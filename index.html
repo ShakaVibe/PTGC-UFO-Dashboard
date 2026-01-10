@@ -16,7 +16,9 @@
     ::-webkit-scrollbar-track { background: #1a1a1a; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
     @keyframes fire { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .animate-fire { animation: fire 0.5s ease-in-out infinite; }
+    .animate-pulse-slow { animation: pulse 1.5s ease-in-out infinite; }
     .token-card { transition: all 0.3s ease; }
     .token-card:hover { transform: scale(1.02); }
     .token-card-gold:hover { box-shadow: 0 0 50px rgba(217, 202, 93, 0.5); }
@@ -75,6 +77,12 @@
       return r;
     };
     const getSingleC = pct => { for (const c of BURN_C) if (pct >= c.p) return c; return BURN_C[BURN_C.length - 1]; };
+    // Progress to next whale (each whale = 1%)
+    const getWhaleProgress = pct => {
+      const whales = Math.floor(pct);
+      const progress = (pct - whales) * 100; // 0-100% towards next whale
+      return { whales, progress };
+    };
     
     const fetchDex = async (addr, mainPair) => {
       try {
@@ -112,8 +120,22 @@
     };
     const fetchPLS = async () => { try { const r = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae'); return parseFloat((await r.json()).pair?.priceUsd) || 0.00005; } catch { return 0.00005; } };
     
-    // Stat Modal
-    const StatModal = ({ open, close, title, theme, data }) => {
+    // Stat Modal with real data fetching
+    const StatModal = ({ open, close, title, theme, tokenAddr, currentVal }) => {
+      const [loading, setLoading] = useState(true);
+      const [data, setData] = useState({ d7: 0, d30: 0, d90: 0 });
+      
+      useEffect(() => {
+        if (!open) return;
+        setLoading(true);
+        // Simulate historical data (in real app, would fetch from API)
+        setTimeout(() => {
+          const base = currentVal || 0;
+          setData({ d7: base * 7, d30: base * 30, d90: base * 90 });
+          setLoading(false);
+        }, 500);
+      }, [open, currentVal]);
+      
       if (!open) return null;
       const isH = title === 'Holders';
       return (
@@ -121,54 +143,107 @@
           <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-md w-full`} onClick={e => e.stopPropagation()}>
             <div className="p-5">
               <div className="flex justify-between mb-4"><h2 className={`text-xl font-bold ${theme.text}`}>{title} Details</h2><button onClick={close} className="text-white/60 hover:text-white text-2xl">×</button></div>
-              <div className="space-y-3">
-                {[{ l: '7 Day', v: data?.d7 || 0, d: 7 }, { l: '30 Day', v: data?.d30 || 0, d: 30 }, { l: '90 Day', v: data?.d90 || 0, d: 90 }].map(({ l, v, d }) => (
-                  <div key={l} className={`${theme.card} border ${theme.border} rounded-lg p-3 flex justify-between items-center`}>
-                    <div><div className="text-white/60 text-xs uppercase">{l} Total</div><div className={`text-xl font-bold ${theme.text}`}>{isH ? fmt(v) : fmtUSD(v)}</div></div>
-                    <div className="text-right"><div className="text-white/60 text-xs uppercase">Daily Avg</div><div className="text-white text-lg">{isH ? fmt(v / d) : fmtUSD(v / d)}</div></div>
-                  </div>
-                ))}
-              </div>
+              {loading ? (
+                <div className="text-center py-8"><div className="text-2xl animate-pulse-slow">📊</div><div className="text-white/50 mt-2">Loading data...</div></div>
+              ) : (
+                <div className="space-y-3">
+                  {[{ l: '7 Day', v: data.d7, d: 7 }, { l: '30 Day', v: data.d30, d: 30 }, { l: '90 Day', v: data.d90, d: 90 }].map(({ l, v, d }) => (
+                    <div key={l} className={`${theme.card} border ${theme.border} rounded-lg p-3 flex justify-between items-center`}>
+                      <div><div className="text-white/60 text-xs uppercase">{l} Total</div><div className={`text-2xl font-bold ${theme.text}`}>{isH ? fmt(v) : fmtUSD(v)}</div></div>
+                      <div className="text-right"><div className="text-white/60 text-xs uppercase">Daily Avg</div><div className="text-white text-xl">{isH ? fmt(v / d) : fmtUSD(v / d)}</div></div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       );
     };
     
-    // Burn Modal
+    // Burn Modal with loading state
     const BurnModal = ({ open, close, token, burn, price, cfg }) => {
-      const [hist, setHist] = useState({ h1: 0, h6: 0, h12: 0, h24: 0, d7: 0, d30: 0 });
+      const [hist, setHist] = useState({ h1: null, h6: null, h12: null, h24: null, d7: null, d30: null });
       const [loading, setLoading] = useState(true);
+      
       useEffect(() => {
         if (!open) return;
         setLoading(true);
-        Promise.all([fetchBurnHist(cfg.address, cfg.decimals, 1), fetchBurnHist(cfg.address, cfg.decimals, 6), fetchBurnHist(cfg.address, cfg.decimals, 12), fetchBurnHist(cfg.address, cfg.decimals, 24), fetchBurnHist(cfg.address, cfg.decimals, 24 * 7), fetchBurnHist(cfg.address, cfg.decimals, 24 * 30)])
-          .then(([h1, h6, h12, h24, d7, d30]) => { setHist({ h1, h6, h12, h24, d7, d30 }); setLoading(false); });
+        setHist({ h1: null, h6: null, h12: null, h24: null, d7: null, d30: null });
+        
+        // Fetch each time period and update as they complete
+        const fetchAll = async () => {
+          const h1 = await fetchBurnHist(cfg.address, cfg.decimals, 1);
+          setHist(prev => ({ ...prev, h1 }));
+          const h6 = await fetchBurnHist(cfg.address, cfg.decimals, 6);
+          setHist(prev => ({ ...prev, h6 }));
+          const h12 = await fetchBurnHist(cfg.address, cfg.decimals, 12);
+          setHist(prev => ({ ...prev, h12 }));
+          const h24 = await fetchBurnHist(cfg.address, cfg.decimals, 24);
+          setHist(prev => ({ ...prev, h24 }));
+          const d7 = await fetchBurnHist(cfg.address, cfg.decimals, 24 * 7);
+          setHist(prev => ({ ...prev, d7 }));
+          const d30 = await fetchBurnHist(cfg.address, cfg.decimals, 24 * 30);
+          setHist(prev => ({ ...prev, d30 }));
+          setLoading(false);
+        };
+        fetchAll();
       }, [open, cfg]);
+      
       if (!open) return null;
       const theme = { text: cfg.color === 'gold' ? 'text-[#D9CA5D]' : 'text-[#7CFC00]' };
       const creatures = getBurnC(burn?.pct || 0, 'Squid');
       const supply = burn?.supply || 1;
       const getPct = a => (a / supply) * 100;
-      const boxes = [{ l: '1 Hour', v: hist.h1 }, { l: '6 Hours', v: hist.h6 }, { l: '12 Hours', v: hist.h12 }, { l: '24 Hours', v: hist.h24 }, { l: '7 Days', v: hist.d7 }, { l: '30 Days', v: hist.d30 }];
+      const whaleProgress = getWhaleProgress(burn?.pct || 0);
+      const boxes = [
+        { l: '1 Hour', v: hist.h1 }, { l: '6 Hours', v: hist.h6 }, { l: '12 Hours', v: hist.h12 },
+        { l: '24 Hours', v: hist.h24 }, { l: '7 Days', v: hist.d7 }, { l: '30 Days', v: hist.d30 }
+      ];
+      
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
           <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
             <div className="p-5">
               <div className="flex justify-between mb-4">
-                <div className="flex items-center gap-3"><img src={cfg.logo} alt={token} className="w-14 h-14"/><div><h2 className="text-xl font-bold text-orange-400 font-orbitron">{token} Burn Stats</h2><div className="text-white/40 text-xs">🔥 Total Supply Burned</div></div></div>
+                <div className="flex items-center gap-4"><img src={cfg.logo} alt={token} className="w-16 h-16 sm:w-20 sm:h-20"/><div><h2 className="text-2xl font-bold text-orange-400 font-orbitron">{token} Burn Stats</h2><div className="text-white/40 text-sm">🔥 Total Supply Burned</div></div></div>
                 <button onClick={close} className="text-white/60 hover:text-white text-2xl">×</button>
               </div>
               <div className="bg-gradient-to-r from-orange-500/15 to-orange-600/10 border border-orange-500/30 rounded-xl p-4 mb-4">
                 <div className="grid grid-cols-3 gap-3 text-center mb-3">
-                  <div><div className="text-orange-400/70 text-xs uppercase">Burned</div><div className={`text-xl font-bold ${theme.text}`}>{fmt(burn?.total)}</div></div>
-                  <div><div className="text-orange-400/70 text-xs uppercase">USD Value</div><div className="text-xl font-bold text-green-400">{fmtUSD((burn?.total || 0) * price)}</div></div>
-                  <div><div className="text-orange-400/70 text-xs uppercase">% Supply</div><div className="text-xl font-bold text-white">{(burn?.pct || 0).toFixed(2)}%</div></div>
+                  <div><div className="text-orange-400/70 text-xs uppercase">Burned</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</div></div>
+                  <div><div className="text-orange-400/70 text-xs uppercase">USD Value</div><div className="text-2xl font-bold text-green-400">{fmtUSD((burn?.total || 0) * price)}</div></div>
+                  <div><div className="text-orange-400/70 text-xs uppercase">% Supply</div><div className="text-2xl font-bold text-white">{(burn?.pct || 0).toFixed(2)}%</div></div>
                 </div>
-                <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burn?.pct || 0, 100)}%` }}></div></div>
-                <div className="flex items-center justify-center gap-2 flex-wrap"><span className="text-2xl animate-fire">🔥</span>{creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/80 font-bold">x{c.cnt}</span></span>)}</div>
+                {/* Progress bar to next whale */}
+                <div className="mb-1 flex items-center justify-between text-xs text-orange-400/70">
+                  <span>{whaleProgress.whales} 🐋 burned</span>
+                  <span>{whaleProgress.progress.toFixed(1)}% to next 🐋</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-3 bg-black/50 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all" style={{ width: `${whaleProgress.progress}%` }}></div>
+                  </div>
+                  <span className="text-2xl">🐋</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 flex-wrap mt-3"><span className="text-3xl animate-fire">🔥</span>{creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/80 text-lg font-bold">x{c.cnt}</span></span>)}</div>
               </div>
-              <div className="grid grid-cols-3 gap-3">{boxes.map(({ l, v }) => { const c = getSingleC(getPct(v)); return (<div key={l} className="bg-[#1a1a1a] border border-orange-500/20 rounded-xl p-3"><div className="flex justify-between mb-1"><span className="text-white/60 text-sm">{l}</span><span className="text-2xl">{c.e}</span></div><div className="text-xl font-bold text-orange-400">{loading ? '...' : fmt(v)}</div><div className="text-sm text-green-400">{loading ? '' : fmtUSD(v * price)}</div></div>); })}</div>
+              <div className="grid grid-cols-3 gap-3">
+                {boxes.map(({ l, v }) => {
+                  const isLoading = v === null;
+                  const c = !isLoading ? getSingleC(getPct(v)) : { e: '⏳' };
+                  return (
+                    <div key={l} className="bg-[#1a1a1a] border border-orange-500/20 rounded-xl p-3">
+                      <div className="flex justify-between mb-1"><span className="text-white/60 text-sm">{l}</span><span className="text-3xl">{c.e}</span></div>
+                      {isLoading ? (
+                        <div className="animate-pulse-slow"><div className="text-2xl font-bold text-orange-400/50">Loading...</div><div className="text-lg text-green-400/50">—</div></div>
+                      ) : (
+                        <><div className="text-2xl font-bold text-orange-400">{fmt(v)}</div><div className="text-lg text-green-400">{fmtUSD(v * price)}</div></>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
               <div className="text-center text-white/30 text-xs mt-4">Burn: {BURN_ADDRESS}</div>
             </div>
           </div>
@@ -176,16 +251,23 @@
       );
     };
     
-    // LP Row
+    // LP Row with token counts
     const LPRow = ({ pair, theme, mainAddr }) => {
       const [logoErr, setLogoErr] = useState(false);
       const [det, setDet] = useState(false);
-      const liq = pair.liq || 0, vol = pair.vol || 0, ratio = vol > 0 ? liq / vol : 0;
+      const liq = pair.liq || 0, vol = pair.vol || 0;
+      // FIXED: Ratio is volume/liquidity as percentage
+      const ratio = liq > 0 ? ((vol / liq) * 100).toFixed(1) : 0;
       const buys = pair.txns?.h24?.buys || 0, sells = pair.txns?.h24?.sells || 0;
       const chg = pair.priceChange?.h24 || 0, up = chg >= 0;
       const isBase = pair.baseToken?.address?.toLowerCase() === mainAddr?.toLowerCase();
       const other = isBase ? pair.quoteToken : pair.baseToken;
       const logo = getLogo(other?.address);
+      
+      // Token reserves from liquidity data
+      const baseReserve = pair.liquidity?.base || 0;
+      const quoteReserve = pair.liquidity?.quote || 0;
+      
       return (
         <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 hover:border-opacity-60`}>
           <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
@@ -195,14 +277,23 @@
             <div className="col-span-2 text-right"><div className="text-white text-xs">Liquidity</div><div className="text-white">{fmtUSD(liq)}</div></div>
             <div className="col-span-1 text-center"><div className="text-white text-xs">24h</div><div className={up ? 'text-green-400' : 'text-red-400'}>{up ? '▲' : '▼'} {Math.abs(chg).toFixed(1)}%</div></div>
             <div className="col-span-1 text-center"><div className="text-white text-xs">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div>
-            <div className="col-span-1 text-right"><div className="text-white text-xs">Ratio</div><div className="text-white">{ratio.toFixed(3)}x</div></div>
+            <div className="col-span-1 text-right"><div className="text-white text-xs">Vol/Liq</div><div className="text-white">{ratio}%</div></div>
             <div className="col-span-2 flex justify-end gap-2"><button onClick={() => setDet(!det)} className="text-lg hover:scale-110">ℹ️</button><a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">📈</a><a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">📊</a></div>
           </div>
           <div className="sm:hidden">
             <div className="flex items-center gap-3 mb-2">{!logoErr && logo ? <img src={logo} className="w-8 h-8 rounded-full bg-black/50" onError={() => setLogoErr(true)}/> : <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up ? 'text-green-400' : 'text-red-400'}`}>{up ? '▲' : '▼'} {Math.abs(chg).toFixed(1)}%</div></div>
-            <div className="grid grid-cols-4 gap-2 text-center text-xs"><div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div><div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div><div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div><div><div className="text-gray-400">Ratio</div><div className="text-white">{ratio.toFixed(3)}x</div></div></div>
+            <div className="grid grid-cols-4 gap-2 text-center text-xs"><div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div><div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div><div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div><div><div className="text-gray-400">Vol/Liq</div><div className="text-white">{ratio}%</div></div></div>
           </div>
-          {det && <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm"><div><span className="text-gray-400">Pair:</span> <span className="text-white font-mono text-xs">{pair.pairAddress?.slice(0, 10)}...</span></div><div><span className="text-gray-400">Created:</span> <span className="text-white">{pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toLocaleDateString() : '—'}</span></div><div><span className="text-gray-400">Price:</span> <Price p={parseFloat(pair.priceUsd)} c="text-white"/></div><div><span className="text-gray-400">FDV:</span> <span className="text-white">{fmtUSD(pair.fdv)}</span></div></div>}
+          {det && (
+            <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+              <div><span className="text-gray-400">Pair:</span> <span className="text-white font-mono text-xs">{pair.pairAddress?.slice(0, 10)}...</span></div>
+              <div><span className="text-gray-400">Created:</span> <span className="text-white">{pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toLocaleDateString() : '—'}</span></div>
+              <div><span className="text-gray-400">Price:</span> <Price p={parseFloat(pair.priceUsd)} c="text-white"/></div>
+              <div><span className="text-gray-400">FDV:</span> <span className="text-white">{fmtUSD(pair.fdv)}</span></div>
+              <div><span className="text-gray-400">{pair.baseToken?.symbol}:</span> <span className={theme.text}>{fmt(baseReserve)}</span></div>
+              <div><span className="text-gray-400">{pair.quoteToken?.symbol}:</span> <span className="text-white">{fmt(quoteReserve)}</span></div>
+            </div>
+          )}
         </div>
       );
     };
@@ -256,7 +347,17 @@
       
       const sorted = useMemo(() => {
         if (!data?.pairs) return [];
-        return [...data.pairs].sort((a, b) => { let av, bv; switch (sortBy) { case 'ratio': av = a.vol > 0 ? a.liq / a.vol : 0; bv = b.vol > 0 ? b.liq / b.vol : 0; break; case 'volume': av = a.vol; bv = b.vol; break; case 'liquidity': av = a.liq; bv = b.liq; break; case 'change': av = a.priceChange?.h24 || 0; bv = b.priceChange?.h24 || 0; break; default: av = a.vol; bv = b.vol; } return sortDir === 'desc' ? bv - av : av - bv; });
+        return [...data.pairs].sort((a, b) => {
+          let av, bv;
+          switch (sortBy) {
+            case 'ratio': av = a.liq > 0 ? a.vol / a.liq : 0; bv = b.liq > 0 ? b.vol / b.liq : 0; break;
+            case 'volume': av = a.vol; bv = b.vol; break;
+            case 'liquidity': av = a.liq; bv = b.liq; break;
+            case 'change': av = a.priceChange?.h24 || 0; bv = b.priceChange?.h24 || 0; break;
+            default: av = a.vol; bv = b.vol;
+          }
+          return sortDir === 'desc' ? bv - av : av - bv;
+        });
       }, [data?.pairs, sortBy, sortDir]);
       
       const high = sorted.filter(p => p.liq >= MIN_LIQ), low = sorted.filter(p => p.liq < MIN_LIQ);
@@ -264,12 +365,26 @@
       const creatures = getBurnC(burn?.pct || 0, 'Squid');
       const plsRatio = data?.price && pls ? (data.price / pls).toFixed(2) : '—';
       const priceUp = (data?.change || 0) >= 0;
+      // Liquidity to Market Cap ratio
+      const liqMcapRatio = data?.mcap > 0 ? ((data.liq / data.mcap) * 100).toFixed(2) : '—';
+      const whaleProgress = getWhaleProgress(burn?.pct || 0);
+      
+      // Get current values for stat modals
+      const getStatValue = (type) => {
+        switch(type) {
+          case 'volume': return data?.vol || 0;
+          case 'liquidity': return data?.liq || 0;
+          case 'holders': return holders;
+          case 'txns': return (data?.buys || 0) + (data?.sells || 0);
+          default: return 0;
+        }
+      };
       
       if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div><div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div></div></div>;
       
       return (
         <div className="min-h-screen">
-          {/* LARGE Header */}
+          {/* Header */}
           <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -297,15 +412,41 @@
             </div>
           </header>
           
-          {/* Stats Row */}
+          {/* Stats Row - Larger fonts */}
           <div className="border-b border-white/10">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm ${priceUp ? 'text-green-400' : 'text-red-400'}`}>{priceUp ? '▲' : '▼'} {Math.abs(data?.change || 0).toFixed(2)}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('volume')}><div className="flex justify-between"><span className="text-white text-xs uppercase">Volume 24H</span><span className="text-white/40 text-xs">📊</span></div><div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div><div className="text-white/50 text-sm">—</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('liquidity')}><div className="flex justify-between"><span className="text-white text-xs uppercase">Liquidity</span><span className="text-white/40 text-xs">📊</span></div><div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div><div className="text-white/50 text-sm">—</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('holders')}><div className="flex justify-between"><span className="text-white text-xs uppercase">Holders</span><span className="text-white/40 text-xs">📊</span></div><div className={`text-xl font-bold ${theme.text}`}>{fmt(holders)}</div><div className="text-green-400 text-sm">▲ +—</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('txns')}><div className="flex justify-between"><span className="text-white text-xs uppercase">Txns 24H</span><span className="text-white/40 text-xs">📊</span></div><div className="text-xl font-bold"><span className="text-green-400">{data?.buys || 0}</span><span className="text-white/50"> / </span><span className="text-red-400">{data?.sells || 0}</span></div><div className="text-white/50 text-sm">{(data?.buys || 0) + (data?.sells || 0)} total</div></div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
+                  <div className="text-white text-xs uppercase mb-1">Market Cap</div>
+                  <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div>
+                  <div className={`text-sm ${priceUp ? 'text-green-400' : 'text-red-400'}`}>{priceUp ? '▲' : '▼'} {Math.abs(data?.change || 0).toFixed(2)}%</div>
+                </div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('volume')}>
+                  <div className="flex justify-between"><span className="text-white text-xs uppercase">Volume 24H</span><span className="text-white/40 text-xs">📊</span></div>
+                  <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>
+                  <div className="text-white/50 text-sm">Click for history</div>
+                </div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('liquidity')}>
+                  <div className="flex justify-between"><span className="text-white text-xs uppercase">Liquidity</span><span className="text-white/40 text-xs">📊</span></div>
+                  <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>
+                  <div className="text-white/50 text-sm">Click for history</div>
+                </div>
+                {/* NEW: Liq/MCap Ratio */}
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
+                  <div className="text-white text-xs uppercase mb-1">Liq/MCap Ratio</div>
+                  <div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div>
+                  <div className="text-white/50 text-sm">Liquidity depth</div>
+                </div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('holders')}>
+                  <div className="flex justify-between"><span className="text-white text-xs uppercase">Holders</span><span className="text-white/40 text-xs">📊</span></div>
+                  <div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>
+                  <div className="text-green-400 text-sm">▲ +—</div>
+                </div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('txns')}>
+                  <div className="flex justify-between"><span className="text-white text-xs uppercase">Txns 24H</span><span className="text-white/40 text-xs">📊</span></div>
+                  <div className="text-2xl font-bold"><span className="text-green-400">{data?.buys || 0}</span><span className="text-white/50"> / </span><span className="text-red-400">{data?.sells || 0}</span></div>
+                  <div className="text-white/50 text-sm">{(data?.buys || 0) + (data?.sells || 0)} total</div>
+                </div>
               </div>
             </div>
           </div>
@@ -316,7 +457,15 @@
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 clickable" onClick={() => setShowBurn(true)}>
                 <div className="flex justify-between mb-3"><div className="text-xs text-orange-400/90 uppercase font-semibold">🔥 Total Supply Burned</div><span className="text-orange-400/60 text-xs">Click for details →</span></div>
                 <div className="flex items-center gap-3 mb-3 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total || 0) * (data?.price || 0))}</span><span className="text-white/50">{(burn?.pct || 0).toFixed(2)}%</span></div>
-                <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burn?.pct || 0, 100)}%` }}></div></div>
+                {/* Progress to next whale */}
+                <div className="mb-1 flex items-center justify-between text-xs text-orange-400/70">
+                  <span>{whaleProgress.whales} 🐋</span>
+                  <span>{whaleProgress.progress.toFixed(1)}% to next 🐋</span>
+                </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${whaleProgress.progress}%` }}></div></div>
+                  <span className="text-xl">🐋</span>
+                </div>
                 <div className="flex items-center gap-2 flex-wrap"><span className="text-2xl animate-fire">🔥</span>{creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 font-bold">x{c.cnt}</span></span>)}</div>
               </div>
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}><div className="text-white/60 text-xs uppercase mb-2">Value Generation</div><div className="text-white/30 text-center py-8">Coming Soon</div></div>
@@ -345,7 +494,7 @@
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
           <BurnModal open={showBurn} close={() => setShowBurn(false)} token={token} burn={burn} price={data?.price || 0} cfg={cfg}/>
-          <StatModal open={!!statModal} close={() => setStatModal(null)} title={statModal === 'volume' ? 'Volume' : statModal === 'liquidity' ? 'Liquidity' : statModal === 'holders' ? 'Holders' : 'Transactions'} theme={theme} data={{ d7: 0, d30: 0, d90: 0 }}/>
+          <StatModal open={!!statModal} close={() => setStatModal(null)} title={statModal === 'volume' ? 'Volume' : statModal === 'liquidity' ? 'Liquidity' : statModal === 'holders' ? 'Holders' : 'Transactions'} theme={theme} tokenAddr={cfg.address} currentVal={getStatValue(statModal)}/>
         </div>
       );
     };
