@@ -401,92 +401,118 @@
         return () => clearInterval(interval);
       }, []);
       
+      // Mini sparkline component
+      const MiniSparkline = ({ isPositive, color }) => {
+        const points = isPositive 
+          ? "0,20 10,18 20,15 30,17 40,12 50,14 60,8 70,10 80,5 90,7 100,3"
+          : "0,5 10,8 20,6 30,10 40,12 50,9 60,15 70,13 80,18 90,16 100,20";
+        
+        return (
+          <svg viewBox="0 0 100 24" className="w-16 h-6">
+            <polyline
+              points={points}
+              fill="none"
+              stroke={color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        );
+      };
+      
       const TokenCard = ({ token, data }) => {
         const config = TOKENS[token];
         const isGold = config.color === 'gold';
-        const borderColor = isGold ? 'border-[#D9CA5D]' : 'border-[#7CFC00]';
+        const borderColor = isGold ? 'border-[#D9CA5D]/30' : 'border-[#7CFC00]/30';
         const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
         const bgGradient = isGold 
-          ? 'bg-gradient-to-b from-[#D9CA5D]/5 via-black to-black' 
-          : 'bg-gradient-to-b from-[#7CFC00]/5 via-black to-black';
-        const buttonBg = isGold
-          ? 'bg-gradient-to-r from-[#D9CA5D] to-[#B8A83D] hover:from-[#E8D96C] hover:to-[#C9B94E]'
-          : 'bg-gradient-to-r from-[#7CFC00] to-[#5AC800] hover:from-[#8FFF20] hover:to-[#6AD810]';
+          ? 'bg-gradient-to-r from-[#D9CA5D]/10 via-[#1a1a1a] to-[#1a1a1a]' 
+          : 'bg-gradient-to-r from-[#7CFC00]/10 via-[#1a1a1a] to-[#1a1a1a]';
+        const isPositive = (data?.priceChange24h || 0) >= 0;
+        const changeColor = isPositive ? '#22c55e' : '#ef4444';
+        
+        const priceFormatted = fmtPrice(data?.price);
         
         return (
-          <div className={`rounded-2xl border-2 ${borderColor} ${bgGradient} p-6 transition-all duration-300 hover:scale-[1.02]`}>
-            {/* Token Name */}
-            <div className="text-center mb-6">
-              <h2 className={`font-orbitron text-4xl font-bold ${textColor}`}>{token}</h2>
-            </div>
-            
-            {/* Price */}
-            <div className="text-center mb-6">
-              <div className={`text-4xl font-bold ${textColor}`}>
-                <PriceDisplay price={data?.price} color={config.color} />
+          <div 
+            onClick={() => onSelectToken(token)}
+            className={`cursor-pointer rounded-xl border ${borderColor} ${bgGradient} p-4 transition-all duration-300 hover:scale-[1.02] hover:border-opacity-60`}
+          >
+            <div className="flex items-center gap-4">
+              {/* Logo */}
+              <div className="flex-shrink-0">
+                <img 
+                  src={config.logo} 
+                  alt={token} 
+                  className="w-16 h-16 object-contain"
+                />
               </div>
-              {data?.priceChange24h && (
-                <div className="mt-2">
-                  <ChangeBadge value={data.priceChange24h} />
+              
+              {/* Token Info */}
+              <div className="flex-shrink-0">
+                <div className={`font-orbitron text-2xl font-bold ${textColor}`}>{token}</div>
+                <div className="text-white/40 text-xs font-mono">
+                  {config.address.slice(0, 6)}...{config.address.slice(-4)} 
+                  <span className="ml-1 cursor-pointer hover:text-white/60">⧉</span>
                 </div>
-              )}
-            </div>
-            
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="text-center">
-                <div className="text-white/50 text-xs uppercase mb-1">Market Cap</div>
-                <div className="text-white font-bold text-xl">{fmtUSD(data?.mcap)}</div>
               </div>
-              <div className="text-center">
-                <div className="text-white/50 text-xs uppercase mb-1">24h Volume</div>
-                <div className="text-white font-bold text-xl">{fmtUSD(data?.volume24h)}</div>
+              
+              {/* Price & MCap */}
+              <div className="flex-1 text-right">
+                <div className="text-white font-bold text-xl">
+                  {typeof priceFormatted === 'object' ? (
+                    <>{priceFormatted.base}<sub className="text-sm opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>
+                  ) : priceFormatted}
+                </div>
+                <div className="text-white/50 text-sm">
+                  MCap: {fmtUSD(data?.mcap)}
+                </div>
+              </div>
+              
+              {/* Sparkline & Change */}
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <MiniSparkline isPositive={isPositive} color={changeColor} />
+                <div className={`flex items-center gap-1 px-2 py-1 rounded text-sm font-bold ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {isPositive ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%
+                </div>
               </div>
             </div>
-            
-            {/* Enter Button */}
-            <button
-              onClick={() => onSelectToken(token)}
-              className={`w-full py-3 rounded-xl font-bold text-black text-lg transition-all ${buttonBg} shadow-lg hover:shadow-xl`}
-            >
-              Enter Dashboard →
-            </button>
           </div>
         );
       };
       
       return (
         <div className="min-h-screen flex flex-col">
-          {/* Header with Combined Logo */}
-          <header className="text-center py-12">
-            <div className="flex justify-center mb-4">
+          {/* Header with Large Combined Logo */}
+          <header className="text-center py-16">
+            <div className="flex justify-center mb-6">
               <img 
                 src="./07_Combined_PTGC_UFO_Transparent.png" 
                 alt="PTGC & UFO" 
-                className="h-32 w-auto object-contain"
+                className="h-48 w-auto object-contain"
               />
             </div>
             <h1 
-              className="font-orbitron text-4xl font-bold"
+              className="font-orbitron text-5xl font-bold tracking-wider"
               style={{
-                background: 'linear-gradient(180deg, #FFFFFF 0%, #A0A0A0 50%, #606060 100%)',
+                background: 'linear-gradient(180deg, #FFFFFF 0%, #C0C0C0 40%, #808080 70%, #404040 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
-                textShadow: '0 2px 10px rgba(255,255,255,0.2)',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))'
+                filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))'
               }}
             >
-              Dashboard
+              DASHBOARD
             </h1>
           </header>
           
           {/* Token Cards */}
-          <div className="flex-1 flex items-center justify-center px-8 pb-12">
-            <div className="grid md:grid-cols-2 gap-8 max-w-3xl w-full">
+          <div className="flex-1 flex items-start justify-center px-8 pb-12">
+            <div className="flex flex-col gap-4 max-w-2xl w-full">
               {loading ? (
                 <>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-72"></div>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-72"></div>
+                  <div className="animate-pulse bg-white/10 rounded-xl h-24"></div>
+                  <div className="animate-pulse bg-white/10 rounded-xl h-24"></div>
                 </>
               ) : (
                 <>
