@@ -173,6 +173,31 @@
         const lockedAmountPLS=Number(lockedAmountWei)/1e18;
         console.log('Locked/pending amount:',lockedAmountPLS,'PLS');
         
+        // 2b. Get proposal count and count active ones - proposalCount() selector 0xda35c664
+        let pendingCount=0;
+        try{
+          const pcRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:5})});
+          const pcResult=await pcRes.json();
+          if(pcResult.result&&pcResult.result!=='0x'){
+            const proposalCount=parseInt(pcResult.result,16);
+            // Check state of recent proposals - state() selector 0x3e4f49e6
+            const startId=Math.max(1,proposalCount-15);
+            for(let i=proposalCount;i>=startId;i--){
+              try{
+                const idHex=i.toString(16).padStart(64,'0');
+                const stateRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6})});
+                const stateResult=await stateRes.json();
+                if(stateResult.result){
+                  const state=parseInt(stateResult.result,16);
+                  // State 0=Pending, 1=Active
+                  if(state===0||state===1)pendingCount++;
+                }
+              }catch{}
+            }
+          }
+        }catch(e){console.error('proposalCount error:',e)}
+        console.log('Active proposals:',pendingCount);
+        
         // 3. Calculate available = total - locked (using BigInt for precision)
         const availableWei=daoBalanceWei>lockedAmountWei?daoBalanceWei-lockedAmountWei:0n;
         const availablePLS=Number(availableWei)/1e18;
@@ -219,6 +244,7 @@
           availableUSD,
           pendingPLS:lockedAmountPLS,
           pendingUSD,
+          pendingCount,
           managementValue:managementTotalUSD,
           totalValue
         };
@@ -757,23 +783,24 @@
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <div className="text-white/50 text-xs uppercase">Available for New Proposals</div>
+                          <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{1F4B0}'} Available for New Proposals</div>
                           <div className="text-lg font-bold text-white">{fmtAbbr(daoData?.availablePLS||0)} PLS</div>
                           <div className="text-green-400 text-sm font-bold">{fmtUSD(daoData?.availableUSD||0)}</div>
                         </div>
                         <div>
-                          <div className="text-white/50 text-xs uppercase">Pending in Current Proposals</div>
+                          <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{23F3}'} Pending in Live Proposals</div>
                           <div className="text-lg font-bold text-white">{fmtAbbr(daoData?.pendingPLS||0)} PLS</div>
                           <div className="text-green-400 text-sm font-bold">{fmtUSD(daoData?.pendingUSD||0)}</div>
+                          <div className="text-white/40 text-xs mt-1">{daoData?.pendingCount||0} active proposals</div>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <div className="text-white/50 text-xs uppercase">DAO Management Wallet</div>
+                          <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{1F3E6}'} DAO Funds Ready for Deployment</div>
                           <div className={`text-xl font-bold text-green-400`}>{fmtUSD(daoData?.managementValue||0)}</div>
                         </div>
-                        <div>
-                          <div className="text-white/50 text-xs uppercase">Total DAO Value</div>
+                        <div className={`bg-gradient-to-br from-[${cfg.colorHex}]/20 to-black/40 border border-[${cfg.colorHex}]/30 rounded-lg p-3 -m-1`}>
+                          <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{1F4CA}'} Total DAO Value</div>
                           <div className={`text-2xl font-bold text-green-400`}>{fmtUSD(daoData?.totalValue||0)}</div>
                         </div>
                       </div>
