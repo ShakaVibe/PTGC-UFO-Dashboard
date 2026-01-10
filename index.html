@@ -140,59 +140,76 @@
       }
     };
     
-    // Fetch DAO data
-    const fetchDAOData=async(daoContract,treasuryAddr,plsPrice,ptgcAddress)=>{
+    // Management wallet tokens with hardcoded prices (same as ProWeb)
+    const MANAGEMENT_TOKENS = [
+      { symbol: 'USDC', address: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07', decimals: 6, price: 1 },
+      { symbol: 'USDT', address: '0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f', decimals: 6, price: 1 },
+      { symbol: 'DAI', address: '0xefD766cCb38EaF1dfd701853BFCe31359239F305', decimals: 18, price: 1 },
+      { symbol: 'PLSX', address: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', decimals: 18, priceRatio: 0.00008 },
+      { symbol: 'HEX', address: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', decimals: 8, price: 0.001 },
+      { symbol: 'INC', address: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', decimals: 18, price: 0.20 },
+      { symbol: 'WBTC', address: '0xb17D901469B9208B17d916112988A3FeD19b5cA1', decimals: 8, price: 97000 },
+    ];
+    
+    // Fetch DAO data - matching ProWeb exactly
+    const fetchDAOData=async(daoContract,managementWallet,plsPrice)=>{
       try{
-        // Get DAO contract PLS balance
-        const daoBalance=await fetchPLSBalance(daoContract);
-        console.log('DAO contract balance:',daoBalance,'PLS');
+        // 1. Get DAO contract PLS balance
+        const daoBalanceRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[daoContract,'latest'],id:1})});
+        const daoBalanceHex=(await daoBalanceRes.json()).result;
+        const daoBalance=BigInt(daoBalanceHex||'0x0');
+        console.log('DAO contract total:',Number(daoBalance)/1e18,'PLS');
         
-        // Get lockedAmount() from DAO contract - PLS locked in active proposals
-        // lockedAmount() selector = 0xc8ec5a2e
-        let lockedAmount=0;
+        // 2. Get lockedAmount() from DAO contract
+        // lockedAmount() selector = 0x9ae697bf (verified from contract)
+        let lockedAmount=0n;
         try{
-          const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xc8ec5a2e'},'latest'],id:1})});
-          const lResult=(await lRes.json()).result;
-          if(lResult&&lResult!=='0x'){
-            lockedAmount=Number(BigInt(lResult))/1e18;
+          const lockRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x9ae697bf'},'latest'],id:2})});
+          const lockResult=(await lockRes.json()).result;
+          if(lockResult&&lockResult!=='0x'){
+            lockedAmount=BigInt(lockResult);
           }
-          console.log('Locked/pending amount:',lockedAmount,'PLS');
+          console.log('Locked/pending amount:',Number(lockedAmount)/1e18,'PLS');
         }catch(e){console.error('lockedAmount error:',e)}
         
-        // Available for new proposals = DAO balance - locked amount
-        const availablePLS=Math.max(0,daoBalance-lockedAmount);
-        console.log('Available for new proposals:',availablePLS,'PLS');
+        // 3. Calculate available = total - locked
+        const available=daoBalance>lockedAmount?daoBalance-lockedAmount:0n;
+        console.log('Available for new proposals:',Number(available)/1e18,'PLS');
         
-        // Pending in current proposals = locked amount
-        const pendingPLS=lockedAmount;
+        // 4. Get management wallet PLS balance
+        const mgmtBalanceRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[managementWallet,'latest'],id:3})});
+        const mgmtBalanceHex=(await mgmtBalanceRes.json()).result;
+        const mgmtPLS=Number(BigInt(mgmtBalanceHex||'0x0'))/1e18;
+        console.log('Management wallet PLS:',mgmtPLS);
         
-        // Get management wallet total value (PLS + all tokens EXCEPT PTGC)
-        const treasuryPLS=await fetchPLSBalance(treasuryAddr);
-        let treasuryTokenValue=0;
-        try{
-          const r=await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${treasuryAddr}/token-balances`);
-          const tokens=await r.json();
-          if(Array.isArray(tokens)){
-            for(const t of tokens){
-              // Exclude PTGC from liquid value
-              if(t.token?.address?.toLowerCase()===ptgcAddress?.toLowerCase())continue;
-              
-              const val=parseFloat(t.value||0)/Math.pow(10,parseInt(t.token?.decimals||18));
-              if(t.token?.exchange_rate){
-                treasuryTokenValue+=val*parseFloat(t.token.exchange_rate);
+        // 5. Get management wallet token balances
+        let managementTotalUSD=mgmtPLS*plsPrice;
+        
+        for(const token of MANAGEMENT_TOKENS){
+          try{
+            const data='0x70a08231000000000000000000000000'+managementWallet.slice(2).toLowerCase();
+            const tokenRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:token.address,data},'latest'],id:4})});
+            const tokenResult=(await tokenRes.json()).result;
+            if(tokenResult&&tokenResult!=='0x'){
+              const balance=Number(BigInt(tokenResult))/Math.pow(10,token.decimals);
+              if(balance>0.01){
+                const price=token.price||(token.priceRatio?plsPrice*token.priceRatio:0);
+                const usdValue=balance*price;
+                managementTotalUSD+=usdValue;
+                console.log(`Management ${token.symbol}: ${balance.toLocaleString()} ($${usdValue.toLocaleString()})`);
               }
             }
-          }
-        }catch{}
+          }catch(e){}
+        }
+        console.log('Management wallet total USD:',managementTotalUSD);
         
-        // Management Wallet Value = PLS + all tokens (excluding PTGC)
-        const managementValue=treasuryPLS*plsPrice+treasuryTokenValue;
-        console.log('Management wallet value:',managementValue);
-        
-        // Total DAO Value = Available USD + Pending USD + Management Wallet USD
+        // 6. Calculate totals
+        const availablePLS=Number(available)/1e18;
+        const pendingPLS=Number(lockedAmount)/1e18;
         const availableUSD=availablePLS*plsPrice;
         const pendingUSD=pendingPLS*plsPrice;
-        const totalValue=availableUSD+pendingUSD+managementValue;
+        const totalValue=availableUSD+pendingUSD+managementTotalUSD;
+        
         console.log('Total DAO value:',totalValue);
         
         return{
@@ -200,7 +217,7 @@
           availableUSD,
           pendingPLS,
           pendingUSD,
-          managementValue,
+          managementValue:managementTotalUSD,
           totalValue
         };
       }catch(e){
@@ -554,7 +571,7 @@
     const Home=({onSelect})=>{
       const[data,setData]=useState({PTGC:null,UFO:null});
       const[loading,setLoading]=useState(true);
-      useEffect(()=>{const load=async()=>{const[p,u]=await Promise.all([fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair)]);setData({PTGC:p,UFO:u});setLoading(false)};load();const i=setInterval(load,30000);return()=>clearInterval(i)},[]);
+      useEffect(()=>{const load=async()=>{const[p,u]=await Promise.all([fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair)]);setData({PTGC:p,UFO:u});setLoading(false)};load()},[]);
       const Card=({token,d})=>{
         const cfg=TOKENS[token],isGold=cfg.color==='gold';
         const border=isGold?'border-[#D9CA5D]/50':'border-[#7CFC00]/50',text=isGold?'text-[#D9CA5D]':'text-[#7CFC00]';
@@ -610,14 +627,12 @@
           
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
-            const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p,cfg.address);
+            const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p);
             setDaoData(dao);
             setDaoLoading(false);
           }
         };
         load();
-        const i=setInterval(load,60000);
-        return()=>clearInterval(i);
       },[token]);
       
       const sorted=useMemo(()=>{if(!data?.pairs)return[];return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':av=a.vol;bv=b.vol;break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=a.priceChange?.h24||0;bv=b.priceChange?.h24||0;break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir]);
