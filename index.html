@@ -50,7 +50,6 @@
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
     
-    // Display tiers - Turtle & Below combined
     const HOLDER_TIERS_DISPLAY=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
       {n:'Whale',e:'\u{1F40B}',p:1},
@@ -60,23 +59,14 @@
       {n:'Turtle & Below',e:'\u{1F422}',p:0}
     ];
     
-    // Internal tiers for calculation
     const HOLDER_TIERS=[
-      {n:'Poseidon',p:10},
-      {n:'Whale',p:1},
-      {n:'Shark',p:0.1},
-      {n:'Dolphin',p:0.01},
-      {n:'Squid',p:0.001},
-      {n:'Turtle',p:0.0001},
-      {n:'Shrimp',p:0.00001},
-      {n:'Shell',p:0}
+      {n:'Poseidon',p:10},{n:'Whale',p:1},{n:'Shark',p:0.1},{n:'Dolphin',p:0.01},{n:'Squid',p:0.001},{n:'Turtle',p:0.0001},{n:'Shrimp',p:0.00001},{n:'Shell',p:0}
     ];
     
     const BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
     
     const fmt=n=>n==null||isNaN(n)?'\u2014':Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
-    const fmtPLS=n=>n==null||isNaN(n)?'\u2014':Math.floor(Number(n)).toLocaleString('en-US')+' PLS';
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
@@ -103,106 +93,109 @@
       }catch{return 0}
     };
     
-    // Fetch staking data from staking contract
+    // Fetch staking data
     const fetchStakingData=async(stakingContract,tokenAddr,decimals,totalSupply)=>{
       try{
-        // Get total tokens held by staking contract (total staked)
         const totalStaked=await fetchTokenBalance(tokenAddr,stakingContract,decimals);
-        
-        // Try to get locked vs unlocked staking info
-        // Common function signatures:
-        // totalStaked() = 0x817b1cd2
-        // totalLocked() or lockedSupply() 
         let lockedStaked=0;
         let unlockedStaked=totalStaked;
         
-        // Try to call totalLocked or similar
+        // Try lockedSupply()
         try{
-          // Try lockedSupply() = 0x3f3d5530 (common in locked staking)
           const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x3f3d5530'},'latest'],id:1})});
           const lResult=(await lRes.json()).result;
-          if(lResult&&lResult!=='0x'){
+          if(lResult&&lResult!=='0x'&&lResult!=='0x0000000000000000000000000000000000000000000000000000000000000000'){
             lockedStaked=Number(BigInt(lResult))/Math.pow(10,decimals);
             unlockedStaked=totalStaked-lockedStaked;
           }
         }catch{}
         
-        // Try another common pattern - check for locked balance
-        if(lockedStaked===0){
-          try{
-            // Try totalLockedBalance() = 0x7448fbae
-            const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x7448fbae'},'latest'],id:1})});
-            const lResult=(await lRes.json()).result;
-            if(lResult&&lResult!=='0x'&&lResult!=='0x0000000000000000000000000000000000000000000000000000000000000000'){
-              lockedStaked=Number(BigInt(lResult))/Math.pow(10,decimals);
-              unlockedStaked=totalStaked-lockedStaked;
-            }
-          }catch{}
-        }
-        
         const stakedPct=totalSupply>0?(unlockedStaked/totalSupply)*100:0;
         const lockedPct=totalSupply>0?(lockedStaked/totalSupply)*100:0;
         
-        return{
-          totalStaked,
-          staked:unlockedStaked,
-          stakedPct,
-          locked:lockedStaked,
-          lockedPct
-        };
+        return{totalStaked,staked:unlockedStaked,stakedPct,locked:lockedStaked,lockedPct};
       }catch(e){
         console.error('Error fetching staking data:',e);
         return{totalStaked:0,staked:0,stakedPct:0,locked:0,lockedPct:0};
       }
     };
     
-    const fetchWalletValue=async(addr)=>{
-      try{
-        const plsBal=await fetchPLSBalance(addr);
-        const plsPrice=await fetchPLS();
-        const plsValue=plsBal*plsPrice;
-        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`);
-        const tokens=await r.json();
-        let tokenValue=0;
-        if(Array.isArray(tokens)){
-          for(const t of tokens){
-            const val=parseFloat(t.value||0)/Math.pow(10,parseInt(t.token?.decimals||18));
-            if(t.token?.exchange_rate){
-              tokenValue+=val*parseFloat(t.token.exchange_rate);
-            }
-          }
-        }
-        return{pls:plsBal,plsValue,tokenValue,total:plsValue+tokenValue};
-      }catch(e){
-        console.error('Error fetching wallet value:',e);
-        return{pls:0,plsValue:0,tokenValue:0,total:0};
-      }
-    };
-    
+    // Fetch DAO data using exact same logic as ProWeb
     const fetchDAOData=async(daoContract,treasuryAddr,plsPrice)=>{
       try{
+        // Get DAO contract PLS balance (total in contract)
         const daoBalance=await fetchPLSBalance(daoContract);
-        const treasuryData=await fetchWalletValue(treasuryAddr);
+        
+        // Get locked amount from contract (PLS in active proposals)
+        // lockedAmount() selector = 0xc8ec5a2e
+        let lockedAmount=0;
+        try{
+          const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xc8ec5a2e'},'latest'],id:1})});
+          const lResult=(await lRes.json()).result;
+          if(lResult&&lResult!=='0x'){
+            lockedAmount=Number(BigInt(lResult))/1e18;
+          }
+        }catch(e){console.error('lockedAmount error:',e)}
+        
+        // Available = total - locked
+        const availablePLS=Math.max(0,daoBalance-lockedAmount);
+        
+        // Get proposal count
+        // proposalCount() selector = 0xda35c664
         let proposalCount=0;
         let activeProposals=0;
-        let pendingPLS=0;
-        
         try{
           const pcRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:1})});
           const pcResult=(await pcRes.json()).result;
-          if(pcResult&&pcResult!=='0x')proposalCount=parseInt(pcResult,16);
+          if(pcResult&&pcResult!=='0x'){
+            proposalCount=parseInt(pcResult,16);
+            
+            // Count active proposals by checking state of recent ones
+            // state(uint256) selector = 0x3e4f49e6
+            for(let i=proposalCount;i>=Math.max(1,proposalCount-10);i--){
+              try{
+                const idHex=i.toString(16).padStart(64,'0');
+                const stateRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:1})});
+                const stateResult=(await stateRes.json()).result;
+                const state=parseInt(stateResult,16);
+                // State 0=Pending, 1=Active
+                if(state===0||state===1)activeProposals++;
+              }catch{}
+            }
+          }
+        }catch(e){console.error('proposalCount error:',e)}
+        
+        // Get treasury wallet total value
+        const treasuryPLS=await fetchPLSBalance(treasuryAddr);
+        
+        // Also get treasury token balances from PulseScan
+        let treasuryTokenValue=0;
+        try{
+          const r=await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${treasuryAddr}/token-balances`);
+          const tokens=await r.json();
+          if(Array.isArray(tokens)){
+            for(const t of tokens){
+              const val=parseFloat(t.value||0)/Math.pow(10,parseInt(t.token?.decimals||18));
+              if(t.token?.exchange_rate){
+                treasuryTokenValue+=val*parseFloat(t.token.exchange_rate);
+              }
+            }
+          }
         }catch{}
         
+        const treasuryValue=treasuryPLS*plsPrice+treasuryTokenValue;
+        const totalFunds=availablePLS*plsPrice+lockedAmount*plsPrice+treasuryValue;
+        
         return{
-          availablePLS:daoBalance,
-          availableUSD:daoBalance*plsPrice,
-          pendingPLS:pendingPLS,
-          pendingUSD:pendingPLS*plsPrice,
-          activeProposals:activeProposals,
+          availablePLS,
+          availableUSD:availablePLS*plsPrice,
+          pendingPLS:lockedAmount,
+          pendingUSD:lockedAmount*plsPrice,
+          activeProposals,
           totalProposals:proposalCount,
-          treasuryPLS:treasuryData.pls,
-          treasuryValue:treasuryData.total,
-          totalFunds:daoBalance*plsPrice+treasuryData.total
+          treasuryPLS,
+          treasuryValue,
+          totalFunds
         };
       }catch(e){
         console.error('Error fetching DAO data:',e);
@@ -232,7 +225,6 @@
           items.forEach(holder=>{
             const holderAddr=holder.address?.hash?.toLowerCase();
             if(LP_ADDRESSES.includes(holderAddr)||holderAddr===BURN_ADDRESS.toLowerCase())return;
-            // Also exclude staking contract from holder count
             if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())return;
             const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
             const pctOfSupply=(tokens/cfg.totalSupply)*100;
@@ -325,7 +317,6 @@
       
       const chartColors=isPTGC?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
       
-      // Combine Turtle, Shrimp, Shell into "Turtle & Below"
       const displayCounts={
         Poseidon:tierCounts.Poseidon,
         Whale:tierCounts.Whale,
@@ -576,13 +567,11 @@
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
-          // Fetch staking data if applicable
           if(cfg.stakingContract){
             const staking=await fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply);
             setStakingData(staking);
           }
           
-          // Fetch DAO data if applicable
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
             const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p);
@@ -614,7 +603,6 @@
       const lockedPct=stakingData?.lockedPct||0;
       const heldPct=Math.max(0,100-burnedPct-lpPct-stakedPct-lockedPct);
       
-      // Chart colors: Burned, LP, Staked, Locked, Held
       const chartColors=cfg.stakingContract?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
       const chartData=cfg.stakingContract?[
         {label:'Burned',value:burnedPct},
@@ -675,7 +663,6 @@
           
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Burn Box */}
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 clickable" onClick={()=>setShowBurn(true)}>
                 <div className="flex justify-between mb-2"><div className="text-xs text-orange-400/90 uppercase font-semibold">{'\u{1F525}'} Total Supply Burned</div><span className="text-orange-400/60 text-xs">Details {'\u2192'}</span></div>
                 <div className="flex items-center gap-3 mb-2 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span><span className="text-white/50">{(burn?.pct||0).toFixed(2)}%</span></div>
@@ -683,14 +670,12 @@
                 <div className="flex items-center gap-1 flex-wrap"><span className="text-xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center"><span className="text-xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}</div>
               </div>
               
-              {/* Value Generation Box */}
               <div className={`bg-gradient-to-r ${isGold?'from-[#D9CA5D]/15 via-[#D9CA5D]/10 to-[#D9CA5D]/15':'from-[#7CFC00]/15 via-[#7CFC00]/10 to-[#7CFC00]/15'} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowValueGen(true)}>
                 <div className="flex justify-between mb-2"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4B0}'} Value Generated (24H)</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-baseline gap-2 mb-3"><span className="text-3xl font-bold text-green-400">{fmtUSD(valueGen24h)}</span><span className="text-white/50 text-sm">from {fmtUSD(data?.vol)} vol</span></div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">{cfg.taxBreakdown.map((item,i)=><div key={i} className="flex items-center gap-1"><span>{item.emoji}</span><span className="text-white/60">{item.name}:</span><span className={`font-semibold ${theme.text}`}>{fmtUSD((data?.vol||0)*(item.pct/100))}</span></div>)}</div>
               </div>
               
-              {/* Token Allocation Box */}
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowAlloc(true)}>
                 <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4CA}'} Token Allocation</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-center gap-4">
@@ -707,7 +692,6 @@
                 </div>
               </div>
               
-              {/* DAO Box - PTGC only */}
               {cfg.hasDAO?(
                 <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
                   <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F3DB}\u{FE0F}'} DAO Treasury</div></div>
