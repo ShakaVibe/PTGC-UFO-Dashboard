@@ -14,7 +14,7 @@
     body { font-family: 'Rajdhani', sans-serif; background: #0a0a0a; min-height: 100vh; }
     .font-orbitron { font-family: 'Orbitron', monospace; }
     .font-space { font-family: 'Space Grotesk', sans-serif; }
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: #1a1a1a; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
     @keyframes fire-flicker { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
@@ -62,9 +62,8 @@
     const PULSECHAIN_RPC = 'https://rpc.pulsechain.com';
     const MIN_LIQUIDITY = 1000;
     
-    // Burn creatures based on PERCENTAGE of supply
-    // 10% = Poseidon, 1% = Whale, 0.1% = Shark, 0.01% = Dolphin, 0.001% = Squid, 0.0001% = Turtle, 0.00001% = Shrimp, smaller = Shell
-    const BURN_CREATURES_PERCENT = [
+    // Burn creatures based on PERCENTAGE: 10%=Poseidon, 1%=Whale, 0.1%=Shark, etc
+    const BURN_CREATURES = [
       { name: 'Poseidon', emoji: '🔱', percent: 10 },
       { name: 'Whale', emoji: '🐋', percent: 1 },
       { name: 'Shark', emoji: '🦈', percent: 0.1 },
@@ -87,18 +86,15 @@
       { name: 'Kraken', emoji: '🦑', min: 500000, max: Infinity }
     ];
     
-    // Utility Functions
+    // Utilities
     const fmt = (n) => n == null || isNaN(n) ? '—' : Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD = (n) => n == null || isNaN(n) ? '—' : '$' + Math.floor(Number(n)).toLocaleString('en-US');
     
-    // Price formatting - handles small decimals properly
     const fmtPrice = (p) => {
       if (!p || isNaN(p) || p === 0) return '—';
       if (p >= 1) return '$' + p.toFixed(2);
       if (p >= 0.01) return '$' + p.toFixed(4);
       if (p >= 0.0001) return '$' + p.toFixed(6);
-      
-      // For very small prices, use subscript notation
       const str = p.toExponential(4);
       const [mantissa, exp] = str.split('e');
       const exponent = Math.abs(parseInt(exp));
@@ -108,278 +104,215 @@
     
     const PriceDisplay = ({ price, className = '' }) => {
       const formatted = fmtPrice(price);
-      if (typeof formatted === 'string') {
-        return <span className={className}>{formatted}</span>;
-      }
-      return (
-        <span className={className}>
-          {formatted.prefix}<sub className="text-[0.6em] opacity-70">{formatted.zeros}</sub>{formatted.digits}
-        </span>
-      );
+      if (typeof formatted === 'string') return <span className={className}>{formatted}</span>;
+      return <span className={className}>{formatted.prefix}<sub className="text-[0.6em] opacity-70">{formatted.zeros}</sub>{formatted.digits}</span>;
     };
     
-    const getLogoUrl = (address) => address ? `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${address.toLowerCase()}.png` : null;
+    const getLogoUrl = (addr) => addr ? `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${addr.toLowerCase()}.png` : null;
     
-    // Get creature counts based on burn PERCENTAGE
-    // Returns array of creatures with counts (e.g., 8.75% = 8 whales + remainder)
-    const getBurnCreatures = (burnPercent, minCreature = 'Shell') => {
-      const creatures = [];
+    // Get burn creatures based on percentage (8.75% = 8 whales + ...)
+    const getBurnCreatures = (burnPercent, minCreatureName = 'Shell') => {
+      const result = [];
       let remaining = burnPercent;
+      const minIdx = BURN_CREATURES.findIndex(c => c.name === minCreatureName);
       
-      // Find minimum creature index
-      const minIndex = BURN_CREATURES_PERCENT.findIndex(c => c.name === minCreature);
-      
-      for (let i = 0; i < BURN_CREATURES_PERCENT.length; i++) {
-        const creature = BURN_CREATURES_PERCENT[i];
-        const nextCreature = BURN_CREATURES_PERCENT[i + 1];
-        
-        // Skip if below minimum creature threshold
-        if (minIndex >= 0 && i > minIndex) continue;
-        
-        if (creature.percent > 0 && remaining >= creature.percent) {
-          const count = Math.floor(remaining / creature.percent);
+      for (let i = 0; i < BURN_CREATURES.length; i++) {
+        if (minIdx >= 0 && i > minIdx) continue;
+        const c = BURN_CREATURES[i];
+        if (c.percent > 0 && remaining >= c.percent) {
+          const count = Math.floor(remaining / c.percent);
           if (count > 0) {
-            creatures.push({ ...creature, count });
-            remaining -= count * creature.percent;
+            result.push({ ...c, count });
+            remaining -= count * c.percent;
           }
         }
       }
-      
-      // Add remaining as smallest creature if above threshold
-      if (remaining > 0 && minIndex >= 0) {
-        const smallestAllowed = BURN_CREATURES_PERCENT[minIndex];
-        if (remaining >= smallestAllowed.percent || smallestAllowed.percent === 0) {
-          const existing = creatures.find(c => c.name === smallestAllowed.name);
-          if (existing) existing.count += 1;
-          else if (remaining >= smallestAllowed.percent) creatures.push({ ...smallestAllowed, count: 1 });
-        }
-      }
-      
-      return creatures;
+      return result;
     };
     
-    // Get single creature for a burn percentage (for 1hr, 6hr, etc displays)
-    const getSingleBurnCreature = (burnPercent) => {
-      for (const creature of BURN_CREATURES_PERCENT) {
-        if (burnPercent >= creature.percent) return creature;
+    const getSingleCreature = (percent) => {
+      for (const c of BURN_CREATURES) {
+        if (percent >= c.percent) return c;
       }
-      return BURN_CREATURES_PERCENT[BURN_CREATURES_PERCENT.length - 1];
+      return BURN_CREATURES[BURN_CREATURES.length - 1];
     };
     
-    // API Functions
-    const fetchDexScreenerData = async (tokenAddress, mainPairAddress) => {
+    // API
+    const fetchDexData = async (tokenAddr, mainPairAddr) => {
       try {
-        let mainPairData = null;
-        if (mainPairAddress) {
-          const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPairAddress}`);
-          const pairData = await pairRes.json();
-          if (pairData.pair) mainPairData = pairData.pair;
+        let mainPair = null;
+        if (mainPairAddr) {
+          const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPairAddr}`);
+          const d = await r.json();
+          if (d.pair) mainPair = d.pair;
         }
-        
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`);
         const data = await res.json();
-        if (data.pairs && data.pairs.length > 0) {
-          const pairs = data.pairs.map(p => ({
-            ...p,
-            liquidity: p.liquidity?.usd || 0,
-            volume24h: p.volume?.h24 || 0
-          })).sort((a, b) => b.liquidity - a.liquidity);
-          
-          const totalVolume = pairs.reduce((sum, p) => sum + p.volume24h, 0);
-          const totalLiquidity = pairs.reduce((sum, p) => sum + p.liquidity, 0);
-          const totalBuys = pairs.reduce((sum, p) => sum + (p.txns?.h24?.buys || 0), 0);
-          const totalSells = pairs.reduce((sum, p) => sum + (p.txns?.h24?.sells || 0), 0);
-          const pricePair = mainPairData || pairs[0];
-          
+        if (data.pairs?.length > 0) {
+          const pairs = data.pairs.map(p => ({ ...p, liquidity: p.liquidity?.usd || 0, volume24h: p.volume?.h24 || 0 })).sort((a, b) => b.liquidity - a.liquidity);
+          const pricePair = mainPair || pairs[0];
           return {
             price: parseFloat(pricePair.priceUsd) || 0,
             priceNative: parseFloat(pricePair.priceNative) || 0,
             priceChange24h: pricePair.priceChange?.h24 || 0,
             mcap: pricePair.marketCap || pricePair.fdv || 0,
-            liquidity: totalLiquidity,
-            volume24h: totalVolume,
-            buys24h: totalBuys,
-            sells24h: totalSells,
+            liquidity: pairs.reduce((s, p) => s + p.liquidity, 0),
+            volume24h: pairs.reduce((s, p) => s + p.volume24h, 0),
+            buys24h: pairs.reduce((s, p) => s + (p.txns?.h24?.buys || 0), 0),
+            sells24h: pairs.reduce((s, p) => s + (p.txns?.h24?.sells || 0), 0),
             pairs
           };
         }
         return null;
-      } catch (err) { console.error('DexScreener error:', err); return null; }
+      } catch (e) { console.error(e); return null; }
     };
     
-    const fetchHolderCount = async (tokenAddress) => {
+    const fetchHolders = async (addr) => {
       try {
-        const res = await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${tokenAddress}/counters`);
-        const data = await res.json();
-        return parseInt(data.token_holders_count) || 0;
+        const r = await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);
+        return parseInt((await r.json()).token_holders_count) || 0;
       } catch { return 0; }
     };
     
-    const fetchBurnData = async (tokenAddress, decimals) => {
+    const fetchBurnData = async (tokenAddr, decimals) => {
       try {
-        const balanceRes = await fetch(PULSECHAIN_RPC, {
+        const balRes = await fetch(PULSECHAIN_RPC, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddress, data: '0x70a08231000000000000000000000000' + BURN_ADDRESS.slice(2) }, 'latest'], id: 1 })
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddr, data: '0x70a08231000000000000000000000000' + BURN_ADDRESS.slice(2) }, 'latest'], id: 1 })
         });
-        const balanceData = await balanceRes.json();
-        const burned = Number(BigInt(balanceData.result || '0x0')) / Math.pow(10, decimals);
+        const burned = Number(BigInt((await balRes.json()).result || '0x0')) / Math.pow(10, decimals);
         
-        const supplyRes = await fetch(PULSECHAIN_RPC, {
+        const supRes = await fetch(PULSECHAIN_RPC, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddress, data: '0x18160ddd' }, 'latest'], id: 2 })
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddr, data: '0x18160ddd' }, 'latest'], id: 2 })
         });
-        const supplyData = await supplyRes.json();
-        const totalSupply = Number(BigInt(supplyData.result || '0x0')) / Math.pow(10, decimals);
-        
-        return { total: burned, percent: totalSupply > 0 ? (burned / totalSupply) * 100 : 0, totalSupply };
+        const supply = Number(BigInt((await supRes.json()).result || '0x0')) / Math.pow(10, decimals);
+        return { total: burned, percent: supply > 0 ? (burned / supply) * 100 : 0, totalSupply: supply };
       } catch { return { total: 0, percent: 0, totalSupply: 0 }; }
     };
     
-    const fetchBurnHistory = async (tokenAddress, decimals, hours) => {
+    const fetchBurnHistory = async (tokenAddr, decimals, hours) => {
       try {
         const blockRes = await fetch(PULSECHAIN_RPC, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 })
         });
-        const blockData = await blockRes.json();
-        const currentBlock = parseInt(blockData.result, 16);
-        const blocksPerHour = 360; // ~10 sec blocks
-        const fromBlock = '0x' + Math.max(0, currentBlock - (blocksPerHour * hours)).toString(16);
-        
-        const transferSig = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-        const burnPadded = '0x000000000000000000000000' + BURN_ADDRESS.slice(2).toLowerCase();
+        const currentBlock = parseInt((await blockRes.json()).result, 16);
+        const fromBlock = '0x' + Math.max(0, currentBlock - (360 * hours)).toString(16);
         
         const logsRes = await fetch(PULSECHAIN_RPC, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jsonrpc: '2.0', method: 'eth_getLogs',
-            params: [{ address: tokenAddress, topics: [transferSig, null, burnPadded], fromBlock, toBlock: 'latest' }], id: 1
+            params: [{ address: tokenAddr, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], fromBlock, toBlock: 'latest' }], id: 1
           })
         });
-        const logsData = await logsRes.json();
-        
-        let burnAmount = 0;
-        if (logsData.result && Array.isArray(logsData.result)) {
-          burnAmount = logsData.result.reduce((sum, log) => sum + Number(BigInt(log.data)) / Math.pow(10, decimals), 0);
+        const logs = (await logsRes.json()).result;
+        if (Array.isArray(logs)) {
+          return logs.reduce((sum, log) => sum + Number(BigInt(log.data)) / Math.pow(10, decimals), 0);
         }
-        return burnAmount;
+        return 0;
       } catch { return 0; }
     };
     
     const fetchPLSPrice = async () => {
       try {
-        const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');
-        return parseFloat((await res.json()).pair?.priceUsd) || 0.00005;
+        const r = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');
+        return parseFloat((await r.json()).pair?.priceUsd) || 0.00005;
       } catch { return 0.00005; }
     };
     
-    // Components
-    
-    // Burn Details Modal
-    const BurnModal = ({ isOpen, onClose, token, burnData, price, config, totalSupply }) => {
-      const [burnHistory, setBurnHistory] = useState({ h1: 0, h6: 0, h12: 0, h24: 0 });
+    // Burn Modal
+    const BurnModal = ({ isOpen, onClose, token, burnData, price, config }) => {
+      const [history, setHistory] = useState({ h1: 0, h6: 0, h12: 0, h24: 0 });
       const [loading, setLoading] = useState(true);
       
       useEffect(() => {
         if (!isOpen) return;
-        const fetchHistory = async () => {
-          setLoading(true);
-          const [h1, h6, h12, h24] = await Promise.all([
-            fetchBurnHistory(config.address, config.decimals, 1),
-            fetchBurnHistory(config.address, config.decimals, 6),
-            fetchBurnHistory(config.address, config.decimals, 12),
-            fetchBurnHistory(config.address, config.decimals, 24)
-          ]);
-          setBurnHistory({ h1, h6, h12, h24 });
+        setLoading(true);
+        Promise.all([
+          fetchBurnHistory(config.address, config.decimals, 1),
+          fetchBurnHistory(config.address, config.decimals, 6),
+          fetchBurnHistory(config.address, config.decimals, 12),
+          fetchBurnHistory(config.address, config.decimals, 24)
+        ]).then(([h1, h6, h12, h24]) => {
+          setHistory({ h1, h6, h12, h24 });
           setLoading(false);
-        };
-        fetchHistory();
+        });
       }, [isOpen, config]);
       
       if (!isOpen) return null;
       
-      const theme = config.color === 'gold' ? { text: 'text-[#D9CA5D]', border: 'border-[#D9CA5D]' } : { text: 'text-[#7CFC00]', border: 'border-[#7CFC00]' };
-      const burnCreatures = getBurnCreatures(burnData?.percent || 0, 'Squid');
+      const creatures = getBurnCreatures(burnData?.percent || 0, 'Squid');
+      const supply = burnData?.totalSupply || 1;
+      const getPct = (amt) => (amt / supply) * 100;
       
-      // Calculate percentage for each time period
-      const getPercentForAmount = (amount) => totalSupply > 0 ? (amount / totalSupply) * 100 : 0;
-      
-      const timeBoxes = [
-        { label: '1 Hour', value: burnHistory.h1, percent: getPercentForAmount(burnHistory.h1) },
-        { label: '6 Hours', value: burnHistory.h6, percent: getPercentForAmount(burnHistory.h6) },
-        { label: '12 Hours', value: burnHistory.h12, percent: getPercentForAmount(burnHistory.h12) },
-        { label: '24 Hours', value: burnHistory.h24, percent: getPercentForAmount(burnHistory.h24) }
+      const boxes = [
+        { label: '1 Hour', val: history.h1 },
+        { label: '6 Hours', val: history.h6 },
+        { label: '12 Hours', val: history.h12 },
+        { label: '24 Hours', val: history.h24 }
       ];
       
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={onClose}>
-          <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-xl w-full" onClick={e => e.stopPropagation()}>
             <div className="p-5">
-              {/* Header */}
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-2xl">🔥</span>
                   <h2 className="text-xl font-bold text-orange-400 font-orbitron">{token} Burn Stats</h2>
                 </div>
                 <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">×</button>
               </div>
               
-              {/* Main Stats Row */}
-              <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 mb-4">
-                <div className="grid grid-cols-3 gap-4 text-center mb-3">
+              <div className="bg-gradient-to-r from-orange-500/15 to-orange-600/10 border border-orange-500/30 rounded-xl p-4 mb-4">
+                <div className="grid grid-cols-3 gap-3 text-center mb-3">
                   <div>
-                    <div className="text-orange-400/70 text-xs uppercase mb-1">Total Burned</div>
-                    <div className="text-xl font-bold text-orange-400">{fmt(burnData?.total)}</div>
+                    <div className="text-orange-400/70 text-xs uppercase">Burned</div>
+                    <div className="text-lg font-bold text-orange-400">{fmt(burnData?.total)}</div>
                   </div>
                   <div>
-                    <div className="text-orange-400/70 text-xs uppercase mb-1">USD Value</div>
-                    <div className="text-xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * price)}</div>
+                    <div className="text-orange-400/70 text-xs uppercase">USD</div>
+                    <div className="text-lg font-bold text-green-400">{fmtUSD((burnData?.total || 0) * price)}</div>
                   </div>
                   <div>
-                    <div className="text-orange-400/70 text-xs uppercase mb-1">% of Supply</div>
-                    <div className="text-xl font-bold text-white">{(burnData?.percent || 0).toFixed(2)}%</div>
+                    <div className="text-orange-400/70 text-xs uppercase">% Supply</div>
+                    <div className="text-lg font-bold text-white">{(burnData?.percent || 0).toFixed(2)}%</div>
                   </div>
                 </div>
-                
-                {/* Progress Bar */}
-                <div className="h-3 bg-black/50 rounded-full overflow-hidden mb-3">
-                  <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
+                <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3">
+                  <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
                 </div>
-                
-                {/* Sea Creatures */}
                 <div className="flex items-center justify-center gap-2 flex-wrap">
-                  <span className="text-3xl animate-fire">🔥</span>
-                  {burnCreatures.map((c, i) => (
+                  <span className="text-2xl animate-fire">🔥</span>
+                  {creatures.map((c, i) => (
                     <span key={i} className="flex items-center gap-1">
-                      <span className="text-3xl">{c.emoji}</span>
-                      <span className="text-white/80 text-lg font-bold">x{c.count}</span>
+                      <span className="text-2xl">{c.emoji}</span>
+                      <span className="text-white/80 font-bold">x{c.count}</span>
                     </span>
                   ))}
                 </div>
               </div>
               
-              {/* Time-based Burns - Larger fonts */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {timeBoxes.map(({ label, value, percent }) => {
-                  const creature = getSingleBurnCreature(percent);
+              <div className="grid grid-cols-2 gap-3">
+                {boxes.map(({ label, val }) => {
+                  const pct = getPct(val);
+                  const creature = getSingleCreature(pct);
                   return (
                     <div key={label} className="bg-[#1a1a1a] border border-orange-500/20 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-white/60 text-sm uppercase">{label}</span>
-                        <span className="text-4xl">{creature.emoji}</span>
+                        <span className="text-white/60 text-sm">{label}</span>
+                        <span className="text-3xl">{creature.emoji}</span>
                       </div>
-                      <div className="text-2xl font-bold text-orange-400 font-space">{loading ? '...' : fmt(value)}</div>
-                      <div className="text-lg text-green-400 font-semibold">{loading ? '' : fmtUSD(value * price)}</div>
-                      <div className="text-white/40 text-sm">{loading ? '' : percent.toFixed(6)}%</div>
+                      <div className="text-2xl font-bold text-orange-400">{loading ? '...' : fmt(val)}</div>
+                      <div className="text-lg text-green-400">{loading ? '' : fmtUSD(val * price)}</div>
                     </div>
                   );
                 })}
               </div>
               
-              {/* Burn Address */}
-              <div className="text-center text-white/40 text-xs">
-                Burn Address: <span className="font-mono">{BURN_ADDRESS}</span>
-              </div>
+              <div className="text-center text-white/30 text-xs mt-4">Burn: {BURN_ADDRESS}</div>
             </div>
           </div>
         </div>
@@ -387,79 +320,57 @@
     };
     
     // LP Pair Row
-    const LPPairRow = ({ pair, theme, mainTokenAddress }) => {
-      const [logoError, setLogoError] = useState(false);
-      const [showDetails, setShowDetails] = useState(false);
+    const LPPairRow = ({ pair, theme, mainAddr }) => {
+      const [logoErr, setLogoErr] = useState(false);
+      const [details, setDetails] = useState(false);
       
-      const liq = pair.liquidity || 0;
-      const vol = pair.volume24h || 0;
+      const liq = pair.liquidity || 0, vol = pair.volume24h || 0;
       const ratio = vol > 0 ? liq / vol : 0;
-      const buys = pair.txns?.h24?.buys || 0;
-      const sells = pair.txns?.h24?.sells || 0;
-      const priceChange = pair.priceChange?.h24 || 0;
-      const isUp = priceChange >= 0;
-      
-      const isBaseMain = pair.baseToken?.address?.toLowerCase() === mainTokenAddress?.toLowerCase();
-      const otherToken = isBaseMain ? pair.quoteToken : pair.baseToken;
-      const logoUrl = getLogoUrl(otherToken?.address);
-      const fallbackLetter = otherToken?.symbol?.[0] || '?';
+      const buys = pair.txns?.h24?.buys || 0, sells = pair.txns?.h24?.sells || 0;
+      const change = pair.priceChange?.h24 || 0, isUp = change >= 0;
+      const isBase = pair.baseToken?.address?.toLowerCase() === mainAddr?.toLowerCase();
+      const other = isBase ? pair.quoteToken : pair.baseToken;
+      const logo = getLogoUrl(other?.address);
       
       return (
-        <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 transition-all hover:border-opacity-60`}>
+        <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 hover:border-opacity-60`}>
           <div className="sm:hidden">
             <div className="flex items-center gap-3 mb-2">
-              {!logoError && logoUrl ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-full bg-black/50" onError={() => setLogoError(true)}/> : <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-400">{fallbackLetter}</div>}
+              {!logoErr && logo ? <img src={logo} className="w-8 h-8 rounded-full bg-black/50" onError={() => setLogoErr(true)}/> : <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>}
               <div className="flex-1">
                 <div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
                 <div className="text-gray-500 text-xs">PulseX V2</div>
               </div>
-              <div className={`text-sm font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%</div>
+              <div className={`text-sm font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%</div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center text-xs">
-              <div><div className="text-gray-400">Vol</div><div className="text-white font-space">{fmtUSD(vol)}</div></div>
-              <div><div className="text-gray-400">Liq</div><div className="text-white font-space">{fmtUSD(liq)}</div></div>
+              <div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div>
+              <div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div>
               <div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div>
-              <div><div className="text-gray-400">Ratio</div><div className="font-bold text-white">{ratio.toFixed(3)}x</div></div>
+              <div><div className="text-gray-400">Ratio</div><div className="text-white">{ratio.toFixed(3)}x</div></div>
             </div>
           </div>
-          
           <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
             <div className="col-span-1 flex justify-center">
-              {!logoError && logoUrl ? <img src={logoUrl} alt="" className="w-10 h-10 rounded-full bg-black/50" onError={() => setLogoError(true)}/> : <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400">{fallbackLetter}</div>}
+              {!logoErr && logo ? <img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={() => setLogoErr(true)}/> : <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center font-bold">{other?.symbol?.[0]}</div>}
             </div>
             <div className="col-span-2">
-              <div className={`font-semibold ${theme.text} text-base`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
+              <div className={`font-semibold ${theme.text}`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
               <div className="text-gray-500 text-sm">PulseX V2</div>
             </div>
-            <div className="col-span-2 text-right">
-              <div className="text-white text-xs">Volume</div>
-              <div className="text-white font-space font-semibold">{fmtUSD(vol)}</div>
-            </div>
-            <div className="col-span-2 text-right">
-              <div className="text-white text-xs">Liquidity</div>
-              <div className="text-white font-space">{fmtUSD(liq)}</div>
-            </div>
-            <div className="col-span-1 text-center">
-              <div className="text-white text-xs">24h</div>
-              <div className={`font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%</div>
-            </div>
-            <div className="col-span-1 text-center">
-              <div className="text-white text-xs">Txns</div>
-              <div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div>
-            </div>
-            <div className="col-span-1 text-right">
-              <div className="text-white text-xs">Ratio</div>
-              <div className="font-bold text-white">{ratio.toFixed(3)}x</div>
-            </div>
-            <div className="col-span-2 flex items-center justify-end gap-2">
-              <button onClick={() => setShowDetails(!showDetails)} className="text-lg hover:scale-110 transition-transform" title="Pool info">ℹ️</button>
-              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110 transition-transform" title="DexScreener">📈</a>
-              <a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110 transition-transform" title="DexTools">📊</a>
+            <div className="col-span-2 text-right"><div className="text-white text-xs">Volume</div><div className="text-white font-semibold">{fmtUSD(vol)}</div></div>
+            <div className="col-span-2 text-right"><div className="text-white text-xs">Liquidity</div><div className="text-white">{fmtUSD(liq)}</div></div>
+            <div className="col-span-1 text-center"><div className="text-white text-xs">24h</div><div className={isUp ? 'text-green-400' : 'text-red-400'}>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%</div></div>
+            <div className="col-span-1 text-center"><div className="text-white text-xs">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div>
+            <div className="col-span-1 text-right"><div className="text-white text-xs">Ratio</div><div className="text-white">{ratio.toFixed(3)}x</div></div>
+            <div className="col-span-2 flex justify-end gap-2">
+              <button onClick={() => setDetails(!details)} className="text-lg hover:scale-110">ℹ️</button>
+              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">📈</a>
+              <a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">📊</a>
             </div>
           </div>
-          
-          {showDetails && (
-            <div className="mt-3 pt-3 border-t border-white/10 text-sm grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {details && (
+            <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               <div><span className="text-gray-400">Pair:</span> <span className="text-white font-mono text-xs">{pair.pairAddress?.slice(0, 10)}...</span></div>
               <div><span className="text-gray-400">Created:</span> <span className="text-white">{pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toLocaleDateString() : '—'}</span></div>
               <div><span className="text-gray-400">Price:</span> <PriceDisplay price={parseFloat(pair.priceUsd)} className="text-white"/></div>
@@ -470,55 +381,48 @@
       );
     };
     
-    // HOME PAGE
-    const HomePage = ({ onSelectToken }) => {
-      const [tokenData, setTokenData] = useState({ PTGC: null, UFO: null });
+    // HOME
+    const HomePage = ({ onSelect }) => {
+      const [data, setData] = useState({ PTGC: null, UFO: null });
       const [loading, setLoading] = useState(true);
       
       useEffect(() => {
-        const fetchData = async () => {
-          const [ptgcData, ufoData] = await Promise.all([
-            fetchDexScreenerData(TOKENS.PTGC.address, TOKENS.PTGC.mainPair),
-            fetchDexScreenerData(TOKENS.UFO.address, TOKENS.UFO.mainPair)
-          ]);
-          setTokenData({ PTGC: ptgcData, UFO: ufoData });
+        const load = async () => {
+          const [p, u] = await Promise.all([fetchDexData(TOKENS.PTGC.address, TOKENS.PTGC.mainPair), fetchDexData(TOKENS.UFO.address, TOKENS.UFO.mainPair)]);
+          setData({ PTGC: p, UFO: u });
           setLoading(false);
         };
-        fetchData();
-        const interval = setInterval(fetchData, 30000);
-        return () => clearInterval(interval);
+        load();
+        const i = setInterval(load, 30000);
+        return () => clearInterval(i);
       }, []);
       
-      const MiniSparkline = ({ isPositive, color }) => {
-        const points = isPositive ? "0,20 15,17 30,14 45,16 60,11 75,13 90,8 100,5" : "0,5 15,8 30,6 45,10 60,12 75,9 90,15 100,18";
-        return <svg viewBox="0 0 100 24" className="w-16 sm:w-20 lg:w-24 h-6 sm:h-8"><polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"/></svg>;
-      };
-      
-      const TokenCard = ({ token, data }) => {
-        const config = TOKENS[token];
-        const isGold = config.color === 'gold';
-        const borderColor = isGold ? 'border-[#D9CA5D]/50' : 'border-[#7CFC00]/50';
-        const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
-        const bgGradient = isGold ? 'bg-gradient-to-r from-[#D9CA5D]/20 via-[#1a1a1a] to-[#1a1a1a]' : 'bg-gradient-to-r from-[#7CFC00]/20 via-[#1a1a1a] to-[#1a1a1a]';
-        const cardClass = isGold ? 'token-card-gold' : 'token-card-green';
-        const isPositive = (data?.priceChange24h || 0) >= 0;
+      const Card = ({ token, d }) => {
+        const cfg = TOKENS[token];
+        const isGold = cfg.color === 'gold';
+        const border = isGold ? 'border-[#D9CA5D]/50' : 'border-[#7CFC00]/50';
+        const text = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
+        const bg = isGold ? 'bg-gradient-to-r from-[#D9CA5D]/20 via-[#1a1a1a] to-[#1a1a1a]' : 'bg-gradient-to-r from-[#7CFC00]/20 via-[#1a1a1a] to-[#1a1a1a]';
+        const hover = isGold ? 'token-card-gold' : 'token-card-green';
+        const up = (d?.priceChange24h || 0) >= 0;
+        const Spark = ({ up, color }) => <svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points={up ? "0,20 30,14 60,11 100,5" : "0,5 30,10 60,12 100,18"} fill="none" stroke={color} strokeWidth="2"/></svg>;
         
         return (
-          <div onClick={() => onSelectToken(token)} className={`token-card ${cardClass} cursor-pointer rounded-2xl border-2 ${borderColor} ${bgGradient} p-4 sm:p-6 lg:p-8`}>
-            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 lg:gap-8">
-              <img src={config.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
+          <div onClick={() => onSelect(token)} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8`}>
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+              <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
               <div className="text-center sm:text-left">
-                <div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${textColor}`}>{token}</div>
-                <div className="text-white/40 text-xs sm:text-sm font-mono mt-1">{config.address.slice(0, 6)}...{config.address.slice(-4)}</div>
+                <div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${text}`}>{token}</div>
+                <div className="text-white/40 text-xs font-mono mt-1">{cfg.address.slice(0, 6)}...{cfg.address.slice(-4)}</div>
               </div>
               <div className="flex-1 text-center sm:text-right">
-                <PriceDisplay price={data?.price} className="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/>
-                <div className="text-white/50 text-sm sm:text-base lg:text-xl mt-1">MCap: {fmtUSD(data?.mcap)}</div>
+                <PriceDisplay price={d?.price} className="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/>
+                <div className="text-white/50 text-sm sm:text-lg mt-1">MCap: {fmtUSD(d?.mcap)}</div>
               </div>
               <div className="flex items-center gap-2 sm:gap-4">
-                <MiniSparkline isPositive={isPositive} color={isPositive ? '#22c55e' : '#ef4444'}/>
-                <div className={`px-2 sm:px-3 py-1 rounded-lg text-sm sm:text-base lg:text-xl font-bold ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {isPositive ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%
+                <Spark up={up} color={up ? '#22c55e' : '#ef4444'}/>
+                <div className={`px-2 sm:px-3 py-1 rounded-lg text-sm sm:text-lg font-bold ${up ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {up ? '▲' : '▼'} {Math.abs(d?.priceChange24h || 0).toFixed(2)}%
                 </div>
               </div>
             </div>
@@ -528,27 +432,25 @@
       
       return (
         <div className="min-h-screen flex flex-col px-4">
-          <header className="text-center pt-4 sm:pt-6">
-            <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 w-auto object-contain mx-auto"/>
-            <h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold tracking-wider mb-2 -mt-6 sm:-mt-8 lg:-mt-12" style={{ background: 'linear-gradient(180deg, #FFF 0%, #C0C0C0 40%, #808080 70%, #404040 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DASHBOARD</h1>
-            <p className="text-white/50 text-sm sm:text-base lg:text-lg mb-6 sm:mb-8 lg:mb-10">A community tool built for The Grays Ecosystem</p>
+          <header className="text-center pt-4">
+            <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/>
+            <h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 -mt-6 sm:-mt-10" style={{ background: 'linear-gradient(180deg, #FFF, #808080)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DASHBOARD</h1>
+            <p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p>
           </header>
-          <div className="flex-1 flex items-start justify-center pb-8">
+          <div className="flex-1 flex justify-center pb-8">
             <div className="flex flex-col gap-4 sm:gap-6 max-w-4xl w-full">
-              {loading ? <><div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div></> : <><TokenCard token="PTGC" data={tokenData.PTGC}/><TokenCard token="UFO" data={tokenData.UFO}/></>}
+              {loading ? <><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></> : <><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/></>}
             </div>
           </div>
-          <footer className="text-center py-4 sm:py-6 border-t border-white/10">
-            <p className="text-white/30 text-xs px-4">Not financial advice. Data may be delayed. DYOR.</p>
-          </footer>
+          <footer className="text-center py-4 border-t border-white/10"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
         </div>
       );
     };
     
     // DASHBOARD
     const Dashboard = ({ token, onBack }) => {
-      const config = TOKENS[token];
-      const isGold = config.color === 'gold';
+      const cfg = TOKENS[token];
+      const isGold = cfg.color === 'gold';
       const theme = {
         text: isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]',
         border: isGold ? 'border-[#D9CA5D]/30' : 'border-[#7CFC00]/30',
@@ -557,87 +459,87 @@
       };
       
       const [data, setData] = useState(null);
-      const [burnData, setBurnData] = useState({ total: 0, percent: 0, totalSupply: 0 });
+      const [burn, setBurn] = useState({ total: 0, percent: 0, totalSupply: 0 });
       const [holders, setHolders] = useState(0);
-      const [plsPrice, setPlsPrice] = useState(0.00005);
+      const [pls, setPls] = useState(0.00005);
       const [loading, setLoading] = useState(true);
-      const [lpSortBy, setLpSortBy] = useState('volume');
-      const [lpSortDir, setLpSortDir] = useState('desc');
+      const [sortBy, setSortBy] = useState('volume');
+      const [sortDir, setSortDir] = useState('desc');
       const [lastUpdate, setLastUpdate] = useState(new Date());
-      const [showBurnModal, setShowBurnModal] = useState(false);
+      const [showBurn, setShowBurn] = useState(false);
       
       useEffect(() => {
-        const fetchAllData = async () => {
-          const [dexData, holdersCount, burn, pls] = await Promise.all([
-            fetchDexScreenerData(config.address, config.mainPair),
-            fetchHolderCount(config.address),
-            fetchBurnData(config.address, config.decimals),
-            fetchPLSPrice()
-          ]);
-          setData(dexData);
-          setHolders(holdersCount);
-          setBurnData(burn);
-          setPlsPrice(pls);
+        const load = async () => {
+          const [d, h, b, p] = await Promise.all([fetchDexData(cfg.address, cfg.mainPair), fetchHolders(cfg.address), fetchBurnData(cfg.address, cfg.decimals), fetchPLSPrice()]);
+          setData(d); setHolders(h); setBurn(b); setPls(p);
           setLastUpdate(new Date());
           setLoading(false);
         };
-        fetchAllData();
-        const interval = setInterval(fetchAllData, 60000);
-        return () => clearInterval(interval);
+        load();
+        const i = setInterval(load, 60000);
+        return () => clearInterval(i);
       }, [token]);
       
-      const sortedPairs = useMemo(() => {
+      const sorted = useMemo(() => {
         if (!data?.pairs) return [];
         return [...data.pairs].sort((a, b) => {
-          let aVal, bVal;
-          switch (lpSortBy) {
-            case 'ratio': aVal = a.volume24h > 0 ? a.liquidity / a.volume24h : 0; bVal = b.volume24h > 0 ? b.liquidity / b.volume24h : 0; break;
-            case 'volume': aVal = a.volume24h; bVal = b.volume24h; break;
-            case 'liquidity': aVal = a.liquidity; bVal = b.liquidity; break;
-            case 'change': aVal = a.priceChange?.h24 || 0; bVal = b.priceChange?.h24 || 0; break;
-            default: aVal = a.volume24h; bVal = b.volume24h;
+          let av, bv;
+          switch (sortBy) {
+            case 'ratio': av = a.volume24h > 0 ? a.liquidity / a.volume24h : 0; bv = b.volume24h > 0 ? b.liquidity / b.volume24h : 0; break;
+            case 'volume': av = a.volume24h; bv = b.volume24h; break;
+            case 'liquidity': av = a.liquidity; bv = b.liquidity; break;
+            case 'change': av = a.priceChange?.h24 || 0; bv = b.priceChange?.h24 || 0; break;
+            default: av = a.volume24h; bv = b.volume24h;
           }
-          return lpSortDir === 'desc' ? bVal - aVal : aVal - bVal;
+          return sortDir === 'desc' ? bv - av : av - bv;
         });
-      }, [data?.pairs, lpSortBy, lpSortDir]);
+      }, [data?.pairs, sortBy, sortDir]);
       
-      const highPairs = sortedPairs.filter(p => p.liquidity >= MIN_LIQUIDITY);
-      const lowPairs = sortedPairs.filter(p => p.liquidity < MIN_LIQUIDITY);
+      const high = sorted.filter(p => p.liquidity >= MIN_LIQUIDITY);
+      const low = sorted.filter(p => p.liquidity < MIN_LIQUIDITY);
       const [showLow, setShowLow] = useState(false);
       
-      // Get burn creatures based on percentage (minimum Squid for main display)
-      const burnCreatures = getBurnCreatures(burnData?.percent || 0, 'Squid');
-      const plsRatio = data?.price && plsPrice ? (data.price / plsPrice).toFixed(4) : '—';
+      const creatures = getBurnCreatures(burn?.percent || 0, 'Squid');
+      const plsRatio = data?.price && pls ? (data.price / pls).toFixed(2) : '—';
       
-      if (loading) {
-        return (
-          <div className="min-h-screen flex items-center justify-center">
-            <div className="text-center">
-              <div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div>
-              <div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div>
-            </div>
+      if (loading) return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div>
+            <div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div>
           </div>
-        );
-      }
+        </div>
+      );
       
       return (
         <div className="min-h-screen">
-          {/* Header */}
+          {/* Header with Price */}
           <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-3 sm:gap-4">
                   <button onClick={onBack} className="text-white/60 hover:text-white text-sm">← Home</button>
-                  <img src={config.logo} alt={token} className="w-10 h-10 sm:w-12 sm:h-12 object-contain"/>
-                  <div>
+                  <img src={cfg.logo} alt={token} className="w-10 h-10 sm:w-12 sm:h-12"/>
+                  <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
                     <span className={`font-orbitron text-xl sm:text-2xl font-bold ${theme.text}`}>{token}</span>
-                    <div className="text-white/40 text-xs font-mono hidden sm:block">{config.address.slice(0, 6)}...{config.address.slice(-4)}</div>
+                    {/* Price Box */}
+                    <div className={`${theme.card} border ${theme.border} rounded-lg px-3 py-1.5 flex items-center gap-2`}>
+                      <PriceDisplay price={data?.price} className={`text-lg sm:text-xl font-bold ${theme.text}`}/>
+                      <span className={`text-sm font-semibold ${(data?.priceChange24h || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {(data?.priceChange24h || 0) >= 0 ? '▲' : '▼'}{Math.abs(data?.priceChange24h || 0).toFixed(2)}%
+                      </span>
+                    </div>
+                    {/* PLS Ratio Box */}
+                    <div className={`${theme.card} border ${theme.border} rounded-lg px-3 py-1.5`}>
+                      <span className="text-white/60 text-xs mr-2">PLS RATIO</span>
+                      <span className={`text-lg font-bold ${theme.text}`}>{plsRatio}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/40 text-xs hidden md:block">Updated {lastUpdate.toLocaleTimeString()}</span>
-                  <a href={config.pulseScanUrl} target="_blank" className={`px-2 sm:px-3 py-1.5 rounded border ${theme.border} ${theme.text} text-xs sm:text-sm font-medium hover:bg-white/5`}>Explorer</a>
-                  <button className={`px-2 sm:px-3 py-1.5 rounded ${theme.bg} text-black text-xs sm:text-sm font-bold`}>KPI Report</button>
+                  <span className="text-white/40 text-xs hidden md:block">{lastUpdate.toLocaleTimeString()}</span>
+                  <a href={cfg.pulseScanUrl} target="_blank" className={`px-2 py-1.5 rounded border ${theme.border} ${theme.text} text-xs font-medium hover:bg-white/5`}>Explorer</a>
+                  <button className={`px-2 py-1.5 rounded ${theme.bg} text-black text-xs font-bold`}>KPI Report</button>
                 </div>
               </div>
             </div>
@@ -645,107 +547,77 @@
           
           {/* Stats Row */}
           <div className="border-b border-white/10">
-            <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
-                  { label: 'PRICE USD', value: <PriceDisplay price={data?.price} className={theme.text}/>, sub: <span className={data?.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'}>{data?.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%</span> },
-                  { label: 'PLS RATIO', value: `${plsRatio}x`, sub: '—', valueClass: theme.text },
-                  { label: 'MARKET CAP', value: fmtUSD(data?.mcap), sub: '—', valueClass: theme.text },
-                  { label: 'VOLUME 24H', value: fmtUSD(data?.volume24h), sub: '—', valueClass: theme.text },
-                  { label: 'LIQUIDITY', value: fmtUSD(data?.liquidity), sub: '—', valueClass: theme.text },
-                  { label: 'TXNS 24H', value: <><span className="text-green-400">{data?.buys24h || 0}</span> / <span className="text-red-400">{data?.sells24h || 0}</span></>, sub: 'buys / sells' }
-                ].map((stat, i) => (
-                  <div key={i} className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4`}>
-                    <div className="text-white text-xs uppercase mb-1">{stat.label}</div>
-                    <div className={`text-xl sm:text-2xl font-bold ${stat.valueClass || ''}`}>{stat.value}</div>
-                    <div className="text-sm text-white/50">{stat.sub}</div>
+                  { label: 'MARKET CAP', value: fmtUSD(data?.mcap) },
+                  { label: 'VOLUME 24H', value: fmtUSD(data?.volume24h) },
+                  { label: 'LIQUIDITY', value: fmtUSD(data?.liquidity) },
+                  { label: 'HOLDERS', value: fmt(holders) },
+                  { label: 'TXNS 24H', value: <><span className="text-green-400">{data?.buys24h || 0}</span> / <span className="text-red-400">{data?.sells24h || 0}</span></> }
+                ].map((s, i) => (
+                  <div key={i} className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
+                    <div className="text-white text-xs uppercase mb-1">{s.label}</div>
+                    <div className={`text-xl font-bold ${theme.text}`}>{s.value}</div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
           
-          {/* Burn Section - ProWeb Orange Style */}
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4">
-              {/* MAIN BURN BOX - Orange Themed */}
-              <div className="lg:col-span-2 bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 cursor-pointer hover:border-orange-500/50 transition-all" onClick={() => setShowBurnModal(true)}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 text-xs text-orange-400/90 uppercase font-semibold">🔥 Total Supply Burned</div>
-                  <span className="text-orange-400/60 text-xs">Click for details →</span>
-                </div>
-                <div className="flex items-center gap-3 mb-3 flex-wrap">
-                  <span className={`text-2xl font-bold ${theme.text}`}>{fmt(burnData?.total)}</span>
-                  <span className="text-lg font-bold text-green-400">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</span>
-                  <span className="text-white/50">{(burnData?.percent || 0).toFixed(2)}%</span>
-                </div>
-                <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3">
-                  <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-2xl animate-fire">🔥</span>
-                  {burnCreatures.map((c, i) => (
-                    <span key={i} className="flex items-center gap-1">
-                      <span className="text-2xl">{c.emoji}</span>
-                      <span className="text-white/70 text-sm font-bold">x{c.count}</span>
-                    </span>
-                  ))}
-                </div>
+          {/* Burn Section */}
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
+            <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 cursor-pointer hover:border-orange-500/50" onClick={() => setShowBurn(true)}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs text-orange-400/90 uppercase font-semibold">🔥 Total Supply Burned</div>
+                <span className="text-orange-400/60 text-xs">Click for details →</span>
               </div>
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span>
+                <span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total || 0) * (data?.price || 0))}</span>
+                <span className="text-white/50">{(burn?.percent || 0).toFixed(2)}%</span>
               </div>
-              
-              {/* Other Stats */}
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center gap-2 mb-2"><span className="text-xl">📊</span><span className="text-white text-sm font-medium">TOTAL SUPPLY</span></div>
-                <div className={`text-xl sm:text-2xl font-bold ${theme.text}`}>{fmt(burnData?.totalSupply)}</div>
+              <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3">
+                <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burn?.percent || 0, 100)}%` }}></div>
               </div>
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center gap-2 mb-2"><span className="text-xl">👥</span><span className="text-white text-sm font-medium">HOLDERS</span></div>
-                <div className={`text-xl sm:text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-2xl animate-fire">🔥</span>
+                {creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.emoji}</span><span className="text-white/70 font-bold">x{c.count}</span></span>)}
               </div>
             </div>
           </div>
           
           {/* LP Pairs */}
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 font-normal text-sm">({highPairs.length} with $1K+ LP)</span></h2>
+              <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length} with $1K+ LP)</span></h2>
               <div className={`${theme.card} border ${theme.border} rounded-lg px-3 py-2 flex items-center gap-2`}>
                 <span className="text-gray-400 text-xs">Sort:</span>
-                {['Ratio', 'Volume', 'Liquidity', '24h %'].map((label, i) => {
-                  const col = ['ratio', 'volume', 'liquidity', 'change'][i];
-                  return (
-                    <button key={col} onClick={() => { if (lpSortBy === col) setLpSortDir(lpSortDir === 'desc' ? 'asc' : 'desc'); else { setLpSortBy(col); setLpSortDir('desc'); } }}
-                      className={`px-2 py-1 rounded text-xs font-medium ${lpSortBy === col ? `${theme.text} bg-white/10` : 'text-gray-500 hover:text-gray-300'}`}>
-                      {label}{lpSortBy === col && <span className="ml-1">{lpSortDir === 'desc' ? '↓' : '↑'}</span>}
-                    </button>
-                  );
+                {['Ratio', 'Volume', 'Liquidity', '24h %'].map((l, i) => {
+                  const c = ['ratio', 'volume', 'liquidity', 'change'][i];
+                  return <button key={c} onClick={() => { sortBy === c ? setSortDir(sortDir === 'desc' ? 'asc' : 'desc') : (setSortBy(c), setSortDir('desc')); }} className={`px-2 py-1 rounded text-xs ${sortBy === c ? `${theme.text} bg-white/10` : 'text-gray-500'}`}>{l}{sortBy === c && (sortDir === 'desc' ? '↓' : '↑')}</button>;
                 })}
               </div>
             </div>
-            
-            <div className="space-y-2">
-              {highPairs.map((p, i) => <LPPairRow key={p.pairAddress || i} pair={p} theme={theme} mainTokenAddress={config.address}/>)}
-            </div>
-            
-            {lowPairs.length > 0 && (
+            <div className="space-y-2">{high.map((p, i) => <LPPairRow key={p.pairAddress || i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>
+            {low.length > 0 && (
               <div className="mt-3">
                 <button onClick={() => setShowLow(!showLow)} className={`w-full ${theme.card} border ${theme.border} rounded-lg p-2 flex items-center justify-between text-sm`}>
-                  <span className="text-gray-400">{showLow ? 'Hide' : 'Show'} {lowPairs.length} pairs &lt;$1K LP</span>
+                  <span className="text-gray-400">{showLow ? 'Hide' : 'Show'} {low.length} pairs &lt;$1K</span>
                   <span className={theme.text}>{showLow ? '▲' : '▼'}</span>
                 </button>
-                {showLow && <div className="mt-2 space-y-2">{lowPairs.map((p, i) => <LPPairRow key={p.pairAddress || i} pair={p} theme={theme} mainTokenAddress={config.address}/>)}</div>}
+                {showLow && <div className="mt-2 space-y-2">{low.map((p, i) => <LPPairRow key={p.pairAddress || i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>}
               </div>
             )}
           </div>
           
           {/* Holder Tiers */}
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
             <h2 className={`font-bold text-lg ${theme.text} mb-4`}>🦑 Holder Tiers</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 sm:gap-3">
-              {SEA_CREATURES.map((c) => (
-                <div key={c.name} className={`${theme.card} border ${theme.border} rounded-lg p-2 sm:p-3 text-center hover:bg-white/10 transition-all`}>
-                  <div className="text-2xl sm:text-3xl mb-1">{c.emoji}</div>
+            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+              {SEA_CREATURES.map(c => (
+                <div key={c.name} className={`${theme.card} border ${theme.border} rounded-lg p-2 text-center hover:bg-white/10`}>
+                  <div className="text-2xl mb-1">{c.emoji}</div>
                   <div className="text-white text-xs font-bold">{c.name}</div>
                   <div className={`${theme.text} text-xs`}>{c.max === Infinity ? `$${fmt(c.min)}+` : `$${fmt(c.min)}`}</div>
                 </div>
@@ -753,25 +625,20 @@
             </div>
           </div>
           
-          <footer className="text-center py-4 border-t border-white/10 mt-8">
-            <p className="text-white/30 text-xs px-4">Not financial advice. Data may be delayed. DYOR.</p>
-          </footer>
+          <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
-          {/* Burn Modal */}
-          <BurnModal isOpen={showBurnModal} onClose={() => setShowBurnModal(false)} token={token} burnData={burnData} price={data?.price || 0} config={config} totalSupply={burnData?.totalSupply || 0}/>
+          <BurnModal isOpen={showBurn} onClose={() => setShowBurn(false)} token={token} burnData={burn} price={data?.price || 0} config={cfg}/>
         </div>
       );
     };
     
-    // MAIN APP
+    // App
     const App = () => {
       const [view, setView] = useState('home');
-      const [selectedToken, setSelectedToken] = useState(null);
+      const [token, setToken] = useState(null);
       
-      if (view === 'dashboard' && selectedToken) {
-        return <Dashboard token={selectedToken} onBack={() => { setView('home'); setSelectedToken(null); }}/>;
-      }
-      return <HomePage onSelectToken={(token) => { setSelectedToken(token); setView('dashboard'); }}/>;
+      if (view === 'dashboard' && token) return <Dashboard token={token} onBack={() => { setView('home'); setToken(null); }}/>;
+      return <HomePage onSelect={t => { setToken(t); setView('dashboard'); }}/>;
     };
     
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
