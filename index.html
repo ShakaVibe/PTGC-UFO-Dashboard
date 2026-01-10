@@ -100,62 +100,37 @@
         const totalInContract=await fetchTokenBalance(tokenAddr,stakingContract,decimals);
         console.log('Total tokens in staking contract:',totalInContract);
         
-        // Try various selectors to get staked and locked amounts
         let stakedTokens=0;
         let lockedTokens=0;
         
-        // Try totalStaked() = 0x817b1cd2
-        try{
-          const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1})});
-          const result=await res.json();
+        // Try totalStaked() = 0x817b1cd2 and totalLocked() = 0x56891412 in parallel
+        const [stakedRes, lockedRes] = await Promise.all([
+          fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1})}).catch(()=>null),
+          fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2})}).catch(()=>null)
+        ]);
+        
+        if(stakedRes){
+          const result=await stakedRes.json();
           console.log('totalStaked() raw:',result.result);
-          if(result.result&&result.result.length>2){
+          if(result.result&&result.result.length>2&&!result.error){
             stakedTokens=Number(BigInt(result.result))/Math.pow(10,decimals);
             console.log('totalStaked():',stakedTokens);
           }
-        }catch(e){console.error('totalStaked error:',e)}
+        }
         
-        // Try totalLocked() = 0x56891412
-        try{
-          const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2})});
-          const result=await res.json();
+        if(lockedRes){
+          const result=await lockedRes.json();
           console.log('totalLocked() raw:',result.result);
-          if(result.result&&result.result.length>2){
+          if(result.result&&result.result.length>2&&!result.error){
             lockedTokens=Number(BigInt(result.result))/Math.pow(10,decimals);
             console.log('totalLocked():',lockedTokens);
           }
-        }catch(e){console.error('totalLocked error:',e)}
-        
-        // If totalStaked didn't work, try getTotalStaked() = 0x0917e776
-        if(stakedTokens===0){
-          try{
-            const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x0917e776'},'latest'],id:3})});
-            const result=await res.json();
-            console.log('getTotalStaked() raw:',result.result);
-            if(result.result&&result.result.length>2){
-              stakedTokens=Number(BigInt(result.result))/Math.pow(10,decimals);
-              console.log('getTotalStaked():',stakedTokens);
-            }
-          }catch{}
         }
         
-        // If totalLocked didn't work, try getTotalLocked() = 0xf4732da6
-        if(lockedTokens===0){
-          try{
-            const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0xf4732da6'},'latest'],id:4})});
-            const result=await res.json();
-            console.log('getTotalLocked() raw:',result.result);
-            if(result.result&&result.result.length>2){
-              lockedTokens=Number(BigInt(result.result))/Math.pow(10,decimals);
-              console.log('getTotalLocked():',lockedTokens);
-            }
-          }catch{}
-        }
-        
-        // If still no staked value, calculate from contract balance minus locked
-        if(stakedTokens===0&&totalInContract>0){
-          stakedTokens=Math.max(0,totalInContract-lockedTokens);
-          console.log('Calculated staked (total - locked):',stakedTokens);
+        // If no staked/locked values found, use contract balance as staked
+        if(stakedTokens===0&&lockedTokens===0&&totalInContract>0){
+          stakedTokens=totalInContract;
+          console.log('Using contract balance as staked:',stakedTokens);
         }
         
         const stakedPct=totalSupply>0?(stakedTokens/totalSupply)*100:0;
@@ -217,20 +192,20 @@
           const pcResult=await pcRes.json();
           if(pcResult.result&&pcResult.result!=='0x'){
             const proposalCount=parseInt(pcResult.result,16);
-            // Check state of recent proposals - state() selector 0x3e4f49e6
-            const startId=Math.max(1,proposalCount-15);
+            // Check state of recent proposals in parallel - state() selector 0x3e4f49e6
+            const startId=Math.max(1,proposalCount-10);
+            const statePromises=[];
             for(let i=proposalCount;i>=startId;i--){
-              try{
-                const idHex=i.toString(16).padStart(64,'0');
-                const stateRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6})});
-                const stateResult=await stateRes.json();
-                if(stateResult.result){
-                  const state=parseInt(stateResult.result,16);
-                  // State 0=Pending, 1=Active
-                  if(state===0||state===1)pendingCount++;
-                }
-              }catch{}
+              const idHex=i.toString(16).padStart(64,'0');
+              statePromises.push(
+                fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6})})
+                  .then(r=>r.json())
+                  .then(r=>r.result?parseInt(r.result,16):-1)
+                  .catch(()=>-1)
+              );
             }
+            const states=await Promise.all(statePromises);
+            pendingCount=states.filter(s=>s===0||s===1).length;
           }
         }catch(e){console.error('proposalCount error:',e)}
         console.log('Active proposals:',pendingCount);
@@ -247,10 +222,10 @@
         const mgmtPLS=Number(mgmtPLSWei)/1e18;
         console.log('Management wallet PLS:',mgmtPLS);
         
-        // 5. Get management wallet token balances (same tokens as ProWeb)
+        // 5. Get management wallet token balances in parallel (same tokens as ProWeb)
         let managementTotalUSD=mgmtPLS*plsPrice;
         
-        for(const token of MANAGEMENT_TOKENS){
+        const tokenPromises=MANAGEMENT_TOKENS.map(async(token)=>{
           try{
             const data='0x70a08231000000000000000000000000'+managementWallet.slice(2).toLowerCase();
             const tokenRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:token.address,data},'latest'],id:4})});
@@ -261,12 +236,16 @@
               if(balance>0.01){
                 const price=token.price!==undefined?token.price:(token.priceRatio?plsPrice*token.priceRatio:0);
                 const usdValue=balance*price;
-                managementTotalUSD+=usdValue;
                 console.log(`Management ${token.symbol}: ${balance.toLocaleString()} ($${usdValue.toLocaleString()})`);
+                return usdValue;
               }
             }
           }catch(e){console.error(`Error fetching ${token.symbol}:`,e)}
-        }
+          return 0;
+        });
+        
+        const tokenValues=await Promise.all(tokenPromises);
+        managementTotalUSD+=tokenValues.reduce((sum,v)=>sum+v,0);
         console.log('Management wallet total USD:',managementTotalUSD);
         
         // 6. Calculate totals
