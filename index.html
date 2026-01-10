@@ -10,35 +10,20 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            gold: '#D9CA5D',
-            ufogreen: '#7CFC00',
-          }
-        }
-      }
-    }
-  </script>
   <style>
     body { font-family: 'Rajdhani', sans-serif; background: #0a0a0a; min-height: 100vh; }
     .font-orbitron { font-family: 'Orbitron', monospace; }
     .font-space { font-family: 'Space Grotesk', sans-serif; }
-    
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #1a1a1a; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #444; }
-    
     @keyframes fire-flicker { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
     .animate-fire { animation: fire-flicker 0.5s ease-in-out infinite; }
-    
     .token-card { transition: all 0.3s ease; }
     .token-card:hover { transform: scale(1.02); }
     .token-card-gold:hover { box-shadow: 0 0 50px rgba(217, 202, 93, 0.5); border-color: rgba(217, 202, 93, 1) !important; }
     .token-card-green:hover { box-shadow: 0 0 50px rgba(124, 252, 0, 0.5); border-color: rgba(124, 252, 0, 1) !important; }
+    .modal-overlay { backdrop-filter: blur(8px); }
   </style>
 </head>
 <body>
@@ -47,7 +32,6 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
     
-    // Configuration
     const TOKENS = {
       PTGC: {
         name: 'PTGC',
@@ -74,18 +58,20 @@
     };
     
     const COMBINED_LOGO = '07_Combined_PTGC_UFO_Transparent.png';
+    const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
+    const PULSECHAIN_RPC = 'https://rpc.pulsechain.com';
     const MIN_LIQUIDITY = 1000;
     
     const BURN_CREATURES = [
-      { name: 'Plankton', emoji: '🦠', min: 0, max: 1000000 },
-      { name: 'Shrimp', emoji: '🦐', min: 1000000, max: 10000000 },
-      { name: 'Crab', emoji: '🦀', min: 10000000, max: 50000000 },
-      { name: 'Turtle', emoji: '🐢', min: 50000000, max: 100000000 },
-      { name: 'Octopus', emoji: '🐙', min: 100000000, max: 500000000 },
-      { name: 'Dolphin', emoji: '🐬', min: 500000000, max: 1000000000 },
-      { name: 'Shark', emoji: '🦈', min: 1000000000, max: 5000000000 },
-      { name: 'Whale', emoji: '🐋', min: 5000000000, max: 25000000000 },
-      { name: 'Kraken', emoji: '🦑', min: 25000000000, max: Infinity }
+      { name: 'Plankton', emoji: '🦠', min: 0, max: 1e6 },
+      { name: 'Shrimp', emoji: '🦐', min: 1e6, max: 1e7 },
+      { name: 'Crab', emoji: '🦀', min: 1e7, max: 5e7 },
+      { name: 'Turtle', emoji: '🐢', min: 5e7, max: 1e8 },
+      { name: 'Octopus', emoji: '🐙', min: 1e8, max: 5e8 },
+      { name: 'Dolphin', emoji: '🐬', min: 5e8, max: 1e9 },
+      { name: 'Shark', emoji: '🦈', min: 1e9, max: 5e9 },
+      { name: 'Whale', emoji: '🐋', min: 5e9, max: 25e9 },
+      { name: 'Kraken', emoji: '🦑', min: 25e9, max: Infinity }
     ];
     
     const SEA_CREATURES = [
@@ -101,28 +87,37 @@
     ];
     
     // Utility Functions
-    const fmt = (n) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    const fmtCompact = (n) => {
-      if (n == null || isNaN(n)) return '—';
-      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-      if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K';
-      return '$' + n.toFixed(2);
-    };
+    const fmt = (n) => n == null || isNaN(n) ? '—' : Math.floor(Number(n)).toLocaleString('en-US');
+    const fmtUSD = (n) => n == null || isNaN(n) ? '—' : '$' + Math.floor(Number(n)).toLocaleString('en-US');
+    
+    // Price formatting - handles small decimals properly
     const fmtPrice = (p) => {
-      if (!p || isNaN(p)) return '—';
-      if (p < 0.0001) {
-        const str = p.toFixed(20);
-        const match = str.match(/0\.(0+)(\d{4})/);
-        if (match) return `$0.0₍${match[1].length}₎${match[2]}`;
-      }
-      return '$' + p.toFixed(p < 1 ? 6 : 2);
+      if (!p || isNaN(p) || p === 0) return '—';
+      if (p >= 1) return '$' + p.toFixed(2);
+      if (p >= 0.01) return '$' + p.toFixed(4);
+      if (p >= 0.0001) return '$' + p.toFixed(6);
+      
+      // For very small prices, use subscript notation
+      const str = p.toExponential(4);
+      const [mantissa, exp] = str.split('e');
+      const exponent = Math.abs(parseInt(exp));
+      const significand = parseFloat(mantissa).toFixed(4).replace('.', '');
+      return { prefix: '$0.0', zeros: exponent - 1, digits: significand.slice(0, 4) };
     };
     
-    const getLogoUrl = (address) => {
-      if (!address) return null;
-      return `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${address.toLowerCase()}.png`;
+    const PriceDisplay = ({ price, className = '' }) => {
+      const formatted = fmtPrice(price);
+      if (typeof formatted === 'string') {
+        return <span className={className}>{formatted}</span>;
+      }
+      return (
+        <span className={className}>
+          {formatted.prefix}<sub className="text-[0.6em] opacity-70">{formatted.zeros}</sub>{formatted.digits}
+        </span>
+      );
     };
+    
+    const getLogoUrl = (address) => address ? `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${address.toLowerCase()}.png` : null;
     
     const getCreatureCounts = (total, creatures) => {
       const counts = [];
@@ -164,6 +159,8 @@
           
           const totalVolume = pairs.reduce((sum, p) => sum + p.volume24h, 0);
           const totalLiquidity = pairs.reduce((sum, p) => sum + p.liquidity, 0);
+          const totalBuys = pairs.reduce((sum, p) => sum + (p.txns?.h24?.buys || 0), 0);
+          const totalSells = pairs.reduce((sum, p) => sum + (p.txns?.h24?.sells || 0), 0);
           const pricePair = mainPairData || pairs[0];
           
           return {
@@ -173,14 +170,13 @@
             mcap: pricePair.marketCap || pricePair.fdv || 0,
             liquidity: totalLiquidity,
             volume24h: totalVolume,
+            buys24h: totalBuys,
+            sells24h: totalSells,
             pairs
           };
         }
         return null;
-      } catch (err) {
-        console.error('DexScreener error:', err);
-        return null;
-      }
+      } catch (err) { console.error('DexScreener error:', err); return null; }
     };
     
     const fetchHolderCount = async (tokenAddress) => {
@@ -191,16 +187,16 @@
       } catch { return 0; }
     };
     
-    const fetchBurnData = async (tokenAddress, burnAddress, decimals) => {
+    const fetchBurnData = async (tokenAddress, decimals) => {
       try {
-        const balanceRes = await fetch('https://rpc.pulsechain.com', {
+        const balanceRes = await fetch(PULSECHAIN_RPC, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddress, data: '0x70a08231000000000000000000000000' + burnAddress.slice(2).padStart(64, '0') }, 'latest'], id: 1 })
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddress, data: '0x70a08231000000000000000000000000' + BURN_ADDRESS.slice(2) }, 'latest'], id: 1 })
         });
         const balanceData = await balanceRes.json();
         const burned = Number(BigInt(balanceData.result || '0x0')) / Math.pow(10, decimals);
         
-        const supplyRes = await fetch('https://rpc.pulsechain.com', {
+        const supplyRes = await fetch(PULSECHAIN_RPC, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: tokenAddress, data: '0x18160ddd' }, 'latest'], id: 2 })
         });
@@ -211,28 +207,167 @@
       } catch { return { total: 0, percent: 0, totalSupply: 0 }; }
     };
     
+    const fetchBurnHistory = async (tokenAddress, decimals, hours) => {
+      try {
+        const blockRes = await fetch(PULSECHAIN_RPC, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 })
+        });
+        const blockData = await blockRes.json();
+        const currentBlock = parseInt(blockData.result, 16);
+        const blocksPerHour = 360; // ~10 sec blocks
+        const fromBlock = '0x' + Math.max(0, currentBlock - (blocksPerHour * hours)).toString(16);
+        
+        const transferSig = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+        const burnPadded = '0x000000000000000000000000' + BURN_ADDRESS.slice(2).toLowerCase();
+        
+        const logsRes = await fetch(PULSECHAIN_RPC, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', method: 'eth_getLogs',
+            params: [{ address: tokenAddress, topics: [transferSig, null, burnPadded], fromBlock, toBlock: 'latest' }], id: 1
+          })
+        });
+        const logsData = await logsRes.json();
+        
+        let burnAmount = 0;
+        if (logsData.result && Array.isArray(logsData.result)) {
+          burnAmount = logsData.result.reduce((sum, log) => sum + Number(BigInt(log.data)) / Math.pow(10, decimals), 0);
+        }
+        return burnAmount;
+      } catch { return 0; }
+    };
+    
     const fetchPLSPrice = async () => {
       try {
         const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');
-        const data = await res.json();
-        return parseFloat(data.pair?.priceUsd) || 0.00005;
+        return parseFloat((await res.json()).pair?.priceUsd) || 0.00005;
       } catch { return 0.00005; }
     };
     
     // Components
-    const SeaCreatureDisplay = ({ creatures, size = 'text-xl' }) => (
+    const SeaCreatureDisplay = ({ creatures, size = 'text-2xl' }) => (
       <div className="flex items-center gap-1 flex-wrap">
         <span className={`${size} animate-fire`}>🔥</span>
-        {creatures.slice(0, 5).map((c, i) => (
+        {creatures.slice(0, 6).map((c, i) => (
           <span key={i} className="flex items-center">
             <span className={size}>{c.emoji}</span>
-            {c.count > 1 && <span className="text-white/60 text-xs">x{c.count}</span>}
+            {c.count > 1 && <span className="text-white/70 text-sm font-bold">x{c.count}</span>}
           </span>
         ))}
       </div>
     );
     
-    // LP Pair Row Component (ProWeb style)
+    // Burn Details Modal
+    const BurnModal = ({ isOpen, onClose, token, burnData, price, config }) => {
+      const [burnHistory, setBurnHistory] = useState({ h1: 0, h6: 0, h12: 0, h24: 0 });
+      const [chartPeriod, setChartPeriod] = useState('24h');
+      const [loading, setLoading] = useState(true);
+      
+      useEffect(() => {
+        if (!isOpen) return;
+        const fetchHistory = async () => {
+          setLoading(true);
+          const [h1, h6, h12, h24] = await Promise.all([
+            fetchBurnHistory(config.address, config.decimals, 1),
+            fetchBurnHistory(config.address, config.decimals, 6),
+            fetchBurnHistory(config.address, config.decimals, 12),
+            fetchBurnHistory(config.address, config.decimals, 24)
+          ]);
+          setBurnHistory({ h1, h6, h12, h24 });
+          setLoading(false);
+        };
+        fetchHistory();
+      }, [isOpen, config]);
+      
+      if (!isOpen) return null;
+      
+      const theme = config.color === 'gold' ? { text: 'text-[#D9CA5D]', border: 'border-[#D9CA5D]' } : { text: 'text-[#7CFC00]', border: 'border-[#7CFC00]' };
+      const burnCreatures = getCreatureCounts(burnData?.total || 0, BURN_CREATURES);
+      
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={onClose}>
+          <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">🔥</span>
+                  <h2 className="text-2xl font-bold text-orange-400 font-orbitron">{token} Burn Statistics</h2>
+                </div>
+                <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">×</button>
+              </div>
+              
+              {/* Main Stats */}
+              <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <div className="text-orange-400/80 text-sm uppercase font-semibold mb-1">Total Burned</div>
+                    <div className="text-2xl font-bold text-orange-400">{fmt(burnData?.total)} <span className="text-base">{token}</span></div>
+                  </div>
+                  <div>
+                    <div className="text-orange-400/80 text-sm uppercase font-semibold mb-1">USD Value</div>
+                    <div className="text-2xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * price)}</div>
+                  </div>
+                  <div>
+                    <div className="text-orange-400/80 text-sm uppercase font-semibold mb-1">% of Supply</div>
+                    <div className="text-2xl font-bold text-white">{(burnData?.percent || 0).toFixed(2)}%</div>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="h-3 bg-black/50 rounded-full overflow-hidden mb-4">
+                  <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
+                </div>
+                
+                {/* Sea Creatures */}
+                <SeaCreatureDisplay creatures={burnCreatures} size="text-3xl" />
+              </div>
+              
+              {/* Time-based Burns */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {[
+                  { label: '1 Hour', value: burnHistory.h1 },
+                  { label: '6 Hours', value: burnHistory.h6 },
+                  { label: '12 Hours', value: burnHistory.h12 },
+                  { label: '24 Hours', value: burnHistory.h24 }
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-[#1a1a1a] border border-orange-500/20 rounded-lg p-3 text-center">
+                    <div className="text-white/60 text-xs uppercase mb-1">{label}</div>
+                    <div className="text-lg font-bold text-orange-400">{loading ? '...' : fmt(value)}</div>
+                    <div className="text-green-400 text-sm">{loading ? '' : fmtUSD(value * price)}</div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Chart Area */}
+              <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-white font-semibold">Burn History</h3>
+                  <div className="flex gap-2">
+                    {['24h', '7D', '30D', '90D', 'All'].map(period => (
+                      <button key={period} onClick={() => setChartPeriod(period)}
+                        className={`px-3 py-1 rounded text-sm ${chartPeriod === period ? 'bg-orange-500/30 text-orange-400 border border-orange-500/50' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
+                        {period}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="h-48 flex items-center justify-center text-white/40">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">📊</div>
+                    <div>Burn chart coming soon</div>
+                    <div className="text-sm mt-1">Showing {chartPeriod} period</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
+    // LP Pair Row
     const LPPairRow = ({ pair, theme, mainTokenAddress }) => {
       const [logoError, setLogoError] = useState(false);
       const [showDetails, setShowDetails] = useState(false);
@@ -252,81 +387,64 @@
       
       return (
         <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 transition-all hover:border-opacity-60`}>
-          {/* Mobile layout */}
           <div className="sm:hidden">
             <div className="flex items-center gap-3 mb-2">
-              {!logoError && logoUrl ? (
-                <img src={logoUrl} alt="" className="w-8 h-8 rounded-full bg-black/50" onError={() => setLogoError(true)}/>
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-400">{fallbackLetter}</div>
-              )}
+              {!logoError && logoUrl ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-full bg-black/50" onError={() => setLogoError(true)}/> : <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-400">{fallbackLetter}</div>}
               <div className="flex-1">
                 <div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
                 <div className="text-gray-500 text-xs">PulseX V2</div>
               </div>
-              <div className={`text-sm font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
-                {isUp ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%
-              </div>
+              <div className={`text-sm font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%</div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center text-xs">
-              <div><div className="text-gray-400">Vol</div><div className="text-white font-space">{fmtCompact(vol)}</div></div>
-              <div><div className="text-gray-400">Liq</div><div className="text-white font-space">{fmtCompact(liq)}</div></div>
+              <div><div className="text-gray-400">Vol</div><div className="text-white font-space">{fmtUSD(vol)}</div></div>
+              <div><div className="text-gray-400">Liq</div><div className="text-white font-space">{fmtUSD(liq)}</div></div>
               <div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div>
               <div><div className="text-gray-400">Ratio</div><div className="font-bold text-white">{ratio.toFixed(3)}x</div></div>
             </div>
           </div>
           
-          {/* Desktop layout */}
           <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
             <div className="col-span-1 flex justify-center">
-              {!logoError && logoUrl ? (
-                <img src={logoUrl} alt="" className="w-10 h-10 rounded-full bg-black/50" onError={() => setLogoError(true)}/>
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400">{fallbackLetter}</div>
-              )}
+              {!logoError && logoUrl ? <img src={logoUrl} alt="" className="w-10 h-10 rounded-full bg-black/50" onError={() => setLogoError(true)}/> : <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400">{fallbackLetter}</div>}
             </div>
             <div className="col-span-2">
               <div className={`font-semibold ${theme.text} text-base`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
               <div className="text-gray-500 text-sm">PulseX V2</div>
             </div>
             <div className="col-span-2 text-right">
-              <div className="text-gray-400 text-xs">Volume</div>
-              <div className="text-white font-space font-semibold">{fmtCompact(vol)}</div>
+              <div className="text-white text-xs">Volume</div>
+              <div className="text-white font-space font-semibold">{fmtUSD(vol)}</div>
             </div>
             <div className="col-span-2 text-right">
-              <div className="text-gray-400 text-xs">Liquidity</div>
-              <div className="text-white font-space">{fmtCompact(liq)}</div>
+              <div className="text-white text-xs">Liquidity</div>
+              <div className="text-white font-space">{fmtUSD(liq)}</div>
             </div>
             <div className="col-span-1 text-center">
-              <div className="text-gray-400 text-xs">24h</div>
-              <div className={`font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
-                {isUp ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%
-              </div>
+              <div className="text-white text-xs">24h</div>
+              <div className={`font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '▲' : '▼'} {Math.abs(priceChange).toFixed(1)}%</div>
             </div>
             <div className="col-span-1 text-center">
-              <div className="text-gray-400 text-xs">Txns</div>
+              <div className="text-white text-xs">Txns</div>
               <div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div>
             </div>
             <div className="col-span-1 text-right">
-              <div className="text-gray-400 text-xs">Ratio</div>
+              <div className="text-white text-xs">Ratio</div>
               <div className="font-bold text-white">{ratio.toFixed(3)}x</div>
             </div>
             <div className="col-span-2 flex items-center justify-end gap-2">
               <button onClick={() => setShowDetails(!showDetails)} className="text-lg hover:scale-110 transition-transform" title="Pool info">ℹ️</button>
-              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" className="text-lg hover:scale-110 transition-transform" title="DexScreener">📈</a>
-              <a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" className="text-lg hover:scale-110 transition-transform" title="DexTools">📊</a>
+              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110 transition-transform" title="DexScreener">📈</a>
+              <a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110 transition-transform" title="DexTools">📊</a>
             </div>
           </div>
           
-          {/* Details Panel */}
           {showDetails && (
-            <div className="mt-3 pt-3 border-t border-white/10 text-sm">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div><span className="text-gray-400">Pair:</span> <span className="text-white font-mono text-xs">{pair.pairAddress?.slice(0, 10)}...</span></div>
-                <div><span className="text-gray-400">Created:</span> <span className="text-white">{pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toLocaleDateString() : '—'}</span></div>
-                <div><span className="text-gray-400">Price:</span> <span className="text-white">{fmtPrice(parseFloat(pair.priceUsd))}</span></div>
-                <div><span className="text-gray-400">FDV:</span> <span className="text-white">{fmtCompact(pair.fdv)}</span></div>
-              </div>
+            <div className="mt-3 pt-3 border-t border-white/10 text-sm grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div><span className="text-gray-400">Pair:</span> <span className="text-white font-mono text-xs">{pair.pairAddress?.slice(0, 10)}...</span></div>
+              <div><span className="text-gray-400">Created:</span> <span className="text-white">{pair.pairCreatedAt ? new Date(pair.pairCreatedAt).toLocaleDateString() : '—'}</span></div>
+              <div><span className="text-gray-400">Price:</span> <PriceDisplay price={parseFloat(pair.priceUsd)} className="text-white"/></div>
+              <div><span className="text-gray-400">FDV:</span> <span className="text-white">{fmtUSD(pair.fdv)}</span></div>
             </div>
           )}
         </div>
@@ -375,8 +493,8 @@
                 <div className="text-white/40 text-xs sm:text-sm font-mono mt-1">{config.address.slice(0, 6)}...{config.address.slice(-4)}</div>
               </div>
               <div className="flex-1 text-center sm:text-right">
-                <div className="text-white font-bold text-xl sm:text-2xl lg:text-3xl">{fmtPrice(data?.price)}</div>
-                <div className="text-white/50 text-sm sm:text-base lg:text-xl mt-1">MCap: {fmtCompact(data?.mcap)}</div>
+                <PriceDisplay price={data?.price} className="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/>
+                <div className="text-white/50 text-sm sm:text-base lg:text-xl mt-1">MCap: {fmtUSD(data?.mcap)}</div>
               </div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <MiniSparkline isPositive={isPositive} color={isPositive ? '#22c55e' : '#ef4444'}/>
@@ -398,11 +516,7 @@
           </header>
           <div className="flex-1 flex items-start justify-center pb-8">
             <div className="flex flex-col gap-4 sm:gap-6 max-w-4xl w-full">
-              {loading ? (
-                <><div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div></>
-              ) : (
-                <><TokenCard token="PTGC" data={tokenData.PTGC}/><TokenCard token="UFO" data={tokenData.UFO}/></>
-              )}
+              {loading ? <><div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div></> : <><TokenCard token="PTGC" data={tokenData.PTGC}/><TokenCard token="UFO" data={tokenData.UFO}/></>}
             </div>
           </div>
           <footer className="text-center py-4 sm:py-6 border-t border-white/10">
@@ -431,13 +545,14 @@
       const [lpSortBy, setLpSortBy] = useState('volume');
       const [lpSortDir, setLpSortDir] = useState('desc');
       const [lastUpdate, setLastUpdate] = useState(new Date());
+      const [showBurnModal, setShowBurnModal] = useState(false);
       
       useEffect(() => {
         const fetchAllData = async () => {
           const [dexData, holdersCount, burn, pls] = await Promise.all([
             fetchDexScreenerData(config.address, config.mainPair),
             fetchHolderCount(config.address),
-            fetchBurnData(config.address, config.burnAddress, config.decimals),
+            fetchBurnData(config.address, config.decimals),
             fetchPLSPrice()
           ]);
           setData(dexData);
@@ -511,45 +626,53 @@
           {/* Stats Row */}
           <div className="border-b border-white/10">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
-                  { label: 'PRICE USD', value: fmtPrice(data?.price), sub: <span className={data?.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'}>{data?.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%</span>, color: theme.text },
-                  { label: 'PLS RATIO', value: `${plsRatio}x`, sub: '—' },
-                  { label: 'MARKET CAP', value: fmtCompact(data?.mcap), sub: '—' },
-                  { label: 'VOLUME', value: fmtCompact(data?.volume24h), sub: '24h' },
-                  { label: 'LIQUIDITY', value: fmtCompact(data?.liquidity), sub: '—' }
+                  { label: 'PRICE USD', value: <PriceDisplay price={data?.price} className={theme.text}/>, sub: <span className={data?.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'}>{data?.priceChange24h >= 0 ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%</span> },
+                  { label: 'PLS RATIO', value: `${plsRatio}x`, sub: '—', valueClass: theme.text },
+                  { label: 'MARKET CAP', value: fmtUSD(data?.mcap), sub: '—', valueClass: theme.text },
+                  { label: 'VOLUME 24H', value: fmtUSD(data?.volume24h), sub: '—', valueClass: theme.text },
+                  { label: 'LIQUIDITY', value: fmtUSD(data?.liquidity), sub: '—', valueClass: theme.text },
+                  { label: 'TXNS 24H', value: <><span className="text-green-400">{data?.buys24h || 0}</span> / <span className="text-red-400">{data?.sells24h || 0}</span></>, sub: 'buys / sells' }
                 ].map((stat, i) => (
                   <div key={i} className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4`}>
-                    <div className="text-gray-400 text-xs uppercase mb-1">{stat.label}</div>
-                    <div className={`text-xl sm:text-2xl font-bold ${stat.color || 'text-white'}`}>{stat.value}</div>
-                    <div className="text-sm">{stat.sub}</div>
+                    <div className="text-white text-xs uppercase mb-1">{stat.label}</div>
+                    <div className={`text-xl sm:text-2xl font-bold ${stat.valueClass || ''}`}>{stat.value}</div>
+                    <div className="text-sm text-white/50">{stat.sub}</div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
           
-          {/* Burn Section */}
+          {/* Burn Section - ProWeb Orange Style */}
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* MAIN BURN BOX - Orange Themed */}
+              <div className="lg:col-span-2 bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 cursor-pointer hover:border-orange-500/50 transition-all" onClick={() => setShowBurnModal(true)}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-xs text-orange-400/90 uppercase font-semibold">🔥 Total Supply Burned</div>
+                  <span className="text-orange-400/60 text-xs">Click for details →</span>
+                </div>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className={`text-2xl font-bold ${theme.text}`}>{fmt(burnData?.total)}</span>
+                  <span className="text-lg font-bold text-green-400">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</span>
+                  <span className="text-white/50">{(burnData?.percent || 0).toFixed(2)}%</span>
+                </div>
+                <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3">
+                  <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
+                </div>
+                <SeaCreatureDisplay creatures={burnCreatures} size="text-2xl"/>
+              </div>
+              
+              {/* Other Stats */}
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center gap-2 mb-2"><span className="text-xl">🔥</span><span className="text-white/70 text-sm font-medium">TOTAL SUPPLY BURNED</span></div>
-                <div className={`text-xl sm:text-2xl font-bold ${theme.text}`}>{fmt(burnData?.total)} {token}</div>
-                <div className="text-white/50 text-sm">{fmtCompact((burnData?.total || 0) * (data?.price || 0))}</div>
-                <div className="text-green-400 text-sm mt-1">🔥 {burnData?.percent?.toFixed(2)}% of supply</div>
-                <div className="mt-2"><SeaCreatureDisplay creatures={burnCreatures} size="text-lg"/></div>
+                <div className="flex items-center gap-2 mb-2"><span className="text-xl">📊</span><span className="text-white text-sm font-medium">TOTAL SUPPLY</span></div>
+                <div className={`text-xl sm:text-2xl font-bold ${theme.text}`}>{fmt(burnData?.totalSupply)}</div>
               </div>
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center gap-2 mb-2"><span className="text-xl">📊</span><span className="text-white/70 text-sm font-medium">TOTAL SUPPLY</span></div>
-                <div className="text-xl sm:text-2xl font-bold text-white">{fmt(burnData?.totalSupply)}</div>
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center gap-2 mb-2"><span className="text-xl">💫</span><span className="text-white/70 text-sm font-medium">CIRCULATING</span></div>
-                <div className="text-xl sm:text-2xl font-bold text-white">{fmt((burnData?.totalSupply || 0) - (burnData?.total || 0))}</div>
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center gap-2 mb-2"><span className="text-xl">👥</span><span className="text-white/70 text-sm font-medium">HOLDERS</span></div>
-                <div className="text-xl sm:text-2xl font-bold text-white">{fmt(holders)}</div>
+                <div className="flex items-center gap-2 mb-2"><span className="text-xl">👥</span><span className="text-white text-sm font-medium">HOLDERS</span></div>
+                <div className={`text-xl sm:text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>
               </div>
             </div>
           </div>
@@ -595,7 +718,7 @@
                 <div key={c.name} className={`${theme.card} border ${theme.border} rounded-lg p-2 sm:p-3 text-center hover:bg-white/10 transition-all`}>
                   <div className="text-2xl sm:text-3xl mb-1">{c.emoji}</div>
                   <div className="text-white text-xs font-bold">{c.name}</div>
-                  <div className="text-white/40 text-xs">{c.max === Infinity ? `$${fmt(c.min)}+` : `$${fmt(c.min)}`}</div>
+                  <div className={`${theme.text} text-xs`}>{c.max === Infinity ? `$${fmt(c.min)}+` : `$${fmt(c.min)}`}</div>
                 </div>
               ))}
             </div>
@@ -604,6 +727,9 @@
           <footer className="text-center py-4 border-t border-white/10 mt-8">
             <p className="text-white/30 text-xs px-4">Not financial advice. Data may be delayed. DYOR.</p>
           </footer>
+          
+          {/* Burn Modal */}
+          <BurnModal isOpen={showBurnModal} onClose={() => setShowBurnModal(false)} token={token} burnData={burnData} price={data?.price || 0} config={config}/>
         </div>
       );
     };
