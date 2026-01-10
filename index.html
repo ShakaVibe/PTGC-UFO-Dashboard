@@ -405,88 +405,88 @@
         const config = TOKENS[token];
         const isGold = config.color === 'gold';
         const borderColor = isGold ? 'border-[#D9CA5D]' : 'border-[#7CFC00]';
-        const glowClass = isGold ? 'animate-pulse-glow-gold' : 'animate-pulse-glow';
         const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
         const bgGradient = isGold 
-          ? 'bg-gradient-to-b from-[#D9CA5D]/10 via-black to-black' 
-          : 'bg-gradient-to-b from-[#7CFC00]/10 via-black to-black';
+          ? 'bg-gradient-to-b from-[#D9CA5D]/5 via-black to-black' 
+          : 'bg-gradient-to-b from-[#7CFC00]/5 via-black to-black';
+        const buttonBg = isGold
+          ? 'bg-gradient-to-r from-[#D9CA5D] to-[#B8A83D] hover:from-[#E8D96C] hover:to-[#C9B94E]'
+          : 'bg-gradient-to-r from-[#7CFC00] to-[#5AC800] hover:from-[#8FFF20] hover:to-[#6AD810]';
         
         return (
-          <div 
-            onClick={() => onSelectToken(token)}
-            className={`relative cursor-pointer rounded-2xl border-2 ${borderColor} ${bgGradient} ${glowClass} p-8 transition-all duration-300 hover:scale-105`}
-          >
-            {/* Logo and Name */}
-            <div className="flex items-center gap-4 mb-6">
-              <div className={`w-20 h-20 rounded-xl border-2 ${borderColor} bg-black/50 flex items-center justify-center`}>
-                <img src={config.logo} alt={token} className="w-16 h-16 object-contain" />
-              </div>
-              <div>
-                <h2 className={`font-orbitron text-4xl font-bold ${textColor}`}>{token}</h2>
-                <p className="text-white/50 text-sm">Click to view dashboard</p>
-              </div>
+          <div className={`rounded-2xl border-2 ${borderColor} ${bgGradient} p-6 transition-all duration-300 hover:scale-[1.02]`}>
+            {/* Token Name */}
+            <div className="text-center mb-6">
+              <h2 className={`font-orbitron text-4xl font-bold ${textColor}`}>{token}</h2>
             </div>
             
             {/* Price */}
-            <div className="mb-4">
-              <div className="text-white/50 text-sm mb-1">Price</div>
-              <div className="flex items-center gap-3">
-                <span className={`text-3xl font-bold ${textColor}`}>
-                  <PriceDisplay price={data?.price} color={config.color} />
-                </span>
-                {data?.priceChange24h && (
+            <div className="text-center mb-6">
+              <div className={`text-4xl font-bold ${textColor}`}>
+                <PriceDisplay price={data?.price} color={config.color} />
+              </div>
+              {data?.priceChange24h && (
+                <div className="mt-2">
                   <ChangeBadge value={data.priceChange24h} />
-                )}
-              </div>
-            </div>
-            
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-white/50 text-xs uppercase">Market Cap</div>
-                <div className="text-white font-bold text-lg">{fmtUSD(data?.mcap)}</div>
-              </div>
-              <div>
-                <div className="text-white/50 text-xs uppercase">Liquidity</div>
-                <div className="text-white font-bold text-lg">{fmtUSD(data?.liquidity)}</div>
-              </div>
-              <div>
-                <div className="text-white/50 text-xs uppercase">24h Volume</div>
-                <div className="text-white font-bold text-lg">{fmtUSD(data?.volume24h)}</div>
-              </div>
-              <div>
-                <div className="text-white/50 text-xs uppercase">Liq/MC Ratio</div>
-                <div className="text-white font-bold text-lg">
-                  {data?.mcap > 0 ? ((data.liquidity / data.mcap) * 100).toFixed(1) + '%' : '—'}
                 </div>
+              )}
+            </div>
+            
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="text-center">
+                <div className="text-white/50 text-xs uppercase mb-1">Market Cap</div>
+                <div className="text-white font-bold text-xl">{fmtUSD(data?.mcap)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-white/50 text-xs uppercase mb-1">24h Volume</div>
+                <div className="text-white font-bold text-xl">{fmtUSD(data?.volume24h)}</div>
               </div>
             </div>
             
-            {/* Enter Arrow */}
-            <div className={`absolute bottom-4 right-4 ${textColor} text-2xl`}>→</div>
+            {/* Enter Button */}
+            <button
+              onClick={() => onSelectToken(token)}
+              className={`w-full py-3 rounded-xl font-bold text-black text-lg transition-all ${buttonBg} shadow-lg hover:shadow-xl`}
+            >
+              Enter Dashboard →
+            </button>
           </div>
         );
       };
       
       return (
         <div className="min-h-screen flex flex-col">
-          {/* Header */}
+          {/* Header with Combined Logo */}
           <header className="text-center py-12">
-            <h1 className="font-orbitron text-5xl font-bold mb-2">
-              <span className="text-[#D9CA5D]">PTGC</span>
-              <span className="text-white/50 mx-4">&</span>
-              <span className="text-[#7CFC00]">UFO</span>
+            <div className="flex justify-center mb-4">
+              <img 
+                src="./07_Combined_PTGC_UFO_Transparent.png" 
+                alt="PTGC & UFO" 
+                className="h-32 w-auto object-contain"
+              />
+            </div>
+            <h1 
+              className="font-orbitron text-4xl font-bold"
+              style={{
+                background: 'linear-gradient(180deg, #FFFFFF 0%, #A0A0A0 50%, #606060 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: '0 2px 10px rgba(255,255,255,0.2)',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))'
+              }}
+            >
+              Dashboard
             </h1>
-            <p className="text-white/50 text-lg">Dashboard</p>
           </header>
           
           {/* Token Cards */}
           <div className="flex-1 flex items-center justify-center px-8 pb-12">
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full">
+            <div className="grid md:grid-cols-2 gap-8 max-w-3xl w-full">
               {loading ? (
                 <>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-80"></div>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-80"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-72"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-72"></div>
                 </>
               ) : (
                 <>
