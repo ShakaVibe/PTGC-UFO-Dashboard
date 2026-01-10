@@ -141,25 +141,69 @@
     };
     
     // Fetch DAO data
-    const fetchDAOData=async(daoContract,treasuryAddr,plsPrice)=>{
+    const fetchDAOData=async(daoContract,treasuryAddr,plsPrice,ptgcAddress)=>{
       try{
         // Get DAO contract PLS balance
         const daoBalance=await fetchPLSBalance(daoContract);
+        console.log('DAO contract balance:',daoBalance,'PLS');
         
-        // lockedAmount() = 0xc8ec5a2e - PLS locked in active proposals
-        let lockedAmount=0;
+        // Get proposal count - proposalCount() = 0xda35c664
+        let proposalCount=0;
         try{
-          const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xc8ec5a2e'},'latest'],id:1})});
-          const lResult=(await lRes.json()).result;
-          if(lResult&&lResult!=='0x'){
-            lockedAmount=Number(BigInt(lResult))/1e18;
+          const pcRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:1})});
+          const pcResult=(await pcRes.json()).result;
+          if(pcResult&&pcResult!=='0x'){
+            proposalCount=parseInt(pcResult,16);
           }
-        }catch(e){console.error('lockedAmount error:',e)}
+        }catch(e){console.error('proposalCount error:',e)}
+        console.log('Proposal count:',proposalCount);
         
-        // Available for new proposals = DAO balance - locked
-        const availablePLS=Math.max(0,daoBalance-lockedAmount);
+        // Loop through recent proposals to find active ones and sum their fundRequest
+        let activeProposalCount=0;
+        let pendingPLS=0;
         
-        // Get treasury wallet total value (PLS + all tokens)
+        // proposals(uint256) returns (id, fundRequest, startTime, endTime, forVotes, againstVotes, voters, claimed, proposer)
+        // selector = 0x013cf08b
+        // state(uint256) selector = 0x3e4f49e6
+        
+        const startId=Math.max(1,proposalCount-20); // Check last 20 proposals
+        for(let i=proposalCount;i>=startId;i--){
+          try{
+            const idHex=i.toString(16).padStart(64,'0');
+            
+            // Get proposal state
+            const stateRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:1})});
+            const stateResult=(await stateRes.json()).result;
+            const state=parseInt(stateResult,16);
+            
+            // State 0=Pending, 1=Active
+            if(state===0||state===1){
+              activeProposalCount++;
+              
+              // Get proposal details to get fundRequest
+              const propRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x013cf08b'+idHex},'latest'],id:1})});
+              const propResult=(await propRes.json()).result;
+              
+              if(propResult&&propResult.length>=66){
+                // fundRequest is the second uint256 (bytes 64-128, after id)
+                const fundRequestHex='0x'+propResult.slice(66,130);
+                const fundRequest=Number(BigInt(fundRequestHex))/1e18;
+                pendingPLS+=fundRequest;
+                console.log(`Proposal ${i}: Active, fundRequest=${fundRequest} PLS`);
+              }
+            }
+          }catch(e){
+            console.error('Error checking proposal',i,e);
+          }
+        }
+        
+        console.log('Active proposals:',activeProposalCount,'Pending PLS:',pendingPLS);
+        
+        // Available for new proposals = DAO balance - pending in proposals
+        const availablePLS=Math.max(0,daoBalance-pendingPLS);
+        console.log('Available for new proposals:',availablePLS,'PLS');
+        
+        // Get treasury wallet total value (PLS + all tokens EXCEPT PTGC)
         const treasuryPLS=await fetchPLSBalance(treasuryAddr);
         let treasuryTokenValue=0;
         try{
@@ -167,6 +211,9 @@
           const tokens=await r.json();
           if(Array.isArray(tokens)){
             for(const t of tokens){
+              // Exclude PTGC from liquid value
+              if(t.token?.address?.toLowerCase()===ptgcAddress?.toLowerCase())continue;
+              
               const val=parseFloat(t.value||0)/Math.pow(10,parseInt(t.token?.decimals||18));
               if(t.token?.exchange_rate){
                 treasuryTokenValue+=val*parseFloat(t.token.exchange_rate);
@@ -175,19 +222,21 @@
           }
         }catch{}
         
-        // Liquid DAO Value = total treasury wallet value
+        // Liquid DAO Value = treasury wallet value (excluding PTGC)
         const liquidValue=treasuryPLS*plsPrice+treasuryTokenValue;
+        console.log('Liquid DAO Value:',liquidValue);
         
-        // Total DAO Value = Available (USD) + Pending (USD) + Liquid
+        // Total DAO Value = Available USD + Pending USD + Liquid Value
         const availableUSD=availablePLS*plsPrice;
-        const pendingUSD=lockedAmount*plsPrice;
+        const pendingUSD=pendingPLS*plsPrice;
         const totalValue=availableUSD+pendingUSD+liquidValue;
         
         return{
           availablePLS,
           availableUSD,
-          pendingPLS:lockedAmount,
+          pendingPLS,
           pendingUSD,
+          pendingCount:activeProposalCount,
           liquidValue,
           totalValue
         };
@@ -598,7 +647,7 @@
           
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
-            const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p);
+            const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p,cfg.address);
             setDaoData(dao);
             setDaoLoading(false);
           }
@@ -733,7 +782,7 @@
                           <div className="text-white/40 text-xs">{fmtUSD(daoData?.availableUSD||0)}</div>
                         </div>
                         <div>
-                          <div className="text-white/50 text-xs uppercase">Pending in Proposals</div>
+                          <div className="text-white/50 text-xs uppercase">Pending in Proposals ({daoData?.pendingCount||0})</div>
                           <div className="text-lg font-bold text-yellow-400">{fmtAbbr(daoData?.pendingPLS||0)} PLS</div>
                           <div className="text-white/40 text-xs">{fmtUSD(daoData?.pendingUSD||0)}</div>
                         </div>
