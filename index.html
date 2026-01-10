@@ -53,7 +53,10 @@
       {n:'Whale',e:'\u{1F40B}',p:1},
       {n:'Shark',e:'\u{1F988}',p:0.1},
       {n:'Dolphin',e:'\u{1F42C}',p:0.01},
-      {n:'Squid & Below',e:'\u{1F991}',p:0}
+      {n:'Squid',e:'\u{1F991}',p:0.001},
+      {n:'Turtle',e:'\u{1F422}',p:0.0001},
+      {n:'Shrimp',e:'\u{1F990}',p:0.00001},
+      {n:'Shell',e:'\u{1F41A}',p:0}
     ];
     
     const BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
@@ -70,11 +73,10 @@
     
     // Get holder tier based on percentage of supply
     const getHolderTier=(holdingPct)=>{
-      if(holdingPct>=10)return'Poseidon';
-      if(holdingPct>=1)return'Whale';
-      if(holdingPct>=0.1)return'Shark';
-      if(holdingPct>=0.01)return'Dolphin';
-      return'Squid & Below';
+      for(const tier of HOLDER_TIERS){
+        if(holdingPct>=tier.p)return tier.n;
+      }
+      return'Shell';
     };
     
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
@@ -82,9 +84,59 @@
     const fetchBurn=async(addr,dec)=>{try{const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1})});const burned=Number(BigInt((await bRes.json()).result||'0x0'))/Math.pow(10,dec);const sRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})});const supply=Number(BigInt((await sRes.json()).result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch{return{total:0,pct:0,supply:0}}};
     const fetchBurnHist=async(addr,dec,hrs)=>{try{const blocksPerHour=360;const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})});const curBlock=parseInt((await bRes.json()).result,16);if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1})});const logs=(await lRes.json()).result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1})});const logs=(await lRes.json()).result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
-    const fetchTopHolders=async(addr)=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?limit=50`);const data=await r.json();return data.items||[]}catch{return[]}};
     
-    // Donut Chart Component - fixed, no hover effects
+    // Fetch ALL holders with pagination
+    const fetchAllHolders=async(addr,cfg,onProgress)=>{
+      const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0,Turtle:0,Shrimp:0,Shell:0};
+      let nextPageParams=null;
+      let totalFetched=0;
+      const maxPages=100; // Safety limit
+      let page=0;
+      
+      try{
+        while(page<maxPages){
+          const url=nextPageParams
+            ?`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?${nextPageParams}`
+            :`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?limit=50`;
+          
+          const r=await fetch(url);
+          const data=await r.json();
+          const items=data.items||[];
+          
+          if(items.length===0)break;
+          
+          items.forEach(holder=>{
+            const holderAddr=holder.address?.hash?.toLowerCase();
+            // Skip LPs and burn address
+            if(LP_ADDRESSES.includes(holderAddr)||holderAddr===BURN_ADDRESS.toLowerCase())return;
+            
+            const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
+            const pctOfSupply=(tokens/cfg.totalSupply)*100;
+            const tier=getHolderTier(pctOfSupply);
+            counts[tier]++;
+          });
+          
+          totalFetched+=items.length;
+          if(onProgress)onProgress(totalFetched,counts);
+          
+          // Check for next page
+          if(data.next_page_params){
+            const params=new URLSearchParams();
+            Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
+            nextPageParams=params.toString();
+          }else{
+            break;
+          }
+          page++;
+        }
+      }catch(e){
+        console.error('Error fetching holders:',e);
+      }
+      
+      return{counts,total:totalFetched};
+    };
+    
+    // Donut Chart Component
     const DonutChart=({data,colors,size=120})=>{
       const total=data.reduce((s,d)=>s+d.value,0);
       if(total===0)return<svg width={size} height={size}><circle cx={size/2} cy={size/2} r={size/2-10} fill="none" stroke="#333" strokeWidth={size*0.17}/></svg>;
@@ -108,8 +160,27 @@
       );
     };
     
-    // Token Allocation Modal
-    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply,tierCounts})=>{
+    // Token Allocation Modal - fetches ALL holders
+    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply})=>{
+      const[tierCounts,setTierCounts]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0,Turtle:0,Shrimp:0,Shell:0});
+      const[loading,setLoading]=useState(true);
+      const[progress,setProgress]=useState(0);
+      
+      useEffect(()=>{
+        if(!open)return;
+        setLoading(true);
+        setProgress(0);
+        setTierCounts({Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0,Turtle:0,Shrimp:0,Shell:0});
+        
+        fetchAllHolders(cfg.address,cfg,(fetched,counts)=>{
+          setProgress(fetched);
+          setTierCounts({...counts});
+        }).then(({counts})=>{
+          setTierCounts(counts);
+          setLoading(false);
+        });
+      },[open,cfg]);
+      
       if(!open)return null;
       
       const burnedPct=(burn?.pct||0);
@@ -130,6 +201,7 @@
       ];
       
       const chartColors=isPTGC?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
+      const totalHolders=Object.values(tierCounts).reduce((s,c)=>s+c,0);
       
       return(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
@@ -154,18 +226,62 @@
               </div>
               
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="text-white/60 text-xs uppercase mb-3">Holder Distribution (Top 50 Wallets by % Supply)</div>
-                <div className="grid grid-cols-5 gap-2">
-                  {HOLDER_TIERS.map(tier=>(
-                    <div key={tier.n} className="text-center">
-                      <div className="text-3xl mb-1">{tier.e}</div>
-                      <div className={`text-xl font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                      <div className="text-white/50 text-xs">{tier.n}</div>
-                    </div>
-                  ))}
+                <div className="flex justify-between items-center mb-3">
+                  <div className="text-white/60 text-xs uppercase">Holder Distribution by % of Supply</div>
+                  {loading&&<div className="text-white/40 text-xs">Scanning: {progress} wallets...</div>}
                 </div>
-                <div className="text-white/40 text-xs mt-3 text-center">
-                  {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} Below
+                
+                {loading?(
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-4 gap-2">
+                      {HOLDER_TIERS.slice(0,4).map(tier=>(
+                        <div key={tier.n} className="text-center">
+                          <div className="text-2xl mb-1">{tier.e}</div>
+                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                          <div className="text-white/50 text-xs">{tier.n}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {HOLDER_TIERS.slice(4).map(tier=>(
+                        <div key={tier.n} className="text-center">
+                          <div className="text-2xl mb-1">{tier.e}</div>
+                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                          <div className="text-white/50 text-xs">{tier.n}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
+                      <span className="text-white/50 text-sm">Loading all holders...</span>
+                    </div>
+                  </div>
+                ):(
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-4 gap-2">
+                      {HOLDER_TIERS.slice(0,4).map(tier=>(
+                        <div key={tier.n} className="text-center">
+                          <div className="text-2xl mb-1">{tier.e}</div>
+                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                          <div className="text-white/50 text-xs">{tier.n}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {HOLDER_TIERS.slice(4).map(tier=>(
+                        <div key={tier.n} className="text-center">
+                          <div className="text-2xl mb-1">{tier.e}</div>
+                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                          <div className="text-white/50 text-xs">{tier.n}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-center text-white/40 text-xs mt-2">Total: {totalHolders} wallets (excludes LPs & burn)</div>
+                  </div>
+                )}
+                
+                <div className="text-white/40 text-xs mt-3 pt-3 border-t border-white/10">
+                  {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} 0.001%+ {'\u2022'} {'\u{1F422}'} 0.0001%+ {'\u2022'} {'\u{1F990}'} 0.00001%+ {'\u2022'} {'\u{1F41A}'} Below
                 </div>
               </div>
             </div>
@@ -349,28 +465,11 @@
       const[showBurn,setShowBurn]=useState(false);
       const[showValueGen,setShowValueGen]=useState(false);
       const[showAlloc,setShowAlloc]=useState(false);
-      const[tierCounts,setTierCounts]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,'Squid & Below':0});
-      const[loadingTiers,setLoadingTiers]=useState(true);
       
       useEffect(()=>{
         const load=async()=>{
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
-          
-          // Fetch holder tiers
-          setLoadingTiers(true);
-          const topHolders=await fetchTopHolders(cfg.address);
-          const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0,'Squid & Below':0};
-          topHolders.forEach(holder=>{
-            const addr=holder.address?.hash?.toLowerCase();
-            if(LP_ADDRESSES.includes(addr)||addr===BURN_ADDRESS.toLowerCase())return;
-            const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
-            const pctOfSupply=(tokens/cfg.totalSupply)*100;
-            const tier=getHolderTier(pctOfSupply);
-            counts[tier]++;
-          });
-          setTierCounts(counts);
-          setLoadingTiers(false);
         };
         load();
         const i=setInterval(load,60000);
@@ -394,7 +493,6 @@
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
       const heldPct=100-burnedPct-lpPct;
       
-      // Chart colors with token color for "Held"
       const chartColors=['#f97316','#3b82f6',cfg.colorHex];
       
       if(loading)return<div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div><div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div></div></div>;
@@ -459,28 +557,15 @@
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">{cfg.taxBreakdown.map((item,i)=><div key={i} className="flex items-center gap-1"><span>{item.emoji}</span><span className="text-white/60">{item.name}:</span><span className={`font-semibold ${theme.text}`}>{fmtUSD((data?.vol||0)*(item.pct/100))}</span></div>)}</div>
               </div>
               
-              {/* Token Allocation Box - with sea creatures in front */}
+              {/* Token Allocation Box - clean, no sea creatures */}
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowAlloc(true)}>
                 <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4CA}'} Token Allocation</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-center gap-4">
-                  <DonutChart data={[{label:'Burned',value:burnedPct},{label:'In LP',value:lpPct},{label:'Held',value:heldPct}]} colors={chartColors} size={70}/>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-sm mb-1"><span className="text-white/60">{'\u{1F525}'} Burned: <span className={`font-bold ${theme.text}`}>{burnedPct.toFixed(2)}%</span></span><span className="text-white/60">{'\u{1F4A7}'} LP: <span className={`font-bold ${theme.text}`}>{lpPct.toFixed(2)}%</span></span><span className="text-white/60">{'\u{1F464}'} Held: <span className={`font-bold ${theme.text}`}>{heldPct.toFixed(2)}%</span></span></div>
-                    <div className="border-t border-white/10 pt-2 mt-2">
-                      <div className="text-white/50 text-xs mb-1">Top 50 Holders (by % supply)</div>
-                      {loadingTiers?(
-                        <div className="text-white/30 text-xs animate-pulse-slow">Loading...</div>
-                      ):(
-                        <div className="flex justify-between">
-                          {HOLDER_TIERS.map(tier=>(
-                            <div key={tier.n} className="text-center">
-                              <span className="text-lg">{tier.e}</span>
-                              <span className={`ml-1 font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                  <DonutChart data={[{label:'Burned',value:burnedPct},{label:'In LP',value:lpPct},{label:'Held',value:heldPct}]} colors={chartColors} size={80}/>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{background:'#f97316'}}></div><span className="text-white/60 text-sm">Burned:</span><span className={`font-bold ${theme.text}`}>{burnedPct.toFixed(2)}%</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{background:'#3b82f6'}}></div><span className="text-white/60 text-sm">In LP:</span><span className={`font-bold ${theme.text}`}>{lpPct.toFixed(2)}%</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{background:cfg.colorHex}}></div><span className="text-white/60 text-sm">Held:</span><span className={`font-bold ${theme.text}`}>{heldPct.toFixed(2)}%</span></div>
                   </div>
                 </div>
               </div>
@@ -515,7 +600,7 @@
           
           <BurnModal open={showBurn} close={()=>setShowBurn(false)} token={token} burn={burn} price={data?.price||0} cfg={cfg}/>
           <ValueGenModal open={showValueGen} close={()=>setShowValueGen(false)} token={token} vol={data?.vol||0} cfg={cfg} theme={theme}/>
-          <AllocationModal open={showAlloc} close={()=>setShowAlloc(false)} token={token} cfg={cfg} theme={theme} burn={burn} tokensInLP={tokensInLP} totalSupply={cfg.totalSupply} tierCounts={tierCounts}/>
+          <AllocationModal open={showAlloc} close={()=>setShowAlloc(false)} token={token} cfg={cfg} theme={theme} burn={burn} tokensInLP={tokensInLP} totalSupply={cfg.totalSupply}/>
         </div>
       );
     };
