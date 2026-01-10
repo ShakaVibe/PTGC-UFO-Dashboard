@@ -62,16 +62,17 @@
     const PULSECHAIN_RPC = 'https://rpc.pulsechain.com';
     const MIN_LIQUIDITY = 1000;
     
-    const BURN_CREATURES = [
-      { name: 'Plankton', emoji: '🦠', min: 0, max: 1e6 },
-      { name: 'Shrimp', emoji: '🦐', min: 1e6, max: 1e7 },
-      { name: 'Crab', emoji: '🦀', min: 1e7, max: 5e7 },
-      { name: 'Turtle', emoji: '🐢', min: 5e7, max: 1e8 },
-      { name: 'Octopus', emoji: '🐙', min: 1e8, max: 5e8 },
-      { name: 'Dolphin', emoji: '🐬', min: 5e8, max: 1e9 },
-      { name: 'Shark', emoji: '🦈', min: 1e9, max: 5e9 },
-      { name: 'Whale', emoji: '🐋', min: 5e9, max: 25e9 },
-      { name: 'Kraken', emoji: '🦑', min: 25e9, max: Infinity }
+    // Burn creatures based on PERCENTAGE of supply
+    // 10% = Poseidon, 1% = Whale, 0.1% = Shark, 0.01% = Dolphin, 0.001% = Squid, 0.0001% = Turtle, 0.00001% = Shrimp, smaller = Shell
+    const BURN_CREATURES_PERCENT = [
+      { name: 'Poseidon', emoji: '🔱', percent: 10 },
+      { name: 'Whale', emoji: '🐋', percent: 1 },
+      { name: 'Shark', emoji: '🦈', percent: 0.1 },
+      { name: 'Dolphin', emoji: '🐬', percent: 0.01 },
+      { name: 'Squid', emoji: '🦑', percent: 0.001 },
+      { name: 'Turtle', emoji: '🐢', percent: 0.0001 },
+      { name: 'Shrimp', emoji: '🦐', percent: 0.00001 },
+      { name: 'Shell', emoji: '🐚', percent: 0 }
     ];
     
     const SEA_CREATURES = [
@@ -119,23 +120,50 @@
     
     const getLogoUrl = (address) => address ? `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${address.toLowerCase()}.png` : null;
     
-    const getCreatureCounts = (total, creatures) => {
-      const counts = [];
-      let remaining = total;
-      for (let i = creatures.length - 1; i >= 0; i--) {
-        const c = creatures[i];
-        if (remaining >= c.min && c.max !== Infinity) {
-          const count = Math.floor(remaining / c.max);
-          if (count > 0) { counts.push({ ...c, count }); remaining -= count * c.max; }
+    // Get creature counts based on burn PERCENTAGE
+    // Returns array of creatures with counts (e.g., 8.75% = 8 whales + remainder)
+    const getBurnCreatures = (burnPercent, minCreature = 'Shell') => {
+      const creatures = [];
+      let remaining = burnPercent;
+      
+      // Find minimum creature index
+      const minIndex = BURN_CREATURES_PERCENT.findIndex(c => c.name === minCreature);
+      
+      for (let i = 0; i < BURN_CREATURES_PERCENT.length; i++) {
+        const creature = BURN_CREATURES_PERCENT[i];
+        const nextCreature = BURN_CREATURES_PERCENT[i + 1];
+        
+        // Skip if below minimum creature threshold
+        if (minIndex >= 0 && i > minIndex) continue;
+        
+        if (creature.percent > 0 && remaining >= creature.percent) {
+          const count = Math.floor(remaining / creature.percent);
+          if (count > 0) {
+            creatures.push({ ...creature, count });
+            remaining -= count * creature.percent;
+          }
         }
       }
-      if (remaining > 0) {
-        const final = creatures.find((c, i) => remaining >= c.min && (i === creatures.length - 1 || remaining < creatures[i + 1].min)) || creatures[0];
-        const existing = counts.find(c => c.name === final.name);
-        if (existing) existing.count += 1;
-        else counts.push({ ...final, count: 1 });
+      
+      // Add remaining as smallest creature if above threshold
+      if (remaining > 0 && minIndex >= 0) {
+        const smallestAllowed = BURN_CREATURES_PERCENT[minIndex];
+        if (remaining >= smallestAllowed.percent || smallestAllowed.percent === 0) {
+          const existing = creatures.find(c => c.name === smallestAllowed.name);
+          if (existing) existing.count += 1;
+          else if (remaining >= smallestAllowed.percent) creatures.push({ ...smallestAllowed, count: 1 });
+        }
       }
-      return counts;
+      
+      return creatures;
+    };
+    
+    // Get single creature for a burn percentage (for 1hr, 6hr, etc displays)
+    const getSingleBurnCreature = (burnPercent) => {
+      for (const creature of BURN_CREATURES_PERCENT) {
+        if (burnPercent >= creature.percent) return creature;
+      }
+      return BURN_CREATURES_PERCENT[BURN_CREATURES_PERCENT.length - 1];
     };
     
     // API Functions
@@ -246,22 +274,10 @@
     };
     
     // Components
-    const SeaCreatureDisplay = ({ creatures, size = 'text-2xl' }) => (
-      <div className="flex items-center gap-1 flex-wrap">
-        <span className={`${size} animate-fire`}>🔥</span>
-        {creatures.slice(0, 6).map((c, i) => (
-          <span key={i} className="flex items-center">
-            <span className={size}>{c.emoji}</span>
-            {c.count > 1 && <span className="text-white/70 text-sm font-bold">x{c.count}</span>}
-          </span>
-        ))}
-      </div>
-    );
     
     // Burn Details Modal
-    const BurnModal = ({ isOpen, onClose, token, burnData, price, config }) => {
+    const BurnModal = ({ isOpen, onClose, token, burnData, price, config, totalSupply }) => {
       const [burnHistory, setBurnHistory] = useState({ h1: 0, h6: 0, h12: 0, h24: 0 });
-      const [chartPeriod, setChartPeriod] = useState('24h');
       const [loading, setLoading] = useState(true);
       
       useEffect(() => {
@@ -283,83 +299,86 @@
       if (!isOpen) return null;
       
       const theme = config.color === 'gold' ? { text: 'text-[#D9CA5D]', border: 'border-[#D9CA5D]' } : { text: 'text-[#7CFC00]', border: 'border-[#7CFC00]' };
-      const burnCreatures = getCreatureCounts(burnData?.total || 0, BURN_CREATURES);
+      const burnCreatures = getBurnCreatures(burnData?.percent || 0, 'Squid');
+      
+      // Calculate percentage for each time period
+      const getPercentForAmount = (amount) => totalSupply > 0 ? (amount / totalSupply) * 100 : 0;
+      
+      const timeBoxes = [
+        { label: '1 Hour', value: burnHistory.h1, percent: getPercentForAmount(burnHistory.h1) },
+        { label: '6 Hours', value: burnHistory.h6, percent: getPercentForAmount(burnHistory.h6) },
+        { label: '12 Hours', value: burnHistory.h12, percent: getPercentForAmount(burnHistory.h12) },
+        { label: '24 Hours', value: burnHistory.h24, percent: getPercentForAmount(burnHistory.h24) }
+      ];
       
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={onClose}>
-          <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
+          <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-5">
               {/* Header */}
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl">🔥</span>
-                  <h2 className="text-2xl font-bold text-orange-400 font-orbitron">{token} Burn Statistics</h2>
+                  <span className="text-2xl">🔥</span>
+                  <h2 className="text-xl font-bold text-orange-400 font-orbitron">{token} Burn Stats</h2>
                 </div>
                 <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">×</button>
               </div>
               
-              {/* Main Stats */}
-              <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              {/* Main Stats Row */}
+              <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 mb-4">
+                <div className="grid grid-cols-3 gap-4 text-center mb-3">
                   <div>
-                    <div className="text-orange-400/80 text-sm uppercase font-semibold mb-1">Total Burned</div>
-                    <div className="text-2xl font-bold text-orange-400">{fmt(burnData?.total)} <span className="text-base">{token}</span></div>
+                    <div className="text-orange-400/70 text-xs uppercase mb-1">Total Burned</div>
+                    <div className="text-xl font-bold text-orange-400">{fmt(burnData?.total)}</div>
                   </div>
                   <div>
-                    <div className="text-orange-400/80 text-sm uppercase font-semibold mb-1">USD Value</div>
-                    <div className="text-2xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * price)}</div>
+                    <div className="text-orange-400/70 text-xs uppercase mb-1">USD Value</div>
+                    <div className="text-xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * price)}</div>
                   </div>
                   <div>
-                    <div className="text-orange-400/80 text-sm uppercase font-semibold mb-1">% of Supply</div>
-                    <div className="text-2xl font-bold text-white">{(burnData?.percent || 0).toFixed(2)}%</div>
+                    <div className="text-orange-400/70 text-xs uppercase mb-1">% of Supply</div>
+                    <div className="text-xl font-bold text-white">{(burnData?.percent || 0).toFixed(2)}%</div>
                   </div>
                 </div>
                 
                 {/* Progress Bar */}
-                <div className="h-3 bg-black/50 rounded-full overflow-hidden mb-4">
+                <div className="h-3 bg-black/50 rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
                 </div>
                 
                 {/* Sea Creatures */}
-                <SeaCreatureDisplay creatures={burnCreatures} size="text-3xl" />
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <span className="text-3xl animate-fire">🔥</span>
+                  {burnCreatures.map((c, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="text-3xl">{c.emoji}</span>
+                      <span className="text-white/80 text-lg font-bold">x{c.count}</span>
+                    </span>
+                  ))}
+                </div>
               </div>
               
-              {/* Time-based Burns */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                {[
-                  { label: '1 Hour', value: burnHistory.h1 },
-                  { label: '6 Hours', value: burnHistory.h6 },
-                  { label: '12 Hours', value: burnHistory.h12 },
-                  { label: '24 Hours', value: burnHistory.h24 }
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-[#1a1a1a] border border-orange-500/20 rounded-lg p-3 text-center">
-                    <div className="text-white/60 text-xs uppercase mb-1">{label}</div>
-                    <div className="text-lg font-bold text-orange-400">{loading ? '...' : fmt(value)}</div>
-                    <div className="text-green-400 text-sm">{loading ? '' : fmtUSD(value * price)}</div>
-                  </div>
-                ))}
+              {/* Time-based Burns - Larger fonts */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {timeBoxes.map(({ label, value, percent }) => {
+                  const creature = getSingleBurnCreature(percent);
+                  return (
+                    <div key={label} className="bg-[#1a1a1a] border border-orange-500/20 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white/60 text-sm uppercase">{label}</span>
+                        <span className="text-4xl">{creature.emoji}</span>
+                      </div>
+                      <div className="text-2xl font-bold text-orange-400 font-space">{loading ? '...' : fmt(value)}</div>
+                      <div className="text-lg text-green-400 font-semibold">{loading ? '' : fmtUSD(value * price)}</div>
+                      <div className="text-white/40 text-sm">{loading ? '' : percent.toFixed(6)}%</div>
+                    </div>
+                  );
+                })}
               </div>
               
-              {/* Chart Area */}
-              <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-white font-semibold">Burn History</h3>
-                  <div className="flex gap-2">
-                    {['24h', '7D', '30D', '90D', 'All'].map(period => (
-                      <button key={period} onClick={() => setChartPeriod(period)}
-                        className={`px-3 py-1 rounded text-sm ${chartPeriod === period ? 'bg-orange-500/30 text-orange-400 border border-orange-500/50' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
-                        {period}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="h-48 flex items-center justify-center text-white/40">
-                  <div className="text-center">
-                    <div className="text-4xl mb-2">📊</div>
-                    <div>Burn chart coming soon</div>
-                    <div className="text-sm mt-1">Showing {chartPeriod} period</div>
-                  </div>
-                </div>
+              {/* Burn Address */}
+              <div className="text-center text-white/40 text-xs">
+                Burn Address: <span className="font-mono">{BURN_ADDRESS}</span>
               </div>
             </div>
           </div>
@@ -586,7 +605,8 @@
       const lowPairs = sortedPairs.filter(p => p.liquidity < MIN_LIQUIDITY);
       const [showLow, setShowLow] = useState(false);
       
-      const burnCreatures = getCreatureCounts(burnData?.total || 0, BURN_CREATURES);
+      // Get burn creatures based on percentage (minimum Squid for main display)
+      const burnCreatures = getBurnCreatures(burnData?.percent || 0, 'Squid');
       const plsRatio = data?.price && plsPrice ? (data.price / plsPrice).toFixed(4) : '—';
       
       if (loading) {
@@ -654,7 +674,7 @@
                   <div className="flex items-center gap-2 text-xs text-orange-400/90 uppercase font-semibold">🔥 Total Supply Burned</div>
                   <span className="text-orange-400/60 text-xs">Click for details →</span>
                 </div>
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
                   <span className={`text-2xl font-bold ${theme.text}`}>{fmt(burnData?.total)}</span>
                   <span className="text-lg font-bold text-green-400">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</span>
                   <span className="text-white/50">{(burnData?.percent || 0).toFixed(2)}%</span>
@@ -662,7 +682,16 @@
                 <div className="h-2 bg-black/50 rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${Math.min(burnData?.percent || 0, 100)}%` }}></div>
                 </div>
-                <SeaCreatureDisplay creatures={burnCreatures} size="text-2xl"/>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-2xl animate-fire">🔥</span>
+                  {burnCreatures.map((c, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="text-2xl">{c.emoji}</span>
+                      <span className="text-white/70 text-sm font-bold">x{c.count}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
               </div>
               
               {/* Other Stats */}
@@ -729,7 +758,7 @@
           </footer>
           
           {/* Burn Modal */}
-          <BurnModal isOpen={showBurnModal} onClose={() => setShowBurnModal(false)} token={token} burnData={burnData} price={data?.price || 0} config={config}/>
+          <BurnModal isOpen={showBurnModal} onClose={() => setShowBurnModal(false)} token={token} burnData={burnData} price={data?.price || 0} config={config} totalSupply={burnData?.totalSupply || 0}/>
         </div>
       );
     };
