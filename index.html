@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTGC UFO Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0a0a0a;
+      min-height: 100vh;
+    }
+    .font-orbitron { font-family: 'Orbitron', monospace; }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #1a1a1a; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #444; }
+    
+    /* Animations */
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(124, 252, 0, 0.3); }
+      50% { box-shadow: 0 0 40px rgba(124, 252, 0, 0.5); }
+    }
+    @keyframes pulse-glow-gold {
+      0%, 100% { box-shadow: 0 0 20px rgba(217, 202, 93, 0.3); }
+      50% { box-shadow: 0 0 40px rgba(217, 202, 93, 0.5); }
+    }
+    .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    .animate-pulse-glow-gold { animation: pulse-glow-gold 2s ease-in-out infinite; }
+    
+    @keyframes fire-flicker {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    .animate-fire { animation: fire-flicker 0.5s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo } = React;
+    
+    // ============================================
+    // CONSTANTS & CONFIG
+    // ============================================
+    
+    const TOKENS = {
+      PTGC: {
+        name: 'PTGC',
+        address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93',
+        logo: './06_PTGC_V1_transparent_bg (1).png',
+        color: 'gold',
+        burnAddress: '0x0000000000000000000000000000000000000369',
+        feePercent: 0.05,
+        decimals: 18,
+        dexScreenerSlug: 'pulsechain/0x94534eeee131840b1c0f61847c572228bdfdde93',
+        pulseScanUrl: 'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93'
+      },
+      UFO: {
+        name: 'UFO',
+        address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
+        logo: './07_Ufo_transparent.png',
+        color: 'green',
+        burnAddress: '0x0000000000000000000000000000000000000369',
+        feePercent: 0.06,
+        decimals: 18,
+        dexScreenerSlug: 'pulsechain/0x456548a9b56efbbd89ca0309edd17a9e20b04018',
+        pulseScanUrl: 'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'
+      }
+    };
+    
+    // Sea creature thresholds (in USD value)
+    const SEA_CREATURES = [
+      { name: 'Plankton', emoji: '🦠', min: 0, max: 100 },
+      { name: 'Shrimp', emoji: '🦐', min: 100, max: 1000 },
+      { name: 'Crab', emoji: '🦀', min: 1000, max: 5000 },
+      { name: 'Fish', emoji: '🐟', min: 5000, max: 10000 },
+      { name: 'Octopus', emoji: '🐙', min: 10000, max: 25000 },
+      { name: 'Dolphin', emoji: '🐬', min: 25000, max: 50000 },
+      { name: 'Shark', emoji: '🦈', min: 50000, max: 100000 },
+      { name: 'Whale', emoji: '🐋', min: 100000, max: 500000 },
+      { name: 'Kraken', emoji: '🦑', min: 500000, max: Infinity }
+    ];
+    
+    // Burn creature thresholds (in token amount)
+    const BURN_CREATURES = [
+      { name: 'Plankton', emoji: '🦠', min: 0, max: 1000000 },
+      { name: 'Shrimp', emoji: '🦐', min: 1000000, max: 10000000 },
+      { name: 'Crab', emoji: '🦀', min: 10000000, max: 50000000 },
+      { name: 'Turtle', emoji: '🐢', min: 50000000, max: 100000000 },
+      { name: 'Octopus', emoji: '🐙', min: 100000000, max: 500000000 },
+      { name: 'Dolphin', emoji: '🐬', min: 500000000, max: 1000000000 },
+      { name: 'Shark', emoji: '🦈', min: 1000000000, max: 5000000000 },
+      { name: 'Whale', emoji: '🐋', min: 5000000000, max: 25000000000 },
+      { name: 'Kraken', emoji: '🦑', min: 25000000000, max: Infinity }
+    ];
+    
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+    
+    const fmt = (n) => {
+      if (n === null || n === undefined || isNaN(n)) return '—';
+      return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    };
+    
+    const fmtUSD = (n) => {
+      if (n === null || n === undefined || isNaN(n)) return '—';
+      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + n.toFixed(2);
+    };
+    
+    const fmtPrice = (p) => {
+      if (!p || isNaN(p)) return '—';
+      if (p < 0.0001) {
+        const str = p.toFixed(20);
+        const match = str.match(/0\.(0+)(\d{4})/);
+        if (match) {
+          return { base: '$0.0', sub: match[1].length, rest: match[2] };
+        }
+      }
+      return '$' + p.toFixed(p < 1 ? 6 : 2);
+    };
+    
+    const getCreatureForValue = (value, creatures) => {
+      for (let i = creatures.length - 1; i >= 0; i--) {
+        if (value >= creatures[i].min) return creatures[i];
+      }
+      return creatures[0];
+    };
+    
+    const getCreatureCounts = (totalBurn, creatures) => {
+      const counts = [];
+      let remaining = totalBurn;
+      
+      for (let i = creatures.length - 1; i >= 0; i--) {
+        const creature = creatures[i];
+        if (remaining >= creature.min && creature.max !== Infinity) {
+          const count = Math.floor(remaining / creature.max);
+          if (count > 0) {
+            counts.push({ ...creature, count });
+            remaining -= count * creature.max;
+          }
+        }
+      }
+      
+      // Add the final creature for remaining
+      if (remaining > 0) {
+        const finalCreature = getCreatureForValue(remaining, creatures);
+        const existing = counts.find(c => c.name === finalCreature.name);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          counts.push({ ...finalCreature, count: 1 });
+        }
+      }
+      
+      return counts;
+    };
+    
+    // ============================================
+    // API FUNCTIONS
+    // ============================================
+    
+    const fetchDexScreenerData = async (tokenAddress) => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
+        const data = await res.json();
+        if (data.pairs && data.pairs.length > 0) {
+          // Find the main WPLS pair or highest liquidity pair
+          const sortedPairs = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+          const mainPair = sortedPairs[0];
+          
+          // Aggregate data across all pairs
+          const totalVolume = sortedPairs.reduce((sum, p) => sum + (p.volume?.h24 || 0), 0);
+          const totalLiquidity = sortedPairs.reduce((sum, p) => sum + (p.liquidity?.usd || 0), 0);
+          
+          return {
+            price: parseFloat(mainPair.priceUsd) || 0,
+            priceChange24h: mainPair.priceChange?.h24 || 0,
+            mcap: mainPair.marketCap || mainPair.fdv || 0,
+            liquidity: totalLiquidity,
+            volume24h: totalVolume,
+            pairs: sortedPairs
+          };
+        }
+        return null;
+      } catch (err) {
+        console.error('DexScreener fetch error:', err);
+        return null;
+      }
+    };
+    
+    const fetchHolderCount = async (tokenAddress) => {
+      try {
+        const res = await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${tokenAddress}/counters`);
+        const data = await res.json();
+        return parseInt(data.token_holders_count) || 0;
+      } catch (err) {
+        console.error('Holder count fetch error:', err);
+        return 0;
+      }
+    };
+    
+    const fetchBurnData = async (tokenAddress, burnAddress, decimals) => {
+      try {
+        // Fetch burn balance
+        const balanceRes = await fetch('https://rpc.pulsechain.com', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_call',
+            params: [{
+              to: tokenAddress,
+              data: '0x70a08231000000000000000000000000' + burnAddress.slice(2).padStart(64, '0')
+            }, 'latest'],
+            id: 1
+          })
+        });
+        const balanceData = await balanceRes.json();
+        const burnedRaw = BigInt(balanceData.result || '0x0');
+        const burned = Number(burnedRaw) / Math.pow(10, decimals);
+        
+        // Fetch total supply
+        const supplyRes = await fetch('https://rpc.pulsechain.com', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_call',
+            params: [{
+              to: tokenAddress,
+              data: '0x18160ddd'
+            }, 'latest'],
+            id: 2
+          })
+        });
+        const supplyData = await supplyRes.json();
+        const totalSupplyRaw = BigInt(supplyData.result || '0x0');
+        const totalSupply = Number(totalSupplyRaw) / Math.pow(10, decimals);
+        
+        const burnPercent = totalSupply > 0 ? (burned / totalSupply) * 100 : 0;
+        
+        return {
+          total: burned,
+          percent: burnPercent,
+          totalSupply
+        };
+      } catch (err) {
+        console.error('Burn data fetch error:', err);
+        return { total: 0, percent: 0, totalSupply: 0 };
+      }
+    };
+    
+    const fetch24hBurn = async (tokenAddress, burnAddress, decimals) => {
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const past24h = now - 86400;
+        
+        // Get current block
+        const blockRes = await fetch('https://rpc.pulsechain.com', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_blockNumber',
+            params: [],
+            id: 1
+          })
+        });
+        const blockData = await blockRes.json();
+        const currentBlock = parseInt(blockData.result, 16);
+        const fromBlock = Math.max(0, currentBlock - 86400); // ~1 block per second
+        
+        // Get transfer logs to burn address
+        const logsRes = await fetch('https://rpc.pulsechain.com', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_getLogs',
+            params: [{
+              address: tokenAddress,
+              topics: [
+                '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+                null,
+                '0x000000000000000000000000' + burnAddress.slice(2).toLowerCase()
+              ],
+              fromBlock: '0x' + fromBlock.toString(16),
+              toBlock: 'latest'
+            }],
+            id: 1
+          })
+        });
+        
+        const logsData = await logsRes.json();
+        let total24h = 0n;
+        
+        if (logsData.result && Array.isArray(logsData.result)) {
+          for (const log of logsData.result) {
+            total24h += BigInt(log.data);
+          }
+        }
+        
+        return Number(total24h) / Math.pow(10, decimals);
+      } catch (err) {
+        console.error('24h burn fetch error:', err);
+        return 0;
+      }
+    };
+    
+    const fetchPLSPrice = async () => {
+      try {
+        const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');
+        const data = await res.json();
+        return parseFloat(data.pair?.priceUsd) || 0.00001707;
+      } catch {
+        return 0.00001707;
+      }
+    };
+    
+    // ============================================
+    // COMPONENTS
+    // ============================================
+    
+    // Price Display Component
+    const PriceDisplay = ({ price, color }) => {
+      const formatted = fmtPrice(price);
+      const textColor = color === 'gold' ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
+      
+      if (typeof formatted === 'object') {
+        return (
+          <span className={`font-bold ${textColor}`}>
+            {formatted.base}<sub className="text-lg opacity-70">{formatted.sub}</sub>{formatted.rest}
+          </span>
+        );
+      }
+      return <span className={`font-bold ${textColor}`}>{formatted}</span>;
+    };
+    
+    // Change Badge Component
+    const ChangeBadge = ({ value, suffix = '%', threshold = 1 }) => {
+      if (value === null || value === undefined) return null;
+      const isPositive = value >= 0;
+      const isFlat = Math.abs(value) < threshold;
+      
+      const bgColor = isFlat ? 'bg-gray-500/20' : (isPositive ? 'bg-green-500/20' : 'bg-red-500/20');
+      const textColor = isFlat ? 'text-gray-400' : (isPositive ? 'text-green-400' : 'text-red-400');
+      
+      return (
+        <span className={`px-2 py-1 rounded text-sm font-bold ${bgColor} ${textColor}`}>
+          {isPositive ? '▲' : '▼'}{Math.abs(value).toFixed(1)}{suffix}
+        </span>
+      );
+    };
+    
+    // Sea Creature Display Component
+    const SeaCreatureDisplay = ({ creatures, size = 'text-3xl' }) => (
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`${size} animate-fire`}>🔥</span>
+        {creatures.map((c, i) => (
+          <span key={i} className="flex items-center gap-0.5">
+            <span className={size}>{c.emoji}</span>
+            {c.count > 1 && <span className="text-white/80 text-sm font-bold">x{c.count}</span>}
+          </span>
+        ))}
+      </div>
+    );
+    
+    // ============================================
+    // HOME PAGE
+    // ============================================
+    
+    const HomePage = ({ onSelectToken }) => {
+      const [tokenData, setTokenData] = useState({ PTGC: null, UFO: null });
+      const [loading, setLoading] = useState(true);
+      
+      useEffect(() => {
+        const fetchData = async () => {
+          const [ptgcData, ufoData] = await Promise.all([
+            fetchDexScreenerData(TOKENS.PTGC.address),
+            fetchDexScreenerData(TOKENS.UFO.address)
+          ]);
+          setTokenData({ PTGC: ptgcData, UFO: ufoData });
+          setLoading(false);
+        };
+        fetchData();
+        const interval = setInterval(fetchData, 30000);
+        return () => clearInterval(interval);
+      }, []);
+      
+      const TokenCard = ({ token, data }) => {
+        const config = TOKENS[token];
+        const isGold = config.color === 'gold';
+        const borderColor = isGold ? 'border-[#D9CA5D]' : 'border-[#7CFC00]';
+        const glowClass = isGold ? 'animate-pulse-glow-gold' : 'animate-pulse-glow';
+        const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
+        const bgGradient = isGold 
+          ? 'bg-gradient-to-b from-[#D9CA5D]/10 via-black to-black' 
+          : 'bg-gradient-to-b from-[#7CFC00]/10 via-black to-black';
+        
+        return (
+          <div 
+            onClick={() => onSelectToken(token)}
+            className={`relative cursor-pointer rounded-2xl border-2 ${borderColor} ${bgGradient} ${glowClass} p-8 transition-all duration-300 hover:scale-105`}
+          >
+            {/* Logo and Name */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className={`w-20 h-20 rounded-xl border-2 ${borderColor} bg-black/50 flex items-center justify-center`}>
+                <img src={config.logo} alt={token} className="w-16 h-16 object-contain" />
+              </div>
+              <div>
+                <h2 className={`font-orbitron text-4xl font-bold ${textColor}`}>{token}</h2>
+                <p className="text-white/50 text-sm">Click to view dashboard</p>
+              </div>
+            </div>
+            
+            {/* Price */}
+            <div className="mb-4">
+              <div className="text-white/50 text-sm mb-1">Price</div>
+              <div className="flex items-center gap-3">
+                <span className={`text-3xl font-bold ${textColor}`}>
+                  <PriceDisplay price={data?.price} color={config.color} />
+                </span>
+                {data?.priceChange24h && (
+                  <ChangeBadge value={data.priceChange24h} />
+                )}
+              </div>
+            </div>
+            
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-white/50 text-xs uppercase">Market Cap</div>
+                <div className="text-white font-bold text-lg">{fmtUSD(data?.mcap)}</div>
+              </div>
+              <div>
+                <div className="text-white/50 text-xs uppercase">Liquidity</div>
+                <div className="text-white font-bold text-lg">{fmtUSD(data?.liquidity)}</div>
+              </div>
+              <div>
+                <div className="text-white/50 text-xs uppercase">24h Volume</div>
+                <div className="text-white font-bold text-lg">{fmtUSD(data?.volume24h)}</div>
+              </div>
+              <div>
+                <div className="text-white/50 text-xs uppercase">Liq/MC Ratio</div>
+                <div className="text-white font-bold text-lg">
+                  {data?.mcap > 0 ? ((data.liquidity / data.mcap) * 100).toFixed(1) + '%' : '—'}
+                </div>
+              </div>
+            </div>
+            
+            {/* Enter Arrow */}
+            <div className={`absolute bottom-4 right-4 ${textColor} text-2xl`}>→</div>
+          </div>
+        );
+      };
+      
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Header */}
+          <header className="text-center py-12">
+            <h1 className="font-orbitron text-5xl font-bold mb-2">
+              <span className="text-[#D9CA5D]">PTGC</span>
+              <span className="text-white/50 mx-4">&</span>
+              <span className="text-[#7CFC00]">UFO</span>
+            </h1>
+            <p className="text-white/50 text-lg">Dashboard</p>
+          </header>
+          
+          {/* Token Cards */}
+          <div className="flex-1 flex items-center justify-center px-8 pb-12">
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full">
+              {loading ? (
+                <>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-80"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-80"></div>
+                </>
+              ) : (
+                <>
+                  <TokenCard token="PTGC" data={tokenData.PTGC} />
+                  <TokenCard token="UFO" data={tokenData.UFO} />
+                </>
+              )}
+            </div>
+          </div>
+          
+          {/* Footer */}
+          <footer className="text-center py-4 text-white/30 text-sm">
+            Built for the PulseChain community
+          </footer>
+        </div>
+      );
+    };
+    
+    // ============================================
+    // DASHBOARD
+    // ============================================
+    
+    const Dashboard = ({ token, onBack }) => {
+      const config = TOKENS[token];
+      const isGold = config.color === 'gold';
+      const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
+      const borderColor = isGold ? 'border-[#D9CA5D]' : 'border-[#7CFC00]';
+      const bgColor = isGold ? 'bg-[#D9CA5D]/10' : 'bg-[#7CFC00]/10';
+      
+      const [data, setData] = useState(null);
+      const [burnData, setBurnData] = useState(null);
+      const [burn24h, setBurn24h] = useState(0);
+      const [holders, setHolders] = useState(0);
+      const [plsPrice, setPlsPrice] = useState(0.00001707);
+      const [loading, setLoading] = useState(true);
+      const [sortBy, setSortBy] = useState('liquidity');
+      const [sortDir, setSortDir] = useState('desc');
+      const [showKPIModal, setShowKPIModal] = useState(false);
+      
+      useEffect(() => {
+        const fetchAllData = async () => {
+          setLoading(true);
+          
+          const [dexData, holdersCount, burn, burn24hData, pls] = await Promise.all([
+            fetchDexScreenerData(config.address),
+            fetchHolderCount(config.address),
+            fetchBurnData(config.address, config.burnAddress, config.decimals),
+            fetch24hBurn(config.address, config.burnAddress, config.decimals),
+            fetchPLSPrice()
+          ]);
+          
+          setData(dexData);
+          setHolders(holdersCount);
+          setBurnData(burn);
+          setBurn24h(burn24hData);
+          setPlsPrice(pls);
+          setLoading(false);
+        };
+        
+        fetchAllData();
+        const interval = setInterval(fetchAllData, 60000);
+        return () => clearInterval(interval);
+      }, [token]);
+      
+      // Sort pairs
+      const sortedPairs = useMemo(() => {
+        if (!data?.pairs) return [];
+        return [...data.pairs].sort((a, b) => {
+          let aVal, bVal;
+          switch (sortBy) {
+            case 'ratio':
+              aVal = a.liquidity?.usd && a.marketCap ? (a.liquidity.usd / a.marketCap) : 0;
+              bVal = b.liquidity?.usd && b.marketCap ? (b.liquidity.usd / b.marketCap) : 0;
+              break;
+            case 'volume':
+              aVal = a.volume?.h24 || 0;
+              bVal = b.volume?.h24 || 0;
+              break;
+            case 'liquidity':
+              aVal = a.liquidity?.usd || 0;
+              bVal = b.liquidity?.usd || 0;
+              break;
+            case 'change':
+              aVal = a.priceChange?.h24 || 0;
+              bVal = b.priceChange?.h24 || 0;
+              break;
+            default:
+              aVal = a.liquidity?.usd || 0;
+              bVal = b.liquidity?.usd || 0;
+          }
+          return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+        });
+      }, [data?.pairs, sortBy, sortDir]);
+      
+      const handleSort = (column) => {
+        if (sortBy === column) {
+          setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
+        } else {
+          setSortBy(column);
+          setSortDir('desc');
+        }
+      };
+      
+      const SortButton = ({ column, label }) => (
+        <button
+          onClick={() => handleSort(column)}
+          className={`px-3 py-1 rounded text-sm font-medium transition-all ${
+            sortBy === column 
+              ? `${bgColor} ${textColor} border ${borderColor}` 
+              : 'bg-white/5 text-white/60 hover:bg-white/10'
+          }`}
+        >
+          {label} {sortBy === column && (sortDir === 'desc' ? '↓' : '↑')}
+        </button>
+      );
+      
+      // Calculate burn creatures
+      const burnCreatures = burnData ? getCreatureCounts(burnData.total, BURN_CREATURES) : [];
+      const burn24hCreature = getCreatureForValue(burn24h, BURN_CREATURES);
+      
+      if (loading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <div className={`w-20 h-20 mx-auto mb-4 rounded-full border-4 ${borderColor} border-t-transparent animate-spin`}></div>
+              <div className={`font-orbitron text-xl ${textColor}`}>Loading {token} Dashboard...</div>
+            </div>
+          </div>
+        );
+      }
+      
+      return (
+        <div className="min-h-screen pb-8">
+          {/* Header */}
+          <header className={`sticky top-0 z-40 bg-black/90 backdrop-blur border-b ${borderColor}/30`}>
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={onBack}
+                  className="text-white/60 hover:text-white transition-colors"
+                >
+                  ← Back
+                </button>
+                <div className="flex items-center gap-3">
+                  <img src={config.logo} alt={token} className="w-10 h-10 object-contain" />
+                  <span className={`font-orbitron text-2xl font-bold ${textColor}`}>{token}</span>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowKPIModal(true)}
+                  className={`px-4 py-2 rounded-lg font-bold transition-all ${bgColor} ${textColor} border ${borderColor} hover:opacity-80`}
+                >
+                  📊 KPI Report
+                </button>
+                <a
+                  href={`https://dexscreener.com/${config.dexScreenerSlug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all"
+                >
+                  DexScreener ↗
+                </a>
+              </div>
+            </div>
+          </header>
+          
+          {/* Stats Bar */}
+          <div className={`border-b ${borderColor}/20`}>
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                <div>
+                  <div className="text-white/50 text-xs uppercase">Price</div>
+                  <div className={`text-xl font-bold ${textColor}`}>
+                    <PriceDisplay price={data?.price} color={config.color} />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-white/50 text-xs uppercase">24h Change</div>
+                  <div className="text-xl font-bold">
+                    <ChangeBadge value={data?.priceChange24h} />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-white/50 text-xs uppercase">Market Cap</div>
+                  <div className="text-xl font-bold text-white">{fmtUSD(data?.mcap)}</div>
+                </div>
+                <div>
+                  <div className="text-white/50 text-xs uppercase">Liquidity</div>
+                  <div className="text-xl font-bold text-white">{fmtUSD(data?.liquidity)}</div>
+                </div>
+                <div>
+                  <div className="text-white/50 text-xs uppercase">24h Volume</div>
+                  <div className="text-xl font-bold text-white">{fmtUSD(data?.volume24h)}</div>
+                </div>
+                <div>
+                  <div className="text-white/50 text-xs uppercase">Holders</div>
+                  <div className="text-xl font-bold text-white">{fmt(holders)}</div>
+                </div>
+                <div>
+                  <div className="text-white/50 text-xs uppercase">Liq/MC Ratio</div>
+                  <div className="text-xl font-bold text-white">
+                    {data?.mcap > 0 ? ((data.liquidity / data.mcap) * 100).toFixed(1) + '%' : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Main Content */}
+          <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+            
+            {/* Burn Section */}
+            <div className={`rounded-2xl border ${borderColor}/30 bg-gradient-to-r from-orange-500/10 via-orange-600/5 to-orange-500/10 p-6`}>
+              <h3 className="text-orange-400 font-bold text-lg mb-4 flex items-center gap-2">
+                🔥 Burn Statistics
+              </h3>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Total Burned */}
+                <div>
+                  <div className="text-white/50 text-sm mb-1">Total Burned</div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-3xl font-bold text-orange-400">{fmt(burnData?.total)}</span>
+                    <span className="text-xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</span>
+                    <span className="text-white/50">({burnData?.percent?.toFixed(2)}%)</span>
+                  </div>
+                  <div className="mt-3">
+                    <SeaCreatureDisplay creatures={burnCreatures} />
+                  </div>
+                </div>
+                
+                {/* 24h Burned */}
+                <div>
+                  <div className="text-white/50 text-sm mb-1">Burned Last 24h</div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-3xl font-bold text-orange-400">{fmt(burn24h)}</span>
+                    <span className="text-xl font-bold text-green-400">{fmtUSD(burn24h * (data?.price || 0))}</span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-4xl animate-fire">🔥</span>
+                    <span className="text-4xl">{burn24hCreature.emoji}</span>
+                    <span className="text-white/60 text-sm">({burn24hCreature.name})</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* LP Pairs Section */}
+            <div className={`rounded-2xl border ${borderColor}/30 bg-black/50 p-6`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`font-bold text-lg ${textColor}`}>
+                  💧 Liquidity Pairs ({sortedPairs.length})
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-white/50 text-sm mr-2">Sort by:</span>
+                  <SortButton column="liquidity" label="Liquidity" />
+                  <SortButton column="volume" label="Volume" />
+                  <SortButton column="ratio" label="Ratio" />
+                  <SortButton column="change" label="24h" />
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-white/50 text-xs uppercase border-b border-white/10">
+                      <th className="text-left py-3 px-2">Pair</th>
+                      <th className="text-right py-3 px-2">Price</th>
+                      <th className="text-right py-3 px-2">Liquidity</th>
+                      <th className="text-right py-3 px-2">Volume 24h</th>
+                      <th className="text-right py-3 px-2">Liq/MC</th>
+                      <th className="text-right py-3 px-2">24h Change</th>
+                      <th className="text-right py-3 px-2">Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPairs.map((pair, i) => {
+                      const ratio = pair.liquidity?.usd && pair.marketCap 
+                        ? ((pair.liquidity.usd / pair.marketCap) * 100).toFixed(1) 
+                        : '—';
+                      
+                      return (
+                        <tr key={pair.pairAddress || i} className="border-b border-white/5 hover:bg-white/5">
+                          <td className="py-3 px-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white">{pair.baseToken?.symbol}</span>
+                              <span className="text-white/30">/</span>
+                              <span className="text-white/60">{pair.quoteToken?.symbol}</span>
+                            </div>
+                          </td>
+                          <td className="text-right py-3 px-2 text-white">{fmtPrice(parseFloat(pair.priceUsd))}</td>
+                          <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.liquidity?.usd)}</td>
+                          <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.volume?.h24)}</td>
+                          <td className="text-right py-3 px-2 text-white">{ratio}%</td>
+                          <td className="text-right py-3 px-2">
+                            <ChangeBadge value={pair.priceChange?.h24} />
+                          </td>
+                          <td className="text-right py-3 px-2">
+                            <a 
+                              href={pair.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className={`${textColor} hover:underline text-sm`}
+                            >
+                              Trade ↗
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            {/* Holder Zoo Section */}
+            <div className={`rounded-2xl border ${borderColor}/30 bg-black/50 p-6`}>
+              <h3 className={`font-bold text-lg ${textColor} mb-4`}>
+                🦑 Holder Zoo
+              </h3>
+              <p className="text-white/50 text-sm mb-4">
+                Holders organized by their bag size in USD value
+              </p>
+              
+              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3">
+                {SEA_CREATURES.map((creature) => (
+                  <div 
+                    key={creature.name}
+                    className={`rounded-xl p-4 text-center border ${borderColor}/20 bg-white/5 hover:bg-white/10 transition-all cursor-pointer`}
+                  >
+                    <div className="text-4xl mb-2">{creature.emoji}</div>
+                    <div className="text-white font-bold text-sm">{creature.name}</div>
+                    <div className="text-white/40 text-xs mt-1">
+                      {creature.max === Infinity 
+                        ? `$${fmt(creature.min)}+` 
+                        : `$${fmt(creature.min)}-${fmt(creature.max)}`
+                      }
+                    </div>
+                    {/* Count will be fetched/calculated later */}
+                    <div className={`${textColor} font-bold text-lg mt-2`}>—</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+          </div>
+          
+          {/* KPI Modal Placeholder */}
+          {showKPIModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowKPIModal(false)}>
+              <div className={`bg-black rounded-2xl border-2 ${borderColor} p-8 max-w-2xl w-full mx-4`} onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className={`font-orbitron text-2xl font-bold ${textColor}`}>{token} KPI Report</h2>
+                  <button onClick={() => setShowKPIModal(false)} className="text-white/60 hover:text-white text-2xl">×</button>
+                </div>
+                <p className="text-white/60">Full KPI modal coming soon...</p>
+                <div className="mt-4 flex gap-2">
+                  <button className="px-4 py-2 bg-blue-500 text-white rounded-lg">📸 Twitter Screenshot</button>
+                  <button className="px-4 py-2 bg-purple-500 text-white rounded-lg">📊 Dual Report</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+    
+    // ============================================
+    // MAIN APP
+    // ============================================
+    
+    const App = () => {
+      const [view, setView] = useState('home');
+      const [selectedToken, setSelectedToken] = useState(null);
+      
+      const handleSelectToken = (token) => {
+        setSelectedToken(token);
+        setView('dashboard');
+      };
+      
+      const handleBack = () => {
+        setView('home');
+        setSelectedToken(null);
+      };
+      
+      if (view === 'dashboard' && selectedToken) {
+        return <Dashboard token={selectedToken} onBack={handleBack} />;
+      }
+      
+      return <HomePage onSelectToken={handleSelectToken} />;
+    };
+    
+    // Mount the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  <\/script>
+</body>
+</html>
