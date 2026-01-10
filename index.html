@@ -266,9 +266,6 @@
     
     const fetch24hBurn = async (tokenAddress, burnAddress, decimals) => {
       try {
-        const now = Math.floor(Date.now() / 1000);
-        const past24h = now - 86400;
-        
         // Get current block
         const blockRes = await fetch('https://rpc.pulsechain.com', {
           method: 'POST',
@@ -282,12 +279,17 @@
         });
         const blockData = await blockRes.json();
         const currentBlock = parseInt(blockData.result, 16);
-        const fromBlock = Math.max(0, currentBlock - 86400); // ~1 block per second
+        // PulseChain is ~10 second blocks, so 24h = ~8640 blocks
+        const fromBlock = Math.max(0, currentBlock - 8640);
         
-        // Get transfer logs to burn address
+        // Get transfer logs to burn address with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
         const logsRes = await fetch('https://rpc.pulsechain.com', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: 'eth_getLogs',
@@ -304,6 +306,8 @@
             id: 1
           })
         });
+        
+        clearTimeout(timeoutId);
         
         const logsData = await logsRes.json();
         let total24h = 0n;
@@ -408,7 +412,7 @@
           : "0,5 10,8 20,6 30,10 40,12 50,9 60,15 70,13 80,18 90,16 100,20";
         
         return (
-          <svg viewBox="0 0 100 24" className="w-16 h-6">
+          <svg viewBox="0 0 100 24" className="w-20 h-8">
             <polyline
               points={points}
               fill="none"
@@ -424,11 +428,11 @@
       const TokenCard = ({ token, data }) => {
         const config = TOKENS[token];
         const isGold = config.color === 'gold';
-        const borderColor = isGold ? 'border-[#D9CA5D]/30' : 'border-[#7CFC00]/30';
+        const borderColor = isGold ? 'border-[#D9CA5D]/40' : 'border-[#7CFC00]/40';
         const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
         const bgGradient = isGold 
-          ? 'bg-gradient-to-r from-[#D9CA5D]/10 via-[#1a1a1a] to-[#1a1a1a]' 
-          : 'bg-gradient-to-r from-[#7CFC00]/10 via-[#1a1a1a] to-[#1a1a1a]';
+          ? 'bg-gradient-to-r from-[#D9CA5D]/15 via-[#1a1a1a] to-[#1a1a1a]' 
+          : 'bg-gradient-to-r from-[#7CFC00]/15 via-[#1a1a1a] to-[#1a1a1a]';
         const isPositive = (data?.priceChange24h || 0) >= 0;
         const changeColor = isPositive ? '#22c55e' : '#ef4444';
         
@@ -437,22 +441,22 @@
         return (
           <div 
             onClick={() => onSelectToken(token)}
-            className={`cursor-pointer rounded-xl border ${borderColor} ${bgGradient} p-4 transition-all duration-300 hover:scale-[1.02] hover:border-opacity-60`}
+            className={`cursor-pointer rounded-2xl border ${borderColor} ${bgGradient} p-6 transition-all duration-300 hover:scale-[1.02] hover:border-opacity-80`}
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               {/* Logo */}
               <div className="flex-shrink-0">
                 <img 
                   src={config.logo} 
                   alt={token} 
-                  className="w-16 h-16 object-contain"
+                  className="w-24 h-24 object-contain"
                 />
               </div>
               
               {/* Token Info */}
-              <div className="flex-shrink-0">
-                <div className={`font-orbitron text-2xl font-bold ${textColor}`}>{token}</div>
-                <div className="text-white/40 text-xs font-mono">
+              <div className="flex-shrink-0 min-w-[140px]">
+                <div className={`font-orbitron text-3xl font-bold ${textColor}`}>{token}</div>
+                <div className="text-white/40 text-sm font-mono">
                   {config.address.slice(0, 6)}...{config.address.slice(-4)} 
                   <span className="ml-1 cursor-pointer hover:text-white/60">⧉</span>
                 </div>
@@ -460,20 +464,20 @@
               
               {/* Price & MCap */}
               <div className="flex-1 text-right">
-                <div className="text-white font-bold text-xl">
+                <div className="text-white font-bold text-2xl">
                   {typeof priceFormatted === 'object' ? (
-                    <>{priceFormatted.base}<sub className="text-sm opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>
+                    <>{priceFormatted.base}<sub className="text-base opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>
                   ) : priceFormatted}
                 </div>
-                <div className="text-white/50 text-sm">
+                <div className="text-white/50 text-base">
                   MCap: {fmtUSD(data?.mcap)}
                 </div>
               </div>
               
               {/* Sparkline & Change */}
-              <div className="flex-shrink-0 flex items-center gap-2">
+              <div className="flex-shrink-0 flex items-center gap-3">
                 <MiniSparkline isPositive={isPositive} color={changeColor} />
-                <div className={`flex items-center gap-1 px-2 py-1 rounded text-sm font-bold ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                <div className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-base font-bold ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                   {isPositive ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%
                 </div>
               </div>
@@ -485,16 +489,16 @@
       return (
         <div className="min-h-screen flex flex-col">
           {/* Header with Large Combined Logo */}
-          <header className="text-center py-16">
-            <div className="flex justify-center mb-6">
+          <header className="text-center pt-12 pb-6">
+            <div className="flex justify-center mb-3">
               <img 
                 src="./07_Combined_PTGC_UFO_Transparent.png" 
                 alt="PTGC & UFO" 
-                className="h-48 w-auto object-contain"
+                className="h-64 w-auto object-contain"
               />
             </div>
             <h1 
-              className="font-orbitron text-5xl font-bold tracking-wider"
+              className="font-orbitron text-5xl font-bold tracking-wider mb-3"
               style={{
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #C0C0C0 40%, #808080 70%, #404040 100%)',
                 WebkitBackgroundClip: 'text',
@@ -504,15 +508,18 @@
             >
               DASHBOARD
             </h1>
+            <p className="text-white/50 text-lg max-w-xl mx-auto">
+              Track real-time metrics, burns, and liquidity for PTGC & UFO tokens on PulseChain
+            </p>
           </header>
           
           {/* Token Cards */}
-          <div className="flex-1 flex items-start justify-center px-8 pb-12">
-            <div className="flex flex-col gap-4 max-w-2xl w-full">
+          <div className="flex-1 flex items-start justify-center px-8 pt-8 pb-12">
+            <div className="flex flex-col gap-5 max-w-3xl w-full">
               {loading ? (
                 <>
-                  <div className="animate-pulse bg-white/10 rounded-xl h-24"></div>
-                  <div className="animate-pulse bg-white/10 rounded-xl h-24"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-32"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-32"></div>
                 </>
               ) : (
                 <>
@@ -554,21 +561,30 @@
       
       useEffect(() => {
         const fetchAllData = async () => {
+          console.log('Dashboard: Starting data fetch for', token);
           setLoading(true);
           
-          const [dexData, holdersCount, burn, burn24hData, pls] = await Promise.all([
-            fetchDexScreenerData(config.address),
-            fetchHolderCount(config.address),
-            fetchBurnData(config.address, config.burnAddress, config.decimals),
-            fetch24hBurn(config.address, config.burnAddress, config.decimals),
-            fetchPLSPrice()
-          ]);
+          try {
+            // Fetch data in parallel but don't let one failure block others
+            const [dexData, holdersCount, burn, burn24hData, pls] = await Promise.all([
+              fetchDexScreenerData(config.address).catch(e => { console.error('DexScreener error:', e); return null; }),
+              fetchHolderCount(config.address).catch(e => { console.error('Holders error:', e); return 0; }),
+              fetchBurnData(config.address, config.burnAddress, config.decimals).catch(e => { console.error('Burn error:', e); return { total: 0, percent: 0, totalSupply: 0 }; }),
+              fetch24hBurn(config.address, config.burnAddress, config.decimals).catch(e => { console.error('24h burn error:', e); return 0; }),
+              fetchPLSPrice().catch(e => { console.error('PLS price error:', e); return 0.00001707; })
+            ]);
+            
+            console.log('Dashboard: Data fetched', { dexData, holdersCount, burn, burn24hData, pls });
+            
+            setData(dexData);
+            setHolders(holdersCount);
+            setBurnData(burn);
+            setBurn24h(burn24hData);
+            setPlsPrice(pls);
+          } catch (err) {
+            console.error('Dashboard: Fetch error', err);
+          }
           
-          setData(dexData);
-          setHolders(holdersCount);
-          setBurnData(burn);
-          setBurn24h(burn24hData);
-          setPlsPrice(pls);
           setLoading(false);
         };
         
@@ -639,6 +655,24 @@
             <div className="text-center">
               <div className={`w-20 h-20 mx-auto mb-4 rounded-full border-4 ${borderColor} border-t-transparent animate-spin`}></div>
               <div className={`font-orbitron text-xl ${textColor}`}>Loading {token} Dashboard...</div>
+            </div>
+          </div>
+        );
+      }
+      
+      // Fallback if data failed to load
+      if (!data) {
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-6xl mb-4">⚠️</div>
+              <div className={`font-orbitron text-xl ${textColor} mb-4`}>Failed to load {token} data</div>
+              <button 
+                onClick={onBack}
+                className={`px-6 py-2 rounded-lg ${bgColor} ${textColor} border ${borderColor}`}
+              >
+                ← Go Back
+              </button>
             </div>
           </div>
         );
