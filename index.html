@@ -36,6 +36,7 @@
       PTGC:{name:'PTGC',address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D9CA5D',decimals:18,mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',pulseScanUrl:'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93',totalSupply:333333333333,taxRate:0.05,hasDAO:true,
         daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
         daoTreasury:'0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',
+        stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
         taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}'},{name:'Holders+Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
       UFO:{name:'UFO',address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',pulseScanUrl:'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
@@ -49,15 +50,26 @@
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
     
-    const HOLDER_TIERS=[
+    // Display tiers - Turtle & Below combined
+    const HOLDER_TIERS_DISPLAY=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
       {n:'Whale',e:'\u{1F40B}',p:1},
       {n:'Shark',e:'\u{1F988}',p:0.1},
       {n:'Dolphin',e:'\u{1F42C}',p:0.01},
       {n:'Squid',e:'\u{1F991}',p:0.001},
-      {n:'Turtle',e:'\u{1F422}',p:0.0001},
-      {n:'Shrimp',e:'\u{1F990}',p:0.00001},
-      {n:'Shell',e:'\u{1F41A}',p:0}
+      {n:'Turtle & Below',e:'\u{1F422}',p:0}
+    ];
+    
+    // Internal tiers for calculation
+    const HOLDER_TIERS=[
+      {n:'Poseidon',p:10},
+      {n:'Whale',p:1},
+      {n:'Shark',p:0.1},
+      {n:'Dolphin',p:0.01},
+      {n:'Squid',p:0.001},
+      {n:'Turtle',p:0.0001},
+      {n:'Shrimp',p:0.00001},
+      {n:'Shell',p:0}
     ];
     
     const BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
@@ -80,38 +92,86 @@
     const fetchBurnHist=async(addr,dec,hrs)=>{try{const blocksPerHour=360;const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})});const curBlock=parseInt((await bRes.json()).result,16);if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1})});const logs=(await lRes.json()).result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1})});const logs=(await lRes.json()).result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
     
-    // Fetch PLS balance of an address
-    const fetchPLSBalance=async(addr)=>{
+    const fetchPLSBalance=async(addr)=>{try{const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1})});const result=(await r.json()).result;return Number(BigInt(result||'0x0'))/1e18}catch{return 0}};
+    
+    const fetchTokenBalance=async(tokenAddr,walletAddr,decimals)=>{
       try{
-        const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1})});
+        const data='0x70a08231000000000000000000000000'+walletAddr.slice(2).toLowerCase();
+        const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:tokenAddr,data},'latest'],id:1})});
         const result=(await r.json()).result;
-        return Number(BigInt(result||'0x0'))/1e18;
+        return Number(BigInt(result||'0x0'))/Math.pow(10,decimals);
       }catch{return 0}
     };
     
-    // Fetch wallet value from PulseScan (includes all tokens)
+    // Fetch staking data from staking contract
+    const fetchStakingData=async(stakingContract,tokenAddr,decimals,totalSupply)=>{
+      try{
+        // Get total tokens held by staking contract (total staked)
+        const totalStaked=await fetchTokenBalance(tokenAddr,stakingContract,decimals);
+        
+        // Try to get locked vs unlocked staking info
+        // Common function signatures:
+        // totalStaked() = 0x817b1cd2
+        // totalLocked() or lockedSupply() 
+        let lockedStaked=0;
+        let unlockedStaked=totalStaked;
+        
+        // Try to call totalLocked or similar
+        try{
+          // Try lockedSupply() = 0x3f3d5530 (common in locked staking)
+          const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x3f3d5530'},'latest'],id:1})});
+          const lResult=(await lRes.json()).result;
+          if(lResult&&lResult!=='0x'){
+            lockedStaked=Number(BigInt(lResult))/Math.pow(10,decimals);
+            unlockedStaked=totalStaked-lockedStaked;
+          }
+        }catch{}
+        
+        // Try another common pattern - check for locked balance
+        if(lockedStaked===0){
+          try{
+            // Try totalLockedBalance() = 0x7448fbae
+            const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x7448fbae'},'latest'],id:1})});
+            const lResult=(await lRes.json()).result;
+            if(lResult&&lResult!=='0x'&&lResult!=='0x0000000000000000000000000000000000000000000000000000000000000000'){
+              lockedStaked=Number(BigInt(lResult))/Math.pow(10,decimals);
+              unlockedStaked=totalStaked-lockedStaked;
+            }
+          }catch{}
+        }
+        
+        const stakedPct=totalSupply>0?(unlockedStaked/totalSupply)*100:0;
+        const lockedPct=totalSupply>0?(lockedStaked/totalSupply)*100:0;
+        
+        return{
+          totalStaked,
+          staked:unlockedStaked,
+          stakedPct,
+          locked:lockedStaked,
+          lockedPct
+        };
+      }catch(e){
+        console.error('Error fetching staking data:',e);
+        return{totalStaked:0,staked:0,stakedPct:0,locked:0,lockedPct:0};
+      }
+    };
+    
     const fetchWalletValue=async(addr)=>{
       try{
-        // Get PLS balance
         const plsBal=await fetchPLSBalance(addr);
         const plsPrice=await fetchPLS();
         const plsValue=plsBal*plsPrice;
-        
-        // Get token balances from PulseScan
         const r=await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`);
         const tokens=await r.json();
-        
         let tokenValue=0;
         if(Array.isArray(tokens)){
           for(const t of tokens){
             const val=parseFloat(t.value||0)/Math.pow(10,parseInt(t.token?.decimals||18));
-            // Try to get USD value if available
             if(t.token?.exchange_rate){
               tokenValue+=val*parseFloat(t.token.exchange_rate);
             }
           }
         }
-        
         return{pls:plsBal,plsValue,tokenValue,total:plsValue+tokenValue};
       }catch(e){
         console.error('Error fetching wallet value:',e);
@@ -119,32 +179,19 @@
       }
     };
     
-    // Fetch DAO data
     const fetchDAOData=async(daoContract,treasuryAddr,plsPrice)=>{
       try{
-        // Get DAO contract PLS balance (available for proposals)
         const daoBalance=await fetchPLSBalance(daoContract);
-        
-        // Get treasury wallet total value
         const treasuryData=await fetchWalletValue(treasuryAddr);
-        
-        // Try to get proposal count and active proposals
-        // Common DAO function signatures:
-        // proposalCount() = 0xda35c664
-        // activeProposalCount or similar
         let proposalCount=0;
         let activeProposals=0;
         let pendingPLS=0;
         
         try{
-          // Try proposalCount()
           const pcRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:1})});
           const pcResult=(await pcRes.json()).result;
           if(pcResult&&pcResult!=='0x')proposalCount=parseInt(pcResult,16);
         }catch{}
-        
-        // Get pending PLS in active proposals by checking contract state
-        // This would need the specific contract ABI - for now estimate from events or use contract balance
         
         return{
           availablePLS:daoBalance,
@@ -185,6 +232,8 @@
           items.forEach(holder=>{
             const holderAddr=holder.address?.hash?.toLowerCase();
             if(LP_ADDRESSES.includes(holderAddr)||holderAddr===BURN_ADDRESS.toLowerCase())return;
+            // Also exclude staking contract from holder count
+            if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())return;
             const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
             const pctOfSupply=(tokens/cfg.totalSupply)*100;
             const tier=getHolderTier(pctOfSupply);
@@ -233,7 +282,7 @@
       );
     };
     
-    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply})=>{
+    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply,stakingData})=>{
       const[tierCounts,setTierCounts]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0,Turtle:0,Shrimp:0,Shell:0});
       const[loading,setLoading]=useState(true);
       const[progress,setProgress]=useState(0);
@@ -257,23 +306,35 @@
       
       const burnedPct=(burn?.pct||0);
       const lpPct=totalSupply>0?(tokensInLP/totalSupply)*100:0;
-      const heldPct=100-burnedPct-lpPct;
+      const stakedPct=stakingData?.stakedPct||0;
+      const lockedPct=stakingData?.lockedPct||0;
+      const heldPct=Math.max(0,100-burnedPct-lpPct-stakedPct-lockedPct);
       
       const isPTGC=token==='PTGC';
       const chartData=isPTGC?[
         {label:'Burned',value:burnedPct},
         {label:'In LP',value:lpPct},
-        {label:'Staked',value:0},
-        {label:'Staked/Locked',value:0},
+        {label:'Staked',value:stakedPct},
+        {label:'Staked/Locked',value:lockedPct},
         {label:'Held',value:heldPct}
       ]:[
         {label:'Burned',value:burnedPct},
         {label:'In LP',value:lpPct},
-        {label:'Held',value:heldPct}
+        {label:'Held',value:100-burnedPct-lpPct}
       ];
       
       const chartColors=isPTGC?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
-      const totalHolders=Object.values(tierCounts).reduce((s,c)=>s+c,0);
+      
+      // Combine Turtle, Shrimp, Shell into "Turtle & Below"
+      const displayCounts={
+        Poseidon:tierCounts.Poseidon,
+        Whale:tierCounts.Whale,
+        Shark:tierCounts.Shark,
+        Dolphin:tierCounts.Dolphin,
+        Squid:tierCounts.Squid,
+        'Turtle & Below':tierCounts.Turtle+tierCounts.Shrimp+tierCounts.Shell
+      };
+      const totalHolders=Object.values(displayCounts).reduce((s,c)=>s+c,0);
       
       return(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
@@ -303,37 +364,27 @@
                   {loading&&<div className="text-white/40 text-xs">Scanning: {progress} wallets...</div>}
                 </div>
                 
-                <div className="space-y-2">
-                  <div className="grid grid-cols-4 gap-2">
-                    {HOLDER_TIERS.slice(0,4).map(tier=>(
-                      <div key={tier.n} className="text-center">
-                        <div className="text-2xl mb-1">{tier.e}</div>
-                        <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                        <div className="text-white/50 text-xs">{tier.n}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {HOLDER_TIERS.slice(4).map(tier=>(
-                      <div key={tier.n} className="text-center">
-                        <div className="text-2xl mb-1">{tier.e}</div>
-                        <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                        <div className="text-white/50 text-xs">{tier.n}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {loading?(
-                    <div className="flex items-center justify-center gap-2 mt-2">
-                      <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
-                      <span className="text-white/50 text-sm">Loading all holders...</span>
+                <div className="grid grid-cols-3 gap-3">
+                  {HOLDER_TIERS_DISPLAY.map(tier=>(
+                    <div key={tier.n} className="text-center">
+                      <div className="text-2xl mb-1">{tier.e}</div>
+                      <div className={`text-lg font-bold ${theme.text}`}>{displayCounts[tier.n]||0}</div>
+                      <div className="text-white/50 text-xs">{tier.n}</div>
                     </div>
-                  ):(
-                    <div className="text-center text-white/40 text-xs mt-2">Total: {totalHolders} wallets (excludes LPs & burn)</div>
-                  )}
+                  ))}
                 </div>
                 
+                {loading?(
+                  <div className="flex items-center justify-center gap-2 mt-3">
+                    <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
+                    <span className="text-white/50 text-sm">Loading all holders...</span>
+                  </div>
+                ):(
+                  <div className="text-center text-white/40 text-xs mt-3">Total: {totalHolders} wallets (excludes LPs, burn & staking)</div>
+                )}
+                
                 <div className="text-white/40 text-xs mt-3 pt-3 border-t border-white/10">
-                  {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} 0.001%+ {'\u2022'} {'\u{1F422}'} 0.0001%+ {'\u2022'} {'\u{1F990}'} 0.00001%+ {'\u2022'} {'\u{1F41A}'} Below
+                  {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} 0.001%+ {'\u2022'} {'\u{1F422}'} Below
                 </div>
               </div>
             </div>
@@ -518,11 +569,18 @@
       const[showAlloc,setShowAlloc]=useState(false);
       const[daoData,setDaoData]=useState(null);
       const[daoLoading,setDaoLoading]=useState(true);
+      const[stakingData,setStakingData]=useState({totalStaked:0,staked:0,stakedPct:0,locked:0,lockedPct:0});
       
       useEffect(()=>{
         const load=async()=>{
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          
+          // Fetch staking data if applicable
+          if(cfg.stakingContract){
+            const staking=await fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply);
+            setStakingData(staking);
+          }
           
           // Fetch DAO data if applicable
           if(cfg.hasDAO&&cfg.daoContract){
@@ -552,9 +610,23 @@
       
       const burnedPct=burn?.pct||0;
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
-      const heldPct=100-burnedPct-lpPct;
+      const stakedPct=stakingData?.stakedPct||0;
+      const lockedPct=stakingData?.lockedPct||0;
+      const heldPct=Math.max(0,100-burnedPct-lpPct-stakedPct-lockedPct);
       
-      const chartColors=['#f97316','#3b82f6',cfg.colorHex];
+      // Chart colors: Burned, LP, Staked, Locked, Held
+      const chartColors=cfg.stakingContract?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
+      const chartData=cfg.stakingContract?[
+        {label:'Burned',value:burnedPct},
+        {label:'In LP',value:lpPct},
+        {label:'Staked',value:stakedPct},
+        {label:'Locked',value:lockedPct},
+        {label:'Held',value:heldPct}
+      ]:[
+        {label:'Burned',value:burnedPct},
+        {label:'In LP',value:lpPct},
+        {label:'Held',value:100-burnedPct-lpPct}
+      ];
       
       if(loading)return<div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div><div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div></div></div>;
       
@@ -622,11 +694,15 @@
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowAlloc(true)}>
                 <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4CA}'} Token Allocation</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-center gap-4">
-                  <DonutChart data={[{label:'Burned',value:burnedPct},{label:'In LP',value:lpPct},{label:'Held',value:heldPct}]} colors={chartColors} size={80}/>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{background:'#f97316'}}></div><span className="text-white/60 text-sm">Burned:</span><span className={`font-bold ${theme.text}`}>{burnedPct.toFixed(2)}%</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{background:'#3b82f6'}}></div><span className="text-white/60 text-sm">In LP:</span><span className={`font-bold ${theme.text}`}>{lpPct.toFixed(2)}%</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{background:cfg.colorHex}}></div><span className="text-white/60 text-sm">Held:</span><span className={`font-bold ${theme.text}`}>{heldPct.toFixed(2)}%</span></div>
+                  <DonutChart data={chartData} colors={chartColors} size={80}/>
+                  <div className="flex-1 space-y-1">
+                    {chartData.map((d,i)=>(
+                      <div key={i} className="flex items-center gap-2 text-sm">
+                        <div className="w-2 h-2 rounded-full" style={{background:chartColors[i]}}></div>
+                        <span className="text-white/60">{d.label}:</span>
+                        <span className={`font-bold ${theme.text}`}>{d.value.toFixed(2)}%</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -694,7 +770,7 @@
           
           <BurnModal open={showBurn} close={()=>setShowBurn(false)} token={token} burn={burn} price={data?.price||0} cfg={cfg}/>
           <ValueGenModal open={showValueGen} close={()=>setShowValueGen(false)} token={token} vol={data?.vol||0} cfg={cfg} theme={theme}/>
-          <AllocationModal open={showAlloc} close={()=>setShowAlloc(false)} token={token} cfg={cfg} theme={theme} burn={burn} tokensInLP={tokensInLP} totalSupply={cfg.totalSupply}/>
+          <AllocationModal open={showAlloc} close={()=>setShowAlloc(false)} token={token} cfg={cfg} theme={theme} burn={burn} tokensInLP={tokensInLP} totalSupply={cfg.totalSupply} stakingData={stakingData}/>
         </div>
       );
     };
