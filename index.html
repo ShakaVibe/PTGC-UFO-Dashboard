@@ -25,8 +25,6 @@
     .token-card-green:hover{box-shadow:0 0 50px rgba(124,252,0,0.5)}
     .modal-overlay{backdrop-filter:blur(8px)}
     .clickable:hover{transform:scale(1.02);cursor:pointer}
-    .pie-segment{transition:all 0.3s ease}
-    .pie-segment:hover{opacity:0.8;transform:scale(1.02)}
   </style>
 </head>
 <body>
@@ -36,77 +34,61 @@
     
     const TOKENS={
       PTGC:{name:'PTGC',address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D9CA5D',decimals:18,mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',pulseScanUrl:'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93',totalSupply:333333333333,taxRate:0.05,hasDAO:true,
-        taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}'},{name:'Holders+Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}],
-        allocCategories:['Burned','In LP','Staked','Staked/Locked','Held'],
-        allocColors:['#f97316','#3b82f6','#a855f7','#ec4899','#6b7280']
+        taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}'},{name:'Holders+Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
       UFO:{name:'UFO',address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',pulseScanUrl:'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
-        taxBreakdown:[{name:'LP Providers',pct:3,emoji:'\u{1F4A7}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Burn UFO',pct:1,emoji:'\u{1F525}'},{name:'Burn PTGC',pct:1,emoji:'\u{1F525}'}],
-        allocCategories:['Burned','In LP','Held'],
-        allocColors:['#f97316','#3b82f6','#6b7280']
+        taxBreakdown:[{name:'LP Providers',pct:3,emoji:'\u{1F4A7}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Burn UFO',pct:1,emoji:'\u{1F525}'},{name:'Burn PTGC',pct:1,emoji:'\u{1F525}'}]
       }
     };
     
-    // Known LP addresses to exclude from holder counts
-    const LP_ADDRESSES = [
-      '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', // PTGC/WPLS
-      '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', // UFO/WPLS
-    ];
+    const LP_ADDRESSES=['0xf5a89a6487d62df5308cdda89c566c5b5ef94c11','0xbea0e55b82eb975280041f3b49c4d0bd937b72d5'];
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
-    const STAKING_ADDRESSES = []; // Add staking contract addresses when known
-    const STAKING_LOCKED_ADDRESSES = []; // Add locked staking addresses when known
-    
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
     
-    const BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
-    
-    // Sea creature tiers for holder classification (USD value)
+    // Sea creature tiers - same percentages as burn
     const HOLDER_TIERS=[
-      {n:'Poseidon',e:'\u{1F531}',min:1000000},
-      {n:'Whale',e:'\u{1F40B}',min:100000},
-      {n:'Shark',e:'\u{1F988}',min:50000},
-      {n:'Dolphin',e:'\u{1F42C}',min:25000},
-      {n:'Other',e:'\u{1F41A}',min:0}
+      {n:'Poseidon',e:'\u{1F531}',p:10},
+      {n:'Whale',e:'\u{1F40B}',p:1},
+      {n:'Shark',e:'\u{1F988}',p:0.1},
+      {n:'Dolphin',e:'\u{1F42C}',p:0.01},
+      {n:'Squid & Below',e:'\u{1F991}',p:0}
     ];
+    
+    const BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
     
     const fmt=n=>n==null||isNaN(n)?'\u2014':Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
-    const fmtPct=n=>n==null||isNaN(n)?'\u2014':n.toFixed(2)+'%';
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     const getWhaleProgress=pct=>({whales:Math.floor(pct),progress:(pct-Math.floor(pct))*100});
     
+    // Get holder tier based on percentage of supply
+    const getHolderTier=(holdingPct)=>{
+      if(holdingPct>=10)return'Poseidon';
+      if(holdingPct>=1)return'Whale';
+      if(holdingPct>=0.1)return'Shark';
+      if(holdingPct>=0.01)return'Dolphin';
+      return'Squid & Below';
+    };
+    
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
     const fetchBurn=async(addr,dec)=>{try{const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1})});const burned=Number(BigInt((await bRes.json()).result||'0x0'))/Math.pow(10,dec);const sRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})});const supply=Number(BigInt((await sRes.json()).result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch{return{total:0,pct:0,supply:0}}};
     const fetchBurnHist=async(addr,dec,hrs)=>{try{const blocksPerHour=360;const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})});const curBlock=parseInt((await bRes.json()).result,16);if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1})});const logs=(await lRes.json()).result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1})});const logs=(await lRes.json()).result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
+    const fetchTopHolders=async(addr)=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?limit=50`);const data=await r.json();return data.items||[]}catch{return[]}};
     
-    // Fetch top holders from PulseScan
-    const fetchTopHolders=async(addr)=>{
-      try{
-        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?limit=50`);
-        const data=await r.json();
-        return data.items||[];
-      }catch{return[]}
-    };
-    
-    // Donut Chart Component
+    // Donut Chart Component - fixed, no hover effects
     const DonutChart=({data,colors,size=120})=>{
-      let cumulative=0;
       const total=data.reduce((s,d)=>s+d.value,0);
-      const segments=data.map((d,i)=>{
-        const pct=total>0?(d.value/total)*100:0;
-        const start=cumulative;
-        cumulative+=pct;
-        return{...d,pct,start,color:colors[i%colors.length]};
-      });
+      if(total===0)return<svg width={size} height={size}><circle cx={size/2} cy={size/2} r={size/2-10} fill="none" stroke="#333" strokeWidth={size*0.17}/></svg>;
+      let cumulative=0;
       const r=size/2;
       const strokeWidth=r*0.35;
       const radius=r-strokeWidth/2;
@@ -114,12 +96,12 @@
       
       return(
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          {segments.map((seg,i)=>{
-            const offset=circumference*(1-seg.start/100);
-            const length=circumference*(seg.pct/100);
-            return(
-              <circle key={i} className="pie-segment" cx={r} cy={r} r={radius} fill="none" stroke={seg.color} strokeWidth={strokeWidth} strokeDasharray={`${length} ${circumference-length}`} strokeDashoffset={offset} transform={`rotate(-90 ${r} ${r})`}/>
-            );
+          {data.map((d,i)=>{
+            const pct=total>0?(d.value/total)*100:0;
+            const offset=circumference*(1-cumulative/100);
+            const length=circumference*(pct/100);
+            cumulative+=pct;
+            return<circle key={i} cx={r} cy={r} r={radius} fill="none" stroke={colors[i%colors.length]} strokeWidth={strokeWidth} strokeDasharray={`${length} ${circumference-length}`} strokeDashoffset={offset} transform={`rotate(-90 ${r} ${r})`}/>;
           })}
           <circle cx={r} cy={r} r={radius-strokeWidth/2} fill="#0a0a0a"/>
         </svg>
@@ -127,53 +109,27 @@
     };
     
     // Token Allocation Modal
-    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,price,totalSupply})=>{
-      const[holders,setHolders]=useState([]);
-      const[loading,setLoading]=useState(true);
-      const[tierCounts,setTierCounts]=useState({});
-      
-      useEffect(()=>{
-        if(!open)return;
-        setLoading(true);
-        const load=async()=>{
-          const h=await fetchTopHolders(cfg.address);
-          setHolders(h);
-          
-          // Count holders by tier (excluding LPs and burn address)
-          const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0,Other:0};
-          h.forEach(holder=>{
-            const addr=holder.address?.hash?.toLowerCase();
-            if(LP_ADDRESSES.includes(addr)||addr===BURN_ADDRESS.toLowerCase())return;
-            const value=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals)*price;
-            for(const tier of HOLDER_TIERS){
-              if(value>=tier.min){counts[tier.n]++;break}
-            }
-          });
-          setTierCounts(counts);
-          setLoading(false);
-        };
-        load();
-      },[open,cfg,price]);
-      
+    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply,tierCounts})=>{
       if(!open)return null;
       
       const burnedPct=(burn?.pct||0);
       const lpPct=totalSupply>0?(tokensInLP/totalSupply)*100:0;
       const heldPct=100-burnedPct-lpPct;
       
-      // For PTGC we'd add staked percentages when we have that data
       const isPTGC=token==='PTGC';
       const chartData=isPTGC?[
         {label:'Burned',value:burnedPct},
         {label:'In LP',value:lpPct},
-        {label:'Staked',value:0}, // TODO: Get from staking contract
-        {label:'Staked/Locked',value:0}, // TODO: Get from locked staking
+        {label:'Staked',value:0},
+        {label:'Staked/Locked',value:0},
         {label:'Held',value:heldPct}
       ]:[
         {label:'Burned',value:burnedPct},
         {label:'In LP',value:lpPct},
         {label:'Held',value:heldPct}
       ];
+      
+      const chartColors=isPTGC?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
       
       return(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
@@ -184,13 +140,12 @@
                 <button onClick={close} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
               </div>
               
-              {/* Donut Chart */}
               <div className="flex items-center justify-center gap-6 mb-4">
-                <DonutChart data={chartData} colors={cfg.allocColors} size={140}/>
+                <DonutChart data={chartData} colors={chartColors} size={140}/>
                 <div className="space-y-1">
                   {chartData.map((d,i)=>(
                     <div key={i} className="flex items-center gap-2 text-sm">
-                      <div className="w-3 h-3 rounded-full" style={{background:cfg.allocColors[i]}}></div>
+                      <div className="w-3 h-3 rounded-full" style={{background:chartColors[i]}}></div>
                       <span className="text-white/70">{d.label}:</span>
                       <span className={`font-bold ${theme.text}`}>{d.value.toFixed(2)}%</span>
                     </div>
@@ -198,24 +153,19 @@
                 </div>
               </div>
               
-              {/* Sea Creature Distribution */}
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="text-white/60 text-xs uppercase mb-3">Holder Distribution (Top 50 Wallets)</div>
-                {loading?(
-                  <div className="text-center py-4 animate-pulse-slow text-white/50">Loading holders...</div>
-                ):(
-                  <div className="grid grid-cols-5 gap-2">
-                    {HOLDER_TIERS.map(tier=>(
-                      <div key={tier.n} className="text-center">
-                        <div className="text-3xl mb-1">{tier.e}</div>
-                        <div className={`text-xl font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                        <div className="text-white/50 text-xs">{tier.n}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="text-white/60 text-xs uppercase mb-3">Holder Distribution (Top 50 Wallets by % Supply)</div>
+                <div className="grid grid-cols-5 gap-2">
+                  {HOLDER_TIERS.map(tier=>(
+                    <div key={tier.n} className="text-center">
+                      <div className="text-3xl mb-1">{tier.e}</div>
+                      <div className={`text-xl font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                      <div className="text-white/50 text-xs">{tier.n}</div>
+                    </div>
+                  ))}
+                </div>
                 <div className="text-white/40 text-xs mt-3 text-center">
-                  {'\u{1F531}'} $1M+ {'\u2022'} {'\u{1F40B}'} $100K+ {'\u2022'} {'\u{1F988}'} $50K+ {'\u2022'} {'\u{1F42C}'} $25K+ {'\u2022'} {'\u{1F41A}'} Below
+                  {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} Below
                 </div>
               </div>
             </div>
@@ -229,7 +179,6 @@
       const[period,setPeriod]=useState('24h');
       if(!open)return null;
       
-      // Multipliers for each period (estimated from 24h)
       const multipliers={'24h':1,'7d':7,'30d':30,'90d':90};
       const periodVol=vol*multipliers[period];
       const total=periodVol*cfg.taxRate;
@@ -243,7 +192,6 @@
                 <button onClick={close} className="text-white/60 hover:text-white text-xl">{'\u00D7'}</button>
               </div>
               
-              {/* Period Selector */}
               <div className="flex gap-1 mb-4 bg-black/30 rounded-lg p-1">
                 {['24h','7d','30d','90d'].map(p=>(
                   <button key={p} onClick={()=>setPeriod(p)} className={`flex-1 py-2 rounded-md text-sm font-medium transition ${period===p?`${theme.bg} text-black`:'text-white/60 hover:text-white'}`}>{p.toUpperCase()}</button>
@@ -401,8 +349,33 @@
       const[showBurn,setShowBurn]=useState(false);
       const[showValueGen,setShowValueGen]=useState(false);
       const[showAlloc,setShowAlloc]=useState(false);
+      const[tierCounts,setTierCounts]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,'Squid & Below':0});
+      const[loadingTiers,setLoadingTiers]=useState(true);
       
-      useEffect(()=>{const load=async()=>{const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false)};load();const i=setInterval(load,60000);return()=>clearInterval(i)},[token]);
+      useEffect(()=>{
+        const load=async()=>{
+          const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
+          setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          
+          // Fetch holder tiers
+          setLoadingTiers(true);
+          const topHolders=await fetchTopHolders(cfg.address);
+          const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0,'Squid & Below':0};
+          topHolders.forEach(holder=>{
+            const addr=holder.address?.hash?.toLowerCase();
+            if(LP_ADDRESSES.includes(addr)||addr===BURN_ADDRESS.toLowerCase())return;
+            const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
+            const pctOfSupply=(tokens/cfg.totalSupply)*100;
+            const tier=getHolderTier(pctOfSupply);
+            counts[tier]++;
+          });
+          setTierCounts(counts);
+          setLoadingTiers(false);
+        };
+        load();
+        const i=setInterval(load,60000);
+        return()=>clearInterval(i);
+      },[token]);
       
       const sorted=useMemo(()=>{if(!data?.pairs)return[];return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':av=a.vol;bv=b.vol;break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=a.priceChange?.h24||0;bv=b.priceChange?.h24||0;break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir]);
       
@@ -417,9 +390,12 @@
       const tokensInLPPct=cfg.totalSupply>0?((tokensInLP/cfg.totalSupply)*100).toFixed(2):'0';
       const valueGen24h=(data?.vol||0)*cfg.taxRate;
       
-      // Allocation percentages
       const burnedPct=burn?.pct||0;
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
+      const heldPct=100-burnedPct-lpPct;
+      
+      // Chart colors with token color for "Held"
+      const chartColors=['#f97316','#3b82f6',cfg.colorHex];
       
       if(loading)return<div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div><div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div></div></div>;
       
@@ -483,15 +459,28 @@
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">{cfg.taxBreakdown.map((item,i)=><div key={i} className="flex items-center gap-1"><span>{item.emoji}</span><span className="text-white/60">{item.name}:</span><span className={`font-semibold ${theme.text}`}>{fmtUSD((data?.vol||0)*(item.pct/100))}</span></div>)}</div>
               </div>
               
-              {/* Token Allocation Box */}
+              {/* Token Allocation Box - with sea creatures in front */}
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowAlloc(true)}>
-                <div className="flex justify-between mb-2"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4CA}'} Token Allocation</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
+                <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4CA}'} Token Allocation</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-center gap-4">
-                  <DonutChart data={[{label:'Burned',value:burnedPct},{label:'In LP',value:lpPct},{label:'Other',value:100-burnedPct-lpPct}]} colors={['#f97316','#3b82f6','#6b7280']} size={80}/>
-                  <div className="flex-1 space-y-1 text-sm">
-                    <div className="flex justify-between"><span className="text-white/60">{'\u{1F525}'} Burned:</span><span className={`font-bold ${theme.text}`}>{burnedPct.toFixed(2)}%</span></div>
-                    <div className="flex justify-between"><span className="text-white/60">{'\u{1F4A7}'} In LP:</span><span className={`font-bold ${theme.text}`}>{lpPct.toFixed(2)}%</span></div>
-                    <div className="flex justify-between"><span className="text-white/60">{'\u{1F464}'} Held:</span><span className={`font-bold ${theme.text}`}>{(100-burnedPct-lpPct).toFixed(2)}%</span></div>
+                  <DonutChart data={[{label:'Burned',value:burnedPct},{label:'In LP',value:lpPct},{label:'Held',value:heldPct}]} colors={chartColors} size={70}/>
+                  <div className="flex-1">
+                    <div className="flex justify-between text-sm mb-1"><span className="text-white/60">{'\u{1F525}'} Burned: <span className={`font-bold ${theme.text}`}>{burnedPct.toFixed(2)}%</span></span><span className="text-white/60">{'\u{1F4A7}'} LP: <span className={`font-bold ${theme.text}`}>{lpPct.toFixed(2)}%</span></span><span className="text-white/60">{'\u{1F464}'} Held: <span className={`font-bold ${theme.text}`}>{heldPct.toFixed(2)}%</span></span></div>
+                    <div className="border-t border-white/10 pt-2 mt-2">
+                      <div className="text-white/50 text-xs mb-1">Top 50 Holders (by % supply)</div>
+                      {loadingTiers?(
+                        <div className="text-white/30 text-xs animate-pulse-slow">Loading...</div>
+                      ):(
+                        <div className="flex justify-between">
+                          {HOLDER_TIERS.map(tier=>(
+                            <div key={tier.n} className="text-center">
+                              <span className="text-lg">{tier.e}</span>
+                              <span className={`ml-1 font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -526,7 +515,7 @@
           
           <BurnModal open={showBurn} close={()=>setShowBurn(false)} token={token} burn={burn} price={data?.price||0} cfg={cfg}/>
           <ValueGenModal open={showValueGen} close={()=>setShowValueGen(false)} token={token} vol={data?.vol||0} cfg={cfg} theme={theme}/>
-          <AllocationModal open={showAlloc} close={()=>setShowAlloc(false)} token={token} cfg={cfg} theme={theme} burn={burn} tokensInLP={tokensInLP} price={data?.price||0} totalSupply={cfg.totalSupply}/>
+          <AllocationModal open={showAlloc} close={()=>setShowAlloc(false)} token={token} cfg={cfg} theme={theme} burn={burn} tokensInLP={tokensInLP} totalSupply={cfg.totalSupply} tierCounts={tierCounts}/>
         </div>
       );
     };
