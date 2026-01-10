@@ -71,7 +71,8 @@
         color: 'gold',
         burnAddress: '0x0000000000000000000000000000000000000369',
         decimals: 18,
-        dexScreenerSlug: 'pulsechain/0x94534eeee131840b1c0f61847c572228bdfdde93'
+        dexScreenerSlug: 'pulsechain/0x94534eeee131840b1c0f61847c572228bdfdde93',
+        mainPair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11'
       },
       UFO: {
         name: 'UFO',
@@ -80,7 +81,8 @@
         color: 'green',
         burnAddress: '0x0000000000000000000000000000000000000369',
         decimals: 18,
-        dexScreenerSlug: 'pulsechain/0x456548a9b56efbbd89ca0309edd17a9e20b04018'
+        dexScreenerSlug: 'pulsechain/0x456548a9b56efbbd89ca0309edd17a9e20b04018',
+        mainPair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5'
       }
     };
     
@@ -164,19 +166,33 @@
     };
     
     // API Functions
-    const fetchDexScreenerData = async (tokenAddress) => {
+    const fetchDexScreenerData = async (tokenAddress, mainPairAddress) => {
       try {
+        // First fetch the specific main pair for accurate price
+        let mainPairData = null;
+        if (mainPairAddress) {
+          const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPairAddress}`);
+          const pairData = await pairRes.json();
+          if (pairData.pair) {
+            mainPairData = pairData.pair;
+          }
+        }
+        
+        // Then fetch all pairs for liquidity/volume totals
         const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
         const data = await res.json();
         if (data.pairs && data.pairs.length > 0) {
           const sortedPairs = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-          const mainPair = sortedPairs[0];
           const totalVolume = sortedPairs.reduce((sum, p) => sum + (p.volume?.h24 || 0), 0);
           const totalLiquidity = sortedPairs.reduce((sum, p) => sum + (p.liquidity?.usd || 0), 0);
+          
+          // Use main pair for price/mcap if available, otherwise use highest liquidity pair
+          const pricePair = mainPairData || sortedPairs[0];
+          
           return {
-            price: parseFloat(mainPair.priceUsd) || 0,
-            priceChange24h: mainPair.priceChange?.h24 || 0,
-            mcap: mainPair.marketCap || mainPair.fdv || 0,
+            price: parseFloat(pricePair.priceUsd) || 0,
+            priceChange24h: pricePair.priceChange?.h24 || 0,
+            mcap: pricePair.marketCap || pricePair.fdv || 0,
             liquidity: totalLiquidity,
             volume24h: totalVolume,
             pairs: sortedPairs
@@ -270,8 +286,8 @@
       useEffect(() => {
         const fetchData = async () => {
           const [ptgcData, ufoData] = await Promise.all([
-            fetchDexScreenerData(TOKENS.PTGC.address),
-            fetchDexScreenerData(TOKENS.UFO.address)
+            fetchDexScreenerData(TOKENS.PTGC.address, TOKENS.PTGC.mainPair),
+            fetchDexScreenerData(TOKENS.UFO.address, TOKENS.UFO.mainPair)
           ]);
           setTokenData({ PTGC: ptgcData, UFO: ufoData });
           setLoading(false);
@@ -341,10 +357,10 @@
         <div className="min-h-screen flex flex-col">
           <header className="text-center pt-6">
             <div className="flex justify-center">
-              <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-96 w-auto object-contain" />
+              <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-80 w-auto object-contain" />
             </div>
             <h1 
-              className="font-orbitron text-5xl font-bold tracking-wider mb-2 -mt-4"
+              className="font-orbitron text-5xl font-bold tracking-wider mb-2 -mt-8"
               style={{
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #C0C0C0 40%, #808080 70%, #404040 100%)',
                 WebkitBackgroundClip: 'text',
@@ -354,7 +370,7 @@
             >
               DASHBOARD
             </h1>
-            <p className="text-white/50 text-lg">A community tool built for The Grays Ecosystem</p>
+            <p className="text-white/50 text-lg mb-10">A community tool built for The Grays Ecosystem</p>
           </header>
           
           <div className="flex-1 flex items-start justify-center px-8 pt-8 pb-8">
@@ -403,7 +419,7 @@
       useEffect(() => {
         const fetchAllData = async () => {
           console.log('Fetching dashboard data for:', token);
-          const dexData = await fetchDexScreenerData(config.address);
+          const dexData = await fetchDexScreenerData(config.address, config.mainPair);
           const holdersCount = await fetchHolderCount(config.address);
           const burn = await fetchBurnData(config.address, config.burnAddress, config.decimals);
           console.log('Dashboard data:', { dexData, holdersCount, burn });
