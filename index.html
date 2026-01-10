@@ -33,8 +33,43 @@
     const { useState, useEffect, useMemo } = React;
     
     const TOKENS = {
-      PTGC: { name: 'PTGC', address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', logo: '06_PTGC_V1_transparent_bg.png', color: 'gold', colorHex: '#D9CA5D', decimals: 18, mainPair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11', pulseScanUrl: 'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93', totalSupply: 333333333333 },
-      UFO: { name: 'UFO', address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', logo: '07_Ufo_transparent.png', color: 'green', colorHex: '#7CFC00', decimals: 18, mainPair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5', pulseScanUrl: 'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', totalSupply: 999999999051 }
+      PTGC: { 
+        name: 'PTGC', 
+        address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', 
+        logo: '06_PTGC_V1_transparent_bg.png', 
+        color: 'gold', 
+        colorHex: '#D9CA5D', 
+        decimals: 18, 
+        mainPair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11', 
+        pulseScanUrl: 'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93', 
+        totalSupply: 333333333333,
+        taxRate: 0.05, // 5%
+        taxBreakdown: [
+          { name: 'DAO', pct: 2, emoji: '🏛️' },
+          { name: 'Stakers', pct: 1, emoji: '💎' },
+          { name: 'Holders & Stakers', pct: 1, emoji: '🎁' },
+          { name: 'Buy & Burn PTGC', pct: 0.5, emoji: '🔥' },
+          { name: 'Add LP (PTGC/PLS)', pct: 0.5, emoji: '💧' }
+        ]
+      },
+      UFO: { 
+        name: 'UFO', 
+        address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', 
+        logo: '07_Ufo_transparent.png', 
+        color: 'green', 
+        colorHex: '#7CFC00', 
+        decimals: 18, 
+        mainPair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5', 
+        pulseScanUrl: 'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', 
+        totalSupply: 999999999051,
+        taxRate: 0.06, // 6%
+        taxBreakdown: [
+          { name: 'UFO LP Providers', pct: 3, emoji: '💧' },
+          { name: 'UFO Holders', pct: 1, emoji: '🎁' },
+          { name: 'Buy & Burn UFO', pct: 1, emoji: '🔥' },
+          { name: 'Buy & Burn PTGC', pct: 1, emoji: '🔥' }
+        ]
+      }
     };
     const COMBINED_LOGO = '07_Combined_PTGC_UFO_Transparent.png';
     const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
@@ -54,6 +89,7 @@
     
     const fmt = n => n == null || isNaN(n) ? '—' : Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD = n => n == null || isNaN(n) ? '—' : '$' + Math.floor(Number(n)).toLocaleString('en-US');
+    const fmtUSDSmall = n => n == null || isNaN(n) ? '—' : '$' + Number(n).toFixed(2);
     const fmtPrice = p => {
       if (!p || isNaN(p) || p === 0) return '—';
       if (p >= 1) return '$' + p.toFixed(2);
@@ -77,7 +113,6 @@
       return r;
     };
     const getSingleC = pct => { for (const c of BURN_C) if (pct >= c.p) return c; return BURN_C[BURN_C.length - 1]; };
-    // Progress to next whale (each whale = 1%)
     const getWhaleProgress = pct => {
       const whales = Math.floor(pct);
       const progress = (pct - whales) * 100;
@@ -93,15 +128,12 @@
         if (data.pairs?.length > 0) {
           const pairs = data.pairs.map(p => ({ ...p, liq: p.liquidity?.usd || 0, vol: p.volume?.h24 || 0 })).sort((a, b) => b.liq - a.liq);
           const pp = mp || pairs[0];
-          
-          // Calculate total tokens in LP
           let totalTokensInLP = 0;
           pairs.forEach(p => {
             const isBase = p.baseToken?.address?.toLowerCase() === addr.toLowerCase();
             if (isBase && p.liquidity?.base) totalTokensInLP += p.liquidity.base;
             else if (!isBase && p.liquidity?.quote) totalTokensInLP += p.liquidity.quote;
           });
-          
           return { 
             price: parseFloat(pp.priceUsd) || 0, 
             change: pp.priceChange?.h24 || 0, 
@@ -128,52 +160,25 @@
       } catch { return { total: 0, pct: 0, supply: 0 }; }
     };
     
-    // Fetch burn history with better block calculation for 30 days
     const fetchBurnHist = async (addr, dec, hrs) => {
       try {
-        // For longer periods, we need to be more careful about block range
-        const blocksPerHour = 360; // ~10 sec blocks
+        const blocksPerHour = 360;
         const totalBlocks = blocksPerHour * hrs;
-        
-        // Get current block
         const bRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }) });
         const curBlock = parseInt((await bRes.json()).result, 16);
-        
-        // For very long periods (>7 days), we might hit RPC limits, so chunk the requests
         if (hrs > 24 * 7) {
-          // For 30 days, fetch in weekly chunks
           let totalBurn = 0;
-          const chunkHours = 24 * 7; // 1 week chunks
+          const chunkHours = 24 * 7;
           const chunks = Math.ceil(hrs / chunkHours);
-          
           for (let i = 0; i < chunks; i++) {
             const endBlock = curBlock - (i * blocksPerHour * chunkHours);
             const startBlock = Math.max(0, endBlock - (blocksPerHour * chunkHours));
-            
-            const lRes = await fetch(RPC, { 
-              method: 'POST', 
-              headers: { 'Content-Type': 'application/json' }, 
-              body: JSON.stringify({ 
-                jsonrpc: '2.0', 
-                method: 'eth_getLogs', 
-                params: [{ 
-                  address: addr, 
-                  topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], 
-                  fromBlock: '0x' + startBlock.toString(16), 
-                  toBlock: '0x' + endBlock.toString(16) 
-                }], 
-                id: 1 
-              }) 
-            });
+            const lRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getLogs', params: [{ address: addr, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], fromBlock: '0x' + startBlock.toString(16), toBlock: '0x' + endBlock.toString(16) }], id: 1 }) });
             const logs = (await lRes.json()).result;
-            if (Array.isArray(logs)) {
-              totalBurn += logs.reduce((s, l) => s + Number(BigInt(l.data)) / Math.pow(10, dec), 0);
-            }
+            if (Array.isArray(logs)) totalBurn += logs.reduce((s, l) => s + Number(BigInt(l.data)) / Math.pow(10, dec), 0);
           }
           return totalBurn;
         }
-        
-        // For shorter periods, single request
         const fromBlock = '0x' + Math.max(0, curBlock - totalBlocks).toString(16);
         const lRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getLogs', params: [{ address: addr, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], fromBlock, toBlock: 'latest' }], id: 1 }) });
         const logs = (await lRes.json()).result;
@@ -183,23 +188,19 @@
     
     const fetchPLS = async () => { try { const r = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae'); return parseFloat((await r.json()).pair?.priceUsd) || 0.00005; } catch { return 0.00005; } };
     
-    // Stat Modal - needs real historical data API (placeholder shows current * days)
+    // Stat Modal
     const StatModal = ({ open, close, title, theme, currentVal }) => {
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState({ d7: 0, d30: 0, d90: 0 });
-      
       useEffect(() => {
         if (!open) return;
         setLoading(true);
-        // Note: Real historical data would require an indexer/API
-        // For now showing current value extrapolated
         setTimeout(() => {
           const base = currentVal || 0;
           setData({ d7: base * 7, d30: base * 30, d90: base * 90 });
           setLoading(false);
         }, 300);
       }, [open, currentVal]);
-      
       if (!open) return null;
       const isH = title === 'Holders';
       return (
@@ -226,16 +227,64 @@
       );
     };
     
+    // Value Generation Modal
+    const ValueGenModal = ({ open, close, token, volume, cfg, theme }) => {
+      if (!open) return null;
+      const totalValue = volume * cfg.taxRate;
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
+          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e => e.stopPropagation()}>
+            <div className="p-5">
+              <div className="flex justify-between mb-4">
+                <div className="flex items-center gap-3"><img src={cfg.logo} alt={token} className="w-12 h-12"/><div><h2 className={`text-xl font-bold ${theme.text}`}>{token} Value Generation</h2><div className="text-white/40 text-sm">24H Tax Distribution</div></div></div>
+                <button onClick={close} className="text-white/60 hover:text-white text-2xl">×</button>
+              </div>
+              <div className={`${theme.card} border ${theme.border} rounded-xl p-4 mb-4`}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-white/60">24H Volume</span>
+                  <span className="text-white text-xl font-bold">{fmtUSD(volume)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-white/60">Tax Rate</span>
+                  <span className={`${theme.text} text-xl font-bold`}>{(cfg.taxRate * 100).toFixed(0)}%</span>
+                </div>
+                <div className="border-t border-white/10 pt-2 mt-2 flex justify-between items-center">
+                  <span className="text-white font-semibold">Total Value Generated</span>
+                  <span className="text-green-400 text-2xl font-bold">{fmtUSD(totalValue)}</span>
+                </div>
+              </div>
+              <div className="text-white/60 text-xs uppercase mb-2">Distribution Breakdown</div>
+              <div className="space-y-2">
+                {cfg.taxBreakdown.map((item, i) => {
+                  const val = volume * (item.pct / 100);
+                  return (
+                    <div key={i} className={`${theme.card} border ${theme.border} rounded-lg p-3 flex justify-between items-center`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{item.emoji}</span>
+                        <div>
+                          <div className="text-white font-medium">{item.name}</div>
+                          <div className="text-white/50 text-sm">{item.pct}% of volume</div>
+                        </div>
+                      </div>
+                      <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(val)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
     // Burn Modal
     const BurnModal = ({ open, close, token, burn, price, cfg }) => {
       const [hist, setHist] = useState({ h1: null, h6: null, h12: null, h24: null, d7: null, d30: null });
       const [loading, setLoading] = useState(true);
-      
       useEffect(() => {
         if (!open) return;
         setLoading(true);
         setHist({ h1: null, h6: null, h12: null, h24: null, d7: null, d30: null });
-        
         const fetchAll = async () => {
           const h1 = await fetchBurnHist(cfg.address, cfg.decimals, 1);
           setHist(prev => ({ ...prev, h1 }));
@@ -253,7 +302,6 @@
         };
         fetchAll();
       }, [open, cfg]);
-      
       if (!open) return null;
       const theme = { text: cfg.color === 'gold' ? 'text-[#D9CA5D]' : 'text-[#7CFC00]' };
       const creatures = getBurnC(burn?.pct || 0, 'Squid');
@@ -264,7 +312,6 @@
         { l: '1 Hour', v: hist.h1 }, { l: '6 Hours', v: hist.h6 }, { l: '12 Hours', v: hist.h12 },
         { l: '24 Hours', v: hist.h24 }, { l: '7 Days', v: hist.d7 }, { l: '30 Days', v: hist.d30 }
       ];
-      
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
           <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-2xl w-full" onClick={e => e.stopPropagation()}>
@@ -279,11 +326,8 @@
                   <div><div className="text-orange-400/70 text-xs uppercase">USD Value</div><div className="text-2xl font-bold text-green-400">{fmtUSD((burn?.total || 0) * price)}</div></div>
                   <div><div className="text-orange-400/70 text-xs uppercase">% Supply</div><div className="text-2xl font-bold text-white">{(burn?.pct || 0).toFixed(2)}%</div></div>
                 </div>
-                {/* Progress bar to next whale - NO extra whale count above */}
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="flex-1 h-3 bg-black/50 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all" style={{ width: `${whaleProgress.progress}%` }}></div>
-                  </div>
+                  <div className="flex-1 h-3 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full transition-all" style={{ width: `${whaleProgress.progress}%` }}></div></div>
                   <span className="text-xl">🐋</span>
                   <span className="text-orange-400/70 text-sm">{whaleProgress.progress.toFixed(1)}%</span>
                 </div>
@@ -317,7 +361,6 @@
       const [logoErr, setLogoErr] = useState(false);
       const [det, setDet] = useState(false);
       const liq = pair.liq || 0, vol = pair.vol || 0;
-      // FIXED: Vol/Liq ratio rounded to 3 decimals
       const ratio = liq > 0 ? (vol / liq).toFixed(3) : '0.000';
       const buys = pair.txns?.h24?.buys || 0, sells = pair.txns?.h24?.sells || 0;
       const chg = pair.priceChange?.h24 || 0, up = chg >= 0;
@@ -326,7 +369,6 @@
       const logo = getLogo(other?.address);
       const baseReserve = pair.liquidity?.base || 0;
       const quoteReserve = pair.liquidity?.quote || 0;
-      
       return (
         <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 hover:border-opacity-60`}>
           <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
@@ -400,6 +442,7 @@
       const [sortDir, setSortDir] = useState('desc');
       const [lastUpdate, setLastUpdate] = useState(new Date());
       const [showBurn, setShowBurn] = useState(false);
+      const [showValueGen, setShowValueGen] = useState(false);
       const [statModal, setStatModal] = useState(null);
       
       useEffect(() => { const load = async () => { const [d, h, b, p] = await Promise.all([fetchDex(cfg.address, cfg.mainPair), fetchHolders(cfg.address), fetchBurn(cfg.address, cfg.decimals), fetchPLS()]); setData(d); setHolders(h); setBurn(b); setPls(p); setLastUpdate(new Date()); setLoading(false); }; load(); const i = setInterval(load, 60000); return () => clearInterval(i); }, [token]);
@@ -426,10 +469,11 @@
       const priceUp = (data?.change || 0) >= 0;
       const liqMcapRatio = data?.mcap > 0 ? ((data.liq / data.mcap) * 100).toFixed(2) : '—';
       const whaleProgress = getWhaleProgress(burn?.pct || 0);
-      
-      // Tokens in LP calculation
       const tokensInLP = data?.tokensInLP || 0;
       const tokensInLPPct = cfg.totalSupply > 0 ? ((tokensInLP / cfg.totalSupply) * 100).toFixed(2) : '0';
+      
+      // Value Generation
+      const valueGen24h = (data?.vol || 0) * cfg.taxRate;
       
       const getStatValue = (type) => {
         switch(type) {
@@ -498,7 +542,6 @@
                   <div className="flex justify-between"><span className="text-white text-xs uppercase">Holders</span><span className="text-white/40 text-xs">📊</span></div>
                   <div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>
                 </div>
-                {/* NEW: Tokens in LP */}
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
                   <div className="text-white text-xs uppercase mb-1">Tokens in LP</div>
                   <div className={`text-2xl font-bold ${theme.text}`}>{fmt(tokensInLP)}</div>
@@ -515,10 +558,10 @@
           {/* Data Boxes */}
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Burn Box */}
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 clickable" onClick={() => setShowBurn(true)}>
                 <div className="flex justify-between mb-3"><div className="text-xs text-orange-400/90 uppercase font-semibold">🔥 Total Supply Burned</div><span className="text-orange-400/60 text-xs">Click for details →</span></div>
                 <div className="flex items-center gap-3 mb-3 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total || 0) * (data?.price || 0))}</span><span className="text-white/50">{(burn?.pct || 0).toFixed(2)}%</span></div>
-                {/* Progress to next whale - clean version */}
                 <div className="flex items-center gap-2 mb-3">
                   <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{ width: `${whaleProgress.progress}%` }}></div></div>
                   <span className="text-xl">🐋</span>
@@ -526,7 +569,25 @@
                 </div>
                 <div className="flex items-center gap-2 flex-wrap"><span className="text-2xl animate-fire">🔥</span>{creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 font-bold">x{c.cnt}</span></span>)}</div>
               </div>
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}><div className="text-white/60 text-xs uppercase mb-2">Value Generation</div><div className="text-white/30 text-center py-8">Coming Soon</div></div>
+              
+              {/* Value Generation Box */}
+              <div className={`bg-gradient-to-r ${isGold ? 'from-[#D9CA5D]/15 via-[#D9CA5D]/10 to-[#D9CA5D]/15' : 'from-[#7CFC00]/15 via-[#7CFC00]/10 to-[#7CFC00]/15'} border ${theme.border} rounded-xl p-4 clickable`} onClick={() => setShowValueGen(true)}>
+                <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>💰 Value Generation (24H)</div><span className={`${theme.text} opacity-60 text-xs`}>Click for details →</span></div>
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                  <span className="text-3xl font-bold text-green-400">{fmtUSD(valueGen24h)}</span>
+                  <span className={`text-lg ${theme.text}`}>({(cfg.taxRate * 100).toFixed(0)}% of volume)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {cfg.taxBreakdown.slice(0, 4).map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="text-lg">{item.emoji}</span>
+                      <span className="text-white/70">{item.name}</span>
+                      <span className={`ml-auto ${theme.text} font-semibold`}>{item.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+                {cfg.taxBreakdown.length > 4 && <div className="text-white/50 text-xs mt-2">+{cfg.taxBreakdown.length - 4} more...</div>}
+              </div>
             </div>
           </div>
           
@@ -552,6 +613,7 @@
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
           <BurnModal open={showBurn} close={() => setShowBurn(false)} token={token} burn={burn} price={data?.price || 0} cfg={cfg}/>
+          <ValueGenModal open={showValueGen} close={() => setShowValueGen(false)} token={token} volume={data?.vol || 0} cfg={cfg} theme={theme}/>
           <StatModal open={!!statModal} close={() => setStatModal(null)} title={statModal === 'volume' ? 'Volume' : statModal === 'liquidity' ? 'Liquidity' : statModal === 'holders' ? 'Holders' : 'Transactions'} theme={theme} currentVal={getStatValue(statModal)}/>
         </div>
       );
