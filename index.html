@@ -25,6 +25,9 @@
     .token-card-green:hover { box-shadow: 0 0 50px rgba(124, 252, 0, 0.5); }
     .modal-overlay { backdrop-filter: blur(8px); }
     .clickable:hover { transform: scale(1.02); cursor: pointer; }
+    .time-btn { transition: all 0.2s; }
+    .time-btn:hover { background: rgba(255,255,255,0.1); }
+    .time-btn.active { background: rgba(255,255,255,0.15); }
   </style>
 </head>
 <body>
@@ -43,11 +46,11 @@
         mainPair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11', 
         pulseScanUrl: 'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93', 
         totalSupply: 333333333333,
-        taxRate: 0.05, // 5%
+        taxRate: 0.05,
         taxBreakdown: [
           { name: 'DAO', pct: 2, emoji: '🏛️' },
           { name: 'Stakers', pct: 1, emoji: '💎' },
-          { name: 'Holders & Stakers', pct: 1, emoji: '🎁' },
+          { name: 'Holders & Stakers', pct: 1, emoji: '💎💎' },
           { name: 'Buy & Burn PTGC', pct: 0.5, emoji: '🔥' },
           { name: 'Add LP (PTGC/PLS)', pct: 0.5, emoji: '💧' }
         ]
@@ -62,10 +65,10 @@
         mainPair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5', 
         pulseScanUrl: 'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', 
         totalSupply: 999999999051,
-        taxRate: 0.06, // 6%
+        taxRate: 0.06,
         taxBreakdown: [
           { name: 'UFO LP Providers', pct: 3, emoji: '💧' },
-          { name: 'UFO Holders', pct: 1, emoji: '🎁' },
+          { name: 'UFO Holders', pct: 1, emoji: '💎' },
           { name: 'Buy & Burn UFO', pct: 1, emoji: '🔥' },
           { name: 'Buy & Burn PTGC', pct: 1, emoji: '🔥' }
         ]
@@ -81,15 +84,19 @@
       { n: 'Dolphin', e: '🐬', p: 0.01 }, { n: 'Squid', e: '🦑', p: 0.001 }, { n: 'Turtle', e: '🐢', p: 0.0001 },
       { n: 'Shrimp', e: '🦐', p: 0.00001 }, { n: 'Shell', e: '🐚', p: 0 }
     ];
-    const SEA_C = [
-      { n: 'Plankton', e: '🦠', min: 0 }, { n: 'Shrimp', e: '🦐', min: 100 }, { n: 'Crab', e: '🦀', min: 1000 },
-      { n: 'Fish', e: '🐟', min: 5000 }, { n: 'Octopus', e: '🐙', min: 10000 }, { n: 'Dolphin', e: '🐬', min: 25000 },
-      { n: 'Shark', e: '🦈', min: 50000 }, { n: 'Whale', e: '🐋', min: 100000 }, { n: 'Kraken', e: '🦑', min: 500000 }
-    ];
     
     const fmt = n => n == null || isNaN(n) ? '—' : Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD = n => n == null || isNaN(n) ? '—' : '$' + Math.floor(Number(n)).toLocaleString('en-US');
-    const fmtUSDSmall = n => n == null || isNaN(n) ? '—' : '$' + Number(n).toFixed(2);
+    // Abbreviated format for large numbers
+    const fmtAbbr = n => {
+      if (n == null || isNaN(n)) return '—';
+      const num = Number(n);
+      if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+      if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+      if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+      if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+      return Math.floor(num).toLocaleString('en-US');
+    };
     const fmtPrice = p => {
       if (!p || isNaN(p) || p === 0) return '—';
       if (p >= 1) return '$' + p.toFixed(2);
@@ -160,25 +167,31 @@
       } catch { return { total: 0, pct: 0, supply: 0 }; }
     };
     
+    // Optimized burn history - only 4 periods now (12hr, 24hr, 7day, 30day)
     const fetchBurnHist = async (addr, dec, hrs) => {
       try {
         const blocksPerHour = 360;
         const totalBlocks = blocksPerHour * hrs;
         const bRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }) });
         const curBlock = parseInt((await bRes.json()).result, 16);
+        
+        // For 30 days, chunk into smaller requests
         if (hrs > 24 * 7) {
           let totalBurn = 0;
-          const chunkHours = 24 * 7;
+          const chunkHours = 24 * 5; // 5 day chunks
           const chunks = Math.ceil(hrs / chunkHours);
           for (let i = 0; i < chunks; i++) {
             const endBlock = curBlock - (i * blocksPerHour * chunkHours);
             const startBlock = Math.max(0, endBlock - (blocksPerHour * chunkHours));
-            const lRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getLogs', params: [{ address: addr, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], fromBlock: '0x' + startBlock.toString(16), toBlock: '0x' + endBlock.toString(16) }], id: 1 }) });
-            const logs = (await lRes.json()).result;
-            if (Array.isArray(logs)) totalBurn += logs.reduce((s, l) => s + Number(BigInt(l.data)) / Math.pow(10, dec), 0);
+            try {
+              const lRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getLogs', params: [{ address: addr, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], fromBlock: '0x' + startBlock.toString(16), toBlock: '0x' + endBlock.toString(16) }], id: 1 }) });
+              const logs = (await lRes.json()).result;
+              if (Array.isArray(logs)) totalBurn += logs.reduce((s, l) => s + Number(BigInt(l.data)) / Math.pow(10, dec), 0);
+            } catch (e) { console.error('Chunk error:', e); }
           }
           return totalBurn;
         }
+        
         const fromBlock = '0x' + Math.max(0, curBlock - totalBlocks).toString(16);
         const lRes = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getLogs', params: [{ address: addr, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', null, '0x000000000000000000000000' + BURN_ADDRESS.slice(2)], fromBlock, toBlock: 'latest' }], id: 1 }) });
         const logs = (await lRes.json()).result;
@@ -188,7 +201,7 @@
     
     const fetchPLS = async () => { try { const r = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae'); return parseFloat((await r.json()).pair?.priceUsd) || 0.00005; } catch { return 0.00005; } };
     
-    // Stat Modal
+    // Stat Modal - TODO: Need indexer API for real historical data
     const StatModal = ({ open, close, title, theme, currentVal }) => {
       const [loading, setLoading] = useState(true);
       const [data, setData] = useState({ d7: 0, d30: 0, d90: 0 });
@@ -212,6 +225,7 @@
                 <div className="text-center py-8"><div className="text-2xl animate-pulse-slow">📊</div><div className="text-white/50 mt-2">Loading data...</div></div>
               ) : (
                 <div className="space-y-3">
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-center text-yellow-400 text-sm">⚠️ Requires indexer API for accurate historical data</div>
                   <div className="text-white/50 text-xs text-center mb-2">* Estimated based on current 24h data</div>
                   {[{ l: '7 Day', v: data.d7, d: 7 }, { l: '30 Day', v: data.d30, d: 30 }, { l: '90 Day', v: data.d90, d: 90 }].map(({ l, v, d }) => (
                     <div key={l} className={`${theme.card} border ${theme.border} rounded-lg p-3 flex justify-between items-center`}>
@@ -227,69 +241,15 @@
       );
     };
     
-    // Value Generation Modal
-    const ValueGenModal = ({ open, close, token, volume, cfg, theme }) => {
-      if (!open) return null;
-      const totalValue = volume * cfg.taxRate;
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
-          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e => e.stopPropagation()}>
-            <div className="p-5">
-              <div className="flex justify-between mb-4">
-                <div className="flex items-center gap-3"><img src={cfg.logo} alt={token} className="w-12 h-12"/><div><h2 className={`text-xl font-bold ${theme.text}`}>{token} Value Generation</h2><div className="text-white/40 text-sm">24H Tax Distribution</div></div></div>
-                <button onClick={close} className="text-white/60 hover:text-white text-2xl">×</button>
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4 mb-4`}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-white/60">24H Volume</span>
-                  <span className="text-white text-xl font-bold">{fmtUSD(volume)}</span>
-                </div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-white/60">Tax Rate</span>
-                  <span className={`${theme.text} text-xl font-bold`}>{(cfg.taxRate * 100).toFixed(0)}%</span>
-                </div>
-                <div className="border-t border-white/10 pt-2 mt-2 flex justify-between items-center">
-                  <span className="text-white font-semibold">Total Value Generated</span>
-                  <span className="text-green-400 text-2xl font-bold">{fmtUSD(totalValue)}</span>
-                </div>
-              </div>
-              <div className="text-white/60 text-xs uppercase mb-2">Distribution Breakdown</div>
-              <div className="space-y-2">
-                {cfg.taxBreakdown.map((item, i) => {
-                  const val = volume * (item.pct / 100);
-                  return (
-                    <div key={i} className={`${theme.card} border ${theme.border} rounded-lg p-3 flex justify-between items-center`}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{item.emoji}</span>
-                        <div>
-                          <div className="text-white font-medium">{item.name}</div>
-                          <div className="text-white/50 text-sm">{item.pct}% of volume</div>
-                        </div>
-                      </div>
-                      <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(val)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-    
-    // Burn Modal
+    // Burn Modal - Only 4 time periods now
     const BurnModal = ({ open, close, token, burn, price, cfg }) => {
-      const [hist, setHist] = useState({ h1: null, h6: null, h12: null, h24: null, d7: null, d30: null });
+      const [hist, setHist] = useState({ h12: null, h24: null, d7: null, d30: null });
       const [loading, setLoading] = useState(true);
       useEffect(() => {
         if (!open) return;
         setLoading(true);
-        setHist({ h1: null, h6: null, h12: null, h24: null, d7: null, d30: null });
+        setHist({ h12: null, h24: null, d7: null, d30: null });
         const fetchAll = async () => {
-          const h1 = await fetchBurnHist(cfg.address, cfg.decimals, 1);
-          setHist(prev => ({ ...prev, h1 }));
-          const h6 = await fetchBurnHist(cfg.address, cfg.decimals, 6);
-          setHist(prev => ({ ...prev, h6 }));
           const h12 = await fetchBurnHist(cfg.address, cfg.decimals, 12);
           setHist(prev => ({ ...prev, h12 }));
           const h24 = await fetchBurnHist(cfg.address, cfg.decimals, 24);
@@ -309,8 +269,8 @@
       const getPct = a => (a / supply) * 100;
       const whaleProgress = getWhaleProgress(burn?.pct || 0);
       const boxes = [
-        { l: '1 Hour', v: hist.h1 }, { l: '6 Hours', v: hist.h6 }, { l: '12 Hours', v: hist.h12 },
-        { l: '24 Hours', v: hist.h24 }, { l: '7 Days', v: hist.d7 }, { l: '30 Days', v: hist.d30 }
+        { l: '12 Hours', v: hist.h12 }, { l: '24 Hours', v: hist.h24 },
+        { l: '7 Days', v: hist.d7 }, { l: '30 Days', v: hist.d30 }
       ];
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
@@ -333,7 +293,7 @@
                 </div>
                 <div className="flex items-center justify-center gap-2 flex-wrap"><span className="text-3xl animate-fire">🔥</span>{creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/80 text-lg font-bold">x{c.cnt}</span></span>)}</div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {boxes.map(({ l, v }) => {
                   const isLoading = v === null;
                   const c = !isLoading ? getSingleC(getPct(v)) : { e: '⏳' };
@@ -442,8 +402,8 @@
       const [sortDir, setSortDir] = useState('desc');
       const [lastUpdate, setLastUpdate] = useState(new Date());
       const [showBurn, setShowBurn] = useState(false);
-      const [showValueGen, setShowValueGen] = useState(false);
       const [statModal, setStatModal] = useState(null);
+      const [valueGenPeriod, setValueGenPeriod] = useState('24h');
       
       useEffect(() => { const load = async () => { const [d, h, b, p] = await Promise.all([fetchDex(cfg.address, cfg.mainPair), fetchHolders(cfg.address), fetchBurn(cfg.address, cfg.decimals), fetchPLS()]); setData(d); setHolders(h); setBurn(b); setPls(p); setLastUpdate(new Date()); setLoading(false); }; load(); const i = setInterval(load, 60000); return () => clearInterval(i); }, [token]);
       
@@ -472,8 +432,11 @@
       const tokensInLP = data?.tokensInLP || 0;
       const tokensInLPPct = cfg.totalSupply > 0 ? ((tokensInLP / cfg.totalSupply) * 100).toFixed(2) : '0';
       
-      // Value Generation
-      const valueGen24h = (data?.vol || 0) * cfg.taxRate;
+      // Value Generation with time period multiplier
+      const vol24h = data?.vol || 0;
+      const periodMultipliers = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
+      const periodVolume = vol24h * periodMultipliers[valueGenPeriod];
+      const valueGenTotal = periodVolume * cfg.taxRate;
       
       const getStatValue = (type) => {
         switch(type) {
@@ -544,7 +507,7 @@
                 </div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
                   <div className="text-white text-xs uppercase mb-1">Tokens in LP</div>
-                  <div className={`text-2xl font-bold ${theme.text}`}>{fmt(tokensInLP)}</div>
+                  <div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>
                   <div className="text-white/50 text-sm">{tokensInLPPct}% of supply</div>
                 </div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 clickable`} onClick={() => setStatModal('txns')}>
@@ -570,23 +533,34 @@
                 <div className="flex items-center gap-2 flex-wrap"><span className="text-2xl animate-fire">🔥</span>{creatures.map((c, i) => <span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 font-bold">x{c.cnt}</span></span>)}</div>
               </div>
               
-              {/* Value Generation Box */}
-              <div className={`bg-gradient-to-r ${isGold ? 'from-[#D9CA5D]/15 via-[#D9CA5D]/10 to-[#D9CA5D]/15' : 'from-[#7CFC00]/15 via-[#7CFC00]/10 to-[#7CFC00]/15'} border ${theme.border} rounded-xl p-4 clickable`} onClick={() => setShowValueGen(true)}>
-                <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>💰 Value Generation (24H)</div><span className={`${theme.text} opacity-60 text-xs`}>Click for details →</span></div>
-                <div className="flex items-center gap-3 mb-3 flex-wrap">
-                  <span className="text-3xl font-bold text-green-400">{fmtUSD(valueGen24h)}</span>
-                  <span className={`text-lg ${theme.text}`}>({(cfg.taxRate * 100).toFixed(0)}% of volume)</span>
+              {/* Value Generation Box with Time Period Selector */}
+              <div className={`bg-gradient-to-r ${isGold ? 'from-[#D9CA5D]/15 via-[#D9CA5D]/10 to-[#D9CA5D]/15' : 'from-[#7CFC00]/15 via-[#7CFC00]/10 to-[#7CFC00]/15'} border ${theme.border} rounded-xl p-4`}>
+                <div className="flex justify-between items-center mb-3">
+                  <div className={`text-xs ${theme.text} uppercase font-semibold`}>💰 Value Generation</div>
+                  <div className="flex gap-1">
+                    {['24h', '7d', '30d', '90d'].map(p => (
+                      <button key={p} onClick={() => setValueGenPeriod(p)} className={`time-btn px-2 py-1 rounded text-xs font-medium ${valueGenPeriod === p ? `${theme.text} active` : 'text-white/50'}`}>{p}</button>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {cfg.taxBreakdown.slice(0, 4).map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <span className="text-lg">{item.emoji}</span>
-                      <span className="text-white/70">{item.name}</span>
-                      <span className={`ml-auto ${theme.text} font-semibold`}>{item.pct}%</span>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-3xl font-bold text-green-400">{fmtUSD(valueGenTotal)}</span>
+                  <span className={`text-sm ${theme.text} opacity-70`}>({(cfg.taxRate * 100).toFixed(0)}% of {fmtUSD(periodVolume)} vol)</span>
                 </div>
-                {cfg.taxBreakdown.length > 4 && <div className="text-white/50 text-xs mt-2">+{cfg.taxBreakdown.length - 4} more...</div>}
+                <div className="space-y-2">
+                  {cfg.taxBreakdown.map((item, i) => {
+                    const val = periodVolume * (item.pct / 100);
+                    return (
+                      <div key={i} className={`${theme.card} border ${theme.border} rounded-lg px-3 py-2 flex justify-between items-center`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{item.emoji}</span>
+                          <span className="text-white/80 text-sm">{item.name}</span>
+                        </div>
+                        <span className={`text-lg font-bold ${theme.text}`}>{fmtUSD(val)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -604,16 +578,9 @@
             {low.length > 0 && <div className="mt-3"><button onClick={() => setShowLow(!showLow)} className={`w-full ${theme.card} border ${theme.border} rounded-lg p-2 flex justify-between text-sm`}><span className="text-gray-400">{showLow ? 'Hide' : 'Show'} {low.length} pairs &lt;$1K</span><span className={theme.text}>{showLow ? '▲' : '▼'}</span></button>{showLow && <div className="mt-2 space-y-2">{low.map((p, i) => <LPRow key={p.pairAddress || i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>}</div>}
           </div>
           
-          {/* Holder Tiers */}
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
-            <h2 className={`font-bold text-lg ${theme.text} mb-4`}>🦑 Holder Tiers</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">{SEA_C.map(c => <div key={c.n} className={`${theme.card} border ${theme.border} rounded-lg p-2 text-center hover:bg-white/10`}><div className="text-2xl mb-1">{c.e}</div><div className="text-white text-xs font-bold">{c.n}</div><div className={`${theme.text} text-xs`}>${fmt(c.min)}+</div></div>)}</div>
-          </div>
-          
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
           <BurnModal open={showBurn} close={() => setShowBurn(false)} token={token} burn={burn} price={data?.price || 0} cfg={cfg}/>
-          <ValueGenModal open={showValueGen} close={() => setShowValueGen(false)} token={token} volume={data?.vol || 0} cfg={cfg} theme={theme}/>
           <StatModal open={!!statModal} close={() => setStatModal(null)} title={statModal === 'volume' ? 'Volume' : statModal === 'liquidity' ? 'Liquidity' : statModal === 'holders' ? 'Holders' : 'Transactions'} theme={theme} currentVal={getStatValue(statModal)}/>
         </div>
       );
