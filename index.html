@@ -47,27 +47,21 @@
     const LP_ADDRESSES=['0xf5a89a6487d62df5308cdda89c566c5b5ef94c11','0xbea0e55b82eb975280041f3b49c4d0bd937b72d5'];
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
-    const RPC_URLS=['https://rpc.pulsechain.com','https://pulsechain.publicnode.com','https://rpc-pulsechain.g4mm4.io'];
-    let currentRPC=0;
-    const RPC=RPC_URLS[0];
+    const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
     
-    // Helper to try RPC with fallback
-    const rpcFetch=async(body,timeout=5000)=>{
-      for(let i=0;i<RPC_URLS.length;i++){
-        const rpcUrl=RPC_URLS[(currentRPC+i)%RPC_URLS.length];
-        try{
-          const controller=new AbortController();
-          const timeoutId=setTimeout(()=>controller.abort(),timeout);
-          const res=await fetch(rpcUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-          clearTimeout(timeoutId);
-          const data=await res.json();
-          if(!data.error)return data;
-        }catch(e){
-          console.log(`RPC ${rpcUrl} failed, trying next...`);
-        }
+    // Simple RPC fetch with timeout
+    const rpcFetch=async(body,timeout=8000)=>{
+      try{
+        const controller=new AbortController();
+        const timeoutId=setTimeout(()=>controller.abort(),timeout);
+        const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+        clearTimeout(timeoutId);
+        return await res.json();
+      }catch(e){
+        console.error('RPC error:',e.message);
+        return{result:null};
       }
-      return{result:null,error:'All RPCs failed'};
     };
     
     const HOLDER_TIERS_DISPLAY=[
@@ -112,44 +106,22 @@
       }catch{return 0}
     };
     
-    // Fetch staking data - total staked and locked separately
-    const fetchStakingData=async(stakingContract,tokenAddr,decimals,totalSupply)=>{
+    // Fetch staking data - get tokens in staking contract
+    const fetchStakingData=async(stakingContract,tokenAddr,decimals,maxSupply)=>{
       try{
         // Get total PTGC tokens in staking contract (balanceOf)
         const totalInContract=await fetchTokenBalance(tokenAddr,stakingContract,decimals);
         console.log('Total tokens in staking contract:',totalInContract);
         
-        let stakedTokens=0;
-        let lockedTokens=0;
+        // For now, treat all tokens in contract as staked (until we know exact function names)
+        const stakedTokens=totalInContract;
+        const lockedTokens=0;
         
-        // Try totalStaked() = 0x817b1cd2 and totalLocked() = 0x56891412 in parallel
-        const [stakedRes, lockedRes] = await Promise.all([
-          rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1}),
-          rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2})
-        ]);
+        // Use maxSupply (hardcoded 333B) not contract totalSupply
+        const stakedPct=maxSupply>0?(stakedTokens/maxSupply)*100:0;
+        const lockedPct=0;
         
-        console.log('totalStaked() raw:',stakedRes.result);
-        if(stakedRes.result&&stakedRes.result.length>2&&!stakedRes.error){
-          stakedTokens=Number(BigInt(stakedRes.result))/Math.pow(10,decimals);
-          console.log('totalStaked():',stakedTokens);
-        }
-        
-        console.log('totalLocked() raw:',lockedRes.result);
-        if(lockedRes.result&&lockedRes.result.length>2&&!lockedRes.error){
-          lockedTokens=Number(BigInt(lockedRes.result))/Math.pow(10,decimals);
-          console.log('totalLocked():',lockedTokens);
-        }
-        
-        // If no staked/locked values found, use contract balance as staked
-        if(stakedTokens===0&&lockedTokens===0&&totalInContract>0){
-          stakedTokens=totalInContract;
-          console.log('Using contract balance as staked:',stakedTokens);
-        }
-        
-        const stakedPct=totalSupply>0?(stakedTokens/totalSupply)*100:0;
-        const lockedPct=totalSupply>0?(lockedTokens/totalSupply)*100:0;
-        
-        console.log('Final staking data - Staked:',stakedTokens,'('+stakedPct.toFixed(2)+'%) Locked:',lockedTokens,'('+lockedPct.toFixed(2)+'%)');
+        console.log('Staking data - Staked:',stakedTokens,'('+stakedPct.toFixed(2)+'%)');
         
         return{
           totalInContract,
@@ -399,8 +371,10 @@
       
       if(!open)return null;
       
-      const burnedPct=(burn?.pct||0);
-      const lpPct=totalSupply>0?(tokensInLP/totalSupply)*100:0;
+      // Use cfg.totalSupply (hardcoded max supply: 333,333,333,333 for PTGC)
+      const maxSupply=cfg.totalSupply;
+      const burnedPct=maxSupply>0?(burn?.total||0)/maxSupply*100:0;
+      const lpPct=maxSupply>0?(tokensInLP/maxSupply)*100:0;
       const stakedPct=stakingData?.stakedPct||0;
       const lockedPct=stakingData?.lockedPct||0;
       // Held = everything else (not burned, not in LP, not staked, not locked)
@@ -699,11 +673,13 @@
       const tokensInLPPct=cfg.totalSupply>0?((tokensInLP/cfg.totalSupply)*100).toFixed(2):'0';
       const valueGen24h=(data?.vol||0)*cfg.taxRate;
       
-      const burnedPct=burn?.pct||0;
+      const burnedPct=cfg.totalSupply>0?(burn?.total||0)/cfg.totalSupply*100:0;
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
       const stakedPct=stakingData?.stakedPct||0;
       const lockedPct=stakingData?.lockedPct||0;
       const heldPct=Math.max(0,100-burnedPct-lpPct-stakedPct-lockedPct);
+      
+      console.log('Token Allocation:', {burned:burnedPct.toFixed(2)+'%', lp:lpPct.toFixed(2)+'%', staked:stakedPct.toFixed(2)+'%', locked:lockedPct.toFixed(2)+'%', held:heldPct.toFixed(2)+'%'});
       
       const chartColors=cfg.stakingContract?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
       const chartData=cfg.stakingContract?[
