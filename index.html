@@ -10,6 +10,18 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gold: '#D9CA5D',
+            ufogreen: '#7CFC00',
+          }
+        }
+      }
+    }
+  </script>
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -31,8 +43,6 @@
       0%, 100% { box-shadow: 0 0 20px rgba(217, 202, 93, 0.3); }
       50% { box-shadow: 0 0 40px rgba(217, 202, 93, 0.6); }
     }
-    .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-    .animate-pulse-glow-gold { animation: pulse-glow-gold 2s ease-in-out infinite; }
     
     @keyframes fire-flicker {
       0%, 100% { transform: scale(1); }
@@ -44,7 +54,7 @@
       transition: all 0.3s ease;
     }
     .token-card:hover {
-      transform: scale(1.03);
+      transform: scale(1.02);
     }
     .token-card-gold:hover {
       box-shadow: 0 0 50px rgba(217, 202, 93, 0.5);
@@ -54,35 +64,48 @@
       box-shadow: 0 0 50px rgba(124, 252, 0, 0.5);
       border-color: rgba(124, 252, 0, 1) !important;
     }
+    
+    .stat-box {
+      background: linear-gradient(135deg, rgba(20,20,20,0.9) 0%, rgba(10,10,10,0.9) 100%);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .burn-box {
+      background: linear-gradient(135deg, rgba(20,20,20,0.9) 0%, rgba(10,10,10,0.9) 100%);
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
   
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
+    const { useState, useEffect, useMemo } = React;
     
-    // Use relative paths for logos (files must be in same folder as index.html)
+    // Configuration
     const TOKENS = {
       PTGC: {
         name: 'PTGC',
         address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93',
         logo: '06_PTGC_V1_transparent_bg.png',
         color: 'gold',
+        colorHex: '#D9CA5D',
         burnAddress: '0x0000000000000000000000000000000000000369',
         decimals: 18,
         dexScreenerSlug: 'pulsechain/0x94534eeee131840b1c0f61847c572228bdfdde93',
-        mainPair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11'
+        mainPair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
+        pulseScanUrl: 'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93'
       },
       UFO: {
         name: 'UFO',
         address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
         logo: '07_Ufo_transparent.png',
         color: 'green',
+        colorHex: '#7CFC00',
         burnAddress: '0x0000000000000000000000000000000000000369',
         decimals: 18,
         dexScreenerSlug: 'pulsechain/0x456548a9b56efbbd89ca0309edd17a9e20b04018',
-        mainPair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5'
+        mainPair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',
+        pulseScanUrl: 'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'
       }
     };
     
@@ -122,8 +145,16 @@
       if (n === null || n === undefined || isNaN(n)) return '—';
       if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
       if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K';
       return '$' + n.toFixed(2);
+    };
+    
+    const fmtCompact = (n) => {
+      if (n === null || n === undefined || isNaN(n)) return '—';
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+      return n.toFixed(0);
     };
     
     const fmtPrice = (p) => {
@@ -131,7 +162,7 @@
       if (p < 0.0001) {
         const str = p.toFixed(20);
         const match = str.match(/0\.(0+)(\d{4})/);
-        if (match) return { base: '$0.0', sub: match[1].length, rest: match[2] };
+        if (match) return `$0.0${match[1].length > 0 ? '₍' + match[1].length + '₎' : ''}${match[2]}`;
       }
       return '$' + p.toFixed(p < 1 ? 6 : 2);
     };
@@ -168,29 +199,24 @@
     // API Functions
     const fetchDexScreenerData = async (tokenAddress, mainPairAddress) => {
       try {
-        // First fetch the specific main pair for accurate price
         let mainPairData = null;
         if (mainPairAddress) {
           const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPairAddress}`);
           const pairData = await pairRes.json();
-          if (pairData.pair) {
-            mainPairData = pairData.pair;
-          }
+          if (pairData.pair) mainPairData = pairData.pair;
         }
         
-        // Then fetch all pairs for liquidity/volume totals
         const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
         const data = await res.json();
         if (data.pairs && data.pairs.length > 0) {
           const sortedPairs = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
           const totalVolume = sortedPairs.reduce((sum, p) => sum + (p.volume?.h24 || 0), 0);
           const totalLiquidity = sortedPairs.reduce((sum, p) => sum + (p.liquidity?.usd || 0), 0);
-          
-          // Use main pair for price/mcap if available, otherwise use highest liquidity pair
           const pricePair = mainPairData || sortedPairs[0];
           
           return {
             price: parseFloat(pricePair.priceUsd) || 0,
+            priceNative: parseFloat(pricePair.priceNative) || 0,
             priceChange24h: pricePair.priceChange?.h24 || 0,
             mcap: pricePair.marketCap || pricePair.fdv || 0,
             liquidity: totalLiquidity,
@@ -253,32 +279,45 @@
       }
     };
     
+    const fetchPLSPrice = async () => {
+      try {
+        const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');
+        const data = await res.json();
+        return parseFloat(data.pair?.priceUsd) || 0.00005;
+      } catch {
+        return 0.00005;
+      }
+    };
+    
     // Components
-    const ChangeBadge = ({ value, size = 'text-base' }) => {
-      if (value === null || value === undefined) return null;
+    const ChangeBadge = ({ value, size = 'text-sm' }) => {
+      if (value === null || value === undefined) return <span className="text-white/50">—</span>;
       const isPositive = value >= 0;
-      const bgColor = isPositive ? 'bg-green-500/20' : 'bg-red-500/20';
-      const textColor = isPositive ? 'text-green-400' : 'text-red-400';
+      const color = isPositive ? 'text-green-400' : 'text-red-400';
       return (
-        <span className={`px-3 py-1.5 rounded-lg ${size} font-bold ${bgColor} ${textColor}`}>
+        <span className={`${size} font-semibold ${color}`}>
           {isPositive ? '▲' : '▼'} {Math.abs(value).toFixed(2)}%
         </span>
       );
     };
     
-    const SeaCreatureDisplay = ({ creatures, size = 'text-3xl' }) => (
-      <div className="flex items-center gap-2 flex-wrap">
+    const SeaCreatureDisplay = ({ creatures, size = 'text-2xl' }) => (
+      <div className="flex items-center gap-1 flex-wrap">
         <span className={`${size} animate-fire`}>🔥</span>
-        {creatures.map((c, i) => (
-          <span key={i} className="flex items-center gap-0.5">
+        {creatures.slice(0, 6).map((c, i) => (
+          <span key={i} className="flex items-center">
             <span className={size}>{c.emoji}</span>
-            {c.count > 1 && <span className="text-white/80 text-sm font-bold">x{c.count}</span>}
+            {c.count > 1 && <span className="text-white/60 text-xs font-bold">x{c.count}</span>}
           </span>
         ))}
+        {creatures.length > 6 && <span className="text-white/50 text-sm">+{creatures.length - 6}</span>}
       </div>
     );
     
+    // ============================================
     // HOME PAGE
+    // ============================================
+    
     const HomePage = ({ onSelectToken }) => {
       const [tokenData, setTokenData] = useState({ PTGC: null, UFO: null });
       const [loading, setLoading] = useState(true);
@@ -299,10 +338,10 @@
       
       const MiniSparkline = ({ isPositive, color }) => {
         const points = isPositive 
-          ? "0,20 10,18 20,15 30,17 40,12 50,14 60,8 70,10 80,5 90,7 100,3"
-          : "0,5 10,8 20,6 30,10 40,12 50,9 60,15 70,13 80,18 90,16 100,20";
+          ? "0,20 15,17 30,14 45,16 60,11 75,13 90,8 100,5"
+          : "0,5 15,8 30,6 45,10 60,12 75,9 90,15 100,18";
         return (
-          <svg viewBox="0 0 100 24" className="w-24 h-10">
+          <svg viewBox="0 0 100 24" className="w-16 sm:w-20 lg:w-24 h-6 sm:h-8">
             <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         );
@@ -319,34 +358,40 @@
         const cardClass = isGold ? 'token-card-gold' : 'token-card-green';
         const isPositive = (data?.priceChange24h || 0) >= 0;
         const changeColor = isPositive ? '#22c55e' : '#ef4444';
-        const priceFormatted = fmtPrice(data?.price);
         
         return (
           <div 
             onClick={() => onSelectToken(token)}
-            className={`token-card ${cardClass} cursor-pointer rounded-2xl border-2 ${borderColor} ${bgGradient} p-8`}
+            className={`token-card ${cardClass} cursor-pointer rounded-2xl border-2 ${borderColor} ${bgGradient} p-4 sm:p-6 lg:p-8`}
           >
-            <div className="flex items-center gap-8">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 lg:gap-8">
+              {/* Logo */}
               <div className="flex-shrink-0">
-                <img src={config.logo} alt={token} className="w-32 h-32 object-contain" />
+                <img src={config.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain" />
               </div>
-              <div className="flex-shrink-0 min-w-[160px]">
-                <div className={`font-orbitron text-4xl font-bold ${textColor}`}>{token}</div>
-                <div className="text-white/40 text-sm font-mono mt-1">
-                  {config.address.slice(0, 6)}...{config.address.slice(-4)} ⧉
+              
+              {/* Token Info */}
+              <div className="flex-shrink-0 text-center sm:text-left">
+                <div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${textColor}`}>{token}</div>
+                <div className="text-white/40 text-xs sm:text-sm font-mono mt-1">
+                  {config.address.slice(0, 6)}...{config.address.slice(-4)}
                 </div>
               </div>
-              <div className="flex-1 text-right">
-                <div className="text-white font-bold text-3xl">
-                  {typeof priceFormatted === 'object' ? (
-                    <>{priceFormatted.base}<sub className="text-lg opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>
-                  ) : priceFormatted}
+              
+              {/* Price & MCap */}
+              <div className="flex-1 text-center sm:text-right">
+                <div className="text-white font-bold text-xl sm:text-2xl lg:text-3xl">
+                  {fmtPrice(data?.price)}
                 </div>
-                <div className="text-white/50 text-xl mt-1">MCap: {fmtUSD(data?.mcap)}</div>
+                <div className="text-white/50 text-sm sm:text-base lg:text-xl mt-1">MCap: {fmtUSD(data?.mcap)}</div>
               </div>
-              <div className="flex-shrink-0 flex items-center gap-4">
+              
+              {/* Sparkline & Change */}
+              <div className="flex-shrink-0 flex items-center gap-2 sm:gap-4">
                 <MiniSparkline isPositive={isPositive} color={changeColor} />
-                <ChangeBadge value={data?.priceChange24h} size="text-xl" />
+                <div className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-sm sm:text-base lg:text-xl font-bold ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {isPositive ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%
+                </div>
               </div>
             </div>
           </div>
@@ -354,13 +399,13 @@
       };
       
       return (
-        <div className="min-h-screen flex flex-col">
-          <header className="text-center pt-4">
+        <div className="min-h-screen flex flex-col px-4">
+          <header className="text-center pt-4 sm:pt-6">
             <div className="flex justify-center">
-              <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-96 w-auto object-contain" />
+              <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 w-auto object-contain" />
             </div>
             <h1 
-              className="font-orbitron text-5xl font-bold tracking-wider mb-2 -mt-12"
+              className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold tracking-wider mb-2 -mt-6 sm:-mt-8 lg:-mt-12"
               style={{
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #C0C0C0 40%, #808080 70%, #404040 100%)',
                 WebkitBackgroundClip: 'text',
@@ -370,15 +415,15 @@
             >
               DASHBOARD
             </h1>
-            <p className="text-white/50 text-lg mb-10">A community tool built for The Grays Ecosystem</p>
+            <p className="text-white/50 text-sm sm:text-base lg:text-lg mb-6 sm:mb-8 lg:mb-10">A community tool built for The Grays Ecosystem</p>
           </header>
           
-          <div className="flex-1 flex items-start justify-center px-8 pt-8 pb-8">
-            <div className="flex flex-col gap-6 max-w-4xl w-full">
+          <div className="flex-1 flex items-start justify-center pb-8">
+            <div className="flex flex-col gap-4 sm:gap-6 max-w-4xl w-full">
               {loading ? (
                 <>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-40"></div>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-40"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-32 sm:h-40"></div>
                 </>
               ) : (
                 <>
@@ -389,43 +434,50 @@
             </div>
           </div>
           
-          <footer className="text-center py-6 px-4 border-t border-white/10">
-            <p className="text-white/30 text-xs max-w-2xl mx-auto">
+          <footer className="text-center py-4 sm:py-6 border-t border-white/10">
+            <p className="text-white/30 text-xs max-w-2xl mx-auto px-4">
               This dashboard is for informational purposes only and does not constitute financial advice. 
-              Data may be delayed or inaccurate. Always do your own research (DYOR) before making any investment decisions. 
-              The creators are not responsible for any losses.
+              Data may be delayed or inaccurate. Always DYOR. Not responsible for any losses.
             </p>
-            <p className="text-white/20 text-xs mt-2">Built for the PulseChain community</p>
           </footer>
         </div>
       );
     };
     
-    // DASHBOARD
+    // ============================================
+    // DASHBOARD (Matches UFO screenshot style)
+    // ============================================
+    
     const Dashboard = ({ token, onBack }) => {
       const config = TOKENS[token];
       const isGold = config.color === 'gold';
       const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
       const borderColor = isGold ? 'border-[#D9CA5D]' : 'border-[#7CFC00]';
-      const bgColor = isGold ? 'bg-[#D9CA5D]/10' : 'bg-[#7CFC00]/10';
+      const bgColor = isGold ? 'bg-[#D9CA5D]' : 'bg-[#7CFC00]';
+      const colorHex = config.colorHex;
       
       const [data, setData] = useState(null);
       const [burnData, setBurnData] = useState({ total: 0, percent: 0, totalSupply: 0 });
       const [holders, setHolders] = useState(0);
+      const [plsPrice, setPlsPrice] = useState(0.00005);
       const [loading, setLoading] = useState(true);
-      const [sortBy, setSortBy] = useState('liquidity');
+      const [sortBy, setSortBy] = useState('volume');
       const [sortDir, setSortDir] = useState('desc');
+      const [lastUpdate, setLastUpdate] = useState(new Date());
       
       useEffect(() => {
         const fetchAllData = async () => {
-          console.log('Fetching dashboard data for:', token);
-          const dexData = await fetchDexScreenerData(config.address, config.mainPair);
-          const holdersCount = await fetchHolderCount(config.address);
-          const burn = await fetchBurnData(config.address, config.burnAddress, config.decimals);
-          console.log('Dashboard data:', { dexData, holdersCount, burn });
+          const [dexData, holdersCount, burn, pls] = await Promise.all([
+            fetchDexScreenerData(config.address, config.mainPair),
+            fetchHolderCount(config.address),
+            fetchBurnData(config.address, config.burnAddress, config.decimals),
+            fetchPLSPrice()
+          ]);
           setData(dexData);
           setHolders(holdersCount);
           setBurnData(burn);
+          setPlsPrice(pls);
+          setLastUpdate(new Date());
           setLoading(false);
         };
         fetchAllData();
@@ -438,10 +490,14 @@
         return [...data.pairs].sort((a, b) => {
           let aVal, bVal;
           switch (sortBy) {
-            case 'ratio': aVal = a.liquidity?.usd && a.marketCap ? (a.liquidity.usd / a.marketCap) : 0; bVal = b.liquidity?.usd && b.marketCap ? (b.liquidity.usd / b.marketCap) : 0; break;
+            case 'ratio': 
+              aVal = a.liquidity?.usd && a.volume?.h24 ? (a.liquidity.usd / (a.volume.h24 || 1)) : 0;
+              bVal = b.liquidity?.usd && b.volume?.h24 ? (b.liquidity.usd / (b.volume.h24 || 1)) : 0;
+              break;
             case 'volume': aVal = a.volume?.h24 || 0; bVal = b.volume?.h24 || 0; break;
+            case 'liquidity': aVal = a.liquidity?.usd || 0; bVal = b.liquidity?.usd || 0; break;
             case 'change': aVal = a.priceChange?.h24 || 0; bVal = b.priceChange?.h24 || 0; break;
-            default: aVal = a.liquidity?.usd || 0; bVal = b.liquidity?.usd || 0;
+            default: aVal = a.volume?.h24 || 0; bVal = b.volume?.h24 || 0;
           }
           return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
         });
@@ -452,135 +508,226 @@
         else { setSortBy(column); setSortDir('desc'); }
       };
       
-      const SortButton = ({ column, label }) => (
-        <button onClick={() => handleSort(column)} className={`px-3 py-1 rounded text-sm font-medium transition-all ${sortBy === column ? `${bgColor} ${textColor} border ${borderColor}` : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
-          {label} {sortBy === column && (sortDir === 'desc' ? '↓' : '↑')}
-        </button>
-      );
-      
       const burnCreatures = burnData ? getCreatureCounts(burnData.total, BURN_CREATURES) : [];
+      const plsRatio = data?.price && plsPrice ? (data.price / plsPrice).toFixed(4) : '—';
       
       if (loading) {
         return (
           <div className="min-h-screen flex items-center justify-center">
             <div className="text-center">
-              <div className={`w-20 h-20 mx-auto mb-4 rounded-full border-4 ${borderColor} border-t-transparent animate-spin`}></div>
-              <div className={`font-orbitron text-xl ${textColor}`}>Loading {token} Dashboard...</div>
+              <div className={`w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-full border-4 ${borderColor} border-t-transparent animate-spin`}></div>
+              <div className={`font-orbitron text-lg sm:text-xl ${textColor}`}>Loading {token}...</div>
             </div>
           </div>
         );
       }
       
       return (
-        <div className="min-h-screen pb-8">
-          <header className={`sticky top-0 z-40 bg-black/95 backdrop-blur border-b ${borderColor}/30`}>
-            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <button onClick={onBack} className="text-white/60 hover:text-white transition-colors text-lg">← Back</button>
-                <div className="flex items-center gap-3">
-                  <img src={config.logo} alt={token} className="w-12 h-12 object-contain" />
-                  <span className={`font-orbitron text-2xl font-bold ${textColor}`}>{token}</span>
+        <div className="min-h-screen">
+          {/* Header Bar */}
+          <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                {/* Left: Back + Logo + Token */}
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <button onClick={onBack} className="text-white/60 hover:text-white text-sm sm:text-base">← Home</button>
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <img src={config.logo} alt={token} className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
+                    <div>
+                      <span className={`font-orbitron text-xl sm:text-2xl font-bold ${textColor}`}>{token}</span>
+                      <div className="text-white/40 text-xs font-mono hidden sm:block">{config.address.slice(0, 6)}...{config.address.slice(-4)}</div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Right: Buttons */}
+                <div className="flex items-center gap-2">
+                  <span className="text-white/40 text-xs hidden md:block">Updated {lastUpdate.toLocaleTimeString()}</span>
+                  <a href={config.pulseScanUrl} target="_blank" rel="noopener noreferrer" 
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded border ${borderColor} ${textColor} text-xs sm:text-sm font-medium hover:bg-white/5`}>
+                    Explorer
+                  </a>
+                  <button className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded ${bgColor} text-black text-xs sm:text-sm font-bold`}>
+                    KPI Report
+                  </button>
                 </div>
               </div>
-              <a href={`https://dexscreener.com/${config.dexScreenerSlug}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all">DexScreener ↗</a>
             </div>
           </header>
           
-          <div className={`border-b ${borderColor}/20`}>
-            <div className="max-w-7xl mx-auto px-4 py-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                <div><div className="text-white/50 text-xs uppercase">Price</div><div className="text-xl font-bold text-white">{typeof fmtPrice(data?.price) === 'object' ? `${fmtPrice(data?.price).base}${fmtPrice(data?.price).rest}` : fmtPrice(data?.price)}</div></div>
-                <div><div className="text-white/50 text-xs uppercase">24h Change</div><div className="text-xl font-bold"><ChangeBadge value={data?.priceChange24h} /></div></div>
-                <div><div className="text-white/50 text-xs uppercase">Market Cap</div><div className="text-xl font-bold text-white">{fmtUSD(data?.mcap)}</div></div>
-                <div><div className="text-white/50 text-xs uppercase">Liquidity</div><div className="text-xl font-bold text-white">{fmtUSD(data?.liquidity)}</div></div>
-                <div><div className="text-white/50 text-xs uppercase">24h Volume</div><div className="text-xl font-bold text-white">{fmtUSD(data?.volume24h)}</div></div>
-                <div><div className="text-white/50 text-xs uppercase">Holders</div><div className="text-xl font-bold text-white">{fmt(holders)}</div></div>
-                <div><div className="text-white/50 text-xs uppercase">Liq/MC</div><div className="text-xl font-bold text-white">{data?.mcap > 0 ? ((data.liquidity / data.mcap) * 100).toFixed(1) + '%' : '—'}</div></div>
+          {/* Stats Row */}
+          <div className="border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+                <div className="stat-box rounded-lg p-3 sm:p-4">
+                  <div className="text-white/50 text-xs uppercase mb-1">Price USD</div>
+                  <div className={`text-lg sm:text-xl lg:text-2xl font-bold ${textColor}`}>{fmtPrice(data?.price)}</div>
+                  <ChangeBadge value={data?.priceChange24h} />
+                </div>
+                <div className="stat-box rounded-lg p-3 sm:p-4">
+                  <div className="text-white/50 text-xs uppercase mb-1">PLS Ratio</div>
+                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white">{plsRatio}x</div>
+                </div>
+                <div className="stat-box rounded-lg p-3 sm:p-4">
+                  <div className="text-white/50 text-xs uppercase mb-1">Market Cap</div>
+                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white">{fmtUSD(data?.mcap)}</div>
+                </div>
+                <div className="stat-box rounded-lg p-3 sm:p-4">
+                  <div className="text-white/50 text-xs uppercase mb-1">Volume 24h</div>
+                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white">{fmtUSD(data?.volume24h)}</div>
+                </div>
+                <div className="stat-box rounded-lg p-3 sm:p-4">
+                  <div className="text-white/50 text-xs uppercase mb-1">Liquidity</div>
+                  <div className="text-lg sm:text-xl lg:text-2xl font-bold text-white">{fmtUSD(data?.liquidity)}</div>
+                </div>
               </div>
             </div>
           </div>
           
-          <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-            <div className={`rounded-2xl border ${borderColor}/30 bg-gradient-to-r from-orange-500/10 via-black to-orange-500/5 p-6`}>
-              <h3 className="text-orange-400 font-bold text-lg mb-4">🔥 Burn Statistics</h3>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <div className="text-white/50 text-sm mb-1">Total Burned</div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-3xl font-bold text-orange-400">{fmt(burnData?.total)}</span>
-                    <span className="text-xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</span>
-                    <span className="text-white/50">({burnData?.percent?.toFixed(2) || 0}%)</span>
-                  </div>
-                  <div className="mt-3"><SeaCreatureDisplay creatures={burnCreatures} /></div>
+          {/* Burn Section */}
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Total Burned */}
+              <div className={`burn-box rounded-xl p-4 border-l-4`} style={{ borderColor: colorHex }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">🔥</span>
+                  <span className="text-white/70 text-sm font-medium">TOTAL BURNED</span>
                 </div>
-                <div>
-                  <div className="text-white/50 text-sm mb-1">Total Supply</div>
-                  <div className="text-2xl font-bold text-white">{fmt(burnData?.totalSupply)}</div>
-                  <div className="text-white/50 text-sm mt-2">Circulating: {fmt((burnData?.totalSupply || 0) - (burnData?.total || 0))}</div>
+                <div className={`text-xl sm:text-2xl font-bold ${textColor}`}>{fmtCompact(burnData?.total)} {token}</div>
+                <div className="text-white/50 text-sm">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</div>
+                <div className="mt-2">
+                  <SeaCreatureDisplay creatures={burnCreatures} size="text-lg" />
                 </div>
               </div>
-            </div>
-            
-            <div className={`rounded-2xl border ${borderColor}/30 bg-black/50 p-6`}>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-                <h3 className={`font-bold text-lg ${textColor}`}>💧 Liquidity Pairs ({sortedPairs.length})</h3>
-                <div className="flex items-center gap-2"><span className="text-white/50 text-sm">Sort:</span><SortButton column="liquidity" label="Liquidity" /><SortButton column="volume" label="Volume" /><SortButton column="ratio" label="Ratio" /><SortButton column="change" label="24h" /></div>
+              
+              {/* Total Supply */}
+              <div className="burn-box rounded-xl p-4 border-l-4 border-white/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">📊</span>
+                  <span className="text-white/70 text-sm font-medium">TOTAL SUPPLY</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-bold text-white">{fmtCompact(burnData?.totalSupply)}</div>
+                <div className="text-green-400 text-sm">🔥 {burnData?.percent?.toFixed(2) || 0}% burned</div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead><tr className="text-white/50 text-xs uppercase border-b border-white/10"><th className="text-left py-3 px-2">Pair</th><th className="text-right py-3 px-2">Liquidity</th><th className="text-right py-3 px-2">Volume</th><th className="text-right py-3 px-2">Liq/MC</th><th className="text-right py-3 px-2">24h</th><th className="text-right py-3 px-2">Link</th></tr></thead>
-                  <tbody>
-                    {sortedPairs.length === 0 ? <tr><td colSpan="6" className="text-center py-8 text-white/50">No pairs found</td></tr> : sortedPairs.map((pair, i) => (
-                      <tr key={pair.pairAddress || i} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="py-3 px-2"><span className="font-bold text-white">{pair.baseToken?.symbol}</span><span className="text-white/30">/</span><span className="text-white/60">{pair.quoteToken?.symbol}</span></td>
-                        <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.liquidity?.usd)}</td>
-                        <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.volume?.h24)}</td>
-                        <td className="text-right py-3 px-2 text-white">{pair.liquidity?.usd && pair.marketCap ? ((pair.liquidity.usd / pair.marketCap) * 100).toFixed(1) + '%' : '—'}</td>
-                        <td className="text-right py-3 px-2"><ChangeBadge value={pair.priceChange?.h24} size="text-sm" /></td>
-                        <td className="text-right py-3 px-2"><a href={pair.url} target="_blank" rel="noopener noreferrer" className={`${textColor} hover:underline text-sm`}>Trade ↗</a></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              
+              {/* Circulating */}
+              <div className="burn-box rounded-xl p-4 border-l-4 border-blue-500">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">💫</span>
+                  <span className="text-white/70 text-sm font-medium">CIRCULATING</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-bold text-white">{fmtCompact((burnData?.totalSupply || 0) - (burnData?.total || 0))}</div>
+                <div className="text-white/50 text-sm">{(100 - (burnData?.percent || 0)).toFixed(2)}% of supply</div>
               </div>
-            </div>
-            
-            <div className={`rounded-2xl border ${borderColor}/30 bg-black/50 p-6`}>
-              <h3 className={`font-bold text-lg ${textColor} mb-4`}>🦑 Holder Tiers</h3>
-              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3">
-                {SEA_CREATURES.map((c) => (
-                  <div key={c.name} className={`rounded-xl p-4 text-center border ${borderColor}/20 bg-white/5 hover:bg-white/10 transition-all`}>
-                    <div className="text-4xl mb-2">{c.emoji}</div>
-                    <div className="text-white font-bold text-sm">{c.name}</div>
-                    <div className="text-white/40 text-xs mt-1">{c.max === Infinity ? `$${fmt(c.min)}+` : `$${fmt(c.min)}-$${fmt(c.max)}`}</div>
-                  </div>
-                ))}
+              
+              {/* Holders */}
+              <div className="burn-box rounded-xl p-4 border-l-4 border-purple-500">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">👥</span>
+                  <span className="text-white/70 text-sm font-medium">HOLDERS</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-bold text-white">{fmt(holders)}</div>
+                <div className="text-white/50 text-sm">Unique addresses</div>
               </div>
             </div>
           </div>
           
-          <footer className="text-center py-4 px-4 border-t border-white/10 mt-8">
-            <p className="text-white/30 text-xs max-w-2xl mx-auto">This dashboard is for informational purposes only. Not financial advice. DYOR.</p>
+          {/* LP Pairs */}
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className={`font-bold text-lg ${textColor}`}>LP Pairs ({sortedPairs.length})</h2>
+              <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+                <span className="text-white/50">Sort:</span>
+                {['Ratio', 'Volume', 'Liquidity', '24h %'].map((label, i) => {
+                  const col = ['ratio', 'volume', 'liquidity', 'change'][i];
+                  return (
+                    <button key={col} onClick={() => handleSort(col)}
+                      className={`px-2 py-1 rounded ${sortBy === col ? `${bgColor} text-black font-bold` : 'bg-white/10 text-white/60'}`}>
+                      {label} {sortBy === col && (sortDir === 'desc' ? '↓' : '↑')}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              {sortedPairs.map((pair, i) => (
+                <div key={pair.pairAddress || i} className="bg-white/5 rounded-lg p-3 sm:p-4 hover:bg-white/10 transition-all">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/10 flex items-center justify-center text-sm">
+                        {pair.quoteToken?.symbol?.slice(0, 2) || '??'}
+                      </div>
+                      <div>
+                        <div className="font-bold text-white text-sm sm:text-base">{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
+                        <div className="text-white/40 text-xs">PulseX V2</div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 sm:gap-8 text-xs sm:text-sm">
+                      <div className="text-center">
+                        <div className="text-white/50">Volume</div>
+                        <div className="text-white font-bold">{fmtUSD(pair.volume?.h24)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-white/50">Liquidity</div>
+                        <div className="text-white font-bold">{fmtUSD(pair.liquidity?.usd)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-white/50">24h</div>
+                        <ChangeBadge value={pair.priceChange?.h24} />
+                      </div>
+                      <div className="text-center hidden sm:block">
+                        <div className="text-white/50">Ratio</div>
+                        <div className="text-white font-bold">
+                          {pair.liquidity?.usd && pair.volume?.h24 
+                            ? (pair.liquidity.usd / pair.volume.h24).toFixed(3) + 'x' 
+                            : '—'}
+                        </div>
+                      </div>
+                      <a href={pair.url} target="_blank" rel="noopener noreferrer" 
+                        className={`${textColor} hover:underline`}>↗</a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Holder Tiers */}
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+            <h2 className={`font-bold text-lg ${textColor} mb-4`}>🦑 Holder Tiers</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 sm:gap-3">
+              {SEA_CREATURES.map((c) => (
+                <div key={c.name} className="bg-white/5 rounded-lg p-2 sm:p-3 text-center hover:bg-white/10 transition-all">
+                  <div className="text-2xl sm:text-3xl mb-1">{c.emoji}</div>
+                  <div className="text-white text-xs font-bold">{c.name}</div>
+                  <div className="text-white/40 text-xs">{c.max === Infinity ? `$${fmtCompact(c.min)}+` : `$${fmtCompact(c.min)}`}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Footer */}
+          <footer className="text-center py-4 border-t border-white/10 mt-8">
+            <p className="text-white/30 text-xs px-4">Not financial advice. Data may be delayed. DYOR.</p>
           </footer>
         </div>
       );
     };
     
+    // ============================================
     // MAIN APP
+    // ============================================
+    
     const App = () => {
       const [view, setView] = useState('home');
       const [selectedToken, setSelectedToken] = useState(null);
       
-      const handleSelectToken = (token) => {
-        console.log('Selected:', token);
-        setSelectedToken(token);
-        setView('dashboard');
-      };
-      
       if (view === 'dashboard' && selectedToken) {
         return <Dashboard token={selectedToken} onBack={() => { setView('home'); setSelectedToken(null); }} />;
       }
-      return <HomePage onSelectToken={handleSelectToken} />;
+      return <HomePage onSelectToken={(token) => { setSelectedToken(token); setView('dashboard'); }} />;
     };
     
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
