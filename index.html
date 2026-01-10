@@ -18,20 +18,18 @@
     }
     .font-orbitron { font-family: 'Orbitron', monospace; }
     
-    /* Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: #1a1a1a; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #444; }
     
-    /* Animations */
     @keyframes pulse-glow {
       0%, 100% { box-shadow: 0 0 20px rgba(124, 252, 0, 0.3); }
-      50% { box-shadow: 0 0 40px rgba(124, 252, 0, 0.5); }
+      50% { box-shadow: 0 0 40px rgba(124, 252, 0, 0.6); }
     }
     @keyframes pulse-glow-gold {
       0%, 100% { box-shadow: 0 0 20px rgba(217, 202, 93, 0.3); }
-      50% { box-shadow: 0 0 40px rgba(217, 202, 93, 0.5); }
+      50% { box-shadow: 0 0 40px rgba(217, 202, 93, 0.6); }
     }
     .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
     .animate-pulse-glow-gold { animation: pulse-glow-gold 2s ease-in-out infinite; }
@@ -41,6 +39,21 @@
       50% { transform: scale(1.1); }
     }
     .animate-fire { animation: fire-flicker 0.5s ease-in-out infinite; }
+    
+    .token-card {
+      transition: all 0.3s ease;
+    }
+    .token-card:hover {
+      transform: scale(1.03);
+    }
+    .token-card-gold:hover {
+      box-shadow: 0 0 50px rgba(217, 202, 93, 0.5);
+      border-color: rgba(217, 202, 93, 1) !important;
+    }
+    .token-card-green:hover {
+      box-shadow: 0 0 50px rgba(124, 252, 0, 0.5);
+      border-color: rgba(124, 252, 0, 1) !important;
+    }
   </style>
 </head>
 <body>
@@ -49,36 +62,32 @@
   <script type="text/babel">
     const { useState, useEffect, useCallback, useMemo } = React;
     
-    // ============================================
-    // CONSTANTS & CONFIG
-    // ============================================
+    // Use GitHub raw URLs for logos
+    const GITHUB_BASE = 'https://raw.githubusercontent.com/ShakaVibe/PTGC-UFO-Dashboard/main/';
     
     const TOKENS = {
       PTGC: {
         name: 'PTGC',
         address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93',
-        logo: './06_PTGC_V1_transparent_bg.png',
+        logo: GITHUB_BASE + '06_PTGC_V1_transparent_bg.png',
         color: 'gold',
         burnAddress: '0x0000000000000000000000000000000000000369',
-        feePercent: 0.05,
         decimals: 18,
-        dexScreenerSlug: 'pulsechain/0x94534eeee131840b1c0f61847c572228bdfdde93',
-        pulseScanUrl: 'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93'
+        dexScreenerSlug: 'pulsechain/0x94534eeee131840b1c0f61847c572228bdfdde93'
       },
       UFO: {
         name: 'UFO',
         address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
-        logo: './07_Ufo_transparent.png',
+        logo: GITHUB_BASE + '07_Ufo_transparent.png',
         color: 'green',
         burnAddress: '0x0000000000000000000000000000000000000369',
-        feePercent: 0.06,
         decimals: 18,
-        dexScreenerSlug: 'pulsechain/0x456548a9b56efbbd89ca0309edd17a9e20b04018',
-        pulseScanUrl: 'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'
+        dexScreenerSlug: 'pulsechain/0x456548a9b56efbbd89ca0309edd17a9e20b04018'
       }
     };
     
-    // Sea creature thresholds (in USD value)
+    const COMBINED_LOGO = GITHUB_BASE + '07_Combined_PTGC_UFO_Transparent.png';
+    
     const SEA_CREATURES = [
       { name: 'Plankton', emoji: '🦠', min: 0, max: 100 },
       { name: 'Shrimp', emoji: '🦐', min: 100, max: 1000 },
@@ -91,7 +100,6 @@
       { name: 'Kraken', emoji: '🦑', min: 500000, max: Infinity }
     ];
     
-    // Burn creature thresholds (in token amount)
     const BURN_CREATURES = [
       { name: 'Plankton', emoji: '🦠', min: 0, max: 1000000 },
       { name: 'Shrimp', emoji: '🦐', min: 1000000, max: 10000000 },
@@ -104,10 +112,7 @@
       { name: 'Kraken', emoji: '🦑', min: 25000000000, max: Infinity }
     ];
     
-    // ============================================
-    // UTILITY FUNCTIONS
-    // ============================================
-    
+    // Utility Functions
     const fmt = (n) => {
       if (n === null || n === undefined || isNaN(n)) return '—';
       return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -126,9 +131,7 @@
       if (p < 0.0001) {
         const str = p.toFixed(20);
         const match = str.match(/0\.(0+)(\d{4})/);
-        if (match) {
-          return { base: '$0.0', sub: match[1].length, rest: match[2] };
-        }
+        if (match) return { base: '$0.0', sub: match[1].length, rest: match[2] };
       }
       return '$' + p.toFixed(p < 1 ? 6 : 2);
     };
@@ -143,7 +146,6 @@
     const getCreatureCounts = (totalBurn, creatures) => {
       const counts = [];
       let remaining = totalBurn;
-      
       for (let i = creatures.length - 1; i >= 0; i--) {
         const creature = creatures[i];
         if (remaining >= creature.min && creature.max !== Infinity) {
@@ -154,38 +156,25 @@
           }
         }
       }
-      
-      // Add the final creature for remaining
       if (remaining > 0) {
         const finalCreature = getCreatureForValue(remaining, creatures);
         const existing = counts.find(c => c.name === finalCreature.name);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          counts.push({ ...finalCreature, count: 1 });
-        }
+        if (existing) existing.count += 1;
+        else counts.push({ ...finalCreature, count: 1 });
       }
-      
       return counts;
     };
     
-    // ============================================
-    // API FUNCTIONS
-    // ============================================
-    
+    // API Functions
     const fetchDexScreenerData = async (tokenAddress) => {
       try {
         const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
         const data = await res.json();
         if (data.pairs && data.pairs.length > 0) {
-          // Find the main WPLS pair or highest liquidity pair
           const sortedPairs = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
           const mainPair = sortedPairs[0];
-          
-          // Aggregate data across all pairs
           const totalVolume = sortedPairs.reduce((sum, p) => sum + (p.volume?.h24 || 0), 0);
           const totalLiquidity = sortedPairs.reduce((sum, p) => sum + (p.liquidity?.usd || 0), 0);
-          
           return {
             price: parseFloat(mainPair.priceUsd) || 0,
             priceChange24h: mainPair.priceChange?.h24 || 0,
@@ -197,7 +186,7 @@
         }
         return null;
       } catch (err) {
-        console.error('DexScreener fetch error:', err);
+        console.error('DexScreener error:', err);
         return null;
       }
     };
@@ -208,24 +197,20 @@
         const data = await res.json();
         return parseInt(data.token_holders_count) || 0;
       } catch (err) {
-        console.error('Holder count fetch error:', err);
+        console.error('Holder count error:', err);
         return 0;
       }
     };
     
     const fetchBurnData = async (tokenAddress, burnAddress, decimals) => {
       try {
-        // Fetch burn balance
         const balanceRes = await fetch('https://rpc.pulsechain.com', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: 'eth_call',
-            params: [{
-              to: tokenAddress,
-              data: '0x70a08231000000000000000000000000' + burnAddress.slice(2).padStart(64, '0')
-            }, 'latest'],
+            params: [{ to: tokenAddress, data: '0x70a08231000000000000000000000000' + burnAddress.slice(2).padStart(64, '0') }, 'latest'],
             id: 1
           })
         });
@@ -233,17 +218,13 @@
         const burnedRaw = BigInt(balanceData.result || '0x0');
         const burned = Number(burnedRaw) / Math.pow(10, decimals);
         
-        // Fetch total supply
         const supplyRes = await fetch('https://rpc.pulsechain.com', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: 'eth_call',
-            params: [{
-              to: tokenAddress,
-              data: '0x18160ddd'
-            }, 'latest'],
+            params: [{ to: tokenAddress, data: '0x18160ddd' }, 'latest'],
             id: 2
           })
         });
@@ -251,126 +232,26 @@
         const totalSupplyRaw = BigInt(supplyData.result || '0x0');
         const totalSupply = Number(totalSupplyRaw) / Math.pow(10, decimals);
         
-        const burnPercent = totalSupply > 0 ? (burned / totalSupply) * 100 : 0;
-        
-        return {
-          total: burned,
-          percent: burnPercent,
-          totalSupply
-        };
+        return { total: burned, percent: totalSupply > 0 ? (burned / totalSupply) * 100 : 0, totalSupply };
       } catch (err) {
-        console.error('Burn data fetch error:', err);
+        console.error('Burn data error:', err);
         return { total: 0, percent: 0, totalSupply: 0 };
       }
     };
     
-    const fetch24hBurn = async (tokenAddress, burnAddress, decimals) => {
-      try {
-        // Get current block
-        const blockRes = await fetch('https://rpc.pulsechain.com', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'eth_blockNumber',
-            params: [],
-            id: 1
-          })
-        });
-        const blockData = await blockRes.json();
-        const currentBlock = parseInt(blockData.result, 16);
-        // PulseChain is ~10 second blocks, so 24h = ~8640 blocks
-        const fromBlock = Math.max(0, currentBlock - 8640);
-        
-        // Get transfer logs to burn address with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
-        const logsRes = await fetch('https://rpc.pulsechain.com', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'eth_getLogs',
-            params: [{
-              address: tokenAddress,
-              topics: [
-                '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
-                null,
-                '0x000000000000000000000000' + burnAddress.slice(2).toLowerCase()
-              ],
-              fromBlock: '0x' + fromBlock.toString(16),
-              toBlock: 'latest'
-            }],
-            id: 1
-          })
-        });
-        
-        clearTimeout(timeoutId);
-        
-        const logsData = await logsRes.json();
-        let total24h = 0n;
-        
-        if (logsData.result && Array.isArray(logsData.result)) {
-          for (const log of logsData.result) {
-            total24h += BigInt(log.data);
-          }
-        }
-        
-        return Number(total24h) / Math.pow(10, decimals);
-      } catch (err) {
-        console.error('24h burn fetch error:', err);
-        return 0;
-      }
-    };
-    
-    const fetchPLSPrice = async () => {
-      try {
-        const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');
-        const data = await res.json();
-        return parseFloat(data.pair?.priceUsd) || 0.00001707;
-      } catch {
-        return 0.00001707;
-      }
-    };
-    
-    // ============================================
-    // COMPONENTS
-    // ============================================
-    
-    // Price Display Component
-    const PriceDisplay = ({ price, color }) => {
-      const formatted = fmtPrice(price);
-      const textColor = color === 'gold' ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
-      
-      if (typeof formatted === 'object') {
-        return (
-          <span className={`font-bold ${textColor}`}>
-            {formatted.base}<sub className="text-lg opacity-70">{formatted.sub}</sub>{formatted.rest}
-          </span>
-        );
-      }
-      return <span className={`font-bold ${textColor}`}>{formatted}</span>;
-    };
-    
-    // Change Badge Component
-    const ChangeBadge = ({ value, suffix = '%', threshold = 1 }) => {
+    // Components
+    const ChangeBadge = ({ value, size = 'text-base' }) => {
       if (value === null || value === undefined) return null;
       const isPositive = value >= 0;
-      const isFlat = Math.abs(value) < threshold;
-      
-      const bgColor = isFlat ? 'bg-gray-500/20' : (isPositive ? 'bg-green-500/20' : 'bg-red-500/20');
-      const textColor = isFlat ? 'text-gray-400' : (isPositive ? 'text-green-400' : 'text-red-400');
-      
+      const bgColor = isPositive ? 'bg-green-500/20' : 'bg-red-500/20';
+      const textColor = isPositive ? 'text-green-400' : 'text-red-400';
       return (
-        <span className={`px-2 py-1 rounded text-sm font-bold ${bgColor} ${textColor}`}>
-          {isPositive ? '▲' : '▼'}{Math.abs(value).toFixed(1)}{suffix}
+        <span className={`px-3 py-1.5 rounded-lg ${size} font-bold ${bgColor} ${textColor}`}>
+          {isPositive ? '▲' : '▼'} {Math.abs(value).toFixed(2)}%
         </span>
       );
     };
     
-    // Sea Creature Display Component
     const SeaCreatureDisplay = ({ creatures, size = 'text-3xl' }) => (
       <div className="flex items-center gap-2 flex-wrap">
         <span className={`${size} animate-fire`}>🔥</span>
@@ -383,10 +264,7 @@
       </div>
     );
     
-    // ============================================
     // HOME PAGE
-    // ============================================
-    
     const HomePage = ({ onSelectToken }) => {
       const [tokenData, setTokenData] = useState({ PTGC: null, UFO: null });
       const [loading, setLoading] = useState(true);
@@ -405,22 +283,13 @@
         return () => clearInterval(interval);
       }, []);
       
-      // Mini sparkline component
       const MiniSparkline = ({ isPositive, color }) => {
         const points = isPositive 
           ? "0,20 10,18 20,15 30,17 40,12 50,14 60,8 70,10 80,5 90,7 100,3"
           : "0,5 10,8 20,6 30,10 40,12 50,9 60,15 70,13 80,18 90,16 100,20";
-        
         return (
-          <svg viewBox="0 0 100 24" className="w-20 h-8">
-            <polyline
-              points={points}
-              fill="none"
-              stroke={color}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+          <svg viewBox="0 0 100 24" className="w-24 h-10">
+            <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         );
       };
@@ -428,58 +297,42 @@
       const TokenCard = ({ token, data }) => {
         const config = TOKENS[token];
         const isGold = config.color === 'gold';
-        const borderColor = isGold ? 'border-[#D9CA5D]/40' : 'border-[#7CFC00]/40';
+        const borderColor = isGold ? 'border-[#D9CA5D]/50' : 'border-[#7CFC00]/50';
         const textColor = isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]';
         const bgGradient = isGold 
-          ? 'bg-gradient-to-r from-[#D9CA5D]/15 via-[#1a1a1a] to-[#1a1a1a]' 
-          : 'bg-gradient-to-r from-[#7CFC00]/15 via-[#1a1a1a] to-[#1a1a1a]';
+          ? 'bg-gradient-to-r from-[#D9CA5D]/20 via-[#1a1a1a] to-[#1a1a1a]' 
+          : 'bg-gradient-to-r from-[#7CFC00]/20 via-[#1a1a1a] to-[#1a1a1a]';
+        const cardClass = isGold ? 'token-card-gold' : 'token-card-green';
         const isPositive = (data?.priceChange24h || 0) >= 0;
         const changeColor = isPositive ? '#22c55e' : '#ef4444';
-        
         const priceFormatted = fmtPrice(data?.price);
         
         return (
           <div 
             onClick={() => onSelectToken(token)}
-            className={`cursor-pointer rounded-2xl border ${borderColor} ${bgGradient} p-6 transition-all duration-300 hover:scale-[1.02] hover:border-opacity-80`}
+            className={`token-card ${cardClass} cursor-pointer rounded-2xl border-2 ${borderColor} ${bgGradient} p-8`}
           >
-            <div className="flex items-center gap-6">
-              {/* Logo */}
+            <div className="flex items-center gap-8">
               <div className="flex-shrink-0">
-                <img 
-                  src={config.logo} 
-                  alt={token} 
-                  className="w-24 h-24 object-contain"
-                />
+                <img src={config.logo} alt={token} className="w-32 h-32 object-contain" />
               </div>
-              
-              {/* Token Info */}
-              <div className="flex-shrink-0 min-w-[140px]">
-                <div className={`font-orbitron text-3xl font-bold ${textColor}`}>{token}</div>
-                <div className="text-white/40 text-sm font-mono">
-                  {config.address.slice(0, 6)}...{config.address.slice(-4)} 
-                  <span className="ml-1 cursor-pointer hover:text-white/60">⧉</span>
+              <div className="flex-shrink-0 min-w-[160px]">
+                <div className={`font-orbitron text-4xl font-bold ${textColor}`}>{token}</div>
+                <div className="text-white/40 text-sm font-mono mt-1">
+                  {config.address.slice(0, 6)}...{config.address.slice(-4)} ⧉
                 </div>
               </div>
-              
-              {/* Price & MCap */}
               <div className="flex-1 text-right">
-                <div className="text-white font-bold text-2xl">
+                <div className="text-white font-bold text-3xl">
                   {typeof priceFormatted === 'object' ? (
-                    <>{priceFormatted.base}<sub className="text-base opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>
+                    <>{priceFormatted.base}<sub className="text-lg opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>
                   ) : priceFormatted}
                 </div>
-                <div className="text-white/50 text-base">
-                  MCap: {fmtUSD(data?.mcap)}
-                </div>
+                <div className="text-white/50 text-xl mt-1">MCap: {fmtUSD(data?.mcap)}</div>
               </div>
-              
-              {/* Sparkline & Change */}
-              <div className="flex-shrink-0 flex items-center gap-3">
+              <div className="flex-shrink-0 flex items-center gap-4">
                 <MiniSparkline isPositive={isPositive} color={changeColor} />
-                <div className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-base font-bold ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {isPositive ? '▲' : '▼'} {Math.abs(data?.priceChange24h || 0).toFixed(2)}%
-                </div>
+                <ChangeBadge value={data?.priceChange24h} size="text-xl" />
               </div>
             </div>
           </div>
@@ -488,17 +341,12 @@
       
       return (
         <div className="min-h-screen flex flex-col">
-          {/* Header with Large Combined Logo */}
-          <header className="text-center pt-12 pb-6">
-            <div className="flex justify-center mb-3">
-              <img 
-                src="./07_Combined_PTGC_UFO_Transparent.png" 
-                alt="PTGC & UFO" 
-                className="h-64 w-auto object-contain"
-              />
+          <header className="text-center pt-6">
+            <div className="flex justify-center">
+              <img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-96 w-auto object-contain" />
             </div>
             <h1 
-              className="font-orbitron text-5xl font-bold tracking-wider mb-3"
+              className="font-orbitron text-5xl font-bold tracking-wider mb-2 -mt-4"
               style={{
                 background: 'linear-gradient(180deg, #FFFFFF 0%, #C0C0C0 40%, #808080 70%, #404040 100%)',
                 WebkitBackgroundClip: 'text',
@@ -508,18 +356,15 @@
             >
               DASHBOARD
             </h1>
-            <p className="text-white/50 text-lg max-w-xl mx-auto">
-              Track real-time metrics, burns, and liquidity for PTGC & UFO tokens on PulseChain
-            </p>
+            <p className="text-white/50 text-lg">A community tool built for The Grays Ecosystem</p>
           </header>
           
-          {/* Token Cards */}
-          <div className="flex-1 flex items-start justify-center px-8 pt-8 pb-12">
-            <div className="flex flex-col gap-5 max-w-3xl w-full">
+          <div className="flex-1 flex items-start justify-center px-8 pt-8 pb-8">
+            <div className="flex flex-col gap-6 max-w-4xl w-full">
               {loading ? (
                 <>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-32"></div>
-                  <div className="animate-pulse bg-white/10 rounded-2xl h-32"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-40"></div>
+                  <div className="animate-pulse bg-white/10 rounded-2xl h-40"></div>
                 </>
               ) : (
                 <>
@@ -530,18 +375,19 @@
             </div>
           </div>
           
-          {/* Footer */}
-          <footer className="text-center py-4 text-white/30 text-sm">
-            Built for the PulseChain community
+          <footer className="text-center py-6 px-4 border-t border-white/10">
+            <p className="text-white/30 text-xs max-w-2xl mx-auto">
+              This dashboard is for informational purposes only and does not constitute financial advice. 
+              Data may be delayed or inaccurate. Always do your own research (DYOR) before making any investment decisions. 
+              The creators are not responsible for any losses.
+            </p>
+            <p className="text-white/20 text-xs mt-2">Built for the PulseChain community</p>
           </footer>
         </div>
       );
     };
     
-    // ============================================
     // DASHBOARD
-    // ============================================
-    
     const Dashboard = ({ token, onBack }) => {
       const config = TOKENS[token];
       const isGold = config.color === 'gold';
@@ -550,104 +396,55 @@
       const bgColor = isGold ? 'bg-[#D9CA5D]/10' : 'bg-[#7CFC00]/10';
       
       const [data, setData] = useState(null);
-      const [burnData, setBurnData] = useState(null);
-      const [burn24h, setBurn24h] = useState(0);
+      const [burnData, setBurnData] = useState({ total: 0, percent: 0, totalSupply: 0 });
       const [holders, setHolders] = useState(0);
-      const [plsPrice, setPlsPrice] = useState(0.00001707);
       const [loading, setLoading] = useState(true);
       const [sortBy, setSortBy] = useState('liquidity');
       const [sortDir, setSortDir] = useState('desc');
-      const [showKPIModal, setShowKPIModal] = useState(false);
       
       useEffect(() => {
         const fetchAllData = async () => {
-          console.log('Dashboard: Starting data fetch for', token);
-          setLoading(true);
-          
-          try {
-            // Fetch data in parallel but don't let one failure block others
-            const [dexData, holdersCount, burn, burn24hData, pls] = await Promise.all([
-              fetchDexScreenerData(config.address).catch(e => { console.error('DexScreener error:', e); return null; }),
-              fetchHolderCount(config.address).catch(e => { console.error('Holders error:', e); return 0; }),
-              fetchBurnData(config.address, config.burnAddress, config.decimals).catch(e => { console.error('Burn error:', e); return { total: 0, percent: 0, totalSupply: 0 }; }),
-              fetch24hBurn(config.address, config.burnAddress, config.decimals).catch(e => { console.error('24h burn error:', e); return 0; }),
-              fetchPLSPrice().catch(e => { console.error('PLS price error:', e); return 0.00001707; })
-            ]);
-            
-            console.log('Dashboard: Data fetched', { dexData, holdersCount, burn, burn24hData, pls });
-            
-            setData(dexData);
-            setHolders(holdersCount);
-            setBurnData(burn);
-            setBurn24h(burn24hData);
-            setPlsPrice(pls);
-          } catch (err) {
-            console.error('Dashboard: Fetch error', err);
-          }
-          
+          console.log('Fetching dashboard data for:', token);
+          const dexData = await fetchDexScreenerData(config.address);
+          const holdersCount = await fetchHolderCount(config.address);
+          const burn = await fetchBurnData(config.address, config.burnAddress, config.decimals);
+          console.log('Dashboard data:', { dexData, holdersCount, burn });
+          setData(dexData);
+          setHolders(holdersCount);
+          setBurnData(burn);
           setLoading(false);
         };
-        
         fetchAllData();
         const interval = setInterval(fetchAllData, 60000);
         return () => clearInterval(interval);
-      }, [token]);
+      }, [token, config]);
       
-      // Sort pairs
       const sortedPairs = useMemo(() => {
         if (!data?.pairs) return [];
         return [...data.pairs].sort((a, b) => {
           let aVal, bVal;
           switch (sortBy) {
-            case 'ratio':
-              aVal = a.liquidity?.usd && a.marketCap ? (a.liquidity.usd / a.marketCap) : 0;
-              bVal = b.liquidity?.usd && b.marketCap ? (b.liquidity.usd / b.marketCap) : 0;
-              break;
-            case 'volume':
-              aVal = a.volume?.h24 || 0;
-              bVal = b.volume?.h24 || 0;
-              break;
-            case 'liquidity':
-              aVal = a.liquidity?.usd || 0;
-              bVal = b.liquidity?.usd || 0;
-              break;
-            case 'change':
-              aVal = a.priceChange?.h24 || 0;
-              bVal = b.priceChange?.h24 || 0;
-              break;
-            default:
-              aVal = a.liquidity?.usd || 0;
-              bVal = b.liquidity?.usd || 0;
+            case 'ratio': aVal = a.liquidity?.usd && a.marketCap ? (a.liquidity.usd / a.marketCap) : 0; bVal = b.liquidity?.usd && b.marketCap ? (b.liquidity.usd / b.marketCap) : 0; break;
+            case 'volume': aVal = a.volume?.h24 || 0; bVal = b.volume?.h24 || 0; break;
+            case 'change': aVal = a.priceChange?.h24 || 0; bVal = b.priceChange?.h24 || 0; break;
+            default: aVal = a.liquidity?.usd || 0; bVal = b.liquidity?.usd || 0;
           }
           return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
         });
       }, [data?.pairs, sortBy, sortDir]);
       
       const handleSort = (column) => {
-        if (sortBy === column) {
-          setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
-        } else {
-          setSortBy(column);
-          setSortDir('desc');
-        }
+        if (sortBy === column) setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
+        else { setSortBy(column); setSortDir('desc'); }
       };
       
       const SortButton = ({ column, label }) => (
-        <button
-          onClick={() => handleSort(column)}
-          className={`px-3 py-1 rounded text-sm font-medium transition-all ${
-            sortBy === column 
-              ? `${bgColor} ${textColor} border ${borderColor}` 
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
-          }`}
-        >
+        <button onClick={() => handleSort(column)} className={`px-3 py-1 rounded text-sm font-medium transition-all ${sortBy === column ? `${bgColor} ${textColor} border ${borderColor}` : 'bg-white/5 text-white/60 hover:bg-white/10'}`}>
           {label} {sortBy === column && (sortDir === 'desc' ? '↓' : '↑')}
         </button>
       );
       
-      // Calculate burn creatures
       const burnCreatures = burnData ? getCreatureCounts(burnData.total, BURN_CREATURES) : [];
-      const burn24hCreature = getCreatureForValue(burn24h, BURN_CREATURES);
       
       if (loading) {
         return (
@@ -660,291 +457,119 @@
         );
       }
       
-      // Fallback if data failed to load
-      if (!data) {
-        return (
-          <div className="min-h-screen flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-6xl mb-4">⚠️</div>
-              <div className={`font-orbitron text-xl ${textColor} mb-4`}>Failed to load {token} data</div>
-              <button 
-                onClick={onBack}
-                className={`px-6 py-2 rounded-lg ${bgColor} ${textColor} border ${borderColor}`}
-              >
-                ← Go Back
-              </button>
-            </div>
-          </div>
-        );
-      }
-      
       return (
         <div className="min-h-screen pb-8">
-          {/* Header */}
-          <header className={`sticky top-0 z-40 bg-black/90 backdrop-blur border-b ${borderColor}/30`}>
+          <header className={`sticky top-0 z-40 bg-black/95 backdrop-blur border-b ${borderColor}/30`}>
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <button 
-                  onClick={onBack}
-                  className="text-white/60 hover:text-white transition-colors"
-                >
-                  ← Back
-                </button>
+                <button onClick={onBack} className="text-white/60 hover:text-white transition-colors text-lg">← Back</button>
                 <div className="flex items-center gap-3">
-                  <img src={config.logo} alt={token} className="w-10 h-10 object-contain" />
+                  <img src={config.logo} alt={token} className="w-12 h-12 object-contain" />
                   <span className={`font-orbitron text-2xl font-bold ${textColor}`}>{token}</span>
                 </div>
               </div>
-              
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowKPIModal(true)}
-                  className={`px-4 py-2 rounded-lg font-bold transition-all ${bgColor} ${textColor} border ${borderColor} hover:opacity-80`}
-                >
-                  📊 KPI Report
-                </button>
-                <a
-                  href={`https://dexscreener.com/${config.dexScreenerSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all"
-                >
-                  DexScreener ↗
-                </a>
-              </div>
+              <a href={`https://dexscreener.com/${config.dexScreenerSlug}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all">DexScreener ↗</a>
             </div>
           </header>
           
-          {/* Stats Bar */}
           <div className={`border-b ${borderColor}/20`}>
             <div className="max-w-7xl mx-auto px-4 py-4">
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                <div>
-                  <div className="text-white/50 text-xs uppercase">Price</div>
-                  <div className={`text-xl font-bold ${textColor}`}>
-                    <PriceDisplay price={data?.price} color={config.color} />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-white/50 text-xs uppercase">24h Change</div>
-                  <div className="text-xl font-bold">
-                    <ChangeBadge value={data?.priceChange24h} />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-white/50 text-xs uppercase">Market Cap</div>
-                  <div className="text-xl font-bold text-white">{fmtUSD(data?.mcap)}</div>
-                </div>
-                <div>
-                  <div className="text-white/50 text-xs uppercase">Liquidity</div>
-                  <div className="text-xl font-bold text-white">{fmtUSD(data?.liquidity)}</div>
-                </div>
-                <div>
-                  <div className="text-white/50 text-xs uppercase">24h Volume</div>
-                  <div className="text-xl font-bold text-white">{fmtUSD(data?.volume24h)}</div>
-                </div>
-                <div>
-                  <div className="text-white/50 text-xs uppercase">Holders</div>
-                  <div className="text-xl font-bold text-white">{fmt(holders)}</div>
-                </div>
-                <div>
-                  <div className="text-white/50 text-xs uppercase">Liq/MC Ratio</div>
-                  <div className="text-xl font-bold text-white">
-                    {data?.mcap > 0 ? ((data.liquidity / data.mcap) * 100).toFixed(1) + '%' : '—'}
-                  </div>
-                </div>
+                <div><div className="text-white/50 text-xs uppercase">Price</div><div className="text-xl font-bold text-white">{typeof fmtPrice(data?.price) === 'object' ? `${fmtPrice(data?.price).base}${fmtPrice(data?.price).rest}` : fmtPrice(data?.price)}</div></div>
+                <div><div className="text-white/50 text-xs uppercase">24h Change</div><div className="text-xl font-bold"><ChangeBadge value={data?.priceChange24h} /></div></div>
+                <div><div className="text-white/50 text-xs uppercase">Market Cap</div><div className="text-xl font-bold text-white">{fmtUSD(data?.mcap)}</div></div>
+                <div><div className="text-white/50 text-xs uppercase">Liquidity</div><div className="text-xl font-bold text-white">{fmtUSD(data?.liquidity)}</div></div>
+                <div><div className="text-white/50 text-xs uppercase">24h Volume</div><div className="text-xl font-bold text-white">{fmtUSD(data?.volume24h)}</div></div>
+                <div><div className="text-white/50 text-xs uppercase">Holders</div><div className="text-xl font-bold text-white">{fmt(holders)}</div></div>
+                <div><div className="text-white/50 text-xs uppercase">Liq/MC</div><div className="text-xl font-bold text-white">{data?.mcap > 0 ? ((data.liquidity / data.mcap) * 100).toFixed(1) + '%' : '—'}</div></div>
               </div>
             </div>
           </div>
           
-          {/* Main Content */}
           <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-            
-            {/* Burn Section */}
-            <div className={`rounded-2xl border ${borderColor}/30 bg-gradient-to-r from-orange-500/10 via-orange-600/5 to-orange-500/10 p-6`}>
-              <h3 className="text-orange-400 font-bold text-lg mb-4 flex items-center gap-2">
-                🔥 Burn Statistics
-              </h3>
-              
+            <div className={`rounded-2xl border ${borderColor}/30 bg-gradient-to-r from-orange-500/10 via-black to-orange-500/5 p-6`}>
+              <h3 className="text-orange-400 font-bold text-lg mb-4">🔥 Burn Statistics</h3>
               <div className="grid md:grid-cols-2 gap-6">
-                {/* Total Burned */}
                 <div>
                   <div className="text-white/50 text-sm mb-1">Total Burned</div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-3xl font-bold text-orange-400">{fmt(burnData?.total)}</span>
                     <span className="text-xl font-bold text-green-400">{fmtUSD((burnData?.total || 0) * (data?.price || 0))}</span>
-                    <span className="text-white/50">({burnData?.percent?.toFixed(2)}%)</span>
+                    <span className="text-white/50">({burnData?.percent?.toFixed(2) || 0}%)</span>
                   </div>
-                  <div className="mt-3">
-                    <SeaCreatureDisplay creatures={burnCreatures} />
-                  </div>
+                  <div className="mt-3"><SeaCreatureDisplay creatures={burnCreatures} /></div>
                 </div>
-                
-                {/* 24h Burned */}
                 <div>
-                  <div className="text-white/50 text-sm mb-1">Burned Last 24h</div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-3xl font-bold text-orange-400">{fmt(burn24h)}</span>
-                    <span className="text-xl font-bold text-green-400">{fmtUSD(burn24h * (data?.price || 0))}</span>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="text-4xl animate-fire">🔥</span>
-                    <span className="text-4xl">{burn24hCreature.emoji}</span>
-                    <span className="text-white/60 text-sm">({burn24hCreature.name})</span>
-                  </div>
+                  <div className="text-white/50 text-sm mb-1">Total Supply</div>
+                  <div className="text-2xl font-bold text-white">{fmt(burnData?.totalSupply)}</div>
+                  <div className="text-white/50 text-sm mt-2">Circulating: {fmt((burnData?.totalSupply || 0) - (burnData?.total || 0))}</div>
                 </div>
               </div>
             </div>
             
-            {/* LP Pairs Section */}
             <div className={`rounded-2xl border ${borderColor}/30 bg-black/50 p-6`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`font-bold text-lg ${textColor}`}>
-                  💧 Liquidity Pairs ({sortedPairs.length})
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-white/50 text-sm mr-2">Sort by:</span>
-                  <SortButton column="liquidity" label="Liquidity" />
-                  <SortButton column="volume" label="Volume" />
-                  <SortButton column="ratio" label="Ratio" />
-                  <SortButton column="change" label="24h" />
-                </div>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+                <h3 className={`font-bold text-lg ${textColor}`}>💧 Liquidity Pairs ({sortedPairs.length})</h3>
+                <div className="flex items-center gap-2"><span className="text-white/50 text-sm">Sort:</span><SortButton column="liquidity" label="Liquidity" /><SortButton column="volume" label="Volume" /><SortButton column="ratio" label="Ratio" /><SortButton column="change" label="24h" /></div>
               </div>
-              
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead>
-                    <tr className="text-white/50 text-xs uppercase border-b border-white/10">
-                      <th className="text-left py-3 px-2">Pair</th>
-                      <th className="text-right py-3 px-2">Price</th>
-                      <th className="text-right py-3 px-2">Liquidity</th>
-                      <th className="text-right py-3 px-2">Volume 24h</th>
-                      <th className="text-right py-3 px-2">Liq/MC</th>
-                      <th className="text-right py-3 px-2">24h Change</th>
-                      <th className="text-right py-3 px-2">Link</th>
-                    </tr>
-                  </thead>
+                  <thead><tr className="text-white/50 text-xs uppercase border-b border-white/10"><th className="text-left py-3 px-2">Pair</th><th className="text-right py-3 px-2">Liquidity</th><th className="text-right py-3 px-2">Volume</th><th className="text-right py-3 px-2">Liq/MC</th><th className="text-right py-3 px-2">24h</th><th className="text-right py-3 px-2">Link</th></tr></thead>
                   <tbody>
-                    {sortedPairs.map((pair, i) => {
-                      const ratio = pair.liquidity?.usd && pair.marketCap 
-                        ? ((pair.liquidity.usd / pair.marketCap) * 100).toFixed(1) 
-                        : '—';
-                      
-                      return (
-                        <tr key={pair.pairAddress || i} className="border-b border-white/5 hover:bg-white/5">
-                          <td className="py-3 px-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-white">{pair.baseToken?.symbol}</span>
-                              <span className="text-white/30">/</span>
-                              <span className="text-white/60">{pair.quoteToken?.symbol}</span>
-                            </div>
-                          </td>
-                          <td className="text-right py-3 px-2 text-white">{fmtPrice(parseFloat(pair.priceUsd))}</td>
-                          <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.liquidity?.usd)}</td>
-                          <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.volume?.h24)}</td>
-                          <td className="text-right py-3 px-2 text-white">{ratio}%</td>
-                          <td className="text-right py-3 px-2">
-                            <ChangeBadge value={pair.priceChange?.h24} />
-                          </td>
-                          <td className="text-right py-3 px-2">
-                            <a 
-                              href={pair.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className={`${textColor} hover:underline text-sm`}
-                            >
-                              Trade ↗
-                            </a>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {sortedPairs.length === 0 ? <tr><td colSpan="6" className="text-center py-8 text-white/50">No pairs found</td></tr> : sortedPairs.map((pair, i) => (
+                      <tr key={pair.pairAddress || i} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-3 px-2"><span className="font-bold text-white">{pair.baseToken?.symbol}</span><span className="text-white/30">/</span><span className="text-white/60">{pair.quoteToken?.symbol}</span></td>
+                        <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.liquidity?.usd)}</td>
+                        <td className="text-right py-3 px-2 text-white">{fmtUSD(pair.volume?.h24)}</td>
+                        <td className="text-right py-3 px-2 text-white">{pair.liquidity?.usd && pair.marketCap ? ((pair.liquidity.usd / pair.marketCap) * 100).toFixed(1) + '%' : '—'}</td>
+                        <td className="text-right py-3 px-2"><ChangeBadge value={pair.priceChange?.h24} size="text-sm" /></td>
+                        <td className="text-right py-3 px-2"><a href={pair.url} target="_blank" rel="noopener noreferrer" className={`${textColor} hover:underline text-sm`}>Trade ↗</a></td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
             
-            {/* Holder Zoo Section */}
             <div className={`rounded-2xl border ${borderColor}/30 bg-black/50 p-6`}>
-              <h3 className={`font-bold text-lg ${textColor} mb-4`}>
-                🦑 Holder Zoo
-              </h3>
-              <p className="text-white/50 text-sm mb-4">
-                Holders organized by their bag size in USD value
-              </p>
-              
+              <h3 className={`font-bold text-lg ${textColor} mb-4`}>🦑 Holder Tiers</h3>
               <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3">
-                {SEA_CREATURES.map((creature) => (
-                  <div 
-                    key={creature.name}
-                    className={`rounded-xl p-4 text-center border ${borderColor}/20 bg-white/5 hover:bg-white/10 transition-all cursor-pointer`}
-                  >
-                    <div className="text-4xl mb-2">{creature.emoji}</div>
-                    <div className="text-white font-bold text-sm">{creature.name}</div>
-                    <div className="text-white/40 text-xs mt-1">
-                      {creature.max === Infinity 
-                        ? `$${fmt(creature.min)}+` 
-                        : `$${fmt(creature.min)}-${fmt(creature.max)}`
-                      }
-                    </div>
-                    {/* Count will be fetched/calculated later */}
-                    <div className={`${textColor} font-bold text-lg mt-2`}>—</div>
+                {SEA_CREATURES.map((c) => (
+                  <div key={c.name} className={`rounded-xl p-4 text-center border ${borderColor}/20 bg-white/5 hover:bg-white/10 transition-all`}>
+                    <div className="text-4xl mb-2">{c.emoji}</div>
+                    <div className="text-white font-bold text-sm">{c.name}</div>
+                    <div className="text-white/40 text-xs mt-1">{c.max === Infinity ? `$${fmt(c.min)}+` : `$${fmt(c.min)}-$${fmt(c.max)}`}</div>
                   </div>
                 ))}
               </div>
             </div>
-            
           </div>
           
-          {/* KPI Modal Placeholder */}
-          {showKPIModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowKPIModal(false)}>
-              <div className={`bg-black rounded-2xl border-2 ${borderColor} p-8 max-w-2xl w-full mx-4`} onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className={`font-orbitron text-2xl font-bold ${textColor}`}>{token} KPI Report</h2>
-                  <button onClick={() => setShowKPIModal(false)} className="text-white/60 hover:text-white text-2xl">×</button>
-                </div>
-                <p className="text-white/60">Full KPI modal coming soon...</p>
-                <div className="mt-4 flex gap-2">
-                  <button className="px-4 py-2 bg-blue-500 text-white rounded-lg">📸 Twitter Screenshot</button>
-                  <button className="px-4 py-2 bg-purple-500 text-white rounded-lg">📊 Dual Report</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <footer className="text-center py-4 px-4 border-t border-white/10 mt-8">
+            <p className="text-white/30 text-xs max-w-2xl mx-auto">This dashboard is for informational purposes only. Not financial advice. DYOR.</p>
+          </footer>
         </div>
       );
     };
     
-    // ============================================
     // MAIN APP
-    // ============================================
-    
     const App = () => {
       const [view, setView] = useState('home');
       const [selectedToken, setSelectedToken] = useState(null);
       
       const handleSelectToken = (token) => {
+        console.log('Selected:', token);
         setSelectedToken(token);
         setView('dashboard');
       };
       
-      const handleBack = () => {
-        setView('home');
-        setSelectedToken(null);
-      };
-      
       if (view === 'dashboard' && selectedToken) {
-        return <Dashboard token={selectedToken} onBack={handleBack} />;
+        return <Dashboard token={selectedToken} onBack={() => { setView('home'); setSelectedToken(null); }} />;
       }
-      
       return <HomePage onSelectToken={handleSelectToken} />;
     };
     
-    // Mount the app
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
