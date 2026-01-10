@@ -154,60 +154,62 @@
     // Fetch DAO data - matching ProWeb exactly
     const fetchDAOData=async(daoContract,managementWallet,plsPrice)=>{
       try{
-        // 1. Get DAO contract PLS balance
+        // 1. Get DAO contract PLS balance (eth_getBalance)
         const daoBalanceRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[daoContract,'latest'],id:1})});
-        const daoBalanceHex=(await daoBalanceRes.json()).result;
-        const daoBalance=BigInt(daoBalanceHex||'0x0');
-        console.log('DAO contract total:',Number(daoBalance)/1e18,'PLS');
+        const daoBalanceResult=await daoBalanceRes.json();
+        const daoBalanceWei=BigInt(daoBalanceResult.result||'0x0');
+        const daoBalancePLS=Number(daoBalanceWei)/1e18;
+        console.log('DAO contract total:',daoBalancePLS,'PLS');
         
-        // 2. Get lockedAmount() from DAO contract
-        // lockedAmount() selector = 0x9ae697bf (verified from contract)
-        let lockedAmount=0n;
+        // 2. Get lockedAmount() from DAO contract - selector 0x9ae697bf
+        let lockedAmountWei=0n;
         try{
           const lockRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x9ae697bf'},'latest'],id:2})});
-          const lockResult=(await lockRes.json()).result;
-          if(lockResult&&lockResult!=='0x'){
-            lockedAmount=BigInt(lockResult);
+          const lockResult=await lockRes.json();
+          if(lockResult.result&&lockResult.result!=='0x'&&lockResult.result!=='0x0'){
+            lockedAmountWei=BigInt(lockResult.result);
           }
-          console.log('Locked/pending amount:',Number(lockedAmount)/1e18,'PLS');
         }catch(e){console.error('lockedAmount error:',e)}
+        const lockedAmountPLS=Number(lockedAmountWei)/1e18;
+        console.log('Locked/pending amount:',lockedAmountPLS,'PLS');
         
-        // 3. Calculate available = total - locked
-        const available=daoBalance>lockedAmount?daoBalance-lockedAmount:0n;
-        console.log('Available for new proposals:',Number(available)/1e18,'PLS');
+        // 3. Calculate available = total - locked (using BigInt for precision)
+        const availableWei=daoBalanceWei>lockedAmountWei?daoBalanceWei-lockedAmountWei:0n;
+        const availablePLS=Number(availableWei)/1e18;
+        console.log('Available for new proposals:',availablePLS,'PLS');
         
         // 4. Get management wallet PLS balance
         const mgmtBalanceRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[managementWallet,'latest'],id:3})});
-        const mgmtBalanceHex=(await mgmtBalanceRes.json()).result;
-        const mgmtPLS=Number(BigInt(mgmtBalanceHex||'0x0'))/1e18;
+        const mgmtBalanceResult=await mgmtBalanceRes.json();
+        const mgmtPLSWei=BigInt(mgmtBalanceResult.result||'0x0');
+        const mgmtPLS=Number(mgmtPLSWei)/1e18;
         console.log('Management wallet PLS:',mgmtPLS);
         
-        // 5. Get management wallet token balances
+        // 5. Get management wallet token balances (same tokens as ProWeb)
         let managementTotalUSD=mgmtPLS*plsPrice;
         
         for(const token of MANAGEMENT_TOKENS){
           try{
             const data='0x70a08231000000000000000000000000'+managementWallet.slice(2).toLowerCase();
             const tokenRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:token.address,data},'latest'],id:4})});
-            const tokenResult=(await tokenRes.json()).result;
-            if(tokenResult&&tokenResult!=='0x'){
-              const balance=Number(BigInt(tokenResult))/Math.pow(10,token.decimals);
+            const tokenResult=await tokenRes.json();
+            if(tokenResult.result&&tokenResult.result!=='0x'&&tokenResult.result!=='0x0'){
+              const balanceWei=BigInt(tokenResult.result);
+              const balance=Number(balanceWei)/Math.pow(10,token.decimals);
               if(balance>0.01){
-                const price=token.price||(token.priceRatio?plsPrice*token.priceRatio:0);
+                const price=token.price!==undefined?token.price:(token.priceRatio?plsPrice*token.priceRatio:0);
                 const usdValue=balance*price;
                 managementTotalUSD+=usdValue;
                 console.log(`Management ${token.symbol}: ${balance.toLocaleString()} ($${usdValue.toLocaleString()})`);
               }
             }
-          }catch(e){}
+          }catch(e){console.error(`Error fetching ${token.symbol}:`,e)}
         }
         console.log('Management wallet total USD:',managementTotalUSD);
         
         // 6. Calculate totals
-        const availablePLS=Number(available)/1e18;
-        const pendingPLS=Number(lockedAmount)/1e18;
         const availableUSD=availablePLS*plsPrice;
-        const pendingUSD=pendingPLS*plsPrice;
+        const pendingUSD=lockedAmountPLS*plsPrice;
         const totalValue=availableUSD+pendingUSD+managementTotalUSD;
         
         console.log('Total DAO value:',totalValue);
@@ -215,7 +217,7 @@
         return{
           availablePLS,
           availableUSD,
-          pendingPLS,
+          pendingPLS:lockedAmountPLS,
           pendingUSD,
           managementValue:managementTotalUSD,
           totalValue
