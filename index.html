@@ -34,6 +34,8 @@
     
     const TOKENS={
       PTGC:{name:'PTGC',address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D9CA5D',decimals:18,mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',pulseScanUrl:'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93',totalSupply:333333333333,taxRate:0.05,hasDAO:true,
+        daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
+        daoTreasury:'0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',
         taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}'},{name:'Holders+Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
       UFO:{name:'UFO',address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',pulseScanUrl:'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
@@ -47,7 +49,6 @@
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
     
-    // Sea creature tiers - same percentages as burn
     const HOLDER_TIERS=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
       {n:'Whale',e:'\u{1F40B}',p:1},
@@ -63,6 +64,7 @@
     
     const fmt=n=>n==null||isNaN(n)?'\u2014':Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
+    const fmtPLS=n=>n==null||isNaN(n)?'\u2014':Math.floor(Number(n)).toLocaleString('en-US')+' PLS';
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
@@ -70,14 +72,7 @@
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     const getWhaleProgress=pct=>({whales:Math.floor(pct),progress:(pct-Math.floor(pct))*100});
-    
-    // Get holder tier based on percentage of supply
-    const getHolderTier=(holdingPct)=>{
-      for(const tier of HOLDER_TIERS){
-        if(holdingPct>=tier.p)return tier.n;
-      }
-      return'Shell';
-    };
+    const getHolderTier=(holdingPct)=>{for(const tier of HOLDER_TIERS){if(holdingPct>=tier.p)return tier.n}return'Shell'};
     
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
@@ -85,12 +80,94 @@
     const fetchBurnHist=async(addr,dec,hrs)=>{try{const blocksPerHour=360;const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})});const curBlock=parseInt((await bRes.json()).result,16);if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1})});const logs=(await lRes.json()).result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1})});const logs=(await lRes.json()).result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
     
-    // Fetch ALL holders with pagination
+    // Fetch PLS balance of an address
+    const fetchPLSBalance=async(addr)=>{
+      try{
+        const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1})});
+        const result=(await r.json()).result;
+        return Number(BigInt(result||'0x0'))/1e18;
+      }catch{return 0}
+    };
+    
+    // Fetch wallet value from PulseScan (includes all tokens)
+    const fetchWalletValue=async(addr)=>{
+      try{
+        // Get PLS balance
+        const plsBal=await fetchPLSBalance(addr);
+        const plsPrice=await fetchPLS();
+        const plsValue=plsBal*plsPrice;
+        
+        // Get token balances from PulseScan
+        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`);
+        const tokens=await r.json();
+        
+        let tokenValue=0;
+        if(Array.isArray(tokens)){
+          for(const t of tokens){
+            const val=parseFloat(t.value||0)/Math.pow(10,parseInt(t.token?.decimals||18));
+            // Try to get USD value if available
+            if(t.token?.exchange_rate){
+              tokenValue+=val*parseFloat(t.token.exchange_rate);
+            }
+          }
+        }
+        
+        return{pls:plsBal,plsValue,tokenValue,total:plsValue+tokenValue};
+      }catch(e){
+        console.error('Error fetching wallet value:',e);
+        return{pls:0,plsValue:0,tokenValue:0,total:0};
+      }
+    };
+    
+    // Fetch DAO data
+    const fetchDAOData=async(daoContract,treasuryAddr,plsPrice)=>{
+      try{
+        // Get DAO contract PLS balance (available for proposals)
+        const daoBalance=await fetchPLSBalance(daoContract);
+        
+        // Get treasury wallet total value
+        const treasuryData=await fetchWalletValue(treasuryAddr);
+        
+        // Try to get proposal count and active proposals
+        // Common DAO function signatures:
+        // proposalCount() = 0xda35c664
+        // activeProposalCount or similar
+        let proposalCount=0;
+        let activeProposals=0;
+        let pendingPLS=0;
+        
+        try{
+          // Try proposalCount()
+          const pcRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:1})});
+          const pcResult=(await pcRes.json()).result;
+          if(pcResult&&pcResult!=='0x')proposalCount=parseInt(pcResult,16);
+        }catch{}
+        
+        // Get pending PLS in active proposals by checking contract state
+        // This would need the specific contract ABI - for now estimate from events or use contract balance
+        
+        return{
+          availablePLS:daoBalance,
+          availableUSD:daoBalance*plsPrice,
+          pendingPLS:pendingPLS,
+          pendingUSD:pendingPLS*plsPrice,
+          activeProposals:activeProposals,
+          totalProposals:proposalCount,
+          treasuryPLS:treasuryData.pls,
+          treasuryValue:treasuryData.total,
+          totalFunds:daoBalance*plsPrice+treasuryData.total
+        };
+      }catch(e){
+        console.error('Error fetching DAO data:',e);
+        return null;
+      }
+    };
+    
     const fetchAllHolders=async(addr,cfg,onProgress)=>{
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0,Turtle:0,Shrimp:0,Shell:0};
       let nextPageParams=null;
       let totalFetched=0;
-      const maxPages=100; // Safety limit
+      const maxPages=100;
       let page=0;
       
       try{
@@ -107,9 +184,7 @@
           
           items.forEach(holder=>{
             const holderAddr=holder.address?.hash?.toLowerCase();
-            // Skip LPs and burn address
             if(LP_ADDRESSES.includes(holderAddr)||holderAddr===BURN_ADDRESS.toLowerCase())return;
-            
             const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
             const pctOfSupply=(tokens/cfg.totalSupply)*100;
             const tier=getHolderTier(pctOfSupply);
@@ -119,7 +194,6 @@
           totalFetched+=items.length;
           if(onProgress)onProgress(totalFetched,counts);
           
-          // Check for next page
           if(data.next_page_params){
             const params=new URLSearchParams();
             Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
@@ -136,7 +210,6 @@
       return{counts,total:totalFetched};
     };
     
-    // Donut Chart Component
     const DonutChart=({data,colors,size=120})=>{
       const total=data.reduce((s,d)=>s+d.value,0);
       if(total===0)return<svg width={size} height={size}><circle cx={size/2} cy={size/2} r={size/2-10} fill="none" stroke="#333" strokeWidth={size*0.17}/></svg>;
@@ -160,7 +233,6 @@
       );
     };
     
-    // Token Allocation Modal - fetches ALL holders
     const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply})=>{
       const[tierCounts,setTierCounts]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0,Turtle:0,Shrimp:0,Shell:0});
       const[loading,setLoading]=useState(true);
@@ -231,54 +303,34 @@
                   {loading&&<div className="text-white/40 text-xs">Scanning: {progress} wallets...</div>}
                 </div>
                 
-                {loading?(
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-4 gap-2">
-                      {HOLDER_TIERS.slice(0,4).map(tier=>(
-                        <div key={tier.n} className="text-center">
-                          <div className="text-2xl mb-1">{tier.e}</div>
-                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                          <div className="text-white/50 text-xs">{tier.n}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {HOLDER_TIERS.slice(4).map(tier=>(
-                        <div key={tier.n} className="text-center">
-                          <div className="text-2xl mb-1">{tier.e}</div>
-                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                          <div className="text-white/50 text-xs">{tier.n}</div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-4 gap-2">
+                    {HOLDER_TIERS.slice(0,4).map(tier=>(
+                      <div key={tier.n} className="text-center">
+                        <div className="text-2xl mb-1">{tier.e}</div>
+                        <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                        <div className="text-white/50 text-xs">{tier.n}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {HOLDER_TIERS.slice(4).map(tier=>(
+                      <div key={tier.n} className="text-center">
+                        <div className="text-2xl mb-1">{tier.e}</div>
+                        <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
+                        <div className="text-white/50 text-xs">{tier.n}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {loading?(
                     <div className="flex items-center justify-center gap-2 mt-2">
                       <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
                       <span className="text-white/50 text-sm">Loading all holders...</span>
                     </div>
-                  </div>
-                ):(
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-4 gap-2">
-                      {HOLDER_TIERS.slice(0,4).map(tier=>(
-                        <div key={tier.n} className="text-center">
-                          <div className="text-2xl mb-1">{tier.e}</div>
-                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                          <div className="text-white/50 text-xs">{tier.n}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {HOLDER_TIERS.slice(4).map(tier=>(
-                        <div key={tier.n} className="text-center">
-                          <div className="text-2xl mb-1">{tier.e}</div>
-                          <div className={`text-lg font-bold ${theme.text}`}>{tierCounts[tier.n]||0}</div>
-                          <div className="text-white/50 text-xs">{tier.n}</div>
-                        </div>
-                      ))}
-                    </div>
+                  ):(
                     <div className="text-center text-white/40 text-xs mt-2">Total: {totalHolders} wallets (excludes LPs & burn)</div>
-                  </div>
-                )}
+                  )}
+                </div>
                 
                 <div className="text-white/40 text-xs mt-3 pt-3 border-t border-white/10">
                   {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} 0.001%+ {'\u2022'} {'\u{1F422}'} 0.0001%+ {'\u2022'} {'\u{1F990}'} 0.00001%+ {'\u2022'} {'\u{1F41A}'} Below
@@ -290,7 +342,6 @@
       );
     };
     
-    // Value Generation Modal with period selector
     const ValueGenModal=({open,close,token,vol,cfg,theme})=>{
       const[period,setPeriod]=useState('24h');
       if(!open)return null;
@@ -465,11 +516,21 @@
       const[showBurn,setShowBurn]=useState(false);
       const[showValueGen,setShowValueGen]=useState(false);
       const[showAlloc,setShowAlloc]=useState(false);
+      const[daoData,setDaoData]=useState(null);
+      const[daoLoading,setDaoLoading]=useState(true);
       
       useEffect(()=>{
         const load=async()=>{
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          
+          // Fetch DAO data if applicable
+          if(cfg.hasDAO&&cfg.daoContract){
+            setDaoLoading(true);
+            const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p);
+            setDaoData(dao);
+            setDaoLoading(false);
+          }
         };
         load();
         const i=setInterval(load,60000);
@@ -557,7 +618,7 @@
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">{cfg.taxBreakdown.map((item,i)=><div key={i} className="flex items-center gap-1"><span>{item.emoji}</span><span className="text-white/60">{item.name}:</span><span className={`font-semibold ${theme.text}`}>{fmtUSD((data?.vol||0)*(item.pct/100))}</span></div>)}</div>
               </div>
               
-              {/* Token Allocation Box - clean, no sea creatures */}
+              {/* Token Allocation Box */}
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowAlloc(true)}>
                 <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F4CA}'} Token Allocation</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-center gap-4">
@@ -573,8 +634,41 @@
               {/* DAO Box - PTGC only */}
               {cfg.hasDAO?(
                 <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                  <div className="flex justify-between mb-2"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F3DB}\u{FE0F}'} DAO</div></div>
-                  <div className="text-white/30 text-center py-4">Coming Soon</div>
+                  <div className="flex justify-between mb-3"><div className={`text-xs ${theme.text} uppercase font-semibold`}>{'\u{1F3DB}\u{FE0F}'} DAO Treasury</div></div>
+                  {daoLoading?(
+                    <div className="flex items-center justify-center py-4">
+                      <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
+                      <span className="text-white/50 ml-2">Loading DAO data...</span>
+                    </div>
+                  ):(
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-white/50 text-xs uppercase">Total Funds</div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(daoData?.totalFunds||0)}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/50 text-xs uppercase">Active Proposals</div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{daoData?.activeProposals||0}</div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-white/50 text-xs uppercase">Available PLS</div>
+                          <div className="text-lg font-bold text-green-400">{fmtAbbr(daoData?.availablePLS||0)}</div>
+                          <div className="text-white/40 text-xs">{fmtUSD(daoData?.availableUSD||0)}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/50 text-xs uppercase">Pending in Proposals</div>
+                          <div className="text-lg font-bold text-yellow-400">{fmtAbbr(daoData?.pendingPLS||0)}</div>
+                          <div className="text-white/40 text-xs">{fmtUSD(daoData?.pendingUSD||0)}</div>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-white/10 text-center">
+                        <a href={`https://scan.pulsechain.com/address/${cfg.daoContract}`} target="_blank" className={`text-xs ${theme.text} hover:underline`}>View DAO Contract {'\u2192'}</a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ):(
                 <div className={`${theme.card} border ${theme.border} rounded-xl p-4 opacity-50`}>
