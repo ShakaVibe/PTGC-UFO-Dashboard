@@ -47,8 +47,28 @@
     const LP_ADDRESSES=['0xf5a89a6487d62df5308cdda89c566c5b5ef94c11','0xbea0e55b82eb975280041f3b49c4d0bd937b72d5'];
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
-    const RPC='https://rpc.pulsechain.com';
+    const RPC_URLS=['https://rpc.pulsechain.com','https://pulsechain.publicnode.com','https://rpc-pulsechain.g4mm4.io'];
+    let currentRPC=0;
+    const RPC=RPC_URLS[0];
     const MIN_LIQ=1000;
+    
+    // Helper to try RPC with fallback
+    const rpcFetch=async(body,timeout=5000)=>{
+      for(let i=0;i<RPC_URLS.length;i++){
+        const rpcUrl=RPC_URLS[(currentRPC+i)%RPC_URLS.length];
+        try{
+          const controller=new AbortController();
+          const timeoutId=setTimeout(()=>controller.abort(),timeout);
+          const res=await fetch(rpcUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+          clearTimeout(timeoutId);
+          const data=await res.json();
+          if(!data.error)return data;
+        }catch(e){
+          console.log(`RPC ${rpcUrl} failed, trying next...`);
+        }
+      }
+      return{result:null,error:'All RPCs failed'};
+    };
     
     const HOLDER_TIERS_DISPLAY=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
@@ -78,18 +98,17 @@
     
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
-    const fetchBurn=async(addr,dec)=>{try{const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1})});const burned=Number(BigInt((await bRes.json()).result||'0x0'))/Math.pow(10,dec);const sRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})});const supply=Number(BigInt((await sRes.json()).result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch{return{total:0,pct:0,supply:0}}};
-    const fetchBurnHist=async(addr,dec,hrs)=>{try{const blocksPerHour=360;const bRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})});const curBlock=parseInt((await bRes.json()).result,16);if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1})});const logs=(await lRes.json()).result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1})});const logs=(await lRes.json()).result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
+    const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
+    const fetchBurnHist=async(addr,dec,hrs)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});const curBlock=parseInt(bRes.result,16);if(!curBlock)return 0;const blocksPerHour=360;if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1});const logs=lRes.result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1});const logs=lRes.result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
     
-    const fetchPLSBalance=async(addr)=>{try{const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1})});const result=(await r.json()).result;return Number(BigInt(result||'0x0'))/1e18}catch{return 0}};
+    const fetchPLSBalance=async(addr)=>{try{const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1});return Number(BigInt(r.result||'0x0'))/1e18}catch{return 0}};
     
     const fetchTokenBalance=async(tokenAddr,walletAddr,decimals)=>{
       try{
         const data='0x70a08231000000000000000000000000'+walletAddr.slice(2).toLowerCase();
-        const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:tokenAddr,data},'latest'],id:1})});
-        const result=(await r.json()).result;
-        return Number(BigInt(result||'0x0'))/Math.pow(10,decimals);
+        const r=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:tokenAddr,data},'latest'],id:1});
+        return Number(BigInt(r.result||'0x0'))/Math.pow(10,decimals);
       }catch{return 0}
     };
     
@@ -105,26 +124,20 @@
         
         // Try totalStaked() = 0x817b1cd2 and totalLocked() = 0x56891412 in parallel
         const [stakedRes, lockedRes] = await Promise.all([
-          fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1})}).catch(()=>null),
-          fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2})}).catch(()=>null)
+          rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1}),
+          rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2})
         ]);
         
-        if(stakedRes){
-          const result=await stakedRes.json();
-          console.log('totalStaked() raw:',result.result);
-          if(result.result&&result.result.length>2&&!result.error){
-            stakedTokens=Number(BigInt(result.result))/Math.pow(10,decimals);
-            console.log('totalStaked():',stakedTokens);
-          }
+        console.log('totalStaked() raw:',stakedRes.result);
+        if(stakedRes.result&&stakedRes.result.length>2&&!stakedRes.error){
+          stakedTokens=Number(BigInt(stakedRes.result))/Math.pow(10,decimals);
+          console.log('totalStaked():',stakedTokens);
         }
         
-        if(lockedRes){
-          const result=await lockedRes.json();
-          console.log('totalLocked() raw:',result.result);
-          if(result.result&&result.result.length>2&&!result.error){
-            lockedTokens=Number(BigInt(result.result))/Math.pow(10,decimals);
-            console.log('totalLocked():',lockedTokens);
-          }
+        console.log('totalLocked() raw:',lockedRes.result);
+        if(lockedRes.result&&lockedRes.result.length>2&&!lockedRes.error){
+          lockedTokens=Number(BigInt(lockedRes.result))/Math.pow(10,decimals);
+          console.log('totalLocked():',lockedTokens);
         }
         
         // If no staked/locked values found, use contract balance as staked
@@ -166,8 +179,7 @@
     const fetchDAOData=async(daoContract,managementWallet,plsPrice)=>{
       try{
         // 1. Get DAO contract PLS balance (eth_getBalance)
-        const daoBalanceRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[daoContract,'latest'],id:1})});
-        const daoBalanceResult=await daoBalanceRes.json();
+        const daoBalanceResult=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[daoContract,'latest'],id:1});
         const daoBalanceWei=BigInt(daoBalanceResult.result||'0x0');
         const daoBalancePLS=Number(daoBalanceWei)/1e18;
         console.log('DAO contract total:',daoBalancePLS,'PLS');
@@ -175,8 +187,7 @@
         // 2. Get lockedAmount() from DAO contract - selector 0x6ab28bc8
         let lockedAmountWei=0n;
         try{
-          const lockRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x6ab28bc8'},'latest'],id:2})});
-          const lockResult=await lockRes.json();
+          const lockResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x6ab28bc8'},'latest'],id:2});
           console.log('lockedAmount raw result:',lockResult.result);
           if(lockResult.result&&lockResult.result.length>2){
             lockedAmountWei=BigInt(lockResult.result);
@@ -188,8 +199,7 @@
         // 2b. Get proposal count and count active ones - proposalCount() selector 0xda35c664
         let pendingCount=0;
         try{
-          const pcRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:5})});
-          const pcResult=await pcRes.json();
+          const pcResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:5});
           if(pcResult.result&&pcResult.result!=='0x'){
             const proposalCount=parseInt(pcResult.result,16);
             // Check state of recent proposals in parallel - state() selector 0x3e4f49e6
@@ -198,8 +208,7 @@
             for(let i=proposalCount;i>=startId;i--){
               const idHex=i.toString(16).padStart(64,'0');
               statePromises.push(
-                fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6})})
-                  .then(r=>r.json())
+                rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6})
                   .then(r=>r.result?parseInt(r.result,16):-1)
                   .catch(()=>-1)
               );
@@ -216,8 +225,7 @@
         console.log('Available for new proposals:',availablePLS,'PLS');
         
         // 4. Get management wallet PLS balance
-        const mgmtBalanceRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_getBalance',params:[managementWallet,'latest'],id:3})});
-        const mgmtBalanceResult=await mgmtBalanceRes.json();
+        const mgmtBalanceResult=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[managementWallet,'latest'],id:3});
         const mgmtPLSWei=BigInt(mgmtBalanceResult.result||'0x0');
         const mgmtPLS=Number(mgmtPLSWei)/1e18;
         console.log('Management wallet PLS:',mgmtPLS);
@@ -228,8 +236,7 @@
         const tokenPromises=MANAGEMENT_TOKENS.map(async(token)=>{
           try{
             const data='0x70a08231000000000000000000000000'+managementWallet.slice(2).toLowerCase();
-            const tokenRes=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:token.address,data},'latest'],id:4})});
-            const tokenResult=await tokenRes.json();
+            const tokenResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:token.address,data},'latest'],id:4});
             if(tokenResult.result&&tokenResult.result!=='0x'&&tokenResult.result!=='0x0'){
               const balanceWei=BigInt(tokenResult.result);
               const balance=Number(balanceWei)/Math.pow(10,token.decimals);
