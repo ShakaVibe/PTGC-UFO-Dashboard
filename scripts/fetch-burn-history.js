@@ -19,9 +19,9 @@ const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
 const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
 const UFO_CONTRACT = '0x456548a9b56efbbd89ca0309edd17a9e20b04018';
 
-// Main LP pairs for volume tracking
-const PTGC_MAIN_PAIR = '0x322e03542678a8e2e926fdd2b5eb0b49ede10c74'; // PTGC/WPLS
-const UFO_MAIN_PAIR = '0x33A8348bAb77cf17d4979c34b7EBB6ca4CF78257';  // UFO/WPLS
+// Main LP pairs for volume tracking (GeckoTerminal format - lowercase)
+const PTGC_MAIN_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // pTGC/WPLS on PulseX
+const UFO_MAIN_PAIR = '0x31c77e0519a0347aa547aeab6e866c30a1a32123';  // UFO/PLSX on PulseX V2
 
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
