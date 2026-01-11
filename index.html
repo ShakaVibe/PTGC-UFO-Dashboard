@@ -93,7 +93,39 @@
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
-    const fetchBurnHist=async(addr,dec,hrs)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});const curBlock=parseInt(bRes.result,16);if(!curBlock)return 0;const blocksPerHour=360;if(hrs>24*7){let totalBurn=0;const chunkHours=24*5;const chunks=Math.ceil(hrs/chunkHours);for(let i=0;i<chunks;i++){const endBlock=curBlock-(i*blocksPerHour*chunkHours);const startBlock=Math.max(0,endBlock-(blocksPerHour*chunkHours));try{const lRes=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock:'0x'+startBlock.toString(16),toBlock:'0x'+endBlock.toString(16)}],id:1});const logs=lRes.result;if(Array.isArray(logs))totalBurn+=logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0)}catch{}}return totalBurn}const fromBlock='0x'+Math.max(0,curBlock-(blocksPerHour*hrs)).toString(16);const lRes=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',params:[{address:addr,topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',null,'0x000000000000000000000000'+BURN_ADDRESS.slice(2)],fromBlock,toBlock:'latest'}],id:1});const logs=lRes.result;return Array.isArray(logs)?logs.reduce((s,l)=>s+Number(BigInt(l.data))/Math.pow(10,dec),0):0}catch{return 0}};
+    // Fetch burn history using PulseScan API - much faster than RPC logs
+    const fetchBurnHist=async(addr,dec,hrs)=>{
+      try{
+        // Use PulseScan API to get recent transfers to burn address
+        const now=Date.now();
+        const cutoff=now-(hrs*60*60*1000);
+        
+        // Fetch token transfers to burn address
+        const url=`https://api.scan.pulsechain.com/api/v2/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&filter=to&token=${addr}`;
+        const r=await fetch(url);
+        const data=await r.json();
+        
+        if(!data.items||!Array.isArray(data.items))return 0;
+        
+        let totalBurned=0;
+        for(const tx of data.items){
+          // Check if within time range
+          const txTime=new Date(tx.timestamp).getTime();
+          if(txTime>=cutoff){
+            const amount=Number(BigInt(tx.total?.value||tx.value||'0'))/Math.pow(10,dec);
+            totalBurned+=amount;
+          }else{
+            // Transactions are sorted by time desc, so we can stop
+            break;
+          }
+        }
+        
+        return totalBurned;
+      }catch(e){
+        console.error('fetchBurnHist error:',e);
+        return 0;
+      }
+    };
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
     
     const fetchPLSBalance=async(addr)=>{try{const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1});return Number(BigInt(r.result||'0x0'))/1e18}catch{return 0}};
@@ -272,13 +304,17 @@
     };
     
     // Fetch holders - stop after Dolphin tier, calculate rest as Squid & Below
-    const fetchHolderTiers=async(addr,cfg,totalHolderCount,onProgress)=>{
+    const fetchHolderTiers=async(addr,cfg,totalHolderCount,lpAddresses=[])=>{
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0};
       let nextPageParams=null;
       let totalFetched=0;
       const maxPages=20; // Reduced since we stop at Dolphin
       let page=0;
       let countedHolders=0;
+      
+      // Combine static LP addresses with dynamic ones
+      const allLPAddresses=[...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase());
+      console.log('Excluding LP addresses:',allLPAddresses.length);
       
       try{
         while(page<maxPages){
@@ -296,7 +332,7 @@
           
           for(const holder of items){
             const holderAddr=holder.address?.hash?.toLowerCase();
-            if(LP_ADDRESSES.includes(holderAddr))continue;
+            if(allLPAddresses.includes(holderAddr))continue;
             if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())continue;
             
             const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
@@ -317,7 +353,6 @@
           }
           
           totalFetched+=items.length;
-          if(onProgress)onProgress(totalFetched,counts,countedHolders);
           
           if(foundBelowDolphin)break;
           
@@ -335,7 +370,7 @@
       }
       
       // Squid & Below = total holders - counted tiers - LP addresses - staking contract
-      const excludedAddresses=LP_ADDRESSES.length+(cfg.stakingContract?1:0);
+      const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
       const squidAndBelow=Math.max(0,totalHolderCount-countedHolders-excludedAddresses);
       
       return{counts,countedHolders,squidAndBelow,total:totalFetched};
@@ -530,7 +565,19 @@
     
     const BurnModal=({open,close,token,burn,price,cfg})=>{
       const[hist,setHist]=useState({h12:null,h24:null,d7:null,d30:null});
-      useEffect(()=>{if(!open)return;setHist({h12:null,h24:null,d7:null,d30:null});const fetchAll=async()=>{const h12=await fetchBurnHist(cfg.address,cfg.decimals,12);setHist(p=>({...p,h12}));const h24=await fetchBurnHist(cfg.address,cfg.decimals,24);setHist(p=>({...p,h24}));const d7=await fetchBurnHist(cfg.address,cfg.decimals,24*7);setHist(p=>({...p,d7}));const d30=await fetchBurnHist(cfg.address,cfg.decimals,24*30);setHist(p=>({...p,d30}))};fetchAll()},[open,cfg]);
+      useEffect(()=>{
+        if(!open)return;
+        setHist({h12:null,h24:null,d7:null,d30:null});
+        // Fetch all periods in parallel
+        Promise.all([
+          fetchBurnHist(cfg.address,cfg.decimals,12),
+          fetchBurnHist(cfg.address,cfg.decimals,24),
+          fetchBurnHist(cfg.address,cfg.decimals,24*7),
+          fetchBurnHist(cfg.address,cfg.decimals,24*30)
+        ]).then(([h12,h24,d7,d30])=>{
+          setHist({h12,h24,d7,d30});
+        });
+      },[open,cfg]);
       if(!open)return null;
       const theme={text:cfg.color==='gold'?'text-[#D9CA5D]':'text-[#7CFC00]'};
       const creatures=getBurnC(burn?.pct||0,'Squid');
@@ -675,8 +722,9 @@
             fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>setStakingData(staking));
           }
           
-          // Fetch holder tiers for all tokens
-          fetchHolderTiers(cfg.address,cfg,h).then(result=>{
+          // Fetch holder tiers for all tokens - pass LP pair addresses
+          const lpPairAddresses=d?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
+          fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
             setHolderTiers({
               Poseidon:result.counts.Poseidon||0,
               Whale:result.counts.Whale||0,
@@ -810,12 +858,12 @@
               
               <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4`}>
                 <div className="flex justify-between mb-3"><div className={`text-base font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation</div></div>
-                <div className="flex items-center gap-3">
-                  <DonutChart data={chartData} colors={chartColors} size={80}/>
+                <div className="flex items-center gap-4">
+                  <DonutChart data={chartData} colors={chartColors} size={90}/>
                   <div className="space-y-1">
                     {chartData.map((d,i)=>(
-                      <div key={i} className="flex items-center gap-2 text-base">
-                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:chartColors[i]}}></div>
+                      <div key={i} className="flex items-center gap-2 text-lg">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{background:chartColors[i]}}></div>
                         <span className="text-white/60">{d.label}:</span>
                         <span className="text-white/80">{fmtAbbr(d.tokens)}</span>
                         <span className={`font-bold ${theme.text}`}>{d.value.toFixed(2)}%</span>
