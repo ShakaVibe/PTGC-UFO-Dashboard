@@ -529,9 +529,17 @@
       const[period,setPeriod]=useState('24h');
       if(!open)return null;
       
-      const multipliers={'24h':1,'7d':7,'30d':30,'90d':90};
-      const periodVol=vol*multipliers[period];
+      // Get actual volume data from cache if available
+      const volData=burnHistoryCache?.[token]?.volume;
+      const vol24h=volData?.current24h||vol;
+      const vol7d=volData?.vol7d||(vol*7);
+      const vol30d=volData?.vol30d||(vol*30);
+      const volChange=volData?.change24h;
+      
+      const periodVols={'24h':vol24h,'7d':vol7d,'30d':vol30d,'90d':vol30d*3};
+      const periodVol=periodVols[period];
       const total=periodVol*cfg.taxRate;
+      const isEstimate=period==='90d'||!volData;
       
       return(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
@@ -549,10 +557,13 @@
               </div>
               
               <div className="text-center mb-4">
-                <div className="text-white/50 text-sm">Est. Volume ({period.toUpperCase()}): {fmtUSD(periodVol)}</div>
+                <div className="text-white/50 text-sm flex items-center justify-center gap-2">
+                  Volume ({period.toUpperCase()}): {fmtUSD(periodVol)}
+                  {period==='24h'&&volChange!==undefined&&<span className={`text-sm ${volChange>=0?'text-green-400':'text-red-400'}`}>{volChange>=0?'\u25B2':'\u25BC'}{Math.abs(volChange).toFixed(1)}%</span>}
+                </div>
                 <div className="text-4xl font-bold text-green-400 my-2">{fmtUSD(total)}</div>
                 <div className="text-white/50 text-sm">{(cfg.taxRate*100)}% Tax Generated</div>
-                {period!=='24h'&&<div className="text-white/40 text-xs mt-1">* Estimated based on current 24h volume</div>}
+                {isEstimate&&<div className="text-white/40 text-xs mt-1">* Estimated {!volData?'(live data loading)':''}</div>}
               </div>
               
               <div className="space-y-2">
@@ -863,7 +874,7 @@
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'} {Math.abs(data?.change||0).toFixed(2)}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div></div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vc=burnHistoryCache?.[token]?.volume?.change24h;return vc!==undefined?<div className={`text-sm ${vc>=0?'text-green-400':'text-red-400'}`}>{vc>=0?'\u25B2':'\u25BC'} {Math.abs(vc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liq/MCap</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div></div>
