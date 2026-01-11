@@ -19,10 +19,15 @@ const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
 const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
 const UFO_CONTRACT = '0x456548a9b56efbbd89ca0309edd17a9e20b04018';
 
+// Main LP pairs for volume tracking
+const PTGC_MAIN_PAIR = '0x322e03542678a8e2e926fdd2b5eb0b49ede10c74'; // PTGC/WPLS
+const UFO_MAIN_PAIR = '0x33A8348bAb77cf17d4979c34b7EBB6ca4CF78257';  // UFO/WPLS
+
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
 
 const API_BASE = 'https://api.scan.pulsechain.com/api/v2';
+const GECKO_API = 'https://api.geckoterminal.com/api/v2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -333,6 +338,107 @@ function mergeBurns(existingBurns, newBurns) {
 }
 
 /**
+ * Fetch OHLCV data from GeckoTerminal for volume history
+ */
+async function fetchVolumeHistory(poolAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} volume history from GeckoTerminal...`);
+  
+  const url = `${GECKO_API}/networks/pulsechain/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=90`;
+  
+  const data = await fetchWithRetry(url);
+  
+  if (!data || !data.data || !data.data.attributes || !data.data.attributes.ohlcv_list) {
+    console.log(`  No volume data available for ${tokenSymbol}`);
+    return null;
+  }
+  
+  const ohlcvList = data.data.attributes.ohlcv_list;
+  
+  // OHLCV format: [timestamp, open, high, low, close, volume]
+  const volumeHistory = ohlcvList.map(candle => ({
+    timestamp: candle[0] * 1000, // Convert to milliseconds
+    open: candle[1],
+    high: candle[2],
+    low: candle[3],
+    close: candle[4],
+    volume: candle[5]
+  })).sort((a, b) => b.timestamp - a.timestamp); // Most recent first
+  
+  console.log(`  Fetched ${volumeHistory.length} days of volume data`);
+  
+  // Calculate volume periods
+  const now = Date.now();
+  const vol24h = volumeHistory.find(v => now - v.timestamp < 24 * 60 * 60 * 1000)?.volume || 0;
+  const vol7d = volumeHistory
+    .filter(v => now - v.timestamp < 7 * 24 * 60 * 60 * 1000)
+    .reduce((sum, v) => sum + v.volume, 0);
+  const vol30d = volumeHistory
+    .filter(v => now - v.timestamp < 30 * 24 * 60 * 60 * 1000)
+    .reduce((sum, v) => sum + v.volume, 0);
+  
+  // Get yesterday's volume for comparison
+  const yesterday = volumeHistory.find(v => {
+    const age = now - v.timestamp;
+    return age >= 24 * 60 * 60 * 1000 && age < 48 * 60 * 60 * 1000;
+  });
+  const volYesterday = yesterday?.volume || 0;
+  const volChange24h = volYesterday > 0 ? ((vol24h - volYesterday) / volYesterday) * 100 : 0;
+  
+  console.log(`  24H Volume: $${vol24h.toLocaleString()} (${volChange24h > 0 ? '+' : ''}${volChange24h.toFixed(2)}%)`);
+  console.log(`  7D Volume: $${vol7d.toLocaleString()}`);
+  console.log(`  30D Volume: $${vol30d.toLocaleString()}`);
+  
+  return {
+    current24h: vol24h,
+    yesterday24h: volYesterday,
+    change24h: volChange24h,
+    vol7d,
+    vol30d,
+    history: volumeHistory.slice(0, 90).map(v => ({
+      t: v.timestamp,
+      v: v.volume,
+      c: v.close // closing price
+    }))
+  };
+}
+
+/**
+ * Fetch current pool data from GeckoTerminal (liquidity, price, etc.)
+ */
+async function fetchPoolData(poolAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} pool data from GeckoTerminal...`);
+  
+  const url = `${GECKO_API}/networks/pulsechain/pools/${poolAddress}`;
+  
+  const data = await fetchWithRetry(url);
+  
+  if (!data || !data.data || !data.data.attributes) {
+    console.log(`  No pool data available for ${tokenSymbol}`);
+    return null;
+  }
+  
+  const attrs = data.data.attributes;
+  
+  const poolData = {
+    name: attrs.name,
+    liquidity: parseFloat(attrs.reserve_in_usd) || 0,
+    volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
+    volume1h: parseFloat(attrs.volume_usd?.h1) || 0,
+    priceUsd: parseFloat(attrs.base_token_price_usd) || 0,
+    priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
+    txns24h: (attrs.transactions?.h24?.buys || 0) + (attrs.transactions?.h24?.sells || 0),
+    buys24h: attrs.transactions?.h24?.buys || 0,
+    sells24h: attrs.transactions?.h24?.sells || 0
+  };
+  
+  console.log(`  Liquidity: $${poolData.liquidity.toLocaleString()}`);
+  console.log(`  24H Volume: $${poolData.volume24h.toLocaleString()}`);
+  console.log(`  Price: $${poolData.priceUsd}`);
+  
+  return poolData;
+}
+
+/**
  * Main function
  */
 async function main() {
@@ -380,6 +486,19 @@ async function main() {
   const ufoPeriods = calculatePeriodBurns(allUFOBurns.map(b => ({...b, timestamp: b.timestamp || b.t})));
   const ptgcByUFOPeriods = calculatePeriodBurns(allPTGCbyUFO.map(b => ({...b, timestamp: b.timestamp || b.t})));
   
+  // Fetch volume history from GeckoTerminal
+  console.log('\n' + '='.repeat(60));
+  console.log('Fetching Volume Data from GeckoTerminal');
+  console.log('='.repeat(60));
+  
+  const ptgcVolume = await fetchVolumeHistory(PTGC_MAIN_PAIR, 'PTGC');
+  await delay(2500); // Respect rate limits (30 req/min)
+  const ufoVolume = await fetchVolumeHistory(UFO_MAIN_PAIR, 'UFO');
+  await delay(2500);
+  const ptgcPool = await fetchPoolData(PTGC_MAIN_PAIR, 'PTGC');
+  await delay(2500);
+  const ufoPool = await fetchPoolData(UFO_MAIN_PAIR, 'UFO');
+  
   // Build output data (compact format to save space)
   const outputData = {
     lastUpdated: new Date().toISOString(),
@@ -390,7 +509,9 @@ async function main() {
       burns: allPTGCBurns.slice(0, 50000).map(b => ({ 
         t: b.timestamp || b.t, 
         a: b.amount || b.a 
-      }))
+      })),
+      volume: ptgcVolume,
+      pool: ptgcPool
     },
     UFO: {
       totalBurned: ufoTotal,
@@ -399,7 +520,9 @@ async function main() {
       burns: allUFOBurns.slice(0, 50000).map(b => ({ 
         t: b.timestamp || b.t, 
         a: b.amount || b.a 
-      }))
+      })),
+      volume: ufoVolume,
+      pool: ufoPool
     },
     PTGCbyUFO: {
       totalBurned: ptgcByUFOTotal,
@@ -428,12 +551,18 @@ async function main() {
   console.log(`  24H: ${ptgcPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ptgcPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ptgcPeriods.d30.amount.toLocaleString()}`);
+  if (ptgcVolume) {
+    console.log(`  Volume 24H: $${ptgcVolume.current24h?.toLocaleString()} (${ptgcVolume.change24h > 0 ? '+' : ''}${ptgcVolume.change24h?.toFixed(2)}%)`);
+  }
   console.log('');
   console.log(`UFO Total Burned: ${ufoTotal.toLocaleString()} (${allUFOBurns.length} txs)`);
   console.log(`  12H: ${ufoPeriods.h12.amount.toLocaleString()}`);
   console.log(`  24H: ${ufoPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ufoPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ufoPeriods.d30.amount.toLocaleString()}`);
+  if (ufoVolume) {
+    console.log(`  Volume 24H: $${ufoVolume.current24h?.toLocaleString()} (${ufoVolume.change24h > 0 ? '+' : ''}${ufoVolume.change24h?.toFixed(2)}%)`);
+  }
   console.log('');
   console.log(`PTGC Burned BY UFO: ${ptgcByUFOTotal.toLocaleString()} (${allPTGCbyUFO.length} txs)`);
   console.log(`  12H: ${ptgcByUFOPeriods.h12.amount.toLocaleString()}`);
