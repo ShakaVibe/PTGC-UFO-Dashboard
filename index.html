@@ -87,37 +87,67 @@
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
+    // Get highest tier creature with count for period burns
+    const getHighestCreatureWithCount=pct=>{
+      for(const c of BURN_C){
+        if(pct>=c.p){
+          const cnt=c.p>0?Math.floor(pct/c.p):1;
+          return{...c,cnt:Math.max(1,cnt)};
+        }
+      }
+      return{...BURN_C[BURN_C.length-1],cnt:0};
+    };
     const getWhaleProgress=pct=>({whales:Math.floor(pct),progress:(pct-Math.floor(pct))*100});
     const getHolderTier=(holdingPct)=>{for(const tier of HOLDER_TIERS){if(holdingPct>=tier.p)return tier.n}return'Shell'};
     
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
-    // Fetch burn history using PulseScan API - much faster than RPC logs
+    // Fetch burn history using PulseScan API - paginate to get all burns in time range
     const fetchBurnHist=async(addr,dec,hrs)=>{
       try{
-        // Use PulseScan API to get recent transfers to burn address
         const now=Date.now();
         const cutoff=now-(hrs*60*60*1000);
-        
-        // Fetch token transfers to burn address
-        const url=`https://api.scan.pulsechain.com/api/v2/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&filter=to&token=${addr}`;
-        const r=await fetch(url);
-        const data=await r.json();
-        
-        if(!data.items||!Array.isArray(data.items))return 0;
-        
         let totalBurned=0;
-        for(const tx of data.items){
-          // Check if within time range
-          const txTime=new Date(tx.timestamp).getTime();
-          if(txTime>=cutoff){
-            const amount=Number(BigInt(tx.total?.value||tx.value||'0'))/Math.pow(10,dec);
-            totalBurned+=amount;
+        let nextPageParams=null;
+        let page=0;
+        const maxPages=50;
+        
+        while(page<maxPages){
+          // Fetch token transfers to burn address
+          const url=nextPageParams
+            ?`https://api.scan.pulsechain.com/api/v2/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&filter=to&token=${addr}&${nextPageParams}`
+            :`https://api.scan.pulsechain.com/api/v2/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&filter=to&token=${addr}`;
+          
+          const r=await fetch(url);
+          const data=await r.json();
+          
+          if(!data.items||!Array.isArray(data.items)||data.items.length===0)break;
+          
+          let foundOlder=false;
+          for(const tx of data.items){
+            const txTime=new Date(tx.timestamp).getTime();
+            if(txTime>=cutoff){
+              const amount=Number(BigInt(tx.total?.value||tx.value||'0'))/Math.pow(10,dec);
+              totalBurned+=amount;
+            }else{
+              // Found transaction older than cutoff, stop
+              foundOlder=true;
+              break;
+            }
+          }
+          
+          if(foundOlder)break;
+          
+          // Check for next page
+          if(data.next_page_params){
+            const params=new URLSearchParams();
+            Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
+            nextPageParams=params.toString();
           }else{
-            // Transactions are sorted by time desc, so we can stop
             break;
           }
+          page++;
         }
         
         return totalBurned;
@@ -607,9 +637,19 @@
                 <div className="flex items-center justify-center gap-2 flex-wrap"><span className="text-3xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/80 text-lg font-bold">x{c.cnt}</span></span>)}</div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {boxes.map(({l,v})=>{const isLoading=v===null;const c=!isLoading?getSingleC(getPct(v)):{e:'\u{23F3}'};return(
+                {boxes.map(({l,v})=>{
+                  const isLoading=v===null;
+                  const pct=!isLoading?getPct(v):0;
+                  const c=!isLoading&&v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
+                  return(
                   <div key={l} className="bg-[#1a1a1a] border border-orange-500/20 rounded-xl p-3">
-                    <div className="flex justify-between mb-1"><span className="text-white/60 text-sm">{l}</span><span className="text-2xl">{c.e}</span></div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-white/60 text-sm">{l}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-2xl">{isLoading?'\u{23F3}':c.e}</span>
+                        {!isLoading&&c.cnt>0&&<span className="text-white/70 text-sm font-bold">x{c.cnt}</span>}
+                      </div>
+                    </div>
                     {isLoading?<div className="animate-pulse-slow text-orange-400/50">Loading...</div>:<><div className="text-xl font-bold text-orange-400">{fmt(v)}</div><div className="text-sm text-green-400">{fmtUSD(v*price)}</div></>}
                   </div>
                 )})}
