@@ -21,7 +21,7 @@ const UFO_CONTRACT = '0x456548a9b56efbbd89ca0309edd17a9e20b04018';
 
 // Main LP pairs for volume tracking (GeckoTerminal format - lowercase)
 const PTGC_MAIN_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // pTGC/WPLS on PulseX
-const UFO_MAIN_PAIR = '0x31c77e0519a0347aa547aeab6e866c30a1a32123';  // UFO/PLSX on PulseX V2
+const UFO_MAIN_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';  // UFO/PLS main pair on PulseX
 
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
@@ -441,6 +441,55 @@ async function fetchPoolData(poolAddress, tokenSymbol) {
 }
 
 /**
+ * Fetch holder count from PulseScan
+ */
+async function fetchHolderCount(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} holder count...`);
+  
+  const url = `${API_BASE}/tokens/${tokenAddress}/counters`;
+  const data = await fetchWithRetry(url);
+  
+  if (!data) {
+    console.log(`  No holder data available for ${tokenSymbol}`);
+    return null;
+  }
+  
+  const holders = parseInt(data.token_holders_count) || 0;
+  console.log(`  Holders: ${holders.toLocaleString()}`);
+  
+  return holders;
+}
+
+/**
+ * Fetch tokens in LP (from main pair)
+ */
+async function fetchTokensInLP(pairAddress, tokenAddress, tokenSymbol, decimals) {
+  console.log(`\nFetching ${tokenSymbol} tokens in LP...`);
+  
+  const url = `${API_BASE}/addresses/${pairAddress}/token-balances`;
+  const data = await fetchWithRetry(url);
+  
+  if (!data || !Array.isArray(data)) {
+    console.log(`  No LP data available for ${tokenSymbol}`);
+    return null;
+  }
+  
+  const tokenBalance = data.find(t => 
+    t.token?.address?.toLowerCase() === tokenAddress.toLowerCase()
+  );
+  
+  if (!tokenBalance) {
+    console.log(`  Token not found in LP`);
+    return null;
+  }
+  
+  const amount = Number(BigInt(tokenBalance.value || '0')) / Math.pow(10, decimals);
+  console.log(`  Tokens in LP: ${amount.toLocaleString()}`);
+  
+  return amount;
+}
+
+/**
  * Main function
  */
 async function main() {
@@ -516,6 +565,84 @@ async function main() {
   await delay(2500);
   const ufoPool = await fetchPoolData(UFO_MAIN_PAIR, 'UFO');
   
+  // Fetch additional metrics for snapshots
+  console.log('\n' + '='.repeat(60));
+  console.log('Fetching Snapshot Metrics');
+  console.log('='.repeat(60));
+  
+  await delay(500);
+  const ptgcHolders = await fetchHolderCount(PTGC_ADDRESS, 'PTGC');
+  await delay(500);
+  const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
+  await delay(500);
+  const ptgcInLP = await fetchTokensInLP(PTGC_MAIN_PAIR, PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS);
+  await delay(500);
+  const ufoInLP = await fetchTokensInLP(UFO_MAIN_PAIR, UFO_ADDRESS, 'UFO', UFO_DECIMALS);
+  
+  // Create today's snapshot
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const ptgcSnapshot = {
+    date: today,
+    holders: ptgcHolders,
+    liquidity: ptgcPool?.liquidity || 0,
+    tokensInLP: ptgcInLP,
+    price: ptgcPool?.priceUsd || 0,
+    volume24h: ptgcVolume?.current24h || 0
+  };
+  const ufoSnapshot = {
+    date: today,
+    holders: ufoHolders,
+    liquidity: ufoPool?.liquidity || 0,
+    tokensInLP: ufoInLP,
+    price: ufoPool?.priceUsd || 0,
+    volume24h: ufoVolume?.current24h || 0
+  };
+  
+  // Merge with existing snapshots (keep last 30 days)
+  const existingPTGCSnapshots = existingData?.PTGC?.snapshots || [];
+  const existingUFOSnapshots = existingData?.UFO?.snapshots || [];
+  
+  // Remove today's snapshot if it exists, then add new one
+  const ptgcSnapshots = [
+    ptgcSnapshot,
+    ...existingPTGCSnapshots.filter(s => s.date !== today)
+  ].slice(0, 30);
+  
+  const ufoSnapshots = [
+    ufoSnapshot,
+    ...existingUFOSnapshots.filter(s => s.date !== today)
+  ].slice(0, 30);
+  
+  // Calculate changes from yesterday
+  const ptgcYesterday = ptgcSnapshots[1]; // Second entry is yesterday
+  const ufoYesterday = ufoSnapshots[1];
+  
+  const ptgcChanges = ptgcYesterday ? {
+    holders: ptgcYesterday.holders ? ((ptgcSnapshot.holders - ptgcYesterday.holders) / ptgcYesterday.holders * 100) : 0,
+    liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0,
+    tokensInLP: ptgcYesterday.tokensInLP ? ((ptgcSnapshot.tokensInLP - ptgcYesterday.tokensInLP) / ptgcYesterday.tokensInLP * 100) : 0
+  } : null;
+  
+  const ufoChanges = ufoYesterday ? {
+    holders: ufoYesterday.holders ? ((ufoSnapshot.holders - ufoYesterday.holders) / ufoYesterday.holders * 100) : 0,
+    liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0,
+    tokensInLP: ufoYesterday.tokensInLP ? ((ufoSnapshot.tokensInLP - ufoYesterday.tokensInLP) / ufoYesterday.tokensInLP * 100) : 0
+  } : null;
+  
+  if (ptgcChanges) {
+    console.log(`\nPTGC Changes vs Yesterday:`);
+    console.log(`  Holders: ${ptgcChanges.holders >= 0 ? '+' : ''}${ptgcChanges.holders.toFixed(2)}%`);
+    console.log(`  Liquidity: ${ptgcChanges.liquidity >= 0 ? '+' : ''}${ptgcChanges.liquidity.toFixed(2)}%`);
+    console.log(`  Tokens in LP: ${ptgcChanges.tokensInLP >= 0 ? '+' : ''}${ptgcChanges.tokensInLP.toFixed(2)}%`);
+  }
+  
+  if (ufoChanges) {
+    console.log(`\nUFO Changes vs Yesterday:`);
+    console.log(`  Holders: ${ufoChanges.holders >= 0 ? '+' : ''}${ufoChanges.holders.toFixed(2)}%`);
+    console.log(`  Liquidity: ${ufoChanges.liquidity >= 0 ? '+' : ''}${ufoChanges.liquidity.toFixed(2)}%`);
+    console.log(`  Tokens in LP: ${ufoChanges.tokensInLP >= 0 ? '+' : ''}${ufoChanges.tokensInLP.toFixed(2)}%`);
+  }
+  
   // Build output data (compact format to save space)
   const outputData = {
     lastUpdated: new Date().toISOString(),
@@ -528,7 +655,9 @@ async function main() {
         a: b.amount || b.a 
       })),
       volume: ptgcVolume,
-      pool: ptgcPool
+      pool: ptgcPool,
+      snapshots: ptgcSnapshots,
+      changes: ptgcChanges
     },
     UFO: {
       totalBurned: ufoTotal,
@@ -539,7 +668,9 @@ async function main() {
         a: b.amount || b.a 
       })),
       volume: ufoVolume,
-      pool: ufoPool
+      pool: ufoPool,
+      snapshots: ufoSnapshots,
+      changes: ufoChanges
     },
     PTGCbyUFO: {
       totalBurned: ptgcByUFOTotal,
