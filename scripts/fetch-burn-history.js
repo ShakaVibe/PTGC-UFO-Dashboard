@@ -1,27 +1,29 @@
 /**
- * Fetch Burn History Script - OPTIMIZED VERSION
+ * Fetch Burn History Script v3
  * 
- * This script fetches burn data for PTGC and UFO tokens.
+ * Tracks:
+ * 1. ALL PTGC burns (transfers to burn address)
+ * 2. ALL UFO burns (transfers to burn address)
+ * 3. PTGC Buyback Burns = PTGC burns FROM the PTGC LP pair (automated swaps)
+ * 4. UFO Buyback Burns = UFO burns FROM the UFO LP pair (automated swaps)
  * 
- * Strategy for "PTGC burned by UFO":
- * - Query UFO contract's outgoing transactions
- * - Find ones that resulted in PTGC burns (buybackBurnpTGC calls)
- * - This is MUCH faster than checking each of 25,000+ PTGC burns
+ * Key insight: When buybackBurnpTGC() runs, PTGC goes from LP pair → burn address
+ * So we can directly measure PTGC burned by UFO by checking the "from" address!
  * 
- * Run via GitHub Actions every 6 hours.
+ * Runs via GitHub Actions every hour.
  */
 
 const fs = require('fs');
 const path = require('path');
 
+// Addresses
 const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
 const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
 const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
-const UFO_CONTRACT = '0x456548a9b56efbbd89ca0309edd17a9e20b04018';
 
-// Main LP pairs for volume tracking (GeckoTerminal format - lowercase)
-const PTGC_MAIN_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // pTGC/WPLS on PulseX
-const UFO_MAIN_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';  // UFO/PLS main pair on PulseX
+// LP Pairs - burns FROM these addresses are automated buyback burns
+const PTGC_LP_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // PTGC/WPLS
+const UFO_LP_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';  // UFO/PLS
 
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
@@ -31,175 +33,125 @@ const GECKO_API = 'https://api.geckoterminal.com/api/v2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fetch with retry logic
+/**
+ * Fetch with retry and better error handling
+ */
 async function fetchWithRetry(url, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url);
-      const text = await response.text();
-      
-      // Check if we got HTML instead of JSON (rate limit error)
-      if (text.startsWith('<')) {
-        throw new Error('Got HTML instead of JSON - likely rate limited');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-      
+      const text = await response.text();
+      if (text.startsWith('<') || text.includes('Internal Server Error')) {
+        throw new Error('Server returned HTML/error');
+      }
       return JSON.parse(text);
     } catch (error) {
-      console.log(`    Retry ${i + 1}/${retries}: ${error.message}`);
-      if (i < retries - 1) {
-        await delay(2000); // Wait 2 seconds before retry
-      }
+      console.log(`  Attempt ${i + 1}/${retries} failed: ${error.message}`);
+      if (i < retries - 1) await delay(2000 * (i + 1)); // Exponential backoff
     }
-  }
-  return null; // Return null if all retries failed
-}
-
-/**
- * Load existing burn history to append to (incremental updates)
- */
-function loadExistingData(outputPath) {
-  try {
-    if (fs.existsSync(outputPath)) {
-      const data = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-      console.log('Loaded existing data, last updated:', data.lastUpdated);
-      return data;
-    }
-  } catch (e) {
-    console.log('No existing data or error loading:', e.message);
   }
   return null;
 }
 
 /**
- * Fetch token transfers to burn address - with incremental support
+ * Load existing data for incremental updates
  */
-async function fetchBurnTransfers(tokenAddress, tokenSymbol, decimals, lastTimestamp = 0) {
-  console.log(`\nFetching ${tokenSymbol} burns${lastTimestamp ? ' (incremental, after ' + new Date(lastTimestamp).toISOString() + ')' : ''}...`);
+function loadExistingData(outputPath) {
+  try {
+    if (fs.existsSync(outputPath)) {
+      const data = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+      console.log('Loaded existing data from:', data.lastUpdated);
+      return data;
+    }
+  } catch (e) {
+    console.log('Could not load existing data:', e.message);
+  }
+  return null;
+}
+
+/**
+ * Extract "from" address from API response (handles different field names)
+ */
+function getFromAddress(tx) {
+  if (tx.from?.hash) return tx.from.hash.toLowerCase();
+  if (tx.from?.address) return tx.from.address.toLowerCase();
+  if (typeof tx.from === 'string') return tx.from.toLowerCase();
+  return '';
+}
+
+/**
+ * Fetch ALL token burns to burn address
+ * Saves "from" address to identify buyback burns
+ */
+async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns = []) {
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`Fetching ${tokenSymbol} burns...`);
+  console.log(`${'='.repeat(50)}`);
   
-  const burns = [];
+  // Find most recent timestamp we have (for incremental updates)
+  const lastTimestamp = existingBurns.length > 0 ? existingBurns[0].t : 0;
+  if (lastTimestamp) {
+    console.log(`Incremental mode: fetching after ${new Date(lastTimestamp).toISOString()}`);
+  } else {
+    console.log('Full fetch mode: getting all historical burns');
+  }
+  
+  const newBurns = [];
   let nextPageParams = null;
   let page = 0;
-  const maxPages = 1000; // Increased limit
   let reachedOldData = false;
   let consecutiveErrors = 0;
   
-  while (page < maxPages && !reachedOldData && consecutiveErrors < 5) {
+  while (!reachedOldData && consecutiveErrors < 5) {
     const url = nextPageParams
-      ? `${API_BASE}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&token=${tokenAddress}&${nextPageParams}`
-      : `${API_BASE}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&token=${tokenAddress}`;
+      ? `${API_BASE}/tokens/${tokenAddress}/transfers?to_address_hash=${BURN_ADDRESS}&${nextPageParams}`
+      : `${API_BASE}/tokens/${tokenAddress}/transfers?to_address_hash=${BURN_ADDRESS}`;
     
     const data = await fetchWithRetry(url);
     
     if (!data) {
       consecutiveErrors++;
-      console.log(`    Failed to fetch page ${page + 1}, consecutive errors: ${consecutiveErrors}`);
-      await delay(3000); // Wait 3 seconds after failed page
+      console.log(`  Page ${page + 1}: ERROR (attempt ${consecutiveErrors}/5)`);
+      await delay(3000);
       continue;
     }
     
-    consecutiveErrors = 0; // Reset on success
+    consecutiveErrors = 0;
     
-    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+    if (!data.items || data.items.length === 0) {
+      console.log(`  Page ${page + 1}: No more data`);
       break;
     }
     
     for (const tx of data.items) {
-      const toAddr = (tx.to?.hash || '').toLowerCase();
-      if (toAddr !== BURN_ADDRESS.toLowerCase()) continue;
-      
       const timestamp = new Date(tx.timestamp).getTime();
       
-      // If incremental and we've reached data we already have, stop
+      // Stop if we've reached data we already have
       if (lastTimestamp && timestamp <= lastTimestamp) {
+        console.log(`  Reached existing data at ${new Date(timestamp).toISOString()}`);
         reachedOldData = true;
         break;
       }
       
-      burns.push({
-        timestamp,
-        amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, decimals),
-        txHash: tx.transaction_hash,
-        from: (tx.from?.hash || '').toLowerCase()
+      const amount = Number(BigInt(tx.total?.value || '0')) / Math.pow(10, decimals);
+      const fromAddr = getFromAddress(tx);
+      
+      newBurns.push({
+        t: timestamp,
+        a: amount,
+        f: fromAddr // Save "from" address for buyback detection
       });
     }
     
-    if (page % 50 === 0 || page < 5) {
-      console.log(`  Page ${page + 1}: ${burns.length} burns collected`);
+    // Log progress
+    if (page % 25 === 0 || page < 5) {
+      console.log(`  Page ${page + 1}: ${newBurns.length} new burns collected`);
     }
     
-    if (data.next_page_params && !reachedOldData) {
-      const params = new URLSearchParams();
-      Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
-      nextPageParams = params.toString();
-    } else {
-      break;
-    }
-    
-    page++;
-    await delay(300); // Slower delay - 300ms between requests
-  }
-  
-  console.log(`  Fetched ${burns.length} ${reachedOldData ? 'new ' : ''}burns`);
-  return burns;
-}
-
-/**
- * Fetch PTGC burns initiated by UFO contract
- * Query UFO contract's transactions and find PTGC token transfers in the same tx
- */
-async function fetchPTGCBurnsByUFO(lastTimestamp = 0) {
-  console.log(`\nFetching PTGC burns by UFO contract...`);
-  
-  const burns = [];
-  let nextPageParams = null;
-  let page = 0;
-  const maxPages = 500;
-  let reachedOldData = false;
-  let consecutiveErrors = 0;
-  
-  // Get all token transfers where UFO contract was involved
-  while (page < maxPages && !reachedOldData && consecutiveErrors < 5) {
-    const url = nextPageParams
-      ? `${API_BASE}/addresses/${UFO_CONTRACT}/token-transfers?type=ERC-20&token=${PTGC_ADDRESS}&${nextPageParams}`
-      : `${API_BASE}/addresses/${UFO_CONTRACT}/token-transfers?type=ERC-20&token=${PTGC_ADDRESS}`;
-    
-    const data = await fetchWithRetry(url);
-    
-    if (!data) {
-      consecutiveErrors++;
-      console.log(`    Failed to fetch page ${page + 1}, consecutive errors: ${consecutiveErrors}`);
-      await delay(3000);
-      continue;
-    }
-    
-    consecutiveErrors = 0;
-    
-    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
-      // No direct transfers, try a different approach - check transactions
-      break;
-    }
-    
-    for (const tx of data.items) {
-      const timestamp = new Date(tx.timestamp).getTime();
-      
-      if (lastTimestamp && timestamp <= lastTimestamp) {
-        reachedOldData = true;
-        break;
-      }
-      
-      // Check if this transfer went to burn address
-      const toAddr = (tx.to?.hash || '').toLowerCase();
-      if (toAddr === BURN_ADDRESS.toLowerCase()) {
-        burns.push({
-          timestamp,
-          amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, PTGC_DECIMALS),
-          txHash: tx.transaction_hash
-        });
-      }
-    }
-    
-    console.log(`  Page ${page + 1}: ${burns.length} UFO->PTGC burns found`);
-    
+    // Get next page
     if (data.next_page_params && !reachedOldData) {
       const params = new URLSearchParams();
       Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
@@ -212,478 +164,313 @@ async function fetchPTGCBurnsByUFO(lastTimestamp = 0) {
     await delay(300);
   }
   
-  // If no results from token-transfers, try internal-transactions approach
-  if (burns.length === 0) {
-    console.log('  Trying alternative approach via transactions...');
-    burns.push(...await fetchPTGCBurnsByUFOViaTransactions(lastTimestamp));
-  }
+  console.log(`Fetched ${newBurns.length} new ${tokenSymbol} burns`);
   
-  console.log(`  Total PTGC burned by UFO: ${burns.length} transactions`);
-  return burns;
+  // Merge with existing burns
+  // Convert existing burns to have "f" field if missing
+  const normalizedExisting = existingBurns.map(b => ({
+    t: b.t,
+    a: b.a,
+    f: b.f || '' // Old data won't have "f", default to empty
+  }));
+  
+  const allBurns = [...newBurns, ...normalizedExisting];
+  
+  // Sort by timestamp descending (newest first)
+  allBurns.sort((a, b) => b.t - a.t);
+  
+  console.log(`Total ${tokenSymbol} burns: ${allBurns.length}`);
+  return allBurns;
 }
 
 /**
- * Alternative: Check UFO contract transactions for PTGC burns
+ * Filter burns that came from LP pair (these are buyback burns from swaps)
  */
-async function fetchPTGCBurnsByUFOViaTransactions(lastTimestamp = 0) {
-  const burns = [];
-  let nextPageParams = null;
-  let page = 0;
-  const maxPages = 200;
-  let reachedOldData = false;
-  let consecutiveErrors = 0;
-  
-  while (page < maxPages && !reachedOldData && consecutiveErrors < 5) {
-    const url = nextPageParams
-      ? `${API_BASE}/addresses/${UFO_CONTRACT}/transactions?${nextPageParams}`
-      : `${API_BASE}/addresses/${UFO_CONTRACT}/transactions`;
-    
-    const data = await fetchWithRetry(url);
-    
-    if (!data) {
-      consecutiveErrors++;
-      await delay(3000);
-      continue;
-    }
-    
-    consecutiveErrors = 0;
-    
-    if (!data.items || data.items.length === 0) break;
-    
-    for (const tx of data.items) {
-      const timestamp = new Date(tx.timestamp).getTime();
-      
-      if (lastTimestamp && timestamp <= lastTimestamp) {
-        reachedOldData = true;
-        break;
-      }
-      
-      // Check if this transaction has token transfers
-      if (tx.token_transfers && tx.token_transfers.length > 0) {
-        for (const transfer of tx.token_transfers) {
-          const tokenAddr = (transfer.token?.address || '').toLowerCase();
-          const toAddr = (transfer.to?.hash || '').toLowerCase();
-          
-          if (tokenAddr === PTGC_ADDRESS.toLowerCase() && toAddr === BURN_ADDRESS.toLowerCase()) {
-            burns.push({
-              timestamp,
-              amount: Number(BigInt(transfer.total?.value || transfer.value || '0')) / Math.pow(10, PTGC_DECIMALS),
-              txHash: tx.hash
-            });
-          }
-        }
-      }
-    }
-    
-    if (page % 20 === 0) {
-      console.log(`    Tx page ${page + 1}: ${burns.length} burns found`);
-    }
-    
-    if (data.next_page_params && !reachedOldData) {
-      const params = new URLSearchParams();
-      Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
-      nextPageParams = params.toString();
-    } else {
-      break;
-    }
-    
-    page++;
-    await delay(300);
-  }
-  
-  return burns;
+function filterBuybackBurns(burns, lpPairAddress) {
+  const lpAddr = lpPairAddress.toLowerCase();
+  const buybacks = burns.filter(b => b.f === lpAddr);
+  return buybacks;
 }
 
 /**
- * Calculate burns for different time periods
+ * Calculate period totals (12H, 24H, 7D, 30D)
  */
-function calculatePeriodBurns(burns) {
+function calculatePeriods(burns) {
   const now = Date.now();
-  const periods = {
-    h12: 12 * 60 * 60 * 1000,
-    h24: 24 * 60 * 60 * 1000,
-    d7: 7 * 24 * 60 * 60 * 1000,
-    d30: 30 * 24 * 60 * 60 * 1000
+  const h12 = 12 * 60 * 60 * 1000;
+  const h24 = 24 * 60 * 60 * 1000;
+  const d7 = 7 * 24 * 60 * 60 * 1000;
+  const d30 = 30 * 24 * 60 * 60 * 1000;
+  
+  const result = {
+    h12: { count: 0, amount: 0 },
+    h24: { count: 0, amount: 0 },
+    d7: { count: 0, amount: 0 },
+    d30: { count: 0, amount: 0 }
   };
   
-  const result = {};
-  for (const [key, ms] of Object.entries(periods)) {
-    const cutoff = now - ms;
-    const periodBurns = burns.filter(b => b.timestamp >= cutoff);
-    result[key] = {
-      count: periodBurns.length,
-      amount: periodBurns.reduce((sum, b) => sum + b.amount, 0)
-    };
+  for (const burn of burns) {
+    const age = now - burn.t;
+    if (age <= h12) { result.h12.count++; result.h12.amount += burn.a; }
+    if (age <= h24) { result.h24.count++; result.h24.amount += burn.a; }
+    if (age <= d7) { result.d7.count++; result.d7.amount += burn.a; }
+    if (age <= d30) { result.d30.count++; result.d30.amount += burn.a; }
   }
+  
   return result;
 }
 
 /**
- * Merge new burns with existing burns (remove duplicates by txHash)
+ * Fetch volume data from GeckoTerminal
  */
-function mergeBurns(existingBurns, newBurns) {
-  const txHashSet = new Set(existingBurns.map(b => b.txHash || b.t));
-  const merged = [...existingBurns];
+async function fetchVolumeData(poolAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} volume data...`);
   
-  for (const burn of newBurns) {
-    if (!txHashSet.has(burn.txHash)) {
-      merged.push(burn);
-      txHashSet.add(burn.txHash);
+  try {
+    const url = `${GECKO_API}/networks/pulsechain/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=90`;
+    const data = await fetchWithRetry(url);
+    
+    if (!data?.data?.attributes?.ohlcv_list) {
+      console.log(`  No volume data available`);
+      return null;
     }
-  }
-  
-  // Sort by timestamp descending
-  merged.sort((a, b) => (b.timestamp || b.t) - (a.timestamp || a.t));
-  return merged;
-}
-
-/**
- * Fetch OHLCV data from GeckoTerminal for volume history
- */
-async function fetchVolumeHistory(poolAddress, tokenSymbol) {
-  console.log(`\nFetching ${tokenSymbol} volume history from GeckoTerminal...`);
-  
-  const url = `${GECKO_API}/networks/pulsechain/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=90`;
-  
-  const data = await fetchWithRetry(url);
-  
-  if (!data || !data.data || !data.data.attributes || !data.data.attributes.ohlcv_list) {
-    console.log(`  No volume data available for ${tokenSymbol}`);
+    
+    const ohlcv = data.data.attributes.ohlcv_list;
+    const history = ohlcv.map(c => ({
+      t: c[0] * 1000, // Convert to milliseconds
+      v: c[5],        // Volume
+      c: c[4]         // Close price
+    })).sort((a, b) => b.t - a.t);
+    
+    const vol24h = history[0]?.v || 0;
+    const volYesterday = history[1]?.v || 0;
+    const vol7d = history.slice(0, 7).reduce((s, v) => s + v.v, 0);
+    const vol30d = history.slice(0, 30).reduce((s, v) => s + v.v, 0);
+    const change24h = volYesterday > 0 ? ((vol24h - volYesterday) / volYesterday) * 100 : 0;
+    
+    console.log(`  24H: $${vol24h.toLocaleString()}, 7D: $${vol7d.toLocaleString()}`);
+    
+    return { current24h: vol24h, yesterday24h: volYesterday, change24h, vol7d, vol30d, history: history.slice(0, 90) };
+  } catch (e) {
+    console.log(`  Error: ${e.message}`);
     return null;
   }
-  
-  const ohlcvList = data.data.attributes.ohlcv_list;
-  
-  // OHLCV format: [timestamp_seconds, open, high, low, close, volume]
-  // Timestamp is already in SECONDS, convert to milliseconds for JS Date
-  const volumeHistory = ohlcvList.map(candle => ({
-    timestamp: candle[0] * 1000, // Convert seconds to milliseconds
-    open: candle[1],
-    high: candle[2],
-    low: candle[3],
-    close: candle[4],
-    volume: candle[5]
-  })).sort((a, b) => b.timestamp - a.timestamp); // Most recent first
-  
-  console.log(`  Fetched ${volumeHistory.length} days of volume data`);
-  
-  // Debug: show first few entries
-  if (volumeHistory.length > 0) {
-    console.log(`  Most recent: ${new Date(volumeHistory[0].timestamp).toISOString().split('T')[0]} - $${volumeHistory[0].volume.toFixed(2)}`);
-    if (volumeHistory.length > 1) {
-      console.log(`  Previous: ${new Date(volumeHistory[1].timestamp).toISOString().split('T')[0]} - $${volumeHistory[1].volume.toFixed(2)}`);
-    }
-  }
-  
-  // Calculate volume periods - sum up daily volumes
-  // Most recent entry is today (or yesterday if today has no trades yet)
-  const vol24h = volumeHistory[0]?.volume || 0;
-  const volYesterday = volumeHistory[1]?.volume || 0;
-  
-  // Sum volumes for 7D and 30D
-  const vol7d = volumeHistory.slice(0, 7).reduce((sum, v) => sum + v.volume, 0);
-  const vol30d = volumeHistory.slice(0, 30).reduce((sum, v) => sum + v.volume, 0);
-  
-  const volChange24h = volYesterday > 0 ? ((vol24h - volYesterday) / volYesterday) * 100 : 0;
-  
-  console.log(`  24H Volume: $${vol24h.toLocaleString()} (${volChange24h > 0 ? '+' : ''}${volChange24h.toFixed(2)}%)`);
-  console.log(`  7D Volume: $${vol7d.toLocaleString()}`);
-  console.log(`  30D Volume: $${vol30d.toLocaleString()}`);
-  
-  return {
-    current24h: vol24h,
-    yesterday24h: volYesterday,
-    change24h: volChange24h,
-    vol7d,
-    vol30d,
-    history: volumeHistory.slice(0, 90).map(v => ({
-      t: v.timestamp,
-      v: v.volume,
-      c: v.close // closing price
-    }))
-  };
 }
 
 /**
- * Fetch current pool data from GeckoTerminal (liquidity, price, etc.)
+ * Fetch pool data (liquidity, price)
  */
 async function fetchPoolData(poolAddress, tokenSymbol) {
-  console.log(`\nFetching ${tokenSymbol} pool data from GeckoTerminal...`);
+  console.log(`\nFetching ${tokenSymbol} pool data...`);
   
-  const url = `${GECKO_API}/networks/pulsechain/pools/${poolAddress}`;
-  
-  const data = await fetchWithRetry(url);
-  
-  if (!data || !data.data || !data.data.attributes) {
-    console.log(`  No pool data available for ${tokenSymbol}`);
+  try {
+    const data = await fetchWithRetry(`${GECKO_API}/networks/pulsechain/pools/${poolAddress}`);
+    
+    if (!data?.data?.attributes) {
+      console.log(`  No pool data available`);
+      return null;
+    }
+    
+    const attrs = data.data.attributes;
+    const result = {
+      liquidity: parseFloat(attrs.reserve_in_usd) || 0,
+      volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
+      priceUsd: parseFloat(attrs.base_token_price_usd) || 0,
+      priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0
+    };
+    
+    console.log(`  Price: $${result.priceUsd}, Liquidity: $${result.liquidity.toLocaleString()}`);
+    return result;
+  } catch (e) {
+    console.log(`  Error: ${e.message}`);
     return null;
   }
-  
-  const attrs = data.data.attributes;
-  
-  const poolData = {
-    name: attrs.name,
-    liquidity: parseFloat(attrs.reserve_in_usd) || 0,
-    volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
-    volume1h: parseFloat(attrs.volume_usd?.h1) || 0,
-    priceUsd: parseFloat(attrs.base_token_price_usd) || 0,
-    priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0,
-    txns24h: (attrs.transactions?.h24?.buys || 0) + (attrs.transactions?.h24?.sells || 0),
-    buys24h: attrs.transactions?.h24?.buys || 0,
-    sells24h: attrs.transactions?.h24?.sells || 0
-  };
-  
-  console.log(`  Liquidity: $${poolData.liquidity.toLocaleString()}`);
-  console.log(`  24H Volume: $${poolData.volume24h.toLocaleString()}`);
-  console.log(`  Price: $${poolData.priceUsd}`);
-  
-  return poolData;
 }
 
 /**
- * Fetch holder count from PulseScan
+ * Fetch holder count
  */
 async function fetchHolderCount(tokenAddress, tokenSymbol) {
   console.log(`\nFetching ${tokenSymbol} holder count...`);
   
-  const url = `${API_BASE}/tokens/${tokenAddress}/counters`;
-  const data = await fetchWithRetry(url);
-  
-  if (!data) {
-    console.log(`  No holder data available for ${tokenSymbol}`);
-    return null;
+  try {
+    const data = await fetchWithRetry(`${API_BASE}/tokens/${tokenAddress}/counters`);
+    const holders = parseInt(data?.token_holders_count) || 0;
+    console.log(`  Holders: ${holders.toLocaleString()}`);
+    return holders;
+  } catch (e) {
+    console.log(`  Error: ${e.message}`);
+    return 0;
   }
-  
-  const holders = parseInt(data.token_holders_count) || 0;
-  console.log(`  Holders: ${holders.toLocaleString()}`);
-  
-  return holders;
-}
-
-/**
- * Fetch tokens in LP (from main pair)
- */
-async function fetchTokensInLP(pairAddress, tokenAddress, tokenSymbol, decimals) {
-  console.log(`\nFetching ${tokenSymbol} tokens in LP...`);
-  
-  const url = `${API_BASE}/addresses/${pairAddress}/token-balances`;
-  const data = await fetchWithRetry(url);
-  
-  if (!data || !Array.isArray(data)) {
-    console.log(`  No LP data available for ${tokenSymbol}`);
-    return null;
-  }
-  
-  const tokenBalance = data.find(t => 
-    t.token?.address?.toLowerCase() === tokenAddress.toLowerCase()
-  );
-  
-  if (!tokenBalance) {
-    console.log(`  Token not found in LP`);
-    return null;
-  }
-  
-  const amount = Number(BigInt(tokenBalance.value || '0')) / Math.pow(10, decimals);
-  console.log(`  Tokens in LP: ${amount.toLocaleString()}`);
-  
-  return amount;
 }
 
 /**
  * Main function
  */
 async function main() {
-  console.log('='.repeat(60));
-  console.log('Burn History Fetcher - OPTIMIZED');
-  console.log('Started at:', new Date().toISOString());
+  console.log('\n' + '='.repeat(60));
+  console.log('BURN HISTORY FETCHER v3');
+  console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
   
   const outputPath = path.join(__dirname, '..', 'data', 'burn-history.json');
   const existingData = loadExistingData(outputPath);
   
-  // Check for --full flag to force complete refetch
-  const forceFullRefetch = process.argv.includes('--full');
+  // Get existing burns (with "f" field if available)
+  const existingPTGCBurns = existingData?.PTGC?.burns || [];
+  const existingUFOBurns = existingData?.UFO?.burns || [];
   
-  // Get last timestamps for incremental updates
-  let lastPTGCTimestamp = existingData?.PTGC?.burns?.[0]?.t || 0;
-  let lastUFOTimestamp = existingData?.UFO?.burns?.[0]?.t || 0;
-  let lastPTGCbyUFOTimestamp = existingData?.PTGCbyUFO?.burns?.[0]?.t || 0;
+  // ============================================
+  // FETCH ALL BURNS
+  // ============================================
   
-  if (forceFullRefetch) {
-    console.log('FULL REFETCH MODE - ignoring existing data timestamps');
-    lastPTGCTimestamp = 0;
-    lastUFOTimestamp = 0;
-    lastPTGCbyUFOTimestamp = 0;
-  } else {
-    console.log('Incremental mode - will fetch burns newer than:');
-    console.log(`  PTGC: ${lastPTGCTimestamp ? new Date(lastPTGCTimestamp).toISOString() : 'none (full fetch)'}`);
-    console.log(`  UFO: ${lastUFOTimestamp ? new Date(lastUFOTimestamp).toISOString() : 'none (full fetch)'}`);
-    console.log(`  PTGCbyUFO: ${lastPTGCbyUFOTimestamp ? new Date(lastPTGCbyUFOTimestamp).toISOString() : 'none (full fetch)'}`);
-  }
+  const ptgcBurns = await fetchAllBurns(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, existingPTGCBurns);
+  await delay(1000);
   
-  // Fetch new PTGC burns
-  const newPTGCBurns = await fetchBurnTransfers(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, lastPTGCTimestamp);
+  const ufoBurns = await fetchAllBurns(UFO_ADDRESS, 'UFO', UFO_DECIMALS, existingUFOBurns);
+  await delay(1000);
   
-  // Fetch new UFO burns
-  const newUFOBurns = await fetchBurnTransfers(UFO_ADDRESS, 'UFO', UFO_DECIMALS, lastUFOTimestamp);
+  // ============================================
+  // IDENTIFY BUYBACK BURNS (from LP pairs)
+  // ============================================
   
-  // Fetch PTGC burned by UFO contract
-  const newPTGCbyUFO = await fetchPTGCBurnsByUFO(lastPTGCbyUFOTimestamp);
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Identifying Buyback Burns...');
+  console.log(`${'='.repeat(50)}`);
   
-  // Merge with existing data
-  const allPTGCBurns = existingData?.PTGC?.burns 
-    ? mergeBurns(existingData.PTGC.burns.map(b => ({...b, timestamp: b.t, amount: b.a, txHash: b.tx})), newPTGCBurns)
-    : newPTGCBurns;
-    
-  const allUFOBurns = existingData?.UFO?.burns
-    ? mergeBurns(existingData.UFO.burns.map(b => ({...b, timestamp: b.t, amount: b.a, txHash: b.tx})), newUFOBurns)
-    : newUFOBurns;
-    
-  const allPTGCbyUFO = existingData?.PTGCbyUFO?.burns
-    ? mergeBurns(existingData.PTGCbyUFO.burns.map(b => ({...b, timestamp: b.t, amount: b.a, txHash: b.tx})), newPTGCbyUFO)
-    : newPTGCbyUFO;
+  // PTGC buyback burns = PTGC that came FROM the PTGC LP pair
+  // This is what happens when UFO's buybackBurnpTGC() runs
+  const ptgcBuybackBurns = filterBuybackBurns(ptgcBurns, PTGC_LP_PAIR);
+  console.log(`PTGC Buyback Burns (from LP): ${ptgcBuybackBurns.length} transactions`);
   
-  // Calculate totals and periods
-  const ptgcTotal = allPTGCBurns.reduce((sum, b) => sum + (b.amount || b.a || 0), 0);
-  const ufoTotal = allUFOBurns.reduce((sum, b) => sum + (b.amount || b.a || 0), 0);
-  const ptgcByUFOTotal = allPTGCbyUFO.reduce((sum, b) => sum + (b.amount || b.a || 0), 0);
+  // UFO buyback burns = UFO that came FROM the UFO LP pair
+  const ufoBuybackBurns = filterBuybackBurns(ufoBurns, UFO_LP_PAIR);
+  console.log(`UFO Buyback Burns (from LP): ${ufoBuybackBurns.length} transactions`);
   
-  const ptgcPeriods = calculatePeriodBurns(allPTGCBurns.map(b => ({...b, timestamp: b.timestamp || b.t})));
-  const ufoPeriods = calculatePeriodBurns(allUFOBurns.map(b => ({...b, timestamp: b.timestamp || b.t})));
-  const ptgcByUFOPeriods = calculatePeriodBurns(allPTGCbyUFO.map(b => ({...b, timestamp: b.timestamp || b.t})));
+  // ============================================
+  // CALCULATE TOTALS AND PERIODS
+  // ============================================
   
-  // Fetch volume history from GeckoTerminal
-  console.log('\n' + '='.repeat(60));
-  console.log('Fetching Volume Data from GeckoTerminal');
-  console.log('='.repeat(60));
+  const ptgcTotal = ptgcBurns.reduce((s, b) => s + b.a, 0);
+  const ufoTotal = ufoBurns.reduce((s, b) => s + b.a, 0);
+  const ptgcBuybackTotal = ptgcBuybackBurns.reduce((s, b) => s + b.a, 0);
+  const ufoBuybackTotal = ufoBuybackBurns.reduce((s, b) => s + b.a, 0);
   
-  const ptgcVolume = await fetchVolumeHistory(PTGC_MAIN_PAIR, 'PTGC');
-  await delay(2500); // Respect rate limits (30 req/min)
-  const ufoVolume = await fetchVolumeHistory(UFO_MAIN_PAIR, 'UFO');
-  await delay(2500);
-  const ptgcPool = await fetchPoolData(PTGC_MAIN_PAIR, 'PTGC');
-  await delay(2500);
-  const ufoPool = await fetchPoolData(UFO_MAIN_PAIR, 'UFO');
+  const ptgcPeriods = calculatePeriods(ptgcBurns);
+  const ufoPeriods = calculatePeriods(ufoBurns);
+  const ptgcBuybackPeriods = calculatePeriods(ptgcBuybackBurns);
+  const ufoBuybackPeriods = calculatePeriods(ufoBuybackBurns);
   
-  // Fetch additional metrics for snapshots
-  console.log('\n' + '='.repeat(60));
-  console.log('Fetching Snapshot Metrics');
-  console.log('='.repeat(60));
+  // ============================================
+  // FETCH ADDITIONAL DATA
+  // ============================================
   
-  await delay(500);
+  const ptgcVolume = await fetchVolumeData(PTGC_LP_PAIR, 'PTGC');
+  await delay(2000);
+  
+  const ufoVolume = await fetchVolumeData(UFO_LP_PAIR, 'UFO');
+  await delay(2000);
+  
+  const ptgcPool = await fetchPoolData(PTGC_LP_PAIR, 'PTGC');
+  await delay(2000);
+  
+  const ufoPool = await fetchPoolData(UFO_LP_PAIR, 'UFO');
+  await delay(1000);
+  
   const ptgcHolders = await fetchHolderCount(PTGC_ADDRESS, 'PTGC');
   await delay(500);
-  const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
-  await delay(500);
-  const ptgcInLP = await fetchTokensInLP(PTGC_MAIN_PAIR, PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS);
-  await delay(500);
-  const ufoInLP = await fetchTokensInLP(UFO_MAIN_PAIR, UFO_ADDRESS, 'UFO', UFO_DECIMALS);
   
-  // Create today's snapshot
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
+  
+  // ============================================
+  // BUILD SNAPSHOTS (for daily changes)
+  // ============================================
+  
+  const today = new Date().toISOString().split('T')[0];
+  const existingPTGCSnapshots = existingData?.PTGC?.snapshots || [];
+  const existingUFOSnapshots = existingData?.UFO?.snapshots || [];
+  
   const ptgcSnapshot = {
     date: today,
     holders: ptgcHolders,
     liquidity: ptgcPool?.liquidity || 0,
-    tokensInLP: ptgcInLP,
-    price: ptgcPool?.priceUsd || 0,
-    volume24h: ptgcVolume?.current24h || 0
+    price: ptgcPool?.priceUsd || 0
   };
+  
   const ufoSnapshot = {
     date: today,
     holders: ufoHolders,
     liquidity: ufoPool?.liquidity || 0,
-    tokensInLP: ufoInLP,
-    price: ufoPool?.priceUsd || 0,
-    volume24h: ufoVolume?.current24h || 0
+    price: ufoPool?.priceUsd || 0
   };
   
-  // Merge with existing snapshots (keep last 30 days)
-  const existingPTGCSnapshots = existingData?.PTGC?.snapshots || [];
-  const existingUFOSnapshots = existingData?.UFO?.snapshots || [];
+  // Keep last 30 days of snapshots
+  const ptgcSnapshots = [ptgcSnapshot, ...existingPTGCSnapshots.filter(s => s.date !== today)].slice(0, 30);
+  const ufoSnapshots = [ufoSnapshot, ...existingUFOSnapshots.filter(s => s.date !== today)].slice(0, 30);
   
-  // Remove today's snapshot if it exists, then add new one
-  const ptgcSnapshots = [
-    ptgcSnapshot,
-    ...existingPTGCSnapshots.filter(s => s.date !== today)
-  ].slice(0, 30);
-  
-  const ufoSnapshots = [
-    ufoSnapshot,
-    ...existingUFOSnapshots.filter(s => s.date !== today)
-  ].slice(0, 30);
-  
-  // Calculate changes from yesterday
-  const ptgcYesterday = ptgcSnapshots[1]; // Second entry is yesterday
+  // Calculate changes vs yesterday
+  const ptgcYesterday = ptgcSnapshots[1];
   const ufoYesterday = ufoSnapshots[1];
   
   const ptgcChanges = ptgcYesterday ? {
-    holders: ptgcYesterday.holders ? ((ptgcSnapshot.holders - ptgcYesterday.holders) / ptgcYesterday.holders * 100) : 0,
-    liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0,
-    tokensInLP: ptgcYesterday.tokensInLP ? ((ptgcSnapshot.tokensInLP - ptgcYesterday.tokensInLP) / ptgcYesterday.tokensInLP * 100) : 0
+    holders: ptgcYesterday.holders ? ((ptgcHolders - ptgcYesterday.holders) / ptgcYesterday.holders * 100) : 0,
+    liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0
   } : null;
   
   const ufoChanges = ufoYesterday ? {
-    holders: ufoYesterday.holders ? ((ufoSnapshot.holders - ufoYesterday.holders) / ufoYesterday.holders * 100) : 0,
-    liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0,
-    tokensInLP: ufoYesterday.tokensInLP ? ((ufoSnapshot.tokensInLP - ufoYesterday.tokensInLP) / ufoYesterday.tokensInLP * 100) : 0
+    holders: ufoYesterday.holders ? ((ufoHolders - ufoYesterday.holders) / ufoYesterday.holders * 100) : 0,
+    liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0
   } : null;
   
-  if (ptgcChanges) {
-    console.log(`\nPTGC Changes vs Yesterday:`);
-    console.log(`  Holders: ${ptgcChanges.holders >= 0 ? '+' : ''}${ptgcChanges.holders.toFixed(2)}%`);
-    console.log(`  Liquidity: ${ptgcChanges.liquidity >= 0 ? '+' : ''}${ptgcChanges.liquidity.toFixed(2)}%`);
-    console.log(`  Tokens in LP: ${ptgcChanges.tokensInLP >= 0 ? '+' : ''}${ptgcChanges.tokensInLP.toFixed(2)}%`);
-  }
+  // ============================================
+  // BUILD OUTPUT
+  // ============================================
   
-  if (ufoChanges) {
-    console.log(`\nUFO Changes vs Yesterday:`);
-    console.log(`  Holders: ${ufoChanges.holders >= 0 ? '+' : ''}${ufoChanges.holders.toFixed(2)}%`);
-    console.log(`  Liquidity: ${ufoChanges.liquidity >= 0 ? '+' : ''}${ufoChanges.liquidity.toFixed(2)}%`);
-    console.log(`  Tokens in LP: ${ufoChanges.tokensInLP >= 0 ? '+' : ''}${ufoChanges.tokensInLP.toFixed(2)}%`);
-  }
-  
-  // Build output data (compact format to save space)
   const outputData = {
     lastUpdated: new Date().toISOString(),
+    
     PTGC: {
       totalBurned: ptgcTotal,
-      burnCount: allPTGCBurns.length,
+      burnCount: ptgcBurns.length,
       periods: ptgcPeriods,
-      burns: allPTGCBurns.slice(0, 50000).map(b => ({ 
-        t: b.timestamp || b.t, 
-        a: b.amount || b.a 
-      })),
+      burns: ptgcBurns.map(b => ({ t: b.t, a: b.a, f: b.f })), // Keep "f" for buyback detection
       volume: ptgcVolume,
       pool: ptgcPool,
       snapshots: ptgcSnapshots,
       changes: ptgcChanges
     },
+    
     UFO: {
       totalBurned: ufoTotal,
-      burnCount: allUFOBurns.length,
+      burnCount: ufoBurns.length,
       periods: ufoPeriods,
-      burns: allUFOBurns.slice(0, 50000).map(b => ({ 
-        t: b.timestamp || b.t, 
-        a: b.amount || b.a 
-      })),
+      burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f })), // Keep "f" for buyback detection
       volume: ufoVolume,
       pool: ufoPool,
       snapshots: ufoSnapshots,
       changes: ufoChanges
     },
+    
+    // PTGC burned via automated buybacks (from LP swaps)
+    // This is "PTGC Burned by UFO" - directly measured!
     PTGCbyUFO: {
-      totalBurned: ptgcByUFOTotal,
-      burnCount: allPTGCbyUFO.length,
-      periods: ptgcByUFOPeriods,
-      burns: allPTGCbyUFO.slice(0, 10000).map(b => ({ 
-        t: b.timestamp || b.t, 
-        a: b.amount || b.a 
-      }))
+      totalBurned: ptgcBuybackTotal,
+      burnCount: ptgcBuybackBurns.length,
+      periods: ptgcBuybackPeriods
+    },
+    
+    // UFO burned via automated buybacks (from LP swaps)
+    UFOBuybacks: {
+      totalBurned: ufoBuybackTotal,
+      burnCount: ufoBuybackBurns.length,
+      periods: ufoBuybackPeriods
     }
   };
   
-  // Ensure directory exists
+  // ============================================
+  // WRITE OUTPUT
+  // ============================================
+  
   const dataDir = path.dirname(outputPath);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -691,35 +478,45 @@ async function main() {
   
   fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2));
   
+  // ============================================
+  // PRINT SUMMARY
+  // ============================================
+  
   console.log('\n' + '='.repeat(60));
-  console.log('Summary:');
+  console.log('SUMMARY');
   console.log('='.repeat(60));
-  console.log(`PTGC Total Burned: ${ptgcTotal.toLocaleString()} (${allPTGCBurns.length} txs)`);
+  
+  console.log(`\nPTGC BURNS (all):`);
+  console.log(`  Total: ${ptgcTotal.toLocaleString()} tokens (${ptgcBurns.length} txs)`);
   console.log(`  12H: ${ptgcPeriods.h12.amount.toLocaleString()}`);
   console.log(`  24H: ${ptgcPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ptgcPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ptgcPeriods.d30.amount.toLocaleString()}`);
-  if (ptgcVolume) {
-    console.log(`  Volume 24H: $${ptgcVolume.current24h?.toLocaleString()} (${ptgcVolume.change24h > 0 ? '+' : ''}${ptgcVolume.change24h?.toFixed(2)}%)`);
-  }
-  console.log('');
-  console.log(`UFO Total Burned: ${ufoTotal.toLocaleString()} (${allUFOBurns.length} txs)`);
+  
+  console.log(`\nUFO BURNS (all):`);
+  console.log(`  Total: ${ufoTotal.toLocaleString()} tokens (${ufoBurns.length} txs)`);
   console.log(`  12H: ${ufoPeriods.h12.amount.toLocaleString()}`);
   console.log(`  24H: ${ufoPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ufoPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ufoPeriods.d30.amount.toLocaleString()}`);
-  if (ufoVolume) {
-    console.log(`  Volume 24H: $${ufoVolume.current24h?.toLocaleString()} (${ufoVolume.change24h > 0 ? '+' : ''}${ufoVolume.change24h?.toFixed(2)}%)`);
-  }
-  console.log('');
-  console.log(`PTGC Burned BY UFO: ${ptgcByUFOTotal.toLocaleString()} (${allPTGCbyUFO.length} txs)`);
-  console.log(`  12H: ${ptgcByUFOPeriods.h12.amount.toLocaleString()}`);
-  console.log(`  24H: ${ptgcByUFOPeriods.h24.amount.toLocaleString()}`);
-  console.log(`  7D:  ${ptgcByUFOPeriods.d7.amount.toLocaleString()}`);
-  console.log(`  30D: ${ptgcByUFOPeriods.d30.amount.toLocaleString()}`);
-  console.log('');
-  console.log(`Output written to: ${outputPath}`);
-  console.log('Completed at:', new Date().toISOString());
+  
+  console.log(`\nPTGC BURNED BY UFO (buybacks from LP):`);
+  console.log(`  Total: ${ptgcBuybackTotal.toLocaleString()} tokens (${ptgcBuybackBurns.length} txs)`);
+  console.log(`  12H: ${ptgcBuybackPeriods.h12.amount.toLocaleString()}`);
+  console.log(`  24H: ${ptgcBuybackPeriods.h24.amount.toLocaleString()}`);
+  console.log(`  7D:  ${ptgcBuybackPeriods.d7.amount.toLocaleString()}`);
+  console.log(`  30D: ${ptgcBuybackPeriods.d30.amount.toLocaleString()}`);
+  
+  console.log(`\nUFO BUYBACK BURNS (from LP):`);
+  console.log(`  Total: ${ufoBuybackTotal.toLocaleString()} tokens (${ufoBuybackBurns.length} txs)`);
+  
+  console.log('\n' + '='.repeat(60));
+  console.log('Output written to:', outputPath);
+  console.log('Completed:', new Date().toISOString());
+  console.log('='.repeat(60));
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('FATAL ERROR:', err);
+  process.exit(1);
+});
