@@ -644,7 +644,7 @@
       );
     };
     
-    const Dashboard=({token,onBack})=>{
+    const Dashboard=({token,onBack,onSwitch})=>{
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#D9CA5D]':'text-[#7CFC00]',border:isGold?'border-[#D9CA5D]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D9CA5D]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
       const[data,setData]=useState(null);
@@ -758,7 +758,12 @@
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all">
+                    <span className="text-white/60 text-sm">{'\u21C4'}</span>
+                    <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-8 h-8"/>
+                    <span className="text-white/60 text-sm">Switch</span>
+                  </button>
                   <span className="text-white/40 text-xs hidden md:block">{lastUpdate.toLocaleTimeString()}</span>
                   <a href={cfg.pulseScanUrl} target="_blank" className={`px-4 py-2 rounded-lg border ${theme.border} ${theme.text} font-medium hover:bg-white/5`}>Explorer</a>
                   <button className={`px-4 py-2 rounded-lg ${theme.bg} text-black font-bold`}>KPI Report</button>
@@ -870,9 +875,9 @@
                               </div>
                               <div className="space-y-1 text-sm">
                                 {daoData.managementTokens.filter(t=>t.usdValue>=5).map((t,i)=>(
-                                  <div key={i} className="flex justify-between text-white/60">
+                                  <div key={i} className="flex justify-between gap-4 text-white/60">
                                     <span>{t.symbol}</span>
-                                    <span className="text-green-400">{fmtUSD(t.usdValue)}</span>
+                                    <span><span className="text-white/50">{fmtAbbr(t.balance)}</span> <span className="text-green-400">{fmtUSD(t.usdValue)}</span></span>
                                   </div>
                                 ))}
                               </div>
@@ -918,7 +923,7 @@
     const App=()=>{
       const[view,setView]=useState('home');
       const[token,setToken]=useState(null);
-      if(view==='dashboard'&&token)return<Dashboard token={token} onBack={()=>{setView('home');setToken(null)}}/>;
+      if(view==='dashboard'&&token)return<Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)}/>;
       return<Home onSelect={t=>{setToken(t);setView('dashboard')}}/>;
     };
     
