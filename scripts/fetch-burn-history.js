@@ -1,13 +1,12 @@
 /**
- * Fetch Burn History Script
+ * Fetch Burn History Script - OPTIMIZED VERSION
  * 
- * This script fetches all burn transactions for PTGC and UFO tokens
- * and saves them to a JSON file for fast dashboard loading.
+ * This script fetches burn data for PTGC and UFO tokens.
  * 
- * Tracks:
- * - All PTGC burns (total supply burned)
- * - All UFO burns (total supply burned)  
- * - PTGC burned specifically by UFO contract (for UFO dashboard)
+ * Strategy for "PTGC burned by UFO":
+ * - Query UFO contract's outgoing transactions
+ * - Find ones that resulted in PTGC burns (buybackBurnpTGC calls)
+ * - This is MUCH faster than checking each of 25,000+ PTGC burns
  * 
  * Run via GitHub Actions every 6 hours.
  */
@@ -18,7 +17,7 @@ const path = require('path');
 const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
 const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
 const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
-const UFO_CONTRACT = '0x456548a9b56efbbd89ca0309edd17a9e20b04018'; // UFO contract (lowercase)
+const UFO_CONTRACT = '0x456548a9b56efbbd89ca0309edd17a9e20b04018';
 
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
@@ -28,17 +27,34 @@ const API_BASE = 'https://api.scan.pulsechain.com/api/v2';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Fetch all token transfers to burn address
+ * Load existing burn history to append to (incremental updates)
  */
-async function fetchBurnTransfers(tokenAddress, tokenSymbol, decimals) {
-  console.log(`\nFetching ${tokenSymbol} burns...`);
+function loadExistingData(outputPath) {
+  try {
+    if (fs.existsSync(outputPath)) {
+      const data = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+      console.log('Loaded existing data, last updated:', data.lastUpdated);
+      return data;
+    }
+  } catch (e) {
+    console.log('No existing data or error loading:', e.message);
+  }
+  return null;
+}
+
+/**
+ * Fetch token transfers to burn address - with incremental support
+ */
+async function fetchBurnTransfers(tokenAddress, tokenSymbol, decimals, lastTimestamp = 0) {
+  console.log(`\nFetching ${tokenSymbol} burns${lastTimestamp ? ' (incremental, after ' + new Date(lastTimestamp).toISOString() + ')' : ''}...`);
   
   const burns = [];
   let nextPageParams = null;
   let page = 0;
-  const maxPages = 500;
+  const maxPages = 1000; // Increased limit
+  let reachedOldData = false;
   
-  while (page < maxPages) {
+  while (page < maxPages && !reachedOldData) {
     const url = nextPageParams
       ? `${API_BASE}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&token=${tokenAddress}&${nextPageParams}`
       : `${API_BASE}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&token=${tokenAddress}`;
@@ -55,17 +71,27 @@ async function fetchBurnTransfers(tokenAddress, tokenSymbol, decimals) {
         const toAddr = (tx.to?.hash || '').toLowerCase();
         if (toAddr !== BURN_ADDRESS.toLowerCase()) continue;
         
+        const timestamp = new Date(tx.timestamp).getTime();
+        
+        // If incremental and we've reached data we already have, stop
+        if (lastTimestamp && timestamp <= lastTimestamp) {
+          reachedOldData = true;
+          break;
+        }
+        
         burns.push({
-          timestamp: new Date(tx.timestamp).getTime(),
+          timestamp,
           amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, decimals),
           txHash: tx.transaction_hash,
           from: (tx.from?.hash || '').toLowerCase()
         });
       }
       
-      console.log(`  Page ${page + 1}: ${burns.length} burns total`);
+      if (page % 50 === 0 || page < 5) {
+        console.log(`  Page ${page + 1}: ${burns.length} burns collected`);
+      }
       
-      if (data.next_page_params) {
+      if (data.next_page_params && !reachedOldData) {
         const params = new URLSearchParams();
         Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
         nextPageParams = params.toString();
@@ -74,61 +100,162 @@ async function fetchBurnTransfers(tokenAddress, tokenSymbol, decimals) {
       }
       
       page++;
-      await delay(200);
+      await delay(150);
       
     } catch (error) {
       console.error(`  Error on page ${page + 1}:`, error.message);
+      await delay(1000);
+    }
+  }
+  
+  console.log(`  Fetched ${burns.length} ${reachedOldData ? 'new ' : ''}burns`);
+  return burns;
+}
+
+/**
+ * Fetch PTGC burns initiated by UFO contract
+ * Query UFO contract's transactions and find PTGC token transfers in the same tx
+ */
+async function fetchPTGCBurnsByUFO(lastTimestamp = 0) {
+  console.log(`\nFetching PTGC burns by UFO contract...`);
+  
+  const burns = [];
+  let nextPageParams = null;
+  let page = 0;
+  const maxPages = 500;
+  let reachedOldData = false;
+  
+  // Get all token transfers where UFO contract was involved
+  while (page < maxPages && !reachedOldData) {
+    const url = nextPageParams
+      ? `${API_BASE}/addresses/${UFO_CONTRACT}/token-transfers?type=ERC-20&token=${PTGC_ADDRESS}&${nextPageParams}`
+      : `${API_BASE}/addresses/${UFO_CONTRACT}/token-transfers?type=ERC-20&token=${PTGC_ADDRESS}`;
+    
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+        // No direct transfers, try a different approach - check transactions
+        break;
+      }
+      
+      for (const tx of data.items) {
+        const timestamp = new Date(tx.timestamp).getTime();
+        
+        if (lastTimestamp && timestamp <= lastTimestamp) {
+          reachedOldData = true;
+          break;
+        }
+        
+        // Check if this transfer went to burn address
+        const toAddr = (tx.to?.hash || '').toLowerCase();
+        if (toAddr === BURN_ADDRESS.toLowerCase()) {
+          burns.push({
+            timestamp,
+            amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, PTGC_DECIMALS),
+            txHash: tx.transaction_hash
+          });
+        }
+      }
+      
+      console.log(`  Page ${page + 1}: ${burns.length} UFO->PTGC burns found`);
+      
+      if (data.next_page_params && !reachedOldData) {
+        const params = new URLSearchParams();
+        Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
+        nextPageParams = params.toString();
+      } else {
+        break;
+      }
+      
+      page++;
+      await delay(150);
+      
+    } catch (error) {
+      console.error(`  Error:`, error.message);
       break;
     }
   }
   
-  burns.sort((a, b) => b.timestamp - a.timestamp);
-  const totalBurned = burns.reduce((sum, b) => sum + b.amount, 0);
+  // If no results from token-transfers, try internal-transactions approach
+  if (burns.length === 0) {
+    console.log('  Trying alternative approach via transactions...');
+    burns.push(...await fetchPTGCBurnsByUFOViaTransactions(lastTimestamp));
+  }
   
-  console.log(`  Total: ${burns.length} txs, ${totalBurned.toLocaleString()} tokens`);
-  
-  return { burns, totalBurned };
+  console.log(`  Total PTGC burned by UFO: ${burns.length} transactions`);
+  return burns;
 }
 
 /**
- * For each PTGC burn, check if the transaction was initiated by UFO contract
+ * Alternative: Check UFO contract transactions for PTGC burns
  */
-async function identifyUFOBurns(ptgcBurns) {
-  console.log('\nIdentifying PTGC burns from UFO contract...');
+async function fetchPTGCBurnsByUFOViaTransactions(lastTimestamp = 0) {
+  const burns = [];
+  let nextPageParams = null;
+  let page = 0;
+  const maxPages = 200;
+  let reachedOldData = false;
   
-  const ufoBurns = [];
-  let checked = 0;
-  
-  for (const burn of ptgcBurns) {
+  while (page < maxPages && !reachedOldData) {
+    const url = nextPageParams
+      ? `${API_BASE}/addresses/${UFO_CONTRACT}/transactions?${nextPageParams}`
+      : `${API_BASE}/addresses/${UFO_CONTRACT}/transactions`;
+    
     try {
-      // Fetch transaction details to see who initiated it
-      const txUrl = `${API_BASE}/transactions/${burn.txHash}`;
-      const response = await fetch(txUrl);
-      const txData = await response.json();
+      const response = await fetch(url);
+      const data = await response.json();
       
-      // Check if transaction was sent FROM the UFO contract
-      const txFrom = (txData.from?.hash || '').toLowerCase();
+      if (!data.items || data.items.length === 0) break;
       
-      if (txFrom === UFO_CONTRACT) {
-        ufoBurns.push(burn);
+      for (const tx of data.items) {
+        const timestamp = new Date(tx.timestamp).getTime();
+        
+        if (lastTimestamp && timestamp <= lastTimestamp) {
+          reachedOldData = true;
+          break;
+        }
+        
+        // Check if this transaction has token transfers
+        if (tx.token_transfers && tx.token_transfers.length > 0) {
+          for (const transfer of tx.token_transfers) {
+            const tokenAddr = (transfer.token?.address || '').toLowerCase();
+            const toAddr = (transfer.to?.hash || '').toLowerCase();
+            
+            if (tokenAddr === PTGC_ADDRESS.toLowerCase() && toAddr === BURN_ADDRESS.toLowerCase()) {
+              burns.push({
+                timestamp,
+                amount: Number(BigInt(transfer.total?.value || transfer.value || '0')) / Math.pow(10, PTGC_DECIMALS),
+                txHash: tx.hash
+              });
+            }
+          }
+        }
       }
       
-      checked++;
-      if (checked % 50 === 0) {
-        console.log(`  Checked ${checked}/${ptgcBurns.length} transactions, found ${ufoBurns.length} UFO burns`);
+      if (page % 20 === 0) {
+        console.log(`    Tx page ${page + 1}: ${burns.length} burns found`);
       }
       
-      await delay(100); // Rate limiting
+      if (data.next_page_params && !reachedOldData) {
+        const params = new URLSearchParams();
+        Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
+        nextPageParams = params.toString();
+      } else {
+        break;
+      }
+      
+      page++;
+      await delay(150);
       
     } catch (error) {
-      // Skip on error
+      console.error(`  Error:`, error.message);
+      break;
     }
   }
   
-  const totalUFOBurned = ufoBurns.reduce((sum, b) => sum + b.amount, 0);
-  console.log(`  UFO burned ${totalUFOBurned.toLocaleString()} PTGC in ${ufoBurns.length} transactions`);
-  
-  return { burns: ufoBurns, totalBurned: totalUFOBurned };
+  return burns;
 }
 
 /**
@@ -156,51 +283,105 @@ function calculatePeriodBurns(burns) {
 }
 
 /**
+ * Merge new burns with existing burns (remove duplicates by txHash)
+ */
+function mergeBurns(existingBurns, newBurns) {
+  const txHashSet = new Set(existingBurns.map(b => b.txHash || b.t));
+  const merged = [...existingBurns];
+  
+  for (const burn of newBurns) {
+    if (!txHashSet.has(burn.txHash)) {
+      merged.push(burn);
+      txHashSet.add(burn.txHash);
+    }
+  }
+  
+  // Sort by timestamp descending
+  merged.sort((a, b) => (b.timestamp || b.t) - (a.timestamp || a.t));
+  return merged;
+}
+
+/**
  * Main function
  */
 async function main() {
   console.log('='.repeat(60));
-  console.log('Burn History Fetcher');
+  console.log('Burn History Fetcher - OPTIMIZED');
   console.log('Started at:', new Date().toISOString());
   console.log('='.repeat(60));
   
-  // Fetch ALL PTGC burns (for total supply burned)
-  const ptgcData = await fetchBurnTransfers(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS);
-  const ptgcPeriods = calculatePeriodBurns(ptgcData.burns);
+  const outputPath = path.join(__dirname, '..', 'data', 'burn-history.json');
+  const existingData = loadExistingData(outputPath);
   
-  // Fetch ALL UFO burns (for total supply burned)
-  const ufoData = await fetchBurnTransfers(UFO_ADDRESS, 'UFO', UFO_DECIMALS);
-  const ufoPeriods = calculatePeriodBurns(ufoData.burns);
+  // Get last timestamps for incremental updates
+  const lastPTGCTimestamp = existingData?.PTGC?.burns?.[0]?.t || 0;
+  const lastUFOTimestamp = existingData?.UFO?.burns?.[0]?.t || 0;
+  const lastPTGCbyUFOTimestamp = existingData?.PTGCbyUFO?.burns?.[0]?.t || 0;
   
-  // Identify PTGC burns that came from UFO contract specifically
-  const ptgcByUFO = await identifyUFOBurns(ptgcData.burns);
-  const ptgcByUFOPeriods = calculatePeriodBurns(ptgcByUFO.burns);
+  // Fetch new PTGC burns
+  const newPTGCBurns = await fetchBurnTransfers(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, lastPTGCTimestamp);
   
-  // Build output data
+  // Fetch new UFO burns
+  const newUFOBurns = await fetchBurnTransfers(UFO_ADDRESS, 'UFO', UFO_DECIMALS, lastUFOTimestamp);
+  
+  // Fetch PTGC burned by UFO contract
+  const newPTGCbyUFO = await fetchPTGCBurnsByUFO(lastPTGCbyUFOTimestamp);
+  
+  // Merge with existing data
+  const allPTGCBurns = existingData?.PTGC?.burns 
+    ? mergeBurns(existingData.PTGC.burns.map(b => ({...b, timestamp: b.t, amount: b.a, txHash: b.tx})), newPTGCBurns)
+    : newPTGCBurns;
+    
+  const allUFOBurns = existingData?.UFO?.burns
+    ? mergeBurns(existingData.UFO.burns.map(b => ({...b, timestamp: b.t, amount: b.a, txHash: b.tx})), newUFOBurns)
+    : newUFOBurns;
+    
+  const allPTGCbyUFO = existingData?.PTGCbyUFO?.burns
+    ? mergeBurns(existingData.PTGCbyUFO.burns.map(b => ({...b, timestamp: b.t, amount: b.a, txHash: b.tx})), newPTGCbyUFO)
+    : newPTGCbyUFO;
+  
+  // Calculate totals and periods
+  const ptgcTotal = allPTGCBurns.reduce((sum, b) => sum + (b.amount || b.a || 0), 0);
+  const ufoTotal = allUFOBurns.reduce((sum, b) => sum + (b.amount || b.a || 0), 0);
+  const ptgcByUFOTotal = allPTGCbyUFO.reduce((sum, b) => sum + (b.amount || b.a || 0), 0);
+  
+  const ptgcPeriods = calculatePeriodBurns(allPTGCBurns.map(b => ({...b, timestamp: b.timestamp || b.t})));
+  const ufoPeriods = calculatePeriodBurns(allUFOBurns.map(b => ({...b, timestamp: b.timestamp || b.t})));
+  const ptgcByUFOPeriods = calculatePeriodBurns(allPTGCbyUFO.map(b => ({...b, timestamp: b.timestamp || b.t})));
+  
+  // Build output data (compact format to save space)
   const outputData = {
     lastUpdated: new Date().toISOString(),
     PTGC: {
-      totalBurned: ptgcData.totalBurned,
-      burnCount: ptgcData.burns.length,
+      totalBurned: ptgcTotal,
+      burnCount: allPTGCBurns.length,
       periods: ptgcPeriods,
-      burns: ptgcData.burns.map(b => ({ t: b.timestamp, a: b.amount }))
+      burns: allPTGCBurns.slice(0, 50000).map(b => ({ 
+        t: b.timestamp || b.t, 
+        a: b.amount || b.a 
+      }))
     },
     UFO: {
-      totalBurned: ufoData.totalBurned,
-      burnCount: ufoData.burns.length,
+      totalBurned: ufoTotal,
+      burnCount: allUFOBurns.length,
       periods: ufoPeriods,
-      burns: ufoData.burns.map(b => ({ t: b.timestamp, a: b.amount }))
+      burns: allUFOBurns.slice(0, 50000).map(b => ({ 
+        t: b.timestamp || b.t, 
+        a: b.amount || b.a 
+      }))
     },
     PTGCbyUFO: {
-      totalBurned: ptgcByUFO.totalBurned,
-      burnCount: ptgcByUFO.burns.length,
+      totalBurned: ptgcByUFOTotal,
+      burnCount: allPTGCbyUFO.length,
       periods: ptgcByUFOPeriods,
-      burns: ptgcByUFO.burns.map(b => ({ t: b.timestamp, a: b.amount }))
+      burns: allPTGCbyUFO.slice(0, 10000).map(b => ({ 
+        t: b.timestamp || b.t, 
+        a: b.amount || b.a 
+      }))
     }
   };
   
-  // Write to file
-  const outputPath = path.join(__dirname, '..', 'data', 'burn-history.json');
+  // Ensure directory exists
   const dataDir = path.dirname(outputPath);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -211,19 +392,19 @@ async function main() {
   console.log('\n' + '='.repeat(60));
   console.log('Summary:');
   console.log('='.repeat(60));
-  console.log(`PTGC Total Burned: ${ptgcData.totalBurned.toLocaleString()}`);
+  console.log(`PTGC Total Burned: ${ptgcTotal.toLocaleString()} (${allPTGCBurns.length} txs)`);
   console.log(`  12H: ${ptgcPeriods.h12.amount.toLocaleString()}`);
   console.log(`  24H: ${ptgcPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ptgcPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ptgcPeriods.d30.amount.toLocaleString()}`);
   console.log('');
-  console.log(`UFO Total Burned: ${ufoData.totalBurned.toLocaleString()}`);
+  console.log(`UFO Total Burned: ${ufoTotal.toLocaleString()} (${allUFOBurns.length} txs)`);
   console.log(`  12H: ${ufoPeriods.h12.amount.toLocaleString()}`);
   console.log(`  24H: ${ufoPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ufoPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ufoPeriods.d30.amount.toLocaleString()}`);
   console.log('');
-  console.log(`PTGC Burned BY UFO: ${ptgcByUFO.totalBurned.toLocaleString()}`);
+  console.log(`PTGC Burned BY UFO: ${ptgcByUFOTotal.toLocaleString()} (${allPTGCbyUFO.length} txs)`);
   console.log(`  12H: ${ptgcByUFOPeriods.h12.amount.toLocaleString()}`);
   console.log(`  24H: ${ptgcByUFOPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ptgcByUFOPeriods.d7.amount.toLocaleString()}`);
