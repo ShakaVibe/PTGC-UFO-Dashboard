@@ -664,11 +664,9 @@
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
+          // Start these in parallel after initial load
           if(cfg.stakingContract){
-            const staking=await fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply);
-            setStakingData(staking);
-            
-            // Fetch holder tiers in background
+            fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>setStakingData(staking));
             fetchHolderTiers(cfg.address,cfg,h).then(result=>{
               setHolderTiers({
                 Poseidon:result.counts.Poseidon||0,
@@ -683,9 +681,10 @@
           
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
-            const dao=await fetchDAOData(cfg.daoContract,cfg.daoTreasury,p);
-            setDaoData(dao);
-            setDaoLoading(false);
+            fetchDAOData(cfg.daoContract,cfg.daoTreasury,p).then(dao=>{
+              setDaoData(dao);
+              setDaoLoading(false);
+            });
           }
         };
         load();
@@ -796,9 +795,9 @@
               
               <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4`}>
                 <div className="flex justify-between mb-3"><div className={`text-sm font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation</div></div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <DonutChart data={chartData} colors={chartColors} size={80}/>
-                  <div className="flex-1 space-y-1">
+                  <div className="space-y-1">
                     {chartData.map((d,i)=>(
                       <div key={i} className="flex items-center gap-2 text-sm">
                         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:chartColors[i]}}></div>
@@ -809,14 +808,14 @@
                     ))}
                   </div>
                   {cfg.stakingContract && (
-                    <div className="border-l border-white/10 pl-4">
-                      <div className="grid grid-cols-3 gap-x-3 gap-y-1">
-                        <div className="flex items-center gap-1"><span className="text-lg">{'\u{1F531}'}</span><span className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Poseidon||0}</span></div>
-                        <div className="flex items-center gap-1"><span className="text-lg">{'\u{1F40B}'}</span><span className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Whale||0}</span></div>
-                        <div className="flex items-center gap-1"><span className="text-lg">{'\u{1F988}'}</span><span className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Shark||0}</span></div>
-                        <div className="flex items-center gap-1"><span className="text-lg">{'\u{1F42C}'}</span><span className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Dolphin||0}</span></div>
-                        <div className="flex items-center gap-1"><span className="text-lg">{'\u{1F991}'}</span><span className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Squid||0}</span></div>
-                        <div className="flex items-center gap-1"><span className="text-lg">{'\u{1F422}'}</span><span className={`text-sm font-bold ${theme.text}`}>{holderTiers?.TurtleBelow||0}</span></div>
+                    <div className="border-l border-white/10 pl-3 ml-auto">
+                      <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-center">
+                        <div><div className="text-2xl">{'\u{1F531}'}</div><div className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Poseidon||0}</div></div>
+                        <div><div className="text-2xl">{'\u{1F40B}'}</div><div className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Whale||0}</div></div>
+                        <div><div className="text-2xl">{'\u{1F988}'}</div><div className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Shark||0}</div></div>
+                        <div><div className="text-2xl">{'\u{1F42C}'}</div><div className={`text-sm font-bold ${theme.text}`}>{holderTiers?.Dolphin||0}</div></div>
+                        <div><div className="text-2xl">{'\u{1F991}'}</div><div className={`text-sm font-bold ${theme.text}`}>{fmtAbbr(holderTiers?.Squid||0)}</div></div>
+                        <div><div className="text-2xl">{'\u{1F422}'}</div><div className={`text-sm font-bold ${theme.text}`}>{fmtAbbr(holderTiers?.TurtleBelow||0)}</div></div>
                       </div>
                     </div>
                   )}
