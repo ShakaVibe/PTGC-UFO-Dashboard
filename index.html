@@ -103,48 +103,65 @@
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
-    // Fetch burn history using RPC getLogs - fast and direct
-    // PulseChain has ~10 second blocks = 6 blocks/min = 360 blocks/hour
+    // Fetch burn history - query burn address for incoming token transfers
     const fetchBurnHist=async(addr,dec,hrs)=>{
       try{
-        // Get current block
-        const blockRes=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        const currentBlock=parseInt(blockRes.result,16);
-        if(!currentBlock)return 0;
+        const now=Date.now();
+        const cutoff=now-(hrs*60*60*1000);
+        let totalBurned=0;
+        let nextPageParams=null;
+        let page=0;
+        const maxPages=20;
+        let reachedCutoff=false;
         
-        // Calculate blocks: ~6 blocks per minute, 360 per hour
-        const blocksPerHour=360;
-        const blocksBack=blocksPerHour*hrs;
-        const fromBlock=Math.max(0,currentBlock-blocksBack);
-        
-        // ERC20 Transfer event topic
-        const transferTopic='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-        // Burn address as topic (padded to 32 bytes)
-        const burnTopic='0x000000000000000000000000'+BURN_ADDRESS.slice(2).toLowerCase();
-        
-        const logsRes=await rpcFetch({
-          jsonrpc:'2.0',
-          method:'eth_getLogs',
-          params:[{
-            address:addr,
-            topics:[transferTopic,null,burnTopic],
-            fromBlock:'0x'+fromBlock.toString(16),
-            toBlock:'latest'
-          }],
-          id:2
-        },15000); // 15 second timeout for larger queries
-        
-        if(!logsRes.result||!Array.isArray(logsRes.result))return 0;
-        
-        let total=0;
-        for(const log of logsRes.result){
-          if(log.data&&log.data!=='0x'){
-            total+=Number(BigInt(log.data))/Math.pow(10,dec);
+        while(page<maxPages&&!reachedCutoff){
+          // Query the burn address for token transfers, filter by this specific token
+          const baseUrl=`https://api.scan.pulsechain.com/api/v2/addresses/${BURN_ADDRESS}/token-transfers`;
+          const url=nextPageParams
+            ?`${baseUrl}?type=ERC-20&token=${addr}&${nextPageParams}`
+            :`${baseUrl}?type=ERC-20&token=${addr}`;
+          
+          const r=await fetch(url);
+          const data=await r.json();
+          
+          if(!data.items||!Array.isArray(data.items)||data.items.length===0)break;
+          
+          for(const tx of data.items){
+            // Only count transfers TO the burn address (not from)
+            const toAddr=(tx.to?.hash||'').toLowerCase();
+            if(toAddr!==BURN_ADDRESS.toLowerCase())continue;
+            
+            const txTime=new Date(tx.timestamp).getTime();
+            if(txTime<cutoff){
+              reachedCutoff=true;
+              break;
+            }
+            
+            // Get the amount - check different possible field names
+            let amount=0;
+            if(tx.total?.value){
+              amount=Number(BigInt(tx.total.value))/Math.pow(10,dec);
+            }else if(tx.value){
+              amount=Number(BigInt(tx.value))/Math.pow(10,dec);
+            }
+            totalBurned+=amount;
           }
+          
+          if(reachedCutoff)break;
+          
+          // Next page
+          if(data.next_page_params){
+            const params=new URLSearchParams();
+            Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
+            nextPageParams=params.toString();
+          }else{
+            break;
+          }
+          page++;
         }
         
-        console.log(`Burn ${hrs}h: ${total.toLocaleString()} from ${logsRes.result.length} txs`);
-        return total;
+        console.log(`Burn ${hrs}h: ${totalBurned.toLocaleString()} tokens (${page+1} pages)`);
+        return totalBurned;
       }catch(e){
         console.error('fetchBurnHist error:',e);
         return 0;
