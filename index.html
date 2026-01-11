@@ -671,16 +671,18 @@
           // Start these in parallel after initial load
           if(cfg.stakingContract){
             fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>setStakingData(staking));
-            fetchHolderTiers(cfg.address,cfg,h).then(result=>{
-              setHolderTiers({
-                Poseidon:result.counts.Poseidon||0,
-                Whale:result.counts.Whale||0,
-                Shark:result.counts.Shark||0,
-                Dolphin:result.counts.Dolphin||0,
-                SquidAndBelow:result.squidAndBelow||0
-              });
-            });
           }
+          
+          // Fetch holder tiers for all tokens
+          fetchHolderTiers(cfg.address,cfg,h).then(result=>{
+            setHolderTiers({
+              Poseidon:result.counts.Poseidon||0,
+              Whale:result.counts.Whale||0,
+              Shark:result.counts.Shark||0,
+              Dolphin:result.counts.Dolphin||0,
+              SquidAndBelow:result.squidAndBelow||0
+            });
+          });
           
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
@@ -753,16 +755,16 @@
                       <span className={`text-xl font-bold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'}{Math.abs(data?.change||0).toFixed(2)}%</span>
                     </div>
                     <div className={`${theme.card} border ${theme.border} rounded-xl px-5 py-3`}>
-                      <span className="text-white/60 text-sm mr-2">PLS</span>
+                      <span className="text-white/60 text-sm mr-2">PLS Ratio</span>
                       <span className={`text-3xl sm:text-4xl font-bold ${theme.text}`}>{plsRatio}</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all">
-                    <span className="text-white/60 text-sm">{'\u21C4'}</span>
-                    <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-8 h-8"/>
-                    <span className="text-white/60 text-sm">Switch</span>
+                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className={`flex items-center gap-3 px-5 py-3 rounded-xl border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all`}>
+                    <span className="text-white/50 text-lg">{'\u21C4'}</span>
+                    <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-10 h-10"/>
+                    <span className="text-white/70 text-base font-medium">Switch</span>
                   </button>
                   <span className="text-white/40 text-xs hidden md:block">{lastUpdate.toLocaleTimeString()}</span>
                   <a href={cfg.pulseScanUrl} target="_blank" className={`px-4 py-2 rounded-lg border ${theme.border} ${theme.text} font-medium hover:bg-white/5`}>Explorer</a>
@@ -795,7 +797,7 @@
                 <div className="flex items-center gap-3 flex-wrap"><span className="text-2xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 text-base font-bold">x{c.cnt}</span></span>)}</div>
               </div>
               
-              <div className={`bg-gradient-to-r ${isGold?'from-[#D9CA5D]/15 via-[#D9CA5D]/10 to-[#D9CA5D]/15':'from-[#7CFC00]/15 via-[#7CFC00]/10 to-[#7CFC00]/15'} border ${theme.border} rounded-xl p-4 clickable`} onClick={()=>setShowValueGen(true)}>
+              <div className={`bg-gradient-to-r from-emerald-500/15 via-emerald-600/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl p-4 clickable`} onClick={()=>setShowValueGen(true)}>
                 <div className="flex justify-between mb-2"><div className={`text-base font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated (24H)</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
                 <div className="flex items-baseline gap-2 mb-3"><span className="text-3xl font-bold text-green-400">{fmtUSD(valueGen24h)}</span><span className="text-white/50 text-sm">from {fmtUSD(data?.vol)} vol</span></div>
                 <div className="flex flex-wrap gap-x-4 gap-y-2 text-base">{cfg.taxBreakdown.map((item,i)=><div key={i} className="flex items-center gap-1"><span className="text-lg">{item.emoji}</span><span className="text-white/60">{item.name}:</span><span className={`font-bold ${theme.text}`}>{fmtUSD((data?.vol||0)*(item.pct/100))}</span></div>)}</div>
@@ -815,24 +817,22 @@
                       </div>
                     ))}
                   </div>
-                  {cfg.stakingContract && (
-                    <div className="border-l border-white/10 pl-4 ml-auto">
-                      {(holderTiers?.Poseidon===0&&holderTiers?.Whale===0&&holderTiers?.Shark===0&&holderTiers?.Dolphin===0&&holderTiers?.SquidAndBelow===0)?(
-                        <div className="flex items-center gap-2 px-4">
-                          <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
-                          <span className="text-white/50 text-sm">Loading...</span>
-                        </div>
-                      ):(
-                        <div className="grid grid-cols-3 gap-x-5 gap-y-3 text-center">
-                          <div><div className="text-3xl">{'\u{1F531}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Poseidon||0}</div></div>
-                          <div><div className="text-3xl">{'\u{1F40B}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Whale||0}</div></div>
-                          <div><div className="text-3xl">{'\u{1F988}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Shark||0}</div></div>
-                          <div><div className="text-3xl">{'\u{1F42C}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Dolphin||0}</div></div>
-                          <div className="col-span-2"><div className="text-2xl">{'\u{1F991}'}<span className="text-white">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-base font-bold ${theme.text}`}>{fmtAbbr(holderTiers?.SquidAndBelow||0)}</div></div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="border-l border-white/10 pl-4 ml-auto">
+                    {(holderTiers?.Poseidon===0&&holderTiers?.Whale===0&&holderTiers?.Shark===0&&holderTiers?.Dolphin===0&&holderTiers?.SquidAndBelow===0)?(
+                      <div className="flex items-center gap-2 px-4">
+                        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
+                        <span className="text-white/50 text-sm">Loading...</span>
+                      </div>
+                    ):(
+                      <div className="grid grid-cols-3 gap-x-5 gap-y-3 text-center">
+                        <div><div className="text-3xl">{'\u{1F531}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Poseidon||0}</div></div>
+                        <div><div className="text-3xl">{'\u{1F40B}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Whale||0}</div></div>
+                        <div><div className="text-3xl">{'\u{1F988}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Shark||0}</div></div>
+                        <div><div className="text-3xl">{'\u{1F42C}'}</div><div className={`text-base font-bold ${theme.text}`}>{holderTiers?.Dolphin||0}</div></div>
+                        <div className="col-span-2"><div className="text-2xl">{'\u{1F991}'}<span className="text-white">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-base font-bold ${theme.text}`}>{fmtAbbr(holderTiers?.SquidAndBelow||0)}</div></div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               
