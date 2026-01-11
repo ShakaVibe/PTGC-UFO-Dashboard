@@ -26,6 +26,29 @@ const API_BASE = 'https://api.scan.pulsechain.com/api/v2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Fetch with retry logic
+async function fetchWithRetry(url, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url);
+      const text = await response.text();
+      
+      // Check if we got HTML instead of JSON (rate limit error)
+      if (text.startsWith('<')) {
+        throw new Error('Got HTML instead of JSON - likely rate limited');
+      }
+      
+      return JSON.parse(text);
+    } catch (error) {
+      console.log(`    Retry ${i + 1}/${retries}: ${error.message}`);
+      if (i < retries - 1) {
+        await delay(2000); // Wait 2 seconds before retry
+      }
+    }
+  }
+  return null; // Return null if all retries failed
+}
+
 /**
  * Load existing burn history to append to (incremental updates)
  */
@@ -53,59 +76,62 @@ async function fetchBurnTransfers(tokenAddress, tokenSymbol, decimals, lastTimes
   let page = 0;
   const maxPages = 1000; // Increased limit
   let reachedOldData = false;
+  let consecutiveErrors = 0;
   
-  while (page < maxPages && !reachedOldData) {
+  while (page < maxPages && !reachedOldData && consecutiveErrors < 5) {
     const url = nextPageParams
       ? `${API_BASE}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&token=${tokenAddress}&${nextPageParams}`
       : `${API_BASE}/addresses/${BURN_ADDRESS}/token-transfers?type=ERC-20&token=${tokenAddress}`;
     
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
-        break;
-      }
-      
-      for (const tx of data.items) {
-        const toAddr = (tx.to?.hash || '').toLowerCase();
-        if (toAddr !== BURN_ADDRESS.toLowerCase()) continue;
-        
-        const timestamp = new Date(tx.timestamp).getTime();
-        
-        // If incremental and we've reached data we already have, stop
-        if (lastTimestamp && timestamp <= lastTimestamp) {
-          reachedOldData = true;
-          break;
-        }
-        
-        burns.push({
-          timestamp,
-          amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, decimals),
-          txHash: tx.transaction_hash,
-          from: (tx.from?.hash || '').toLowerCase()
-        });
-      }
-      
-      if (page % 50 === 0 || page < 5) {
-        console.log(`  Page ${page + 1}: ${burns.length} burns collected`);
-      }
-      
-      if (data.next_page_params && !reachedOldData) {
-        const params = new URLSearchParams();
-        Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
-        nextPageParams = params.toString();
-      } else {
-        break;
-      }
-      
-      page++;
-      await delay(150);
-      
-    } catch (error) {
-      console.error(`  Error on page ${page + 1}:`, error.message);
-      await delay(1000);
+    const data = await fetchWithRetry(url);
+    
+    if (!data) {
+      consecutiveErrors++;
+      console.log(`    Failed to fetch page ${page + 1}, consecutive errors: ${consecutiveErrors}`);
+      await delay(3000); // Wait 3 seconds after failed page
+      continue;
     }
+    
+    consecutiveErrors = 0; // Reset on success
+    
+    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+      break;
+    }
+    
+    for (const tx of data.items) {
+      const toAddr = (tx.to?.hash || '').toLowerCase();
+      if (toAddr !== BURN_ADDRESS.toLowerCase()) continue;
+      
+      const timestamp = new Date(tx.timestamp).getTime();
+      
+      // If incremental and we've reached data we already have, stop
+      if (lastTimestamp && timestamp <= lastTimestamp) {
+        reachedOldData = true;
+        break;
+      }
+      
+      burns.push({
+        timestamp,
+        amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, decimals),
+        txHash: tx.transaction_hash,
+        from: (tx.from?.hash || '').toLowerCase()
+      });
+    }
+    
+    if (page % 50 === 0 || page < 5) {
+      console.log(`  Page ${page + 1}: ${burns.length} burns collected`);
+    }
+    
+    if (data.next_page_params && !reachedOldData) {
+      const params = new URLSearchParams();
+      Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
+      nextPageParams = params.toString();
+    } else {
+      break;
+    }
+    
+    page++;
+    await delay(300); // Slower delay - 300ms between requests
   }
   
   console.log(`  Fetched ${burns.length} ${reachedOldData ? 'new ' : ''}burns`);
@@ -124,58 +150,61 @@ async function fetchPTGCBurnsByUFO(lastTimestamp = 0) {
   let page = 0;
   const maxPages = 500;
   let reachedOldData = false;
+  let consecutiveErrors = 0;
   
   // Get all token transfers where UFO contract was involved
-  while (page < maxPages && !reachedOldData) {
+  while (page < maxPages && !reachedOldData && consecutiveErrors < 5) {
     const url = nextPageParams
       ? `${API_BASE}/addresses/${UFO_CONTRACT}/token-transfers?type=ERC-20&token=${PTGC_ADDRESS}&${nextPageParams}`
       : `${API_BASE}/addresses/${UFO_CONTRACT}/token-transfers?type=ERC-20&token=${PTGC_ADDRESS}`;
     
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
-        // No direct transfers, try a different approach - check transactions
-        break;
-      }
-      
-      for (const tx of data.items) {
-        const timestamp = new Date(tx.timestamp).getTime();
-        
-        if (lastTimestamp && timestamp <= lastTimestamp) {
-          reachedOldData = true;
-          break;
-        }
-        
-        // Check if this transfer went to burn address
-        const toAddr = (tx.to?.hash || '').toLowerCase();
-        if (toAddr === BURN_ADDRESS.toLowerCase()) {
-          burns.push({
-            timestamp,
-            amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, PTGC_DECIMALS),
-            txHash: tx.transaction_hash
-          });
-        }
-      }
-      
-      console.log(`  Page ${page + 1}: ${burns.length} UFO->PTGC burns found`);
-      
-      if (data.next_page_params && !reachedOldData) {
-        const params = new URLSearchParams();
-        Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
-        nextPageParams = params.toString();
-      } else {
-        break;
-      }
-      
-      page++;
-      await delay(150);
-      
-    } catch (error) {
-      console.error(`  Error:`, error.message);
+    const data = await fetchWithRetry(url);
+    
+    if (!data) {
+      consecutiveErrors++;
+      console.log(`    Failed to fetch page ${page + 1}, consecutive errors: ${consecutiveErrors}`);
+      await delay(3000);
+      continue;
+    }
+    
+    consecutiveErrors = 0;
+    
+    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+      // No direct transfers, try a different approach - check transactions
       break;
     }
+    
+    for (const tx of data.items) {
+      const timestamp = new Date(tx.timestamp).getTime();
+      
+      if (lastTimestamp && timestamp <= lastTimestamp) {
+        reachedOldData = true;
+        break;
+      }
+      
+      // Check if this transfer went to burn address
+      const toAddr = (tx.to?.hash || '').toLowerCase();
+      if (toAddr === BURN_ADDRESS.toLowerCase()) {
+        burns.push({
+          timestamp,
+          amount: Number(BigInt(tx.total?.value || tx.value || '0')) / Math.pow(10, PTGC_DECIMALS),
+          txHash: tx.transaction_hash
+        });
+      }
+    }
+    
+    console.log(`  Page ${page + 1}: ${burns.length} UFO->PTGC burns found`);
+    
+    if (data.next_page_params && !reachedOldData) {
+      const params = new URLSearchParams();
+      Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
+      nextPageParams = params.toString();
+    } else {
+      break;
+    }
+    
+    page++;
+    await delay(300);
   }
   
   // If no results from token-transfers, try internal-transactions approach
@@ -197,62 +226,64 @@ async function fetchPTGCBurnsByUFOViaTransactions(lastTimestamp = 0) {
   let page = 0;
   const maxPages = 200;
   let reachedOldData = false;
+  let consecutiveErrors = 0;
   
-  while (page < maxPages && !reachedOldData) {
+  while (page < maxPages && !reachedOldData && consecutiveErrors < 5) {
     const url = nextPageParams
       ? `${API_BASE}/addresses/${UFO_CONTRACT}/transactions?${nextPageParams}`
       : `${API_BASE}/addresses/${UFO_CONTRACT}/transactions`;
     
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
+    const data = await fetchWithRetry(url);
+    
+    if (!data) {
+      consecutiveErrors++;
+      await delay(3000);
+      continue;
+    }
+    
+    consecutiveErrors = 0;
+    
+    if (!data.items || data.items.length === 0) break;
+    
+    for (const tx of data.items) {
+      const timestamp = new Date(tx.timestamp).getTime();
       
-      if (!data.items || data.items.length === 0) break;
-      
-      for (const tx of data.items) {
-        const timestamp = new Date(tx.timestamp).getTime();
-        
-        if (lastTimestamp && timestamp <= lastTimestamp) {
-          reachedOldData = true;
-          break;
-        }
-        
-        // Check if this transaction has token transfers
-        if (tx.token_transfers && tx.token_transfers.length > 0) {
-          for (const transfer of tx.token_transfers) {
-            const tokenAddr = (transfer.token?.address || '').toLowerCase();
-            const toAddr = (transfer.to?.hash || '').toLowerCase();
-            
-            if (tokenAddr === PTGC_ADDRESS.toLowerCase() && toAddr === BURN_ADDRESS.toLowerCase()) {
-              burns.push({
-                timestamp,
-                amount: Number(BigInt(transfer.total?.value || transfer.value || '0')) / Math.pow(10, PTGC_DECIMALS),
-                txHash: tx.hash
-              });
-            }
-          }
-        }
-      }
-      
-      if (page % 20 === 0) {
-        console.log(`    Tx page ${page + 1}: ${burns.length} burns found`);
-      }
-      
-      if (data.next_page_params && !reachedOldData) {
-        const params = new URLSearchParams();
-        Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
-        nextPageParams = params.toString();
-      } else {
+      if (lastTimestamp && timestamp <= lastTimestamp) {
+        reachedOldData = true;
         break;
       }
       
-      page++;
-      await delay(150);
-      
-    } catch (error) {
-      console.error(`  Error:`, error.message);
+      // Check if this transaction has token transfers
+      if (tx.token_transfers && tx.token_transfers.length > 0) {
+        for (const transfer of tx.token_transfers) {
+          const tokenAddr = (transfer.token?.address || '').toLowerCase();
+          const toAddr = (transfer.to?.hash || '').toLowerCase();
+          
+          if (tokenAddr === PTGC_ADDRESS.toLowerCase() && toAddr === BURN_ADDRESS.toLowerCase()) {
+            burns.push({
+              timestamp,
+              amount: Number(BigInt(transfer.total?.value || transfer.value || '0')) / Math.pow(10, PTGC_DECIMALS),
+              txHash: tx.hash
+            });
+          }
+        }
+      }
+    }
+    
+    if (page % 20 === 0) {
+      console.log(`    Tx page ${page + 1}: ${burns.length} burns found`);
+    }
+    
+    if (data.next_page_params && !reachedOldData) {
+      const params = new URLSearchParams();
+      Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
+      nextPageParams = params.toString();
+    } else {
       break;
     }
+    
+    page++;
+    await delay(300);
   }
   
   return burns;
