@@ -107,20 +107,21 @@
     };
     
     // Fetch staking data - totalStaked() and totalLocked() from contract
+    // Note: totalLocked is a SUBSET of totalStaked, not separate
     const fetchStakingData=async(stakingContract,tokenAddr,decimals,maxSupply)=>{
       try{
-        let stakedTokens=0;
+        let totalStakedTokens=0;
         let lockedTokens=0;
         
-        // totalStaked() = 0x817b1cd2
+        // totalStaked() = 0x817b1cd2 - returns ALL tokens in staking (including locked)
         const stakedRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1});
         console.log('totalStaked() raw:',stakedRes.result);
         if(stakedRes.result&&stakedRes.result!=='0x'&&stakedRes.result.length>2){
-          stakedTokens=Number(BigInt(stakedRes.result))/Math.pow(10,decimals);
+          totalStakedTokens=Number(BigInt(stakedRes.result))/Math.pow(10,decimals);
         }
-        console.log('Staked tokens:',stakedTokens);
+        console.log('Total in staking contract:',totalStakedTokens);
         
-        // totalLocked() = 0x56891412
+        // totalLocked() = 0x56891412 - returns locked tokens (subset of totalStaked)
         const lockedRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2});
         console.log('totalLocked() raw:',lockedRes.result);
         if(lockedRes.result&&lockedRes.result!=='0x'&&lockedRes.result.length>2){
@@ -128,11 +129,15 @@
         }
         console.log('Locked tokens:',lockedTokens);
         
+        // Staked (flexible) = totalStaked - totalLocked
+        const stakedTokens=Math.max(0,totalStakedTokens-lockedTokens);
+        console.log('Staked (flexible) tokens:',stakedTokens);
+        
         // Calculate percentages using maxSupply (333,333,333,333)
         const stakedPct=maxSupply>0?(stakedTokens/maxSupply)*100:0;
         const lockedPct=maxSupply>0?(lockedTokens/maxSupply)*100:0;
         
-        console.log('Staking %:',stakedPct.toFixed(4)+'%, Locked %:',lockedPct.toFixed(4)+'%');
+        console.log('Staked %:',stakedPct.toFixed(4)+'%, Locked %:',lockedPct.toFixed(4)+'%');
         
         return{
           staked:stakedTokens,
