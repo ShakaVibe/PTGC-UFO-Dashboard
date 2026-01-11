@@ -35,8 +35,9 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Fetch with retry and better error handling
+ * More retries (5) and longer delays to handle flaky API
  */
-async function fetchWithRetry(url, retries = 3) {
+async function fetchWithRetry(url, retries = 5) {
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url);
@@ -50,7 +51,7 @@ async function fetchWithRetry(url, retries = 3) {
       return JSON.parse(text);
     } catch (error) {
       console.log(`  Attempt ${i + 1}/${retries} failed: ${error.message}`);
-      if (i < retries - 1) await delay(2000 * (i + 1)); // Exponential backoff
+      if (i < retries - 1) await delay(3000 * (i + 1)); // Longer exponential backoff
     }
   }
   return null;
@@ -105,7 +106,7 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
   let reachedOldData = false;
   let consecutiveErrors = 0;
   
-  while (!reachedOldData && consecutiveErrors < 5) {
+  while (!reachedOldData && consecutiveErrors < 10) {
     const url = nextPageParams
       ? `${API_BASE}/tokens/${tokenAddress}/transfers?to_address_hash=${BURN_ADDRESS}&${nextPageParams}`
       : `${API_BASE}/tokens/${tokenAddress}/transfers?to_address_hash=${BURN_ADDRESS}`;
@@ -114,8 +115,8 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
     
     if (!data) {
       consecutiveErrors++;
-      console.log(`  Page ${page + 1}: ERROR (attempt ${consecutiveErrors}/5)`);
-      await delay(3000);
+      console.log(`  Page ${page + 1}: ERROR (attempt ${consecutiveErrors}/10)`);
+      await delay(5000); // Wait longer after errors
       continue;
     }
     
@@ -161,7 +162,7 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
     }
     
     page++;
-    await delay(300);
+    await delay(500); // Slower to be gentler on API
   }
   
   console.log(`Fetched ${newBurns.length} new ${tokenSymbol} burns`);
