@@ -1,60 +1,73 @@
 /**
- * Fetch Burn History Script v3
+ * Fetch Burn History Script - MORALIS VERSION
+ * 
+ * Uses Moralis API for reliable data fetching on PulseChain
  * 
  * Tracks:
- * 1. ALL PTGC burns (transfers to burn address)
- * 2. ALL UFO burns (transfers to burn address)
- * 3. PTGC Buyback Burns = PTGC burns FROM the PTGC LP pair (automated swaps)
- * 4. UFO Buyback Burns = UFO burns FROM the UFO LP pair (automated swaps)
+ * 1. PTGC burns (all transfers to burn address)
+ * 2. UFO burns (all transfers to burn address)
+ * 3. PTGC Buyback Burns = PTGC burns FROM the LP pair (automated swaps)
+ * 4. UFO Buyback Burns = UFO burns FROM the UFO LP pair
  * 
- * Key insight: When buybackBurnpTGC() runs, PTGC goes from LP pair → burn address
- * So we can directly measure PTGC burned by UFO by checking the "from" address!
- * 
- * Runs via GitHub Actions every hour.
+ * Also fetches: LP pairs, volume, holders, prices
  */
 
 const fs = require('fs');
 const path = require('path');
+
+// Moralis API Key - set via environment variable
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
+if (!MORALIS_API_KEY) {
+  console.error('ERROR: MORALIS_API_KEY environment variable not set');
+  process.exit(1);
+}
+
+// PulseChain chain identifier for Moralis
+const CHAIN = '0x171'; // PulseChain mainnet (369 in hex)
 
 // Addresses
 const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
 const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
 const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
 
-// LP Pairs - burns FROM these addresses are automated buyback burns
-const PTGC_LP_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // PTGC/WPLS
-const UFO_LP_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';  // UFO/PLS
+// LP Pairs (for identifying automated buyback burns)
+const PTGC_LP_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11';
+const UFO_LP_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';
 
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
 
-const API_BASE = 'https://api.scan.pulsechain.com/api/v2';
-const GECKO_API = 'https://api.geckoterminal.com/api/v2';
+const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Fetch with retry and better error handling
- * More retries (5) and longer delays to handle flaky API
+ * Make Moralis API request
  */
-async function fetchWithRetry(url, retries = 5) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+async function moralisRequest(endpoint, params = {}) {
+  const url = new URL(`${MORALIS_BASE}${endpoint}`);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+  });
+  
+  try {
+    const response = await fetch(url.toString(), {
+      headers: {
+        'X-API-Key': MORALIS_API_KEY,
+        'Accept': 'application/json'
       }
+    });
+    
+    if (!response.ok) {
       const text = await response.text();
-      if (text.startsWith('<') || text.includes('Internal Server Error')) {
-        throw new Error('Server returned HTML/error');
-      }
-      return JSON.parse(text);
-    } catch (error) {
-      console.log(`  Attempt ${i + 1}/${retries} failed: ${error.message}`);
-      if (i < retries - 1) await delay(3000 * (i + 1)); // Longer exponential backoff
+      throw new Error(`HTTP ${response.status}: ${text}`);
     }
+    
+    return await response.json();
+  } catch (error) {
+    console.log(`  API Error: ${error.message}`);
+    return null;
   }
-  return null;
 }
 
 /**
@@ -74,25 +87,14 @@ function loadExistingData(outputPath) {
 }
 
 /**
- * Extract "from" address from API response (handles different field names)
- */
-function getFromAddress(tx) {
-  if (tx.from?.hash) return tx.from.hash.toLowerCase();
-  if (tx.from?.address) return tx.from.address.toLowerCase();
-  if (typeof tx.from === 'string') return tx.from.toLowerCase();
-  return '';
-}
-
-/**
- * Fetch ALL token burns to burn address
- * Saves "from" address to identify buyback burns
+ * Fetch ALL token transfers to burn address using Moralis
  */
 async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns = []) {
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`Fetching ${tokenSymbol} burns...`);
+  console.log(`Fetching ${tokenSymbol} burns via Moralis...`);
   console.log(`${'='.repeat(50)}`);
   
-  // Find most recent timestamp we have (for incremental updates)
+  // Get the most recent timestamp we have (for incremental updates)
   const lastTimestamp = existingBurns.length > 0 ? existingBurns[0].t : 0;
   if (lastTimestamp) {
     console.log(`Incremental mode: fetching after ${new Date(lastTimestamp).toISOString()}`);
@@ -101,34 +103,32 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
   }
   
   const newBurns = [];
-  let nextPageParams = null;
+  let cursor = null;
   let page = 0;
   let reachedOldData = false;
-  let consecutiveErrors = 0;
   
-  while (!reachedOldData && consecutiveErrors < 10) {
-    const url = nextPageParams
-      ? `${API_BASE}/tokens/${tokenAddress}/transfers?to_address_hash=${BURN_ADDRESS}&${nextPageParams}`
-      : `${API_BASE}/tokens/${tokenAddress}/transfers?to_address_hash=${BURN_ADDRESS}`;
-    
-    const data = await fetchWithRetry(url);
+  while (!reachedOldData) {
+    // Moralis endpoint for wallet token transfers (burn address is the wallet receiving)
+    const data = await moralisRequest(`/${BURN_ADDRESS}/erc20/transfers`, {
+      chain: CHAIN,
+      contract_addresses: [tokenAddress],
+      cursor: cursor,
+      limit: 100
+    });
     
     if (!data) {
-      consecutiveErrors++;
-      console.log(`  Page ${page + 1}: ERROR (attempt ${consecutiveErrors}/10)`);
-      await delay(5000); // Wait longer after errors
+      console.log(`  Page ${page + 1}: API error, retrying in 5s...`);
+      await delay(5000);
       continue;
     }
     
-    consecutiveErrors = 0;
-    
-    if (!data.items || data.items.length === 0) {
-      console.log(`  Page ${page + 1}: No more data`);
+    if (!data.result || data.result.length === 0) {
+      console.log(`  No more data after page ${page + 1}`);
       break;
     }
     
-    for (const tx of data.items) {
-      const timestamp = new Date(tx.timestamp).getTime();
+    for (const tx of data.result) {
+      const timestamp = new Date(tx.block_timestamp).getTime();
       
       // Stop if we've reached data we already have
       if (lastTimestamp && timestamp <= lastTimestamp) {
@@ -137,45 +137,35 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
         break;
       }
       
-      const amount = Number(BigInt(tx.total?.value || '0')) / Math.pow(10, decimals);
-      const fromAddr = getFromAddress(tx);
+      const amount = Number(BigInt(tx.value || '0')) / Math.pow(10, decimals);
+      const fromAddr = (tx.from_address || '').toLowerCase();
       
       newBurns.push({
         t: timestamp,
         a: amount,
-        f: fromAddr // Save "from" address for buyback detection
+        f: fromAddr
       });
     }
     
     // Log progress
-    if (page % 25 === 0 || page < 5) {
+    if (page % 10 === 0 || page < 5) {
       console.log(`  Page ${page + 1}: ${newBurns.length} new burns collected`);
     }
     
-    // Get next page
-    if (data.next_page_params && !reachedOldData) {
-      const params = new URLSearchParams();
-      Object.entries(data.next_page_params).forEach(([k, v]) => params.set(k, v));
-      nextPageParams = params.toString();
-    } else {
+    // Check for next page
+    cursor = data.cursor;
+    if (!cursor || reachedOldData) {
       break;
     }
     
     page++;
-    await delay(500); // Slower to be gentler on API
+    await delay(200); // Gentle rate limiting
   }
   
   console.log(`Fetched ${newBurns.length} new ${tokenSymbol} burns`);
   
   // Merge with existing burns
-  // Convert existing burns to have "f" field if missing
-  const normalizedExisting = existingBurns.map(b => ({
-    t: b.t,
-    a: b.a,
-    f: b.f || '' // Old data won't have "f", default to empty
-  }));
-  
-  const allBurns = [...newBurns, ...normalizedExisting];
+  const allBurns = [...newBurns, ...existingBurns];
   
   // Sort by timestamp descending (newest first)
   allBurns.sort((a, b) => b.t - a.t);
@@ -189,8 +179,7 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
  */
 function filterBuybackBurns(burns, lpPairAddress) {
   const lpAddr = lpPairAddress.toLowerCase();
-  const buybacks = burns.filter(b => b.f === lpAddr);
-  return buybacks;
+  return burns.filter(b => b.f === lpAddr);
 }
 
 /**
@@ -222,87 +211,107 @@ function calculatePeriods(burns) {
 }
 
 /**
- * Fetch volume data from GeckoTerminal
+ * Fetch token price from Moralis
  */
-async function fetchVolumeData(poolAddress, tokenSymbol) {
-  console.log(`\nFetching ${tokenSymbol} volume data...`);
+async function fetchTokenPrice(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} price...`);
   
-  try {
-    const url = `${GECKO_API}/networks/pulsechain/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=90`;
-    const data = await fetchWithRetry(url);
-    
-    if (!data?.data?.attributes?.ohlcv_list) {
-      console.log(`  No volume data available`);
-      return null;
-    }
-    
-    const ohlcv = data.data.attributes.ohlcv_list;
-    const history = ohlcv.map(c => ({
-      t: c[0] * 1000, // Convert to milliseconds
-      v: c[5],        // Volume
-      c: c[4]         // Close price
-    })).sort((a, b) => b.t - a.t);
-    
-    const vol24h = history[0]?.v || 0;
-    const volYesterday = history[1]?.v || 0;
-    const vol7d = history.slice(0, 7).reduce((s, v) => s + v.v, 0);
-    const vol30d = history.slice(0, 30).reduce((s, v) => s + v.v, 0);
-    const change24h = volYesterday > 0 ? ((vol24h - volYesterday) / volYesterday) * 100 : 0;
-    
-    console.log(`  24H: $${vol24h.toLocaleString()}, 7D: $${vol7d.toLocaleString()}`);
-    
-    return { current24h: vol24h, yesterday24h: volYesterday, change24h, vol7d, vol30d, history: history.slice(0, 90) };
-  } catch (e) {
-    console.log(`  Error: ${e.message}`);
-    return null;
-  }
-}
-
-/**
- * Fetch pool data (liquidity, price)
- */
-async function fetchPoolData(poolAddress, tokenSymbol) {
-  console.log(`\nFetching ${tokenSymbol} pool data...`);
+  const data = await moralisRequest(`/erc20/${tokenAddress}/price`, {
+    chain: CHAIN,
+    include: 'percent_change'
+  });
   
-  try {
-    const data = await fetchWithRetry(`${GECKO_API}/networks/pulsechain/pools/${poolAddress}`);
-    
-    if (!data?.data?.attributes) {
-      console.log(`  No pool data available`);
-      return null;
-    }
-    
-    const attrs = data.data.attributes;
-    const result = {
-      liquidity: parseFloat(attrs.reserve_in_usd) || 0,
-      volume24h: parseFloat(attrs.volume_usd?.h24) || 0,
-      priceUsd: parseFloat(attrs.base_token_price_usd) || 0,
-      priceChange24h: parseFloat(attrs.price_change_percentage?.h24) || 0
+  if (data) {
+    const price = data.usdPrice || 0;
+    console.log(`  ${tokenSymbol} price: $${price}`);
+    return {
+      usd: price,
+      change24h: data['24hrPercentChange'] || 0
     };
-    
-    console.log(`  Price: $${result.priceUsd}, Liquidity: $${result.liquidity.toLocaleString()}`);
-    return result;
-  } catch (e) {
-    console.log(`  Error: ${e.message}`);
-    return null;
   }
+  
+  return { usd: 0, change24h: 0 };
 }
 
 /**
- * Fetch holder count
+ * Fetch token pairs and liquidity from Moralis
+ */
+async function fetchTokenPairs(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} LP pairs...`);
+  
+  const data = await moralisRequest(`/erc20/${tokenAddress}/pairs`, {
+    chain: CHAIN,
+    limit: 50
+  });
+  
+  if (data && data.pairs) {
+    console.log(`  Found ${data.pairs.length} pairs`);
+    
+    const pairs = data.pairs.map(p => ({
+      pairAddress: p.pair_address,
+      exchange: p.exchange_name || 'Unknown',
+      token0: p.pair?.[0]?.token_symbol,
+      token1: p.pair?.[1]?.token_symbol,
+      liquidity: p.liquidity_usd || 0,
+      price: p.usd_price || 0,
+      priceChange24h: p.usd_price_24hr_percent_change || 0
+    }));
+    
+    const totalLiquidity = pairs.reduce((s, p) => s + p.liquidity, 0);
+    console.log(`  Total liquidity: $${totalLiquidity.toLocaleString()}`);
+    
+    return {
+      pairs,
+      totalLiquidity
+    };
+  }
+  
+  return { pairs: [], totalLiquidity: 0 };
+}
+
+/**
+ * Fetch token holder count from Moralis
  */
 async function fetchHolderCount(tokenAddress, tokenSymbol) {
-  console.log(`\nFetching ${tokenSymbol} holder count...`);
+  console.log(`\nFetching ${tokenSymbol} holder stats...`);
   
-  try {
-    const data = await fetchWithRetry(`${API_BASE}/tokens/${tokenAddress}/counters`);
-    const holders = parseInt(data?.token_holders_count) || 0;
-    console.log(`  Holders: ${holders.toLocaleString()}`);
+  const data = await moralisRequest(`/erc20/${tokenAddress}/owners`, {
+    chain: CHAIN,
+    limit: 1
+  });
+  
+  if (data) {
+    // Moralis returns total in the response
+    const holders = data.total || 0;
+    console.log(`  ${tokenSymbol} holders: ${holders.toLocaleString()}`);
     return holders;
-  } catch (e) {
-    console.log(`  Error: ${e.message}`);
-    return 0;
   }
+  
+  return 0;
+}
+
+/**
+ * Fetch top token holders from Moralis
+ */
+async function fetchTopHolders(tokenAddress, tokenSymbol, limit = 100) {
+  console.log(`\nFetching ${tokenSymbol} top holders...`);
+  
+  const data = await moralisRequest(`/erc20/${tokenAddress}/owners`, {
+    chain: CHAIN,
+    limit: limit,
+    order: 'DESC'
+  });
+  
+  if (data && data.result) {
+    console.log(`  Got ${data.result.length} top holders`);
+    return data.result.map(h => ({
+      address: h.owner_address,
+      balance: h.balance_formatted || 0,
+      percentage: h.percentage_relative_to_total_supply || 0
+    }));
+  }
+  
+  return [];
 }
 
 /**
@@ -310,14 +319,14 @@ async function fetchHolderCount(tokenAddress, tokenSymbol) {
  */
 async function main() {
   console.log('\n' + '='.repeat(60));
-  console.log('BURN HISTORY FETCHER v3');
+  console.log('BURN HISTORY FETCHER - MORALIS VERSION');
   console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
   
   const outputPath = path.join(__dirname, '..', 'data', 'burn-history.json');
   const existingData = loadExistingData(outputPath);
   
-  // Get existing burns (with "f" field if available)
+  // Get existing burns (for incremental update)
   const existingPTGCBurns = existingData?.PTGC?.burns || [];
   const existingUFOBurns = existingData?.UFO?.burns || [];
   
@@ -326,10 +335,10 @@ async function main() {
   // ============================================
   
   const ptgcBurns = await fetchAllBurns(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, existingPTGCBurns);
-  await delay(1000);
+  await delay(500);
   
   const ufoBurns = await fetchAllBurns(UFO_ADDRESS, 'UFO', UFO_DECIMALS, existingUFOBurns);
-  await delay(1000);
+  await delay(500);
   
   // ============================================
   // IDENTIFY BUYBACK BURNS (from LP pairs)
@@ -339,12 +348,9 @@ async function main() {
   console.log('Identifying Buyback Burns...');
   console.log(`${'='.repeat(50)}`);
   
-  // PTGC buyback burns = PTGC that came FROM the PTGC LP pair
-  // This is what happens when UFO's buybackBurnpTGC() runs
   const ptgcBuybackBurns = filterBuybackBurns(ptgcBurns, PTGC_LP_PAIR);
   console.log(`PTGC Buyback Burns (from LP): ${ptgcBuybackBurns.length} transactions`);
   
-  // UFO buyback burns = UFO that came FROM the UFO LP pair
   const ufoBuybackBurns = filterBuybackBurns(ufoBurns, UFO_LP_PAIR);
   console.log(`UFO Buyback Burns (from LP): ${ufoBuybackBurns.length} transactions`);
   
@@ -366,20 +372,20 @@ async function main() {
   // FETCH ADDITIONAL DATA
   // ============================================
   
-  const ptgcVolume = await fetchVolumeData(PTGC_LP_PAIR, 'PTGC');
-  await delay(2000);
+  const ptgcPrice = await fetchTokenPrice(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
   
-  const ufoVolume = await fetchVolumeData(UFO_LP_PAIR, 'UFO');
-  await delay(2000);
+  const ufoPrice = await fetchTokenPrice(UFO_ADDRESS, 'UFO');
+  await delay(300);
   
-  const ptgcPool = await fetchPoolData(PTGC_LP_PAIR, 'PTGC');
-  await delay(2000);
+  const ptgcPairs = await fetchTokenPairs(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
   
-  const ufoPool = await fetchPoolData(UFO_LP_PAIR, 'UFO');
-  await delay(1000);
+  const ufoPairs = await fetchTokenPairs(UFO_ADDRESS, 'UFO');
+  await delay(300);
   
   const ptgcHolders = await fetchHolderCount(PTGC_ADDRESS, 'PTGC');
-  await delay(500);
+  await delay(300);
   
   const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
   
@@ -394,18 +400,17 @@ async function main() {
   const ptgcSnapshot = {
     date: today,
     holders: ptgcHolders,
-    liquidity: ptgcPool?.liquidity || 0,
-    price: ptgcPool?.priceUsd || 0
+    liquidity: ptgcPairs.totalLiquidity,
+    price: ptgcPrice.usd
   };
   
   const ufoSnapshot = {
     date: today,
     holders: ufoHolders,
-    liquidity: ufoPool?.liquidity || 0,
-    price: ufoPool?.priceUsd || 0
+    liquidity: ufoPairs.totalLiquidity,
+    price: ufoPrice.usd
   };
   
-  // Keep last 30 days of snapshots
   const ptgcSnapshots = [ptgcSnapshot, ...existingPTGCSnapshots.filter(s => s.date !== today)].slice(0, 30);
   const ufoSnapshots = [ufoSnapshot, ...existingUFOSnapshots.filter(s => s.date !== today)].slice(0, 30);
   
@@ -429,14 +434,16 @@ async function main() {
   
   const outputData = {
     lastUpdated: new Date().toISOString(),
+    dataSource: 'Moralis',
     
     PTGC: {
       totalBurned: ptgcTotal,
       burnCount: ptgcBurns.length,
       periods: ptgcPeriods,
-      burns: ptgcBurns.map(b => ({ t: b.t, a: b.a, f: b.f })), // Keep "f" for buyback detection
-      volume: ptgcVolume,
-      pool: ptgcPool,
+      burns: ptgcBurns.map(b => ({ t: b.t, a: b.a, f: b.f })),
+      price: ptgcPrice,
+      pairs: ptgcPairs,
+      holders: ptgcHolders,
       snapshots: ptgcSnapshots,
       changes: ptgcChanges
     },
@@ -445,15 +452,15 @@ async function main() {
       totalBurned: ufoTotal,
       burnCount: ufoBurns.length,
       periods: ufoPeriods,
-      burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f })), // Keep "f" for buyback detection
-      volume: ufoVolume,
-      pool: ufoPool,
+      burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f })),
+      price: ufoPrice,
+      pairs: ufoPairs,
+      holders: ufoHolders,
       snapshots: ufoSnapshots,
       changes: ufoChanges
     },
     
     // PTGC burned via automated buybacks (from LP swaps)
-    // This is "PTGC Burned by UFO" - directly measured!
     PTGCbyUFO: {
       totalBurned: ptgcBuybackTotal,
       burnCount: ptgcBuybackBurns.length,
@@ -510,6 +517,14 @@ async function main() {
   
   console.log(`\nUFO BUYBACK BURNS (from LP):`);
   console.log(`  Total: ${ufoBuybackTotal.toLocaleString()} tokens (${ufoBuybackBurns.length} txs)`);
+  
+  console.log(`\nPRICES:`);
+  console.log(`  PTGC: $${ptgcPrice.usd}`);
+  console.log(`  UFO: $${ufoPrice.usd}`);
+  
+  console.log(`\nHOLDERS:`);
+  console.log(`  PTGC: ${ptgcHolders.toLocaleString()}`);
+  console.log(`  UFO: ${ufoHolders.toLocaleString()}`);
   
   console.log('\n' + '='.repeat(60));
   console.log('Output written to:', outputPath);
