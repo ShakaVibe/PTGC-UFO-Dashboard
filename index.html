@@ -106,25 +106,35 @@
       }catch{return 0}
     };
     
-    // Fetch staking data - get tokens in staking contract
+    // Fetch staking data - totalStaked() and totalLocked() from contract
     const fetchStakingData=async(stakingContract,tokenAddr,decimals,maxSupply)=>{
       try{
-        // Get total PTGC tokens in staking contract (balanceOf)
-        const totalInContract=await fetchTokenBalance(tokenAddr,stakingContract,decimals);
-        console.log('Total tokens in staking contract:',totalInContract);
+        let stakedTokens=0;
+        let lockedTokens=0;
         
-        // For now, treat all tokens in contract as staked (until we know exact function names)
-        const stakedTokens=totalInContract;
-        const lockedTokens=0;
+        // totalStaked() = 0x817b1cd2
+        const stakedRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x817b1cd2'},'latest'],id:1});
+        console.log('totalStaked() raw:',stakedRes.result);
+        if(stakedRes.result&&stakedRes.result!=='0x'&&stakedRes.result.length>2){
+          stakedTokens=Number(BigInt(stakedRes.result))/Math.pow(10,decimals);
+        }
+        console.log('Staked tokens:',stakedTokens);
         
-        // Use maxSupply (hardcoded 333B) not contract totalSupply
+        // totalLocked() = 0x56891412
+        const lockedRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:stakingContract,data:'0x56891412'},'latest'],id:2});
+        console.log('totalLocked() raw:',lockedRes.result);
+        if(lockedRes.result&&lockedRes.result!=='0x'&&lockedRes.result.length>2){
+          lockedTokens=Number(BigInt(lockedRes.result))/Math.pow(10,decimals);
+        }
+        console.log('Locked tokens:',lockedTokens);
+        
+        // Calculate percentages using maxSupply (333,333,333,333)
         const stakedPct=maxSupply>0?(stakedTokens/maxSupply)*100:0;
-        const lockedPct=0;
+        const lockedPct=maxSupply>0?(lockedTokens/maxSupply)*100:0;
         
-        console.log('Staking data - Staked:',stakedTokens,'('+stakedPct.toFixed(2)+'%)');
+        console.log('Staking %:',stakedPct.toFixed(4)+'%, Locked %:',lockedPct.toFixed(4)+'%');
         
         return{
-          totalInContract,
           staked:stakedTokens,
           stakedPct,
           locked:lockedTokens,
@@ -132,7 +142,7 @@
         };
       }catch(e){
         console.error('Error fetching staking data:',e);
-        return{totalInContract:0,staked:0,stakedPct:0,locked:0,lockedPct:0};
+        return{staked:0,stakedPct:0,locked:0,lockedPct:0};
       }
     };
     
@@ -373,12 +383,16 @@
       
       // Use cfg.totalSupply (hardcoded max supply: 333,333,333,333 for PTGC)
       const maxSupply=cfg.totalSupply;
-      const burnedPct=maxSupply>0?(burn?.total||0)/maxSupply*100:0;
+      const burnedTokens=burn?.total||0;
+      const burnedPct=maxSupply>0?burnedTokens/maxSupply*100:0;
       const lpPct=maxSupply>0?(tokensInLP/maxSupply)*100:0;
+      const stakedTokens=stakingData?.staked||0;
+      const lockedTokens=stakingData?.locked||0;
       const stakedPct=stakingData?.stakedPct||0;
       const lockedPct=stakingData?.lockedPct||0;
-      // Held = everything else (not burned, not in LP, not staked, not locked)
-      const heldPct=Math.max(0,100-burnedPct-lpPct-stakedPct-lockedPct);
+      // Held = Total Supply - Burned - In LP - Staked - Locked
+      const heldTokens=Math.max(0,maxSupply-burnedTokens-tokensInLP-stakedTokens-lockedTokens);
+      const heldPct=maxSupply>0?(heldTokens/maxSupply)*100:0;
       
       const isPTGC=token==='PTGC';
       const chartData=isPTGC?[
@@ -675,23 +689,32 @@
       
       const burnedPct=cfg.totalSupply>0?(burn?.total||0)/cfg.totalSupply*100:0;
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
+      const stakedTokens=stakingData?.staked||0;
+      const lockedTokens=stakingData?.locked||0;
       const stakedPct=stakingData?.stakedPct||0;
       const lockedPct=stakingData?.lockedPct||0;
-      const heldPct=Math.max(0,100-burnedPct-lpPct-stakedPct-lockedPct);
+      const heldTokens=Math.max(0,cfg.totalSupply-(burn?.total||0)-tokensInLP-stakedTokens-lockedTokens);
+      const heldPct=cfg.totalSupply>0?(heldTokens/cfg.totalSupply)*100:0;
       
-      console.log('Token Allocation:', {burned:burnedPct.toFixed(2)+'%', lp:lpPct.toFixed(2)+'%', staked:stakedPct.toFixed(2)+'%', locked:lockedPct.toFixed(2)+'%', held:heldPct.toFixed(2)+'%'});
+      console.log('Token Allocation:', {
+        burned: (burn?.total||0).toLocaleString() + ' (' + burnedPct.toFixed(2) + '%)',
+        lp: tokensInLP.toLocaleString() + ' (' + lpPct.toFixed(2) + '%)',
+        staked: stakedTokens.toLocaleString() + ' (' + stakedPct.toFixed(2) + '%)',
+        locked: lockedTokens.toLocaleString() + ' (' + lockedPct.toFixed(2) + '%)',
+        held: heldTokens.toLocaleString() + ' (' + heldPct.toFixed(2) + '%)'
+      });
       
       const chartColors=cfg.stakingContract?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
       const chartData=cfg.stakingContract?[
-        {label:'Burned',value:burnedPct},
-        {label:'In LP',value:lpPct},
-        {label:'Staked',value:stakedPct},
-        {label:'Locked',value:lockedPct},
-        {label:'Held',value:heldPct}
+        {label:'Burned',value:burnedPct,tokens:burn?.total||0},
+        {label:'In LP',value:lpPct,tokens:tokensInLP},
+        {label:'Staked',value:stakedPct,tokens:stakedTokens},
+        {label:'Locked',value:lockedPct,tokens:lockedTokens},
+        {label:'Held',value:heldPct,tokens:heldTokens}
       ]:[
-        {label:'Burned',value:burnedPct},
-        {label:'In LP',value:lpPct},
-        {label:'Held',value:100-burnedPct-lpPct}
+        {label:'Burned',value:burnedPct,tokens:burn?.total||0},
+        {label:'In LP',value:lpPct,tokens:tokensInLP},
+        {label:'Held',value:100-burnedPct-lpPct,tokens:cfg.totalSupply-(burn?.total||0)-tokensInLP}
       ];
       
       if(loading)return<div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div><div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div></div></div>;
@@ -760,10 +783,15 @@
                   <DonutChart data={chartData} colors={chartColors} size={80}/>
                   <div className="flex-1 space-y-1">
                     {chartData.map((d,i)=>(
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <div className="w-2 h-2 rounded-full" style={{background:chartColors[i]}}></div>
-                        <span className="text-white/60">{d.label}:</span>
-                        <span className={`font-bold ${theme.text}`}>{d.value.toFixed(2)}%</span>
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{background:chartColors[i]}}></div>
+                          <span className="text-white/60">{d.label}:</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/80">{fmtAbbr(d.tokens)}</span>
+                          <span className={`font-bold ${theme.text}`}>{d.value.toFixed(2)}%</span>
+                        </div>
                       </div>
                     ))}
                   </div>
