@@ -354,9 +354,10 @@ async function fetchVolumeHistory(poolAddress, tokenSymbol) {
   
   const ohlcvList = data.data.attributes.ohlcv_list;
   
-  // OHLCV format: [timestamp, open, high, low, close, volume]
+  // OHLCV format: [timestamp_seconds, open, high, low, close, volume]
+  // Timestamp is already in SECONDS, convert to milliseconds for JS Date
   const volumeHistory = ohlcvList.map(candle => ({
-    timestamp: candle[0] * 1000, // Convert to milliseconds
+    timestamp: candle[0] * 1000, // Convert seconds to milliseconds
     open: candle[1],
     high: candle[2],
     low: candle[3],
@@ -366,22 +367,23 @@ async function fetchVolumeHistory(poolAddress, tokenSymbol) {
   
   console.log(`  Fetched ${volumeHistory.length} days of volume data`);
   
-  // Calculate volume periods
-  const now = Date.now();
-  const vol24h = volumeHistory.find(v => now - v.timestamp < 24 * 60 * 60 * 1000)?.volume || 0;
-  const vol7d = volumeHistory
-    .filter(v => now - v.timestamp < 7 * 24 * 60 * 60 * 1000)
-    .reduce((sum, v) => sum + v.volume, 0);
-  const vol30d = volumeHistory
-    .filter(v => now - v.timestamp < 30 * 24 * 60 * 60 * 1000)
-    .reduce((sum, v) => sum + v.volume, 0);
+  // Debug: show first few entries
+  if (volumeHistory.length > 0) {
+    console.log(`  Most recent: ${new Date(volumeHistory[0].timestamp).toISOString().split('T')[0]} - $${volumeHistory[0].volume.toFixed(2)}`);
+    if (volumeHistory.length > 1) {
+      console.log(`  Previous: ${new Date(volumeHistory[1].timestamp).toISOString().split('T')[0]} - $${volumeHistory[1].volume.toFixed(2)}`);
+    }
+  }
   
-  // Get yesterday's volume for comparison
-  const yesterday = volumeHistory.find(v => {
-    const age = now - v.timestamp;
-    return age >= 24 * 60 * 60 * 1000 && age < 48 * 60 * 60 * 1000;
-  });
-  const volYesterday = yesterday?.volume || 0;
+  // Calculate volume periods - sum up daily volumes
+  // Most recent entry is today (or yesterday if today has no trades yet)
+  const vol24h = volumeHistory[0]?.volume || 0;
+  const volYesterday = volumeHistory[1]?.volume || 0;
+  
+  // Sum volumes for 7D and 30D
+  const vol7d = volumeHistory.slice(0, 7).reduce((sum, v) => sum + v.volume, 0);
+  const vol30d = volumeHistory.slice(0, 30).reduce((sum, v) => sum + v.volume, 0);
+  
   const volChange24h = volYesterday > 0 ? ((vol24h - volYesterday) / volYesterday) * 100 : 0;
   
   console.log(`  24H Volume: $${vol24h.toLocaleString()} (${volChange24h > 0 ? '+' : ''}${volChange24h.toFixed(2)}%)`);
@@ -450,10 +452,25 @@ async function main() {
   const outputPath = path.join(__dirname, '..', 'data', 'burn-history.json');
   const existingData = loadExistingData(outputPath);
   
+  // Check for --full flag to force complete refetch
+  const forceFullRefetch = process.argv.includes('--full');
+  
   // Get last timestamps for incremental updates
-  const lastPTGCTimestamp = existingData?.PTGC?.burns?.[0]?.t || 0;
-  const lastUFOTimestamp = existingData?.UFO?.burns?.[0]?.t || 0;
-  const lastPTGCbyUFOTimestamp = existingData?.PTGCbyUFO?.burns?.[0]?.t || 0;
+  let lastPTGCTimestamp = existingData?.PTGC?.burns?.[0]?.t || 0;
+  let lastUFOTimestamp = existingData?.UFO?.burns?.[0]?.t || 0;
+  let lastPTGCbyUFOTimestamp = existingData?.PTGCbyUFO?.burns?.[0]?.t || 0;
+  
+  if (forceFullRefetch) {
+    console.log('FULL REFETCH MODE - ignoring existing data timestamps');
+    lastPTGCTimestamp = 0;
+    lastUFOTimestamp = 0;
+    lastPTGCbyUFOTimestamp = 0;
+  } else {
+    console.log('Incremental mode - will fetch burns newer than:');
+    console.log(`  PTGC: ${lastPTGCTimestamp ? new Date(lastPTGCTimestamp).toISOString() : 'none (full fetch)'}`);
+    console.log(`  UFO: ${lastUFOTimestamp ? new Date(lastUFOTimestamp).toISOString() : 'none (full fetch)'}`);
+    console.log(`  PTGCbyUFO: ${lastPTGCbyUFOTimestamp ? new Date(lastPTGCbyUFOTimestamp).toISOString() : 'none (full fetch)'}`);
+  }
   
   // Fetch new PTGC burns
   const newPTGCBurns = await fetchBurnTransfers(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, lastPTGCTimestamp);
