@@ -219,6 +219,7 @@
         
         // 5. Get management wallet token balances in parallel (same tokens as ProWeb)
         let managementTotalUSD=mgmtPLS*plsPrice;
+        const managementTokens=[{symbol:'PLS',balance:mgmtPLS,usdValue:mgmtPLS*plsPrice}];
         
         const tokenPromises=MANAGEMENT_TOKENS.map(async(token)=>{
           try{
@@ -231,15 +232,20 @@
                 const price=token.price!==undefined?token.price:(token.priceRatio?plsPrice*token.priceRatio:0);
                 const usdValue=balance*price;
                 console.log(`Management ${token.symbol}: ${balance.toLocaleString()} ($${usdValue.toLocaleString()})`);
-                return usdValue;
+                return{symbol:token.symbol,balance,usdValue};
               }
             }
           }catch(e){console.error(`Error fetching ${token.symbol}:`,e)}
-          return 0;
+          return null;
         });
         
-        const tokenValues=await Promise.all(tokenPromises);
-        managementTotalUSD+=tokenValues.reduce((sum,v)=>sum+v,0);
+        const tokenResults=await Promise.all(tokenPromises);
+        tokenResults.forEach(t=>{
+          if(t&&t.usdValue>0){
+            managementTokens.push(t);
+            managementTotalUSD+=t.usdValue;
+          }
+        });
         console.log('Management wallet total USD:',managementTotalUSD);
         
         // 6. Calculate totals
@@ -256,6 +262,7 @@
           pendingUSD,
           pendingCount,
           managementValue:managementTotalUSD,
+          managementTokens,
           totalValue
         };
       }catch(e){
@@ -652,6 +659,7 @@
       const[showValueGen,setShowValueGen]=useState(false);
       const[daoData,setDaoData]=useState(null);
       const[daoLoading,setDaoLoading]=useState(true);
+      const[showMgmtTokens,setShowMgmtTokens]=useState(false);
       const[stakingData,setStakingData]=useState({totalInContract:0,staked:0,stakedPct:0,locked:0,lockedPct:0});
       const[holderTiers,setHolderTiers]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
       
@@ -848,7 +856,22 @@
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{1F3E6}'} DAO Funds Ready for Deployment</div>
-                          <div className={`text-2xl font-bold text-green-400`}>{fmtUSD(daoData?.managementValue||0)}</div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-2xl font-bold text-green-400`}>{fmtUSD(daoData?.managementValue||0)}</span>
+                            <button onClick={()=>setShowMgmtTokens(!showMgmtTokens)} className="text-white/40 hover:text-white/70 transition-colors">
+                              {showMgmtTokens?'\u25B2':'\u25BC'}
+                            </button>
+                          </div>
+                          {showMgmtTokens&&daoData?.managementTokens&&(
+                            <div className="mt-2 space-y-1 text-sm">
+                              {daoData.managementTokens.filter(t=>t.usdValue>0).map((t,i)=>(
+                                <div key={i} className="flex justify-between text-white/60">
+                                  <span>{t.symbol}</span>
+                                  <span>{fmtAbbr(t.balance)} <span className="text-green-400/70">({fmtUSD(t.usdValue)})</span></span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div>
                           <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{1F4CA}'} Total DAO Value</div>
