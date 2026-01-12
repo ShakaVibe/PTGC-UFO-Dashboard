@@ -102,7 +102,19 @@
     const getHolderTier=(holdingPct)=>{for(const tier of HOLDER_TIERS){if(holdingPct>=tier.p)return tier.n}return'Shell'};
     
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
-    const fetchHolders=async addr=>{try{const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);return parseInt((await r.json()).token_holders_count)||0}catch{return 0}};
+    const fetchHolders=async addr=>{
+      // First try to get from burn history cache (Moralis data)
+      const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
+      if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
+        return burnHistoryCache[token].holders;
+      }
+      // Fallback to PulseScan
+      try{
+        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);
+        const data=await r.json();
+        return parseInt(data.token_holders_count)||0;
+      }catch{return 0}
+    };
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
     
     // Burn history cache - loaded from pre-generated JSON file
@@ -115,7 +127,8 @@
     const fetchHolderHistory=async()=>{
       if(holderHistoryCache)return holderHistoryCache;
       try{
-        const r=await fetch(HOLDER_HISTORY_URL);
+        // Add cache buster to avoid stale data
+        const r=await fetch(HOLDER_HISTORY_URL+'?t='+Date.now());
         holderHistoryCache=await r.json();
         console.log('Holder history loaded');
         return holderHistoryCache;
@@ -614,94 +627,116 @@
     // Holder Growth Chart Modal using Chart.js
     const HolderChartModal=({open,close,token,currentHolders,theme,cfg})=>{
       const[chartData,setChartData]=useState([]);
+      const[chartError,setChartError]=useState(null);
       const chartRef=React.useRef(null);
       const chartInstance=React.useRef(null);
       
       useEffect(()=>{
         if(!open)return;
         const loadData=async()=>{
-          const hist=await fetchHolderHistory();
-          if(hist&&hist.data){
-            const key=token.toLowerCase();
-            const data=hist.data.map(d=>({
-              month:d.month,
-              date:d.date,
-              holders:d[key]||0
-            }));
-            // Add current holders as latest data point if different month
-            const today=new Date().toISOString().slice(0,7);
-            const lastMonth=data[data.length-1]?.month;
-            if(today!==lastMonth&&currentHolders>0){
-              data.push({month:today,date:new Date().toISOString().slice(0,10),holders:currentHolders});
+          try{
+            console.log('Loading holder history...');
+            const hist=await fetchHolderHistory();
+            console.log('Holder history loaded:',hist);
+            if(hist&&hist.data){
+              const key=token.toLowerCase();
+              const data=hist.data.map(d=>({
+                month:d.month,
+                date:d.date,
+                holders:d[key]||0
+              }));
+              // Add current holders as latest data point if different month
+              const today=new Date().toISOString().slice(0,7);
+              const lastMonth=data[data.length-1]?.month;
+              if(today!==lastMonth&&currentHolders>0){
+                data.push({month:today,date:new Date().toISOString().slice(0,10),holders:currentHolders});
+              }
+              console.log('Chart data:',data);
+              setChartData(data);
             }
-            setChartData(data);
+          }catch(e){
+            console.error('Error loading holder history:',e);
+            setChartError(e.message);
           }
         };
         loadData();
       },[open,token,currentHolders]);
       
       useEffect(()=>{
-        if(!open||!chartRef.current||chartData.length===0||!window.Chart)return;
+        if(!open||!chartRef.current||chartData.length===0)return;
+        
+        console.log('Creating chart, Chart.js available:',!!window.Chart);
+        
+        if(!window.Chart){
+          setChartError('Chart.js not loaded');
+          return;
+        }
         
         // Destroy existing chart
         if(chartInstance.current){
           chartInstance.current.destroy();
         }
         
-        const ctx=chartRef.current.getContext('2d');
-        const gradient=ctx.createLinearGradient(0,0,0,250);
-        gradient.addColorStop(0,cfg.colorHex+'66');
-        gradient.addColorStop(1,cfg.colorHex+'00');
-        
-        chartInstance.current=new window.Chart(ctx,{
-          type:'line',
-          data:{
-            labels:chartData.map(d=>d.month.slice(5)),
-            datasets:[{
-              label:token+' Holders',
-              data:chartData.map(d=>d.holders),
-              borderColor:cfg.colorHex,
-              backgroundColor:gradient,
-              borderWidth:3,
-              fill:true,
-              tension:0.4,
-              pointBackgroundColor:cfg.colorHex,
-              pointBorderColor:'#111',
-              pointBorderWidth:2,
-              pointRadius:4,
-              pointHoverRadius:6
-            }]
-          },
-          options:{
-            responsive:true,
-            maintainAspectRatio:false,
-            plugins:{
-              legend:{display:false},
-              tooltip:{
-                backgroundColor:'#1a1a1a',
+        try{
+          const ctx=chartRef.current.getContext('2d');
+          const gradient=ctx.createLinearGradient(0,0,0,250);
+          gradient.addColorStop(0,cfg.colorHex+'66');
+          gradient.addColorStop(1,cfg.colorHex+'00');
+          
+          chartInstance.current=new window.Chart(ctx,{
+            type:'line',
+            data:{
+              labels:chartData.map(d=>d.month.slice(5)),
+              datasets:[{
+                label:token+' Holders',
+                data:chartData.map(d=>d.holders),
                 borderColor:cfg.colorHex,
-                borderWidth:1,
-                titleColor:'#fff',
-                bodyColor:'#fff',
-                padding:12,
-                displayColors:false,
-                callbacks:{
-                  label:(ctx)=>ctx.parsed.y.toLocaleString()+' holders'
+                backgroundColor:gradient,
+                borderWidth:3,
+                fill:true,
+                tension:0.4,
+                pointBackgroundColor:cfg.colorHex,
+                pointBorderColor:'#111',
+                pointBorderWidth:2,
+                pointRadius:4,
+                pointHoverRadius:6
+              }]
+            },
+            options:{
+              responsive:true,
+              maintainAspectRatio:false,
+              plugins:{
+                legend:{display:false},
+                tooltip:{
+                  backgroundColor:'#1a1a1a',
+                  borderColor:cfg.colorHex,
+                  borderWidth:1,
+                  titleColor:'#fff',
+                  bodyColor:'#fff',
+                  padding:12,
+                  displayColors:false,
+                  callbacks:{
+                    label:(ctx)=>ctx.parsed.y.toLocaleString()+' holders'
+                  }
+                }
+              },
+              scales:{
+                x:{
+                  grid:{color:'#333',drawBorder:false},
+                  ticks:{color:'#999'}
+                },
+                y:{
+                  grid:{color:'#333',drawBorder:false},
+                  ticks:{color:'#999',callback:v=>v>=1000?(v/1000).toFixed(0)+'K':v}
                 }
               }
-            },
-            scales:{
-              x:{
-                grid:{color:'#333',drawBorder:false},
-                ticks:{color:'#999'}
-              },
-              y:{
-                grid:{color:'#333',drawBorder:false},
-                ticks:{color:'#999',callback:v=>v>=1000?(v/1000).toFixed(0)+'K':v}
-              }
             }
-          }
-        });
+          });
+          console.log('Chart created successfully');
+        }catch(e){
+          console.error('Error creating chart:',e);
+          setChartError(e.message);
+        }
         
         return()=>{
           if(chartInstance.current){
@@ -749,9 +784,14 @@
               
               <div className={`${theme.card} border ${theme.border} rounded-xl p-4 relative`} style={{height:'300px'}}>
                 <canvas ref={chartRef} style={{width:'100%',height:'100%'}}></canvas>
-                {chartData.length===0&&(
+                {chartData.length===0&&!chartError&&(
                   <div className="flex items-center justify-center h-full absolute inset-0">
                     <div className="text-white/50">Loading chart data...</div>
+                  </div>
+                )}
+                {chartError&&(
+                  <div className="flex items-center justify-center h-full absolute inset-0">
+                    <div className="text-red-400">Error: {chartError}</div>
                   </div>
                 )}
               </div>
@@ -1075,7 +1115,7 @@
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vc=burnHistoryCache?.[token]?.volume?.change24h;return vc!==undefined?<div className={`text-sm ${vc>=0?'text-green-400':'text-red-400'}`}>{vc>=0?'\u25B2':'\u25BC'} {Math.abs(vc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liq/MCap</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative cursor-pointer hover:border-opacity-70`} onClick={()=>setShowHolderChart(true)}><div className="flex justify-between items-start"><div className="text-white text-xs uppercase mb-1">Holders</div><span className="text-white/40 hover:text-white/70 text-sm" title="View Growth Chart">{'\u{1F4C8}'}</span></div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&<div className={`text-sm ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange).toFixed(1)}%</div>}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative cursor-pointer hover:border-opacity-70`} onClick={()=>{console.log('Opening holder chart');setShowHolderChart(true)}}><div className="flex justify-between items-start"><div className="text-white text-xs uppercase mb-1">Holders</div><span className="text-white/40 hover:text-white/70 text-sm" title="View Growth Chart">{'\u{1F4C8}'}</span></div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&<div className={`text-sm ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange).toFixed(1)}%</div>}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:<div className="text-white/50 text-sm">{tokensInLPPct}%</div>})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="text-2xl font-bold"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></div></div>
               </div>
