@@ -98,7 +98,7 @@ async function moralisRequest(endpoint, params = {}) {
  * Load existing burn files for a token
  */
 function loadExistingBurns(dataDir, token) {
-  const allBurns = [];
+  let allBurns = [];
   console.log(`\nLoading existing ${token} burns...`);
   console.log(`  Data directory: ${dataDir}`);
   
@@ -116,7 +116,8 @@ function loadExistingBurns(dataDir, token) {
           const data = JSON.parse(fileContent);
           console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
           if (data.burns && data.burns.length > 0) {
-            allBurns.push(...data.burns);
+            // Use concat instead of spread to avoid stack overflow
+            allBurns = allBurns.concat(data.burns);
             console.log(`    Added ${data.burns.length} burns, total now: ${allBurns.length}`);
           }
         } else {
@@ -140,7 +141,8 @@ function loadExistingBurns(dataDir, token) {
         const data = JSON.parse(fileContent);
         console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
         if (data.burns && data.burns.length > 0) {
-          allBurns.push(...data.burns);
+          // Use concat instead of spread to avoid stack overflow
+          allBurns = allBurns.concat(data.burns);
           console.log(`    Added ${data.burns.length} burns, total now: ${allBurns.length}`);
         }
       } else {
