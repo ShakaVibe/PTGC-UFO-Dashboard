@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
@@ -123,6 +123,20 @@
         console.error('Failed to load holder history:',e);
         return null;
       }
+    };
+    
+    // Get holder change vs last month from history
+    const getHolderChange=(token,currentHolders)=>{
+      if(!holderHistoryCache||!holderHistoryCache.data||holderHistoryCache.data.length<2)return null;
+      const key=token.toLowerCase();
+      const data=holderHistoryCache.data;
+      const lastMonth=data[data.length-1];
+      const prevMonth=data[data.length-2];
+      if(!lastMonth||!prevMonth)return null;
+      const lastVal=currentHolders||lastMonth[key]||0;
+      const prevVal=prevMonth[key]||0;
+      if(prevVal===0)return null;
+      return ((lastVal-prevVal)/prevVal)*100;
     };
     
     const fetchBurnHistory=async()=>{
@@ -597,10 +611,11 @@
       );
     };
     
-    // Holder Growth Chart Modal
+    // Holder Growth Chart Modal using Chart.js
     const HolderChartModal=({open,close,token,currentHolders,theme,cfg})=>{
       const[chartData,setChartData]=useState([]);
-      const{LineChart,Line,XAxis,YAxis,Tooltip,ResponsiveContainer,CartesianGrid,Area,AreaChart}=window.Recharts||{};
+      const chartRef=React.useRef(null);
+      const chartInstance=React.useRef(null);
       
       useEffect(()=>{
         if(!open)return;
@@ -613,7 +628,7 @@
               date:d.date,
               holders:d[key]||0
             }));
-            // Add current holders as latest data point if different date
+            // Add current holders as latest data point if different month
             const today=new Date().toISOString().slice(0,7);
             const lastMonth=data[data.length-1]?.month;
             if(today!==lastMonth&&currentHolders>0){
@@ -625,7 +640,77 @@
         loadData();
       },[open,token,currentHolders]);
       
-      if(!open||!AreaChart)return null;
+      useEffect(()=>{
+        if(!open||!chartRef.current||chartData.length===0||!window.Chart)return;
+        
+        // Destroy existing chart
+        if(chartInstance.current){
+          chartInstance.current.destroy();
+        }
+        
+        const ctx=chartRef.current.getContext('2d');
+        const gradient=ctx.createLinearGradient(0,0,0,250);
+        gradient.addColorStop(0,cfg.colorHex+'66');
+        gradient.addColorStop(1,cfg.colorHex+'00');
+        
+        chartInstance.current=new window.Chart(ctx,{
+          type:'line',
+          data:{
+            labels:chartData.map(d=>d.month.slice(5)),
+            datasets:[{
+              label:token+' Holders',
+              data:chartData.map(d=>d.holders),
+              borderColor:cfg.colorHex,
+              backgroundColor:gradient,
+              borderWidth:3,
+              fill:true,
+              tension:0.4,
+              pointBackgroundColor:cfg.colorHex,
+              pointBorderColor:'#111',
+              pointBorderWidth:2,
+              pointRadius:4,
+              pointHoverRadius:6
+            }]
+          },
+          options:{
+            responsive:true,
+            maintainAspectRatio:false,
+            plugins:{
+              legend:{display:false},
+              tooltip:{
+                backgroundColor:'#1a1a1a',
+                borderColor:cfg.colorHex,
+                borderWidth:1,
+                titleColor:'#fff',
+                bodyColor:'#fff',
+                padding:12,
+                displayColors:false,
+                callbacks:{
+                  label:(ctx)=>ctx.parsed.y.toLocaleString()+' holders'
+                }
+              }
+            },
+            scales:{
+              x:{
+                grid:{color:'#333',drawBorder:false},
+                ticks:{color:'#999'}
+              },
+              y:{
+                grid:{color:'#333',drawBorder:false},
+                ticks:{color:'#999',callback:v=>v>=1000?(v/1000).toFixed(0)+'K':v}
+              }
+            }
+          }
+        });
+        
+        return()=>{
+          if(chartInstance.current){
+            chartInstance.current.destroy();
+          }
+        };
+      },[open,chartData,cfg.colorHex,token]);
+      
+      if(!open)return null;
       
       const firstHolders=chartData[0]?.holders||0;
       const lastHolders=chartData[chartData.length-1]?.holders||currentHolders||0;
@@ -662,30 +747,10 @@
                 </div>
               </div>
               
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`} style={{height:'300px'}}>
-                {chartData.length>0?(
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{top:10,right:10,left:0,bottom:0}}>
-                      <defs>
-                        <linearGradient id={`gradient-${token}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={cfg.colorHex} stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor={cfg.colorHex} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#333"/>
-                      <XAxis dataKey="month" stroke="#666" tick={{fill:'#999',fontSize:12}} tickFormatter={v=>v.slice(5)}/>
-                      <YAxis stroke="#666" tick={{fill:'#999',fontSize:12}} tickFormatter={v=>v>=1000?(v/1000).toFixed(0)+'K':v} domain={['dataMin - 500','dataMax + 500']}/>
-                      <Tooltip
-                        contentStyle={{background:'#1a1a1a',border:`1px solid ${cfg.colorHex}`,borderRadius:'8px'}}
-                        labelStyle={{color:'#fff'}}
-                        formatter={(v)=>[fmt(v)+' holders',token]}
-                        labelFormatter={(l)=>'Month: '+l}
-                      />
-                      <Area type="monotone" dataKey="holders" stroke={cfg.colorHex} strokeWidth={3} fill={`url(#gradient-${token})`}/>
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ):(
-                  <div className="flex items-center justify-center h-full">
+              <div className={`${theme.card} border ${theme.border} rounded-xl p-4 relative`} style={{height:'300px'}}>
+                <canvas ref={chartRef} style={{width:'100%',height:'100%'}}></canvas>
+                {chartData.length===0&&(
+                  <div className="flex items-center justify-center h-full absolute inset-0">
                     <div className="text-white/50">Loading chart data...</div>
                   </div>
                 )}
@@ -852,6 +917,7 @@
       const[holderTiers,setHolderTiers]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
       const[copied,setCopied]=useState(false);
       const[ptgcPrice,setPtgcPrice]=useState(0);
+      const[holderChange,setHolderChange]=useState(null);
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
       useEffect(()=>{
@@ -865,15 +931,24 @@
         setStakingData({totalInContract:0,staked:0,stakedPct:0,locked:0,lockedPct:0});
         setHolderTiers({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
         setPtgcPrice(0);
+        setHolderChange(null);
         
         const load=async()=>{
           // Load burn history cache first (for burn modal)
           fetchBurnHistory();
-          // Load holder history cache (for holder chart)
-          fetchHolderHistory();
+          // Load holder history cache (for holder chart and change indicator)
+          fetchHolderHistory().then(()=>{
+            // Update holder change after history is loaded
+            const hc=getHolderChange(token,0);
+            if(hc!==null)setHolderChange(hc);
+          });
           
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          
+          // Update holder change with current holder count
+          const hc=getHolderChange(token,h);
+          if(hc!==null)setHolderChange(hc);
           
           // Start these in parallel after initial load
           if(cfg.stakingContract){
@@ -1000,7 +1075,7 @@
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vc=burnHistoryCache?.[token]?.volume?.change24h;return vc!==undefined?<div className={`text-sm ${vc>=0?'text-green-400':'text-red-400'}`}>{vc>=0?'\u25B2':'\u25BC'} {Math.abs(vc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liq/MCap</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative cursor-pointer hover:border-opacity-70`} onClick={()=>setShowHolderChart(true)}><div className="flex justify-between items-start"><div className="text-white text-xs uppercase mb-1">Holders</div><span className="text-white/40 hover:text-white/70 text-sm" title="View Growth Chart">{'\u{1F4C8}'}</span></div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{(()=>{const hc=burnHistoryCache?.[token]?.changes?.holders;return hc!==undefined?<div className={`text-sm ${hc>=0?'text-green-400':'text-red-400'}`}>{hc>=0?'\u25B2':'\u25BC'} {Math.abs(hc).toFixed(2)}%</div>:null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative cursor-pointer hover:border-opacity-70`} onClick={()=>setShowHolderChart(true)}><div className="flex justify-between items-start"><div className="text-white text-xs uppercase mb-1">Holders</div><span className="text-white/40 hover:text-white/70 text-sm" title="View Growth Chart">{'\u{1F4C8}'}</span></div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&<div className={`text-sm ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange).toFixed(1)}%</div>}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:<div className="text-white/50 text-sm">{tokensInLPPct}%</div>})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="text-2xl font-bold"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></div></div>
               </div>
