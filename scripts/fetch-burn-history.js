@@ -1,15 +1,17 @@
 /**
- * Fetch Burn History Script - MORALIS VERSION
+ * Fetch Burn History Script - MORALIS VERSION (SPLIT FILES)
  * 
- * Uses Moralis API for reliable data fetching on PulseChain
+ * Splits burn data into multiple files to stay under GitHub's 100MB limit
  * 
- * Tracks:
- * 1. PTGC burns (all transfers to burn address)
- * 2. UFO burns (all transfers to burn address)
- * 3. PTGC Buyback Burns = PTGC burns FROM the LP pair (automated swaps)
- * 4. UFO Buyback Burns = UFO burns FROM the UFO LP pair
- * 
- * Also fetches: LP pairs, volume, holders, prices
+ * Files created:
+ * - burn-summary.json (totals, prices, periods, snapshots)
+ * - ptgc-burns-2023-h2.json (May-Dec 2023)
+ * - ptgc-burns-2024-h1.json (Jan-Jun 2024)
+ * - ptgc-burns-2024-h2.json (Jul-Dec 2024)
+ * - ptgc-burns-2025-h1.json (Jan-Jun 2025)
+ * - ptgc-burns-2025-h2.json (Jul-Dec 2025)
+ * - ptgc-burns-2026.json (2026+, current file for updates)
+ * - ufo-burns.json (all UFO burns - small file)
  */
 
 const fs = require('fs');
@@ -41,6 +43,28 @@ const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Time period boundaries (timestamps)
+const PERIODS = {
+  '2023-h2': { start: new Date('2023-05-01').getTime(), end: new Date('2024-01-01').getTime() },
+  '2024-h1': { start: new Date('2024-01-01').getTime(), end: new Date('2024-07-01').getTime() },
+  '2024-h2': { start: new Date('2024-07-01').getTime(), end: new Date('2025-01-01').getTime() },
+  '2025-h1': { start: new Date('2025-01-01').getTime(), end: new Date('2025-07-01').getTime() },
+  '2025-h2': { start: new Date('2025-07-01').getTime(), end: new Date('2026-01-01').getTime() },
+  '2026': { start: new Date('2026-01-01').getTime(), end: new Date('2030-01-01').getTime() }
+};
+
+/**
+ * Get period key for a timestamp
+ */
+function getPeriodKey(timestamp) {
+  for (const [key, range] of Object.entries(PERIODS)) {
+    if (timestamp >= range.start && timestamp < range.end) {
+      return key;
+    }
+  }
+  return '2026'; // Default to current
+}
+
 /**
  * Make Moralis API request
  */
@@ -71,17 +95,57 @@ async function moralisRequest(endpoint, params = {}) {
 }
 
 /**
- * Load existing data for incremental updates
+ * Load existing burn files for a token
  */
-function loadExistingData(outputPath) {
+function loadExistingBurns(dataDir, token) {
+  const allBurns = [];
+  
+  if (token === 'PTGC') {
+    // Load all PTGC period files
+    for (const period of Object.keys(PERIODS)) {
+      const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
+      try {
+        if (fs.existsSync(filePath)) {
+          const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          allBurns.push(...data.burns);
+          console.log(`  Loaded ${data.burns.length} burns from ${filePath}`);
+        }
+      } catch (e) {
+        console.log(`  Could not load ${filePath}: ${e.message}`);
+      }
+    }
+  } else {
+    // Load UFO file
+    const filePath = path.join(dataDir, 'ufo-burns.json');
+    try {
+      if (fs.existsSync(filePath)) {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        allBurns.push(...data.burns);
+        console.log(`  Loaded ${data.burns.length} burns from ${filePath}`);
+      }
+    } catch (e) {
+      console.log(`  Could not load ${filePath}: ${e.message}`);
+    }
+  }
+  
+  // Sort by timestamp descending
+  allBurns.sort((a, b) => b.t - a.t);
+  return allBurns;
+}
+
+/**
+ * Load existing summary
+ */
+function loadExistingSummary(dataDir) {
+  const filePath = path.join(dataDir, 'burn-summary.json');
   try {
-    if (fs.existsSync(outputPath)) {
-      const data = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-      console.log('Loaded existing data from:', data.lastUpdated);
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      console.log('Loaded existing summary from:', data.lastUpdated);
       return data;
     }
   } catch (e) {
-    console.log('Could not load existing data:', e.message);
+    console.log('Could not load summary:', e.message);
   }
   return null;
 }
@@ -175,6 +239,24 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
 }
 
 /**
+ * Split burns into period files
+ */
+function splitBurnsByPeriod(burns) {
+  const byPeriod = {};
+  
+  for (const period of Object.keys(PERIODS)) {
+    byPeriod[period] = [];
+  }
+  
+  for (const burn of burns) {
+    const period = getPeriodKey(burn.t);
+    byPeriod[period].push(burn);
+  }
+  
+  return byPeriod;
+}
+
+/**
  * Filter burns that came from LP pair (these are buyback burns from swaps)
  */
 function filterBuybackBurns(burns, lpPairAddress) {
@@ -234,6 +316,27 @@ async function fetchTokenPrice(tokenAddress, tokenSymbol) {
 }
 
 /**
+ * Fetch volume stats from Moralis
+ */
+async function fetchVolumeStats(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} volume...`);
+  
+  const data = await moralisRequest(`/erc20/${tokenAddress}/analytics`, {
+    chain: CHAIN
+  });
+  
+  if (data) {
+    console.log(`  ${tokenSymbol} 24h volume: $${data.totalVolume24h || 0}`);
+    return {
+      volume24h: data.totalVolume24h || 0,
+      change24h: data.volumeChange24h || 0
+    };
+  }
+  
+  return { volume24h: 0, change24h: 0 };
+}
+
+/**
  * Fetch token pairs and liquidity from Moralis
  */
 async function fetchTokenPairs(tokenAddress, tokenSymbol) {
@@ -247,30 +350,34 @@ async function fetchTokenPairs(tokenAddress, tokenSymbol) {
   if (data && data.pairs) {
     console.log(`  Found ${data.pairs.length} pairs`);
     
-    const pairs = data.pairs.map(p => ({
-      pairAddress: p.pair_address,
-      exchange: p.exchange_name || 'Unknown',
-      token0: p.pair?.[0]?.token_symbol,
-      token1: p.pair?.[1]?.token_symbol,
-      liquidity: p.liquidity_usd || 0,
-      price: p.usd_price || 0,
-      priceChange24h: p.usd_price_24hr_percent_change || 0
-    }));
+    let totalLiquidity = 0;
+    let totalTokensInLP = 0;
     
-    const totalLiquidity = pairs.reduce((s, p) => s + p.liquidity, 0);
+    for (const pair of data.pairs) {
+      totalLiquidity += pair.usdValueCombined || 0;
+      
+      // Find this token's reserve in the pair
+      if (pair.token0 && pair.token0.address.toLowerCase() === tokenAddress.toLowerCase()) {
+        totalTokensInLP += Number(pair.reserve0 || 0);
+      } else if (pair.token1 && pair.token1.address.toLowerCase() === tokenAddress.toLowerCase()) {
+        totalTokensInLP += Number(pair.reserve1 || 0);
+      }
+    }
+    
     console.log(`  Total liquidity: $${totalLiquidity.toLocaleString()}`);
     
     return {
-      pairs,
-      totalLiquidity
+      pairs: data.pairs,
+      totalLiquidity,
+      totalTokensInLP
     };
   }
   
-  return { pairs: [], totalLiquidity: 0 };
+  return { pairs: [], totalLiquidity: 0, totalTokensInLP: 0 };
 }
 
 /**
- * Fetch token holder count from Moralis
+ * Fetch holder count from Moralis
  */
 async function fetchHolderCount(tokenAddress, tokenSymbol) {
   console.log(`\nFetching ${tokenSymbol} holder stats...`);
@@ -280,38 +387,13 @@ async function fetchHolderCount(tokenAddress, tokenSymbol) {
     limit: 1
   });
   
-  if (data) {
-    // Moralis returns total in the response
-    const holders = data.total || 0;
-    console.log(`  ${tokenSymbol} holders: ${holders.toLocaleString()}`);
-    return holders;
+  if (data && data.totalHolders !== undefined) {
+    console.log(`  ${tokenSymbol} holders: ${data.totalHolders}`);
+    return data.totalHolders;
   }
   
+  console.log(`  ${tokenSymbol} holders: 0`);
   return 0;
-}
-
-/**
- * Fetch top token holders from Moralis
- */
-async function fetchTopHolders(tokenAddress, tokenSymbol, limit = 100) {
-  console.log(`\nFetching ${tokenSymbol} top holders...`);
-  
-  const data = await moralisRequest(`/erc20/${tokenAddress}/owners`, {
-    chain: CHAIN,
-    limit: limit,
-    order: 'DESC'
-  });
-  
-  if (data && data.result) {
-    console.log(`  Got ${data.result.length} top holders`);
-    return data.result.map(h => ({
-      address: h.owner_address,
-      balance: h.balance_formatted || 0,
-      percentage: h.percentage_relative_to_total_supply || 0
-    }));
-  }
-  
-  return [];
 }
 
 /**
@@ -319,16 +401,23 @@ async function fetchTopHolders(tokenAddress, tokenSymbol, limit = 100) {
  */
 async function main() {
   console.log('\n' + '='.repeat(60));
-  console.log('BURN HISTORY FETCHER - MORALIS VERSION');
+  console.log('BURN HISTORY FETCHER - MORALIS VERSION (SPLIT FILES)');
   console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
   
-  const outputPath = path.join(__dirname, '..', 'data', 'burn-history.json');
-  const existingData = loadExistingData(outputPath);
+  const dataDir = path.join(__dirname, '..', 'data');
   
-  // Get existing burns (for incremental update)
-  const existingPTGCBurns = existingData?.PTGC?.burns || [];
-  const existingUFOBurns = existingData?.UFO?.burns || [];
+  // Ensure data directory exists
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  
+  // Load existing data
+  const existingSummary = loadExistingSummary(dataDir);
+  console.log('\nLoading existing PTGC burns...');
+  const existingPTGCBurns = loadExistingBurns(dataDir, 'PTGC');
+  console.log('\nLoading existing UFO burns...');
+  const existingUFOBurns = loadExistingBurns(dataDir, 'UFO');
   
   // ============================================
   // FETCH ALL BURNS
@@ -378,6 +467,12 @@ async function main() {
   const ufoPrice = await fetchTokenPrice(UFO_ADDRESS, 'UFO');
   await delay(300);
   
+  const ptgcVolume = await fetchVolumeStats(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoVolume = await fetchVolumeStats(UFO_ADDRESS, 'UFO');
+  await delay(300);
+  
   const ptgcPairs = await fetchTokenPairs(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
@@ -389,26 +484,34 @@ async function main() {
   
   const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
   
+  // Get tokens in LP from pairs data
+  const ptgcTokensInLP = ptgcPairs.totalTokensInLP || 0;
+  const ufoTokensInLP = ufoPairs.totalTokensInLP || 0;
+
   // ============================================
   // BUILD SNAPSHOTS (for daily changes)
   // ============================================
   
   const today = new Date().toISOString().split('T')[0];
-  const existingPTGCSnapshots = existingData?.PTGC?.snapshots || [];
-  const existingUFOSnapshots = existingData?.UFO?.snapshots || [];
+  const existingPTGCSnapshots = existingSummary?.PTGC?.snapshots || [];
+  const existingUFOSnapshots = existingSummary?.UFO?.snapshots || [];
   
   const ptgcSnapshot = {
     date: today,
     holders: ptgcHolders,
     liquidity: ptgcPairs.totalLiquidity,
-    price: ptgcPrice.usd
+    price: ptgcPrice.usd,
+    volume: ptgcVolume.volume24h,
+    tokensInLP: ptgcTokensInLP
   };
   
   const ufoSnapshot = {
     date: today,
     holders: ufoHolders,
     liquidity: ufoPairs.totalLiquidity,
-    price: ufoPrice.usd
+    price: ufoPrice.usd,
+    volume: ufoVolume.volume24h,
+    tokensInLP: ufoTokensInLP
   };
   
   const ptgcSnapshots = [ptgcSnapshot, ...existingPTGCSnapshots.filter(s => s.date !== today)].slice(0, 30);
@@ -420,19 +523,84 @@ async function main() {
   
   const ptgcChanges = ptgcYesterday ? {
     holders: ptgcYesterday.holders ? ((ptgcHolders - ptgcYesterday.holders) / ptgcYesterday.holders * 100) : 0,
-    liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0
+    liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0,
+    tokensInLP: ptgcYesterday.tokensInLP ? ((ptgcTokensInLP - ptgcYesterday.tokensInLP) / ptgcYesterday.tokensInLP * 100) : 0
   } : null;
   
   const ufoChanges = ufoYesterday ? {
     holders: ufoYesterday.holders ? ((ufoHolders - ufoYesterday.holders) / ufoYesterday.holders * 100) : 0,
-    liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0
+    liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0,
+    tokensInLP: ufoYesterday.tokensInLP ? ((ufoTokensInLP - ufoYesterday.tokensInLP) / ufoYesterday.tokensInLP * 100) : 0
   } : null;
   
   // ============================================
-  // BUILD OUTPUT
+  // SPLIT PTGC BURNS BY PERIOD
   // ============================================
   
-  const outputData = {
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Splitting burns by time period...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const ptgcBurnsByPeriod = splitBurnsByPeriod(ptgcBurns);
+  
+  for (const [period, burns] of Object.entries(ptgcBurnsByPeriod)) {
+    console.log(`  ${period}: ${burns.length} burns`);
+  }
+  
+  // ============================================
+  // WRITE PTGC BURN FILES (by period)
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Writing PTGC burn files...');
+  console.log(`${'='.repeat(50)}`);
+  
+  for (const [period, burns] of Object.entries(ptgcBurnsByPeriod)) {
+    if (burns.length === 0) continue;
+    
+    const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
+    const periodTotal = burns.reduce((s, b) => s + b.a, 0);
+    
+    const fileData = {
+      period,
+      burnCount: burns.length,
+      totalBurned: periodTotal,
+      burns: burns.map(b => ({ t: b.t, a: b.a, f: b.f }))
+    };
+    
+    fs.writeFileSync(filePath, JSON.stringify(fileData));
+    const fileSizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(2);
+    console.log(`  Written: ${filePath} (${fileSizeMB} MB, ${burns.length} burns)`);
+  }
+  
+  // ============================================
+  // WRITE UFO BURNS FILE
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Writing UFO burns file...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const ufoFilePath = path.join(dataDir, 'ufo-burns.json');
+  const ufoFileData = {
+    burnCount: ufoBurns.length,
+    totalBurned: ufoTotal,
+    burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f }))
+  };
+  
+  fs.writeFileSync(ufoFilePath, JSON.stringify(ufoFileData));
+  const ufoFileSizeMB = (fs.statSync(ufoFilePath).size / (1024 * 1024)).toFixed(2);
+  console.log(`  Written: ${ufoFilePath} (${ufoFileSizeMB} MB, ${ufoBurns.length} burns)`);
+  
+  // ============================================
+  // WRITE SUMMARY FILE
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Writing summary file...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const summaryData = {
     lastUpdated: new Date().toISOString(),
     dataSource: 'Moralis',
     
@@ -440,24 +608,37 @@ async function main() {
       totalBurned: ptgcTotal,
       burnCount: ptgcBurns.length,
       periods: ptgcPeriods,
-      burns: ptgcBurns.map(b => ({ t: b.t, a: b.a, f: b.f })),
       price: ptgcPrice,
+      volume: {
+        usd24h: ptgcVolume.volume24h,
+        change24h: ptgcVolume.change24h
+      },
       pairs: ptgcPairs,
       holders: ptgcHolders,
+      tokensInLP: ptgcTokensInLP,
       snapshots: ptgcSnapshots,
-      changes: ptgcChanges
+      changes: ptgcChanges,
+      // File references for loading burns
+      burnFiles: Object.keys(PERIODS).map(p => `ptgc-burns-${p}.json`).filter(f => 
+        fs.existsSync(path.join(dataDir, f))
+      )
     },
     
     UFO: {
       totalBurned: ufoTotal,
       burnCount: ufoBurns.length,
       periods: ufoPeriods,
-      burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f })),
       price: ufoPrice,
+      volume: {
+        usd24h: ufoVolume.volume24h,
+        change24h: ufoVolume.change24h
+      },
       pairs: ufoPairs,
       holders: ufoHolders,
+      tokensInLP: ufoTokensInLP,
       snapshots: ufoSnapshots,
-      changes: ufoChanges
+      changes: ufoChanges,
+      burnFile: 'ufo-burns.json'
     },
     
     // PTGC burned via automated buybacks (from LP swaps)
@@ -475,16 +656,10 @@ async function main() {
     }
   };
   
-  // ============================================
-  // WRITE OUTPUT
-  // ============================================
-  
-  const dataDir = path.dirname(outputPath);
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-  
-  fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2));
+  const summaryPath = path.join(dataDir, 'burn-summary.json');
+  fs.writeFileSync(summaryPath, JSON.stringify(summaryData, null, 2));
+  const summarySizeMB = (fs.statSync(summaryPath).size / (1024 * 1024)).toFixed(2);
+  console.log(`  Written: ${summaryPath} (${summarySizeMB} MB)`);
   
   // ============================================
   // PRINT SUMMARY
@@ -527,7 +702,13 @@ async function main() {
   console.log(`  UFO: ${ufoHolders.toLocaleString()}`);
   
   console.log('\n' + '='.repeat(60));
-  console.log('Output written to:', outputPath);
+  console.log('FILES WRITTEN:');
+  for (const period of Object.keys(PERIODS)) {
+    const f = path.join(dataDir, `ptgc-burns-${period}.json`);
+    if (fs.existsSync(f)) console.log(`  - ptgc-burns-${period}.json`);
+  }
+  console.log('  - ufo-burns.json');
+  console.log('  - burn-summary.json');
   console.log('Completed:', new Date().toISOString());
   console.log('='.repeat(60));
 }
