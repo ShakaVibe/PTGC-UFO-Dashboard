@@ -1447,6 +1447,7 @@
                   const burn24hAmt=burnPeriods.h24||0;
                   const burn24hUSD=(burnPeriods.h24||0)*(data?.price||0);
                   const burnPctNum=burn.pct||0;
+                  const burnUSD=burn.total*(data?.price||0);
                   const creatures=getBurnC(burnPctNum,isPTGC?'Squid':'Shrimp');
                   const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
                   const valueGen=(()=>{
@@ -1468,43 +1469,49 @@
                     }
                   })();
                   const valueGenChange=volChange||0;
+                  const whaleProgress=(burnPctNum/100)*100;
                   
                   return(
-                    <div className={`rounded-2xl overflow-hidden ${isPTGC?'bg-gradient-to-b from-[#1a1a0a] via-[#0d0d05] to-[#0a0a0a]':'bg-gradient-to-b from-[#0a1a0a] via-[#050d05] to-[#0a0a0a]'}`} style={{border:`2px solid ${isPTGC?'#D9CA5D33':'#22c55e33'}`}}>
+                    <div className="rounded-3xl overflow-hidden bg-[#0a0a0a]" style={{border:`3px solid ${isPTGC?'#D9CA5D':'#22c55e'}`}}>
                       {/* Close button */}
-                      <button onClick={()=>setShowKPI(false)} className="absolute top-3 right-3 text-white/50 hover:text-white text-2xl z-10">&times;</button>
+                      <button onClick={()=>setShowKPI(false)} className="absolute top-4 right-4 text-white/50 hover:text-white text-2xl z-10">&times;</button>
                       
                       {/* Header */}
-                      <div className="text-center pt-6 pb-4">
-                        <div className="flex justify-center mb-2">
-                          <div className={`w-20 h-20 rounded-full flex items-center justify-center ${isPTGC?'bg-[#D9CA5D]/20':'bg-green-500/20'}`} style={{boxShadow:`0 0 40px ${isPTGC?'#D9CA5D66':'#22c55e66'}`}}>
-                            <img src={cfg.logo} className="w-16 h-16 rounded-full" alt={token}/>
+                      <div className="px-5 pt-5 pb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-14 h-14 rounded-full flex items-center justify-center`} style={{boxShadow:`0 0 25px ${isPTGC?'#D9CA5D99':'#22c55e99'}`,background:`radial-gradient(circle,${isPTGC?'#D9CA5D33':'#22c55e33'} 0%,transparent 70%)`}}>
+                            <img src={cfg.logo} className="w-12 h-12 rounded-full" alt={token}/>
+                          </div>
+                          <div>
+                            <div className={`text-2xl font-bold ${theme.text}`}>{token}</div>
+                            <div className={`text-[10px] tracking-widest ${theme.text} opacity-60`}>KPI REPORT</div>
+                            <div className="text-[9px] text-white/30 font-mono">{cfg.address}</div>
                           </div>
                         </div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{token}</div>
-                        <div className={`text-xs ${theme.text} opacity-70`}>KPI REPORT</div>
-                        <div className="text-[10px] text-white/40 mt-1 font-mono">{cfg.address}</div>
-                        <div className="flex justify-center items-center gap-2 mt-2">
-                          <span className="text-white/50 text-xs">{today}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded ${isPTGC?'bg-[#D9CA5D] text-black':'bg-green-500 text-black'} font-bold`}>24H</span>
+                        <div className="text-right">
+                          <div className="text-white/50 text-xs">{today}</div>
+                          <div className={`text-[10px] px-3 py-1 rounded-full ${isPTGC?'bg-[#D9CA5D] text-black':'bg-green-500 text-black'} font-bold mt-1 inline-block`}>24H</div>
                         </div>
                       </div>
                       
                       {/* Price Section */}
-                      <div className="mx-4 mb-4">
-                        <div className={`rounded-xl p-4 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/30':'bg-[#0a1a0a] border border-green-500/30'}`}>
+                      <div className="mx-4 mb-3">
+                        <div className={`rounded-2xl p-4 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/40':'bg-[#0a1a0a] border border-green-500/40'}`}>
                           <div className="flex items-center justify-between">
                             <div>
-                              <div className={`text-xs ${theme.text} opacity-70 flex items-center gap-1`}><span className="text-green-400">$</span> PRICE</div>
-                              <div className={`text-3xl font-bold ${theme.text}`}>${data?.price?.toFixed(6)||'0.000000'}</div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-sm font-bold text-black">$</div>
+                                <span className="text-white/60 text-xs uppercase tracking-wide">Price</span>
+                              </div>
+                              <div className={`text-4xl font-bold ${theme.text}`}>${data?.price?.toFixed(6)||'0.000000'}</div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <div className={`px-3 py-1 rounded-lg text-sm font-bold ${priceUp?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}>
+                            <div className="flex items-center gap-4">
+                              <div className={`px-4 py-2 rounded-xl text-lg font-bold ${priceUp?'bg-green-500 text-black':'bg-red-500 text-white'}`}>
                                 {priceUp?'\u25B2':'\u25BC'} {Math.abs(priceChange).toFixed(2)}%
                               </div>
                               <div className="text-center">
-                                <div className="text-[10px] text-white/50">PLS RATIO</div>
-                                <div className={`text-lg font-bold ${theme.text}`}>{plsRatio.toFixed(2)}</div>
+                                <div className="text-[10px] text-white/40 uppercase">PLS Ratio</div>
+                                <div className={`text-2xl font-bold ${theme.text}`}>{plsRatio.toFixed(2)}</div>
                               </div>
                             </div>
                           </div>
@@ -1512,70 +1519,100 @@
                       </div>
                       
                       {/* Stats Grid */}
-                      <div className="mx-4 mb-4 grid grid-cols-2 gap-3">
-                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
-                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className={theme.text}>🏛</span> MARKET CAP</div>
-                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div>
+                      <div className="mx-4 mb-3 grid grid-cols-2 gap-2">
+                        <div className={`rounded-2xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`${theme.text} text-sm`}>🏛</span>
+                            <span className="text-white/50 text-[10px] uppercase">Market Cap</span>
+                          </div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div>
                         </div>
-                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
-                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-yellow-400">💧</span> LIQUIDITY {liqChange!==undefined&&<span className={`ml-auto ${liqChange>=0?'text-green-400':'text-red-400'}`}>{liqChange>=0?'\u25B2':'\u25BC'} {Math.abs(liqChange).toFixed(1)}%</span>}</div>
-                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>
+                        <div className={`rounded-2xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-yellow-400 text-sm">💧</span>
+                            <span className="text-white/50 text-[10px] uppercase">Liquidity</span>
+                            {liqChange!==undefined&&<span className={`ml-auto text-xs font-bold ${liqChange>=0?'text-green-400':'text-red-400'}`}>{liqChange>=0?'\u25B2':'\u25BC'} {Math.abs(liqChange).toFixed(1)}%</span>}
+                          </div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>
                         </div>
-                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
-                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-purple-400">📊</span> LIQ/MC RATIO</div>
-                          <div className={`text-xl font-bold ${theme.text}`}>{liqMcapRatio}%</div>
+                        <div className={`rounded-2xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-purple-400 text-sm">📊</span>
+                            <span className="text-white/50 text-[10px] uppercase">Liq/MC Ratio</span>
+                          </div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div>
                         </div>
-                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
-                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-blue-400">📈</span> VOLUME {volChange!==undefined&&<span className={`ml-auto ${volChange>=0?'text-green-400':'text-red-400'}`}>{volChange>=0?'\u25B2':'\u25BC'} {Math.abs(volChange).toFixed(1)}%</span>}</div>
-                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>
+                        <div className={`rounded-2xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-blue-400 text-sm">📈</span>
+                            <span className="text-white/50 text-[10px] uppercase">Volume</span>
+                            {volChange!==undefined&&<span className={`ml-auto text-xs font-bold ${volChange>=0?'text-green-400':'text-red-400'}`}>{volChange>=0?'\u25B2':'\u25BC'} {Math.abs(volChange).toFixed(1)}%</span>}
+                          </div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>
                         </div>
-                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
-                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-cyan-400">👥</span> HOLDERS {holderChange!==null&&holderChange!==0&&<span className={`ml-auto ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange)}</span>}</div>
-                          <div className={`text-xl font-bold ${theme.text}`}>{fmt(holders)}</div>
+                        <div className={`rounded-2xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-cyan-400 text-sm">👥</span>
+                            <span className="text-white/50 text-[10px] uppercase">Holders</span>
+                            {holderChange!==null&&holderChange!==0&&<span className={`ml-auto text-xs font-bold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange)}</span>}
+                          </div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>
                         </div>
-                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
-                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-green-400">⚡</span> VALUE GENERATED {valueGenChange!==0&&<span className={`ml-auto ${valueGenChange>=0?'text-green-400':'text-red-400'}`}>{valueGenChange>=0?'\u25B2':'\u25BC'} {Math.abs(valueGenChange).toFixed(1)}%</span>}</div>
-                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(valueGen)}</div>
+                        <div className={`rounded-2xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-green-400 text-sm">⚡</span>
+                            <span className="text-white/50 text-[10px] uppercase">Value Generated</span>
+                            {valueGenChange!==0&&<span className={`ml-auto text-xs font-bold ${valueGenChange>=0?'text-green-400':'text-red-400'}`}>{valueGenChange>=0?'\u25B2':'\u25BC'} {Math.abs(valueGenChange).toFixed(1)}%</span>}
+                          </div>
+                          <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(valueGen)}</div>
                         </div>
                       </div>
                       
                       {/* Total Burned Section */}
-                      <div className={`mx-4 mb-4 rounded-xl p-4 ${isPTGC?'bg-gradient-to-r from-[#2a1a0a] to-[#1a1a0a] border border-orange-500/30':'bg-gradient-to-r from-[#0a2a1a] to-[#0a1a0a] border border-green-500/30'}`}>
-                        <div className="flex justify-between items-start">
+                      <div className={`mx-4 mb-4 rounded-2xl p-4 ${isPTGC?'bg-gradient-to-br from-[#2a1a0a] to-[#1a0a0a] border border-orange-500/30':'bg-gradient-to-br from-[#0a2a1a] to-[#0a1a0a] border border-green-500/30'}`}>
+                        <div className="flex justify-between">
                           <div>
-                            <div className="text-[10px] text-white/50 flex items-center gap-1"><span>🔥</span> TOTAL BURNED</div>
-                            <div className={`text-xl font-bold ${theme.text}`}>{fmtAbbr(burn.total)} <span className="text-base text-white/50">{token}</span></div>
-                            <div className="text-green-400 text-sm">{fmtUSD(burn.total*(data?.price||0))}</div>
-                            <div className="text-white/50 text-xs">{burnPctNum.toFixed(2)}% of supply</div>
-                            <div className="flex items-center gap-1 mt-2 flex-wrap">
-                              {creatures.map((c,i)=><span key={i} className="flex items-center"><span className="text-lg">{c.e}</span><span className="text-white/50 text-xs">x{c.cnt}</span></span>)}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-orange-400">🔥</span>
+                              <span className="text-white/50 text-[10px] uppercase">Total Burned</span>
+                            </div>
+                            <div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(burn.total)} <span className="text-base opacity-60">{token}</span></div>
+                            <div className="text-green-400 text-sm font-semibold">{fmtUSD(burnUSD)}</div>
+                            <div className="text-white/40 text-xs">{burnPctNum.toFixed(2)}% of supply</div>
+                            <div className="flex items-center gap-1 mt-3">
+                              {creatures.map((c,i)=><span key={i} className="flex items-center"><span className="text-xl">{c.e}</span><span className="text-white/40 text-xs font-bold">x{c.cnt}</span></span>)}
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[10px] text-white/50 flex items-center gap-1 justify-end"><span>🔥</span> 24H BURN</div>
-                            <div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(burn24hAmt)} <span className="text-sm text-white/50">{token}</span></div>
-                            <div className="text-green-400 text-sm">{fmtUSD(burn24hUSD)}</div>
-                            <div className="mt-2">
-                              {creatures.length>0&&<span className="text-2xl">{creatures[creatures.length-1]?.e||'🦐'}</span>}
+                            <div className="flex items-center gap-2 mb-2 justify-end">
+                              <span className="text-orange-400">🔥</span>
+                              <span className="text-white/50 text-[10px] uppercase">24H Burn</span>
+                            </div>
+                            <div className={`text-xl font-bold ${theme.text}`}>{fmtAbbr(burn24hAmt)} <span className="text-sm opacity-60">{token}</span></div>
+                            <div className="text-green-400 text-sm font-semibold">{fmtUSD(burn24hUSD)}</div>
+                            <div className="mt-3">
+                              <span className="text-4xl">{isPTGC?'🦕':'🦐'}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="mt-3 flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${isPTGC?'bg-gradient-to-r from-orange-500 to-yellow-500':'bg-gradient-to-r from-green-500 to-emerald-400'}`} style={{width:`${Math.min(burnPctNum,100)}%`}}></div>
+                        <div className="mt-4 flex items-center gap-2">
+                          <div className="flex-1 h-3 bg-black/50 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${isPTGC?'bg-gradient-to-r from-orange-600 to-yellow-400':'bg-gradient-to-r from-green-600 to-emerald-400'}`} style={{width:`${Math.min(whaleProgress*3,100)}%`}}></div>
                           </div>
-                          <span className="text-white/50 text-xs">{burnPctNum.toFixed(0)}%</span>
-                          <span className="text-lg">🐙</span>
+                          <span className="text-white/50 text-xs">{(whaleProgress*3).toFixed(0)}%</span>
+                          <span className="text-2xl">🐙</span>
                         </div>
                       </div>
                       
                       {/* Footer */}
-                      <div className={`px-4 py-3 flex justify-between items-center border-t ${isPTGC?'border-[#D9CA5D]/20':'border-green-500/20'}`}>
+                      <div className={`px-5 py-3 flex justify-between items-center border-t ${isPTGC?'border-[#D9CA5D]/20':'border-green-500/20'} bg-black/30`}>
                         <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-bold text-black">P</div>
-                          <span className="text-white/50 text-xs">PulseChain</span>
+                          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                            <span className="text-black font-bold text-xs">P</span>
+                          </div>
+                          <span className="text-white/60 text-sm">PulseChain</span>
                         </div>
-                        <div className={`text-xs ${theme.text}`}>{isPTGC?'www.GoPTGC.com':'www.UFOtoken.io'}</div>
+                        <div className={`text-sm font-semibold ${theme.text}`}>{isPTGC?'www.GoPTGC.com':'www.UFOtoken.io'}</div>
                       </div>
                     </div>
                   );
