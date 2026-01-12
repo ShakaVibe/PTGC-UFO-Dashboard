@@ -1453,41 +1453,24 @@
                   const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
                   const valueGen=(()=>{const ba=burnPeriods.h24||0;const pr=data?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*0.04;})();
                   
-                  const getCreatures=(amt)=>{
-                    const t=isPTGC?{P:10e9,W:1e9,S:100e6,D:10e6,Q:1e6,T:100000}:{P:100e9,W:10e9,S:1e9,D:100e6,Q:10e6,R:1e6};
-                    const c=[];let r=amt;
-                    if(r>=t.P){c.push({e:'🔱',n:Math.floor(r/t.P)});r%=t.P;}
-                    if(r>=t.W){c.push({e:'🐋',n:Math.floor(r/t.W)});r%=t.W;}
-                    if(r>=t.S){c.push({e:'🦈',n:Math.floor(r/t.S)});r%=t.S;}
-                    if(r>=t.D){c.push({e:'🐬',n:Math.floor(r/t.D)});r%=t.D;}
-                    if(r>=t.Q){c.push({e:'🦑',n:Math.floor(r/t.Q)});r%=t.Q;}
-                    if(r>=(isPTGC?t.T:t.R)){c.push({e:isPTGC?'🐢':'🦐',n:Math.floor(r/(isPTGC?t.T:t.R))});}
-                    return c;
-                  };
-                  const creatures=getCreatures(burn.total);
+                  // Use same creature calculation as main page - based on burn PERCENTAGE
+                  const creatures=getBurnC(burnPctNum,isPTGC?'Squid':'Shrimp');
+                  const burn24hPct=burn.supply>0?(burn24hAmt/burn.supply)*100:0;
+                  const singleCreature=getSingleC(burn24hPct);
                   
-                  const getSingle=(amt)=>{
-                    const t=isPTGC?{P:10e9,W:1e9,S:100e6,D:10e6,Q:1e6,T:100000}:{P:100e9,W:10e9,S:1e9,D:100e6,Q:10e6,R:1e6};
-                    if(amt>=t.P)return'🔱';if(amt>=t.W)return'🐋';if(amt>=t.S)return'🦈';if(amt>=t.D)return'🐬';if(amt>=t.Q)return'🦑';
-                    return isPTGC?'🦕':'🦐';
-                  };
-                  
-                  const getProgress=(amt)=>{
-                    const t=isPTGC?{P:10e9,W:1e9,S:100e6,D:10e6,Q:1e6,T:100000}:{P:100e9,W:10e9,S:1e9,D:100e6,Q:10e6,R:1e6};
-                    let ne='🐢',nt=t.T||t.R,cl=amt;
-                    if(amt>=t.P){ne='🔱';nt=t.P;cl=amt%t.P;}
-                    else if(amt>=t.W){ne='🔱';nt=t.P;cl=amt;}
-                    else if(amt>=t.S){ne='🐋';nt=t.W;cl=amt%t.W;}
-                    else if(amt>=t.D){ne='🦈';nt=t.S;cl=amt%t.S;}
-                    else if(amt>=t.Q){ne='🐬';nt=t.D;cl=amt%t.D;}
-                    else if(amt>=(isPTGC?t.T:t.R)){ne='🦑';nt=t.Q;cl=amt%t.Q;}
-                    return{p:(cl/nt)*100,ne};
-                  };
-                  const prog=getProgress(burn.total);
+                  // Progress calculation - find next creature
+                  const whaleP=getWhaleProgress(burnPctNum);
+                  // Find next creature threshold
+                  const currentC=getSingleC(burnPctNum);
+                  const currentIdx=BURN_C.findIndex(c=>c.n===currentC.n);
+                  const nextC=currentIdx>0?BURN_C[currentIdx-1]:BURN_C[0];
+                  const currentThreshold=currentC.p;
+                  const nextThreshold=nextC.p;
+                  const progressToNext=nextThreshold>currentThreshold?((burnPctNum-currentThreshold)/(nextThreshold-currentThreshold))*100:whaleP.progress;
                   
                   const LB=({emoji,text})=>(<div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md" style={{background:`${pc}30`}}><span className="text-xs">{emoji}</span><span className="text-xs font-bold text-gray-200">{text}</span></div>);
                   const Badge=({v,pct=true})=>{if(v===null||v===undefined)return null;const u=v>=0;return(<span className={`text-xs font-bold ${u?'text-green-400':'text-red-500'}`}>{u?'▲':'▼'} {pct?Math.abs(v).toFixed(1)+'%':Math.abs(v)}</span>);};
-                  const MB=({emoji,label,value,change,pct=true})=>(<div className="p-3 rounded-xl flex flex-col justify-center" style={{background:`rgba(${pcRgb},0.08)`,border:`1px solid rgba(${pcRgb},0.2)`,minHeight:'90px'}}><div className="flex items-center justify-between mb-2"><LB emoji={emoji} text={label}/><Badge v={change} pct={pct}/></div><div className="font-bold text-xl text-white pl-1">{value}</div></div>);
+                  const MB=({emoji,label,value,change,pct=true})=>(<div className="p-3 rounded-xl flex flex-col justify-center" style={{background:`rgba(${pcRgb},0.08)`,border:`1px solid rgba(${pcRgb},0.2)`,minHeight:'90px'}}><div className="flex items-center justify-between mb-2"><LB emoji={emoji} text={label}/><Badge v={change} pct={pct}/></div><div className="font-bold text-2xl text-white pl-1">{value}</div></div>);
                   
                   return(
                     <div className="rounded-2xl overflow-hidden relative" style={{background:'#0d0d0d',border:`2px solid ${pc}40`}}>
@@ -1503,7 +1486,7 @@
                             <img src={cfg.logo} alt={token} className="relative w-20 h-20 rounded-2xl object-contain" style={{border:`3px solid ${pc}60`}}/>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-black text-2xl" style={{color:pc}}>{token}</div>
+                            <div className="font-orbitron font-bold text-4xl" style={{color:pc}}>{token}</div>
                             <div className="text-gray-500 text-xs font-bold tracking-widest">KPI REPORT</div>
                             <div className="text-gray-500 text-[9px] font-mono mt-1 break-all leading-tight">{cfg.address}</div>
                           </div>
@@ -1516,7 +1499,7 @@
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex-1">
                               <LB emoji="💰" text="PRICE"/>
-                              <div className="font-black text-3xl mt-2" style={{color:pc}}>${data?.price?.toFixed(6)||'0.000000'}</div>
+                              <div className="font-bold text-4xl mt-2" style={{color:pc}}>${data?.price?.toFixed(6)||'0.000000'}</div>
                             </div>
                             <div className="flex items-center gap-2">
                               <div className={`px-4 py-2.5 rounded-lg text-center ${priceChange>=0?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-500'}`}>
@@ -1541,21 +1524,21 @@
                           <div className="flex gap-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-1.5 mb-1"><span className="text-sm">🔥</span><span className="text-[10px] font-bold text-orange-400 uppercase">Total Burned</span></div>
-                              <div className="text-lg font-bold text-orange-400">{fmtAbbr(burn.total)} <span className="text-sm text-orange-400/70">{token}</span></div>
+                              <div className="text-lg font-bold text-orange-400">{fmt(burn.total)} <span className="text-sm text-orange-400/70">{token}</span></div>
                               <div className="text-gray-400 text-xs">{fmtUSD(burnUSD)}<span className="text-orange-400/60 ml-2">{burnPctNum.toFixed(2)}% of supply</span></div>
                               <div className="mt-3">
                                 <div className="flex items-center justify-between mb-1.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">{creatures.length>0?creatures.map((cr,i)=>(<span key={i} className="flex items-center gap-0.5"><span className="text-sm">{cr.e}</span><span className="text-white text-[10px] font-bold">x{cr.n}</span></span>)):<span className="text-gray-500 text-[10px]">Building...</span>}</div>
-                                  <span className="text-[10px] text-gray-500">{prog.p.toFixed(0)}%→{prog.ne}</span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">{creatures.length>0?creatures.map((cr,i)=>(<span key={i} className="flex items-center gap-0.5"><span className="text-sm">{cr.e}</span><span className="text-white text-[10px] font-bold">x{cr.cnt}</span></span>)):<span className="text-gray-500 text-[10px]">Building...</span>}</div>
+                                  <span className="text-[10px] text-gray-500">{progressToNext.toFixed(0)}%→{nextC.e}</span>
                                 </div>
-                                <div className="h-1 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${Math.min(prog.p,100)}%`}}/></div>
+                                <div className="h-1 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${Math.min(progressToNext,100)}%`}}/></div>
                               </div>
                             </div>
                             <div className="w-28 border-l border-orange-400/20 pl-3 flex flex-col">
                               <div className="flex items-center gap-1 mb-1"><span className="text-xs">🔥</span><span className="text-[9px] font-bold text-orange-300 uppercase">24h Burn</span></div>
                               <div className="text-sm font-bold text-orange-300">{fmtAbbr(burn24hAmt)} <span className="text-[10px] text-orange-300/70">{token}</span></div>
                               <div className="text-green-400 text-xs font-semibold">{fmtUSD(burn24hUSD)}</div>
-                              <div className="flex-1 flex items-center justify-center mt-2"><span className="text-3xl">{getSingle(burn24hAmt)}</span></div>
+                              <div className="flex-1 flex items-center justify-center mt-2"><span className="text-3xl">{singleCreature.e}</span></div>
                             </div>
                           </div>
                         </div>
