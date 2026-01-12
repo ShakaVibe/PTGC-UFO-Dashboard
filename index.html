@@ -103,11 +103,20 @@
     
     const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
     const fetchHolders=async addr=>{
-      // First try to get from burn history cache (Moralis data)
       const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
+      const key=token.toLowerCase();
+      
+      // First try burn history cache (Moralis data)
       if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
         return burnHistoryCache[token].holders;
       }
+      
+      // Then try holder history cache (most recent month)
+      if(holderHistoryCache&&holderHistoryCache.data?.length>0){
+        const lastEntry=holderHistoryCache.data[holderHistoryCache.data.length-1];
+        if(lastEntry[key]>0)return lastEntry[key];
+      }
+      
       // Fallback to PulseScan
       try{
         const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);
@@ -119,7 +128,7 @@
     
     // Burn history cache - loaded from pre-generated JSON file
     let burnHistoryCache=null;
-    const BURN_HISTORY_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/burn-history.json';
+    const BURN_HISTORY_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/burn-summary.json';
     const HOLDER_HISTORY_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/holder-history.json';
     
     // Holder history cache
@@ -138,8 +147,20 @@
       }
     };
     
-    // Get holder change vs last month from history
+    // Get holder change vs yesterday (24hr) from burn summary snapshots
     const getHolderChange=(token,currentHolders)=>{
+      // Try burn summary snapshots first (daily data)
+      if(burnHistoryCache&&burnHistoryCache[token]?.snapshots?.length>=2){
+        const snapshots=burnHistoryCache[token].snapshots;
+        const today=snapshots[0];
+        const yesterday=snapshots[1];
+        if(today&&yesterday&&yesterday.holders>0){
+          const todayHolders=currentHolders||today.holders||0;
+          return todayHolders-yesterday.holders;
+        }
+      }
+      
+      // Fallback to holder history (monthly data)
       if(!holderHistoryCache||!holderHistoryCache.data||holderHistoryCache.data.length<2)return null;
       const key=token.toLowerCase();
       const data=holderHistoryCache.data;
@@ -148,8 +169,7 @@
       if(!lastMonth||!prevMonth)return null;
       const lastVal=currentHolders||lastMonth[key]||0;
       const prevVal=prevMonth[key]||0;
-      if(prevVal===0)return null;
-      return ((lastVal-prevVal)/prevVal)*100;
+      return lastVal-prevVal;
     };
     
     const fetchBurnHistory=async()=>{
@@ -358,13 +378,12 @@
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0};
       let nextPageParams=null;
       let totalFetched=0;
-      const maxPages=20; // Reduced since we stop at Dolphin
+      const maxPages=10; // Reduced for faster loading
       let page=0;
       let countedHolders=0;
       
       // Combine static LP addresses with dynamic ones
       const allLPAddresses=[...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase());
-      console.log('Excluding LP addresses:',allLPAddresses.length);
       
       try{
         while(page<maxPages){
@@ -372,48 +391,63 @@
             ?`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?${nextPageParams}`
             :`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?limit=50`;
           
-          const r=await fetch(url);
-          const data=await r.json();
-          const items=data.items||[];
+          // Add timeout to prevent hanging
+          const controller=new AbortController();
+          const timeoutId=setTimeout(()=>controller.abort(),8000);
           
-          if(items.length===0)break;
-          
-          let foundBelowDolphin=false;
-          
-          for(const holder of items){
-            const holderAddr=holder.address?.hash?.toLowerCase();
-            if(allLPAddresses.includes(holderAddr))continue;
-            if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())continue;
+          try{
+            const r=await fetch(url,{signal:controller.signal});
+            clearTimeout(timeoutId);
+            const data=await r.json();
+            const items=data.items||[];
             
-            const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
-            const pctOfSupply=(tokens/cfg.totalSupply)*100;
+            if(items.length===0)break;
             
-            // Stop at Dolphin threshold (0.01%)
-            if(pctOfSupply<0.01){
-              foundBelowDolphin=true;
-              break;
+            let foundBelowDolphin=false;
+            
+            for(const holder of items){
+              const holderAddr=holder.address?.hash?.toLowerCase();
+              if(allLPAddresses.includes(holderAddr))continue;
+              if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())continue;
+              
+              const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
+              const pctOfSupply=(tokens/cfg.totalSupply)*100;
+              
+              // Stop at Dolphin threshold (0.01%)
+              if(pctOfSupply<0.01){
+                foundBelowDolphin=true;
+                break;
+              }
+              
+              if(pctOfSupply>=10)counts.Poseidon++;
+              else if(pctOfSupply>=1)counts.Whale++;
+              else if(pctOfSupply>=0.1)counts.Shark++;
+              else if(pctOfSupply>=0.01)counts.Dolphin++;
+              
+              countedHolders++;
             }
             
-            if(pctOfSupply>=10)counts.Poseidon++;
-            else if(pctOfSupply>=1)counts.Whale++;
-            else if(pctOfSupply>=0.1)counts.Shark++;
-            else if(pctOfSupply>=0.01)counts.Dolphin++;
+            totalFetched+=items.length;
             
-            countedHolders++;
+            if(foundBelowDolphin)break;
+            
+            if(data.next_page_params){
+              const params=new URLSearchParams();
+              Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
+              nextPageParams=params.toString();
+            }else{
+              break;
+            }
+            page++;
+          }catch(fetchError){
+            clearTimeout(timeoutId);
+            if(fetchError.name==='AbortError'){
+              console.log('Holder tier fetch timed out on page',page);
+            }else{
+              console.error('Error on page',page,':',fetchError);
+            }
+            break; // Stop on any error
           }
-          
-          totalFetched+=items.length;
-          
-          if(foundBelowDolphin)break;
-          
-          if(data.next_page_params){
-            const params=new URLSearchParams();
-            Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
-            nextPageParams=params.toString();
-          }else{
-            break;
-          }
-          page++;
         }
       }catch(e){
         console.error('Error fetching holders:',e);
@@ -640,7 +674,7 @@
             console.log('Holder history loaded:',hist);
             if(hist&&hist.data){
               const key=token.toLowerCase();
-              const data=hist.data.map(d=>({
+              let data=hist.data.map(d=>({
                 month:d.month,
                 date:d.date,
                 holders:d[key]||0
@@ -651,7 +685,9 @@
               if(today!==lastMonth&&currentHolders>0){
                 data.push({month:today,date:new Date().toISOString().slice(0,10),holders:currentHolders});
               }
-              console.log('Chart data:',data);
+              // Only show last 12 months
+              data=data.slice(-12);
+              console.log('Chart data (last 12 months):',data);
               setChartData(data);
             }
           }catch(e){
@@ -974,14 +1010,10 @@
         setHolderChange(null);
         
         const load=async()=>{
-          // Load burn history cache first (for burn modal)
-          fetchBurnHistory();
+          // Load burn history cache first (needed for holders from Moralis)
+          await fetchBurnHistory();
           // Load holder history cache (for holder chart and change indicator)
-          fetchHolderHistory().then(()=>{
-            // Update holder change after history is loaded
-            const hc=getHolderChange(token,0);
-            if(hc!==null)setHolderChange(hc);
-          });
+          await fetchHolderHistory();
           
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
@@ -1115,7 +1147,7 @@
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vc=burnHistoryCache?.[token]?.volume?.change24h;return vc!==undefined?<div className={`text-sm ${vc>=0?'text-green-400':'text-red-400'}`}>{vc>=0?'\u25B2':'\u25BC'} {Math.abs(vc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liq/MCap</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative cursor-pointer hover:border-opacity-70`} onClick={()=>{console.log('Opening holder chart');setShowHolderChart(true)}}><div className="flex justify-between items-start"><div className="text-white text-xs uppercase mb-1">Holders</div><span className="text-white/40 hover:text-white/70 text-sm" title="View Growth Chart">{'\u{1F4C8}'}</span></div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&<div className={`text-sm ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange).toFixed(1)}%</div>}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative cursor-pointer hover:border-opacity-70`} onClick={()=>{console.log('Opening holder chart');setShowHolderChart(true)}}><div className="flex justify-between items-start"><div className="text-white text-xs uppercase mb-1">Holders</div><span className="text-white/40 hover:text-white/70 text-sm" title="View Growth Chart">{'\u{1F4C8}'}</span></div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&holderChange!==0&&<div className={`text-sm ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:<div className="text-white/50 text-sm">{tokensInLPPct}%</div>})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="text-2xl font-bold"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></div></div>
               </div>
