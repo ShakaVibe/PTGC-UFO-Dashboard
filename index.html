@@ -992,6 +992,7 @@
       const[copied,setCopied]=useState(false);
       const[ptgcPrice,setPtgcPrice]=useState(0);
       const[holderChange,setHolderChange]=useState(null);
+      const[showKPI,setShowKPI]=useState(false);
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
       useEffect(()=>{
@@ -1137,7 +1138,7 @@
                     <span className="text-white/70 text-sm font-medium">Switch</span>
                   </button>
                   <a href={cfg.pulseScanUrl} target="_blank" className={`px-4 py-2 rounded-lg border ${theme.border} ${theme.text} font-medium hover:bg-white/5`}>Explorer</a>
-                  <button className={`px-4 py-2 rounded-lg ${theme.bg} text-black font-bold`}>KPI Report</button>
+                  <button onClick={()=>setShowKPI(true)} className={`px-4 py-2 rounded-lg ${theme.bg} text-black font-bold hover:opacity-90 transition-opacity`}>KPI Report</button>
                 </div>
               </div>
             </div>
@@ -1430,6 +1431,158 @@
             <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>
             {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} className={`w-full ${theme.card} border ${theme.border} rounded-lg p-2 flex justify-between text-sm`}><span className="text-gray-400">{showLow?'Hide':'Show'} {low.length} pairs &lt;$1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>}</div>}
           </div>
+          
+          {/* KPI Report Modal */}
+          {showKPI&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={()=>setShowKPI(false)}>
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+              <div className="relative w-full max-w-md" onClick={e=>e.stopPropagation()}>
+                {(()=>{
+                  const isPTGC=token==='PTGC';
+                  const priceChange=data?.change||0;
+                  const priceUp=priceChange>=0;
+                  const plsRatio=pls>0?(data?.price||0)/pls:0;
+                  const liqChange=burnHistoryCache?.[token]?.changes?.liquidity;
+                  const volChange=burnHistoryCache?.[token]?.changes?.volume24h;
+                  const burn24hAmt=burnPeriods.h24||0;
+                  const burn24hUSD=(burnPeriods.h24||0)*(data?.price||0);
+                  const burnPctNum=burn.pct||0;
+                  const creatures=getBurnC(burnPctNum,isPTGC?'Squid':'Shrimp');
+                  const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+                  const valueGen=(()=>{
+                    const burnAmt=burnPeriods.h24||0;
+                    const price=data?.price||0;
+                    const burnPctRate=isPTGC?0.005:0.01;
+                    const vol24h=burnAmt>0?(burnAmt*price)/burnPctRate:0;
+                    if(isPTGC){
+                      const daoFee=vol24h*0.02;
+                      const lpFee=vol24h*0.005;
+                      const buyBurn=vol24h*0.005;
+                      const hsFee=vol24h*0.01;
+                      return daoFee+lpFee+buyBurn+hsFee;
+                    }else{
+                      const holderFee=vol24h*0.005;
+                      const lpFee=vol24h*0.015;
+                      const burnFees=vol24h*0.02;
+                      return holderFee+lpFee+burnFees;
+                    }
+                  })();
+                  const valueGenChange=volChange||0;
+                  
+                  return(
+                    <div className={`rounded-2xl overflow-hidden ${isPTGC?'bg-gradient-to-b from-[#1a1a0a] via-[#0d0d05] to-[#0a0a0a]':'bg-gradient-to-b from-[#0a1a0a] via-[#050d05] to-[#0a0a0a]'}`} style={{border:`2px solid ${isPTGC?'#D9CA5D33':'#22c55e33'}`}}>
+                      {/* Close button */}
+                      <button onClick={()=>setShowKPI(false)} className="absolute top-3 right-3 text-white/50 hover:text-white text-2xl z-10">&times;</button>
+                      
+                      {/* Header */}
+                      <div className="text-center pt-6 pb-4">
+                        <div className="flex justify-center mb-2">
+                          <div className={`w-20 h-20 rounded-full flex items-center justify-center ${isPTGC?'bg-[#D9CA5D]/20':'bg-green-500/20'}`} style={{boxShadow:`0 0 40px ${isPTGC?'#D9CA5D66':'#22c55e66'}`}}>
+                            <img src={cfg.logo} className="w-16 h-16 rounded-full" alt={token}/>
+                          </div>
+                        </div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{token}</div>
+                        <div className={`text-xs ${theme.text} opacity-70`}>KPI REPORT</div>
+                        <div className="text-[10px] text-white/40 mt-1 font-mono">{cfg.address}</div>
+                        <div className="flex justify-center items-center gap-2 mt-2">
+                          <span className="text-white/50 text-xs">{today}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded ${isPTGC?'bg-[#D9CA5D] text-black':'bg-green-500 text-black'} font-bold`}>24H</span>
+                        </div>
+                      </div>
+                      
+                      {/* Price Section */}
+                      <div className="mx-4 mb-4">
+                        <div className={`rounded-xl p-4 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/30':'bg-[#0a1a0a] border border-green-500/30'}`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className={`text-xs ${theme.text} opacity-70 flex items-center gap-1`}><span className="text-green-400">$</span> PRICE</div>
+                              <div className={`text-3xl font-bold ${theme.text}`}>${data?.price?.toFixed(6)||'0.000000'}</div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className={`px-3 py-1 rounded-lg text-sm font-bold ${priceUp?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}>
+                                {priceUp?'\u25B2':'\u25BC'} {Math.abs(priceChange).toFixed(2)}%
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[10px] text-white/50">PLS RATIO</div>
+                                <div className={`text-lg font-bold ${theme.text}`}>{plsRatio.toFixed(2)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Stats Grid */}
+                      <div className="mx-4 mb-4 grid grid-cols-2 gap-3">
+                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className={theme.text}>🏛</span> MARKET CAP</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div>
+                        </div>
+                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-yellow-400">💧</span> LIQUIDITY {liqChange!==undefined&&<span className={`ml-auto ${liqChange>=0?'text-green-400':'text-red-400'}`}>{liqChange>=0?'\u25B2':'\u25BC'} {Math.abs(liqChange).toFixed(1)}%</span>}</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>
+                        </div>
+                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-purple-400">📊</span> LIQ/MC RATIO</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{liqMcapRatio}%</div>
+                        </div>
+                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-blue-400">📈</span> VOLUME {volChange!==undefined&&<span className={`ml-auto ${volChange>=0?'text-green-400':'text-red-400'}`}>{volChange>=0?'\u25B2':'\u25BC'} {Math.abs(volChange).toFixed(1)}%</span>}</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>
+                        </div>
+                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-cyan-400">👥</span> HOLDERS {holderChange!==null&&holderChange!==0&&<span className={`ml-auto ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {Math.abs(holderChange)}</span>}</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{fmt(holders)}</div>
+                        </div>
+                        <div className={`rounded-xl p-3 ${isPTGC?'bg-[#1a1a0a] border border-[#D9CA5D]/20':'bg-[#0a1a0a] border border-green-500/20'}`}>
+                          <div className="text-[10px] text-white/50 flex items-center gap-1"><span className="text-green-400">⚡</span> VALUE GENERATED {valueGenChange!==0&&<span className={`ml-auto ${valueGenChange>=0?'text-green-400':'text-red-400'}`}>{valueGenChange>=0?'\u25B2':'\u25BC'} {Math.abs(valueGenChange).toFixed(1)}%</span>}</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(valueGen)}</div>
+                        </div>
+                      </div>
+                      
+                      {/* Total Burned Section */}
+                      <div className={`mx-4 mb-4 rounded-xl p-4 ${isPTGC?'bg-gradient-to-r from-[#2a1a0a] to-[#1a1a0a] border border-orange-500/30':'bg-gradient-to-r from-[#0a2a1a] to-[#0a1a0a] border border-green-500/30'}`}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="text-[10px] text-white/50 flex items-center gap-1"><span>🔥</span> TOTAL BURNED</div>
+                            <div className={`text-xl font-bold ${theme.text}`}>{fmtAbbr(burn.total)} <span className="text-base text-white/50">{token}</span></div>
+                            <div className="text-green-400 text-sm">{fmtUSD(burn.total*(data?.price||0))}</div>
+                            <div className="text-white/50 text-xs">{burnPctNum.toFixed(2)}% of supply</div>
+                            <div className="flex items-center gap-1 mt-2 flex-wrap">
+                              {creatures.map((c,i)=><span key={i} className="flex items-center"><span className="text-lg">{c.e}</span><span className="text-white/50 text-xs">x{c.cnt}</span></span>)}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-white/50 flex items-center gap-1 justify-end"><span>🔥</span> 24H BURN</div>
+                            <div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(burn24hAmt)} <span className="text-sm text-white/50">{token}</span></div>
+                            <div className="text-green-400 text-sm">{fmtUSD(burn24hUSD)}</div>
+                            <div className="mt-2">
+                              {creatures.length>0&&<span className="text-2xl">{creatures[creatures.length-1]?.e||'🦐'}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${isPTGC?'bg-gradient-to-r from-orange-500 to-yellow-500':'bg-gradient-to-r from-green-500 to-emerald-400'}`} style={{width:`${Math.min(burnPctNum,100)}%`}}></div>
+                          </div>
+                          <span className="text-white/50 text-xs">{burnPctNum.toFixed(0)}%</span>
+                          <span className="text-lg">🐙</span>
+                        </div>
+                      </div>
+                      
+                      {/* Footer */}
+                      <div className={`px-4 py-3 flex justify-between items-center border-t ${isPTGC?'border-[#D9CA5D]/20':'border-green-500/20'}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-[10px] font-bold text-black">P</div>
+                          <span className="text-white/50 text-xs">PulseChain</span>
+                        </div>
+                        <div className={`text-xs ${theme.text}`}>{isPTGC?'www.GoPTGC.com':'www.UFOtoken.io'}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
           
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
