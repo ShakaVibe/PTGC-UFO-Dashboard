@@ -273,12 +273,14 @@ function calculatePeriods(burns) {
   const h24 = 24 * 60 * 60 * 1000;
   const d7 = 7 * 24 * 60 * 60 * 1000;
   const d30 = 30 * 24 * 60 * 60 * 1000;
+  const d90 = 90 * 24 * 60 * 60 * 1000;
   
   const result = {
     h12: { count: 0, amount: 0 },
     h24: { count: 0, amount: 0 },
     d7: { count: 0, amount: 0 },
-    d30: { count: 0, amount: 0 }
+    d30: { count: 0, amount: 0 },
+    d90: { count: 0, amount: 0 }
   };
   
   for (const burn of burns) {
@@ -287,6 +289,7 @@ function calculatePeriods(burns) {
     if (age <= h24) { result.h24.count++; result.h24.amount += burn.a; }
     if (age <= d7) { result.d7.count++; result.d7.amount += burn.a; }
     if (age <= d30) { result.d30.count++; result.d30.amount += burn.a; }
+    if (age <= d90) { result.d90.count++; result.d90.amount += burn.a; }
   }
   
   return result;
@@ -675,6 +678,7 @@ async function main() {
   console.log(`  24H: ${ptgcPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ptgcPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ptgcPeriods.d30.amount.toLocaleString()}`);
+  console.log(`  90D: ${ptgcPeriods.d90.amount.toLocaleString()}`);
   
   console.log(`\nUFO BURNS (all):`);
   console.log(`  Total: ${ufoTotal.toLocaleString()} tokens (${ufoBurns.length} txs)`);
@@ -682,6 +686,7 @@ async function main() {
   console.log(`  24H: ${ufoPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ufoPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ufoPeriods.d30.amount.toLocaleString()}`);
+  console.log(`  90D: ${ufoPeriods.d90.amount.toLocaleString()}`);
   
   console.log(`\nPTGC BURNED BY UFO (buybacks from LP):`);
   console.log(`  Total: ${ptgcBuybackTotal.toLocaleString()} tokens (${ptgcBuybackBurns.length} txs)`);
@@ -689,6 +694,7 @@ async function main() {
   console.log(`  24H: ${ptgcBuybackPeriods.h24.amount.toLocaleString()}`);
   console.log(`  7D:  ${ptgcBuybackPeriods.d7.amount.toLocaleString()}`);
   console.log(`  30D: ${ptgcBuybackPeriods.d30.amount.toLocaleString()}`);
+  console.log(`  90D: ${ptgcBuybackPeriods.d90.amount.toLocaleString()}`);
   
   console.log(`\nUFO BUYBACK BURNS (from LP):`);
   console.log(`  Total: ${ufoBuybackTotal.toLocaleString()} tokens (${ufoBuybackBurns.length} txs)`);
