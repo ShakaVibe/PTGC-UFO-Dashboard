@@ -2,16 +2,25 @@ name: Update Burn History
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour
-  workflow_dispatch:  # Manual trigger
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
 
 jobs:
   update-burn-history:
     runs-on: ubuntu-latest
     
+    env:
+      MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -19,14 +28,13 @@ jobs:
           node-version: '20'
       
       - name: Fetch burn history
-        env:
-          MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
         run: node scripts/fetch-burn-history.js
       
       - name: Commit and push if changed
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add data/burn-history.json
+          git add data/
           git diff --staged --quiet || git commit -m "Update burn history data [automated]"
+          git pull --rebase
           git push
