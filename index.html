@@ -1142,8 +1142,8 @@
             </div>
           </header>
           
-          <div className="border-b border-white/10">
-            <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
+          <div className="border-b border-white/10 mt-4">
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 py-5">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'} {Math.abs(data?.change||0).toFixed(2)}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const burnPct=token==='PTGC'?0.005:0.01;const burn24h=burnPeriods.h24||0;const burn7d=burnPeriods.d7||0;const price=data?.price||0;if(burn24h>0&&burn7d>0){const vol24h=(burn24h*price)/burnPct;const vol7dAvg=(burn7d*price)/(burnPct*7);const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
@@ -1156,7 +1156,7 @@
             </div>
           </div>
           
-          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4">
                 <div className="flex justify-between mb-1"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned</div></div>
@@ -1164,7 +1164,7 @@
                 <div className="flex items-center gap-2 mb-1"><div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div><span className="text-lg">{'\u{1F40B}'}</span><span className="text-orange-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span></div>
                 <div className="flex items-center gap-2 flex-wrap mb-4"><span className="text-xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-2"><span className="text-xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}</div>
                 <div className="grid grid-cols-4 gap-2">
-                  {[{l:'12H',v:burnPeriods.h12},{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30}].map(({l,v})=>{
+                  {[{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:(burnPeriods.d30||0)*3}].map(({l,v})=>{
                     const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
                     const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                     return(
@@ -1237,7 +1237,7 @@
                               <span className="text-xl">{item.emoji}</span>
                               <span className="text-white/70 text-sm">{item.name}</span>
                             </div>
-                            <div className={`font-bold text-lg ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(calculatedVol*(item.pct/100))}</div>
+                            <div className={`font-bold text-xl text-right ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(calculatedVol*(item.pct/100))}</div>
                           </div>
                         ))}
                       </div>
@@ -1404,13 +1404,11 @@
               </div>
               <div className="col-span-2 text-right">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1 inline-block`}>
-                  <span className="text-white/50 text-xs mr-1">Total:</span>
                   <span className={`font-bold ${theme.text} text-sm`}>{fmtUSD(data?.vol||0)}</span>
                 </div>
               </div>
               <div className="col-span-2 text-right">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1 inline-block`}>
-                  <span className="text-white/50 text-xs mr-1">Total:</span>
                   <span className={`font-bold ${theme.text} text-sm`}>{fmtUSD(data?.liq||0)}</span>
                 </div>
               </div>
