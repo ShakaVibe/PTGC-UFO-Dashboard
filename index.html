@@ -982,7 +982,7 @@
       const[sortDir,setSortDir]=useState('desc');
       const[lastUpdate,setLastUpdate]=useState(new Date());
       const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0});
-      const[showValueGen,setShowValueGen]=useState(false);
+      const[valueGenPeriod,setValueGenPeriod]=useState('24h');
       const[showHolderChart,setShowHolderChart]=useState(false);
       const[daoData,setDaoData]=useState(null);
       const[daoLoading,setDaoLoading]=useState(true);
@@ -1007,6 +1007,7 @@
         setPtgcPrice(0);
         setHolderChange(null);
         setBurnPeriods({h12:0,h24:0,d7:0,d30:0});
+        setValueGenPeriod('24h');
         
         const load=async()=>{
           // Load burn history cache first (needed for holders from Moralis)
@@ -1072,7 +1073,6 @@
       const whaleProgress=getWhaleProgress(burn?.pct||0);
       const tokensInLP=data?.tokensInLP||0;
       const tokensInLPPct=cfg.totalSupply>0?((tokensInLP/cfg.totalSupply)*100).toFixed(2):'0';
-      const valueGen24h=(data?.vol||0)*cfg.taxRate;
       
       const burnedPct=cfg.totalSupply>0?(burn?.total||0)/cfg.totalSupply*100:0;
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
@@ -1160,32 +1160,68 @@
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4">
-                <div className="flex justify-between mb-2"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned</div></div>
-                <div className="flex items-center gap-3 mb-2 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span><span className="text-white/50">{(burn?.pct||0).toFixed(2)}%</span></div>
-                <div className="flex items-center gap-2 mb-2"><div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div><span className="text-lg">{'\u{1F40B}'}</span><span className="text-orange-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span></div>
-                <div className="flex items-center gap-3 flex-wrap mb-3"><span className="text-2xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 text-base font-bold">x{c.cnt}</span></span>)}</div>
+                <div className="flex justify-between mb-1"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned</div></div>
+                <div className="flex items-center gap-3 mb-1 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span><span className="text-white/50">{(burn?.pct||0).toFixed(2)}%</span></div>
+                <div className="flex items-center gap-2 mb-1"><div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div><span className="text-lg">{'\u{1F40B}'}</span><span className="text-orange-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span></div>
+                <div className="flex items-center gap-2 flex-wrap mb-2"><span className="text-xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}</div>
                 <div className="grid grid-cols-4 gap-2">
                   {[{l:'12H',v:burnPeriods.h12},{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30}].map(({l,v})=>{
                     const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
                     const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                     return(
-                      <div key={l} className="bg-black/30 rounded-lg p-2 text-center">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-white/50 text-xs">{l}</span>
-                          <span className="text-xl">{c.e}</span>
-                        </div>
-                        <div className="text-orange-400 font-bold text-sm">{fmtAbbr(v)}</div>
-                        <div className="text-green-400 text-xs">{fmtUSD(v*(data?.price||0))}</div>
+                      <div key={l} className="bg-black/30 rounded-lg px-2 py-1 text-center">
+                        <div className="text-white font-bold text-xs">{l}</div>
+                        <div className="text-xl">{c.e}{c.cnt>1&&<span className="text-white/70 text-xs font-bold ml-1">x{c.cnt}</span>}</div>
+                        <div className="text-green-400 font-bold text-sm">{fmtUSD(v*(data?.price||0))}</div>
                       </div>
                     );
                   })}
                 </div>
               </div>
               
-              <div className={`bg-gradient-to-r from-emerald-500/15 via-emerald-600/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl p-4 clickable`} onClick={()=>setShowValueGen(true)}>
-                <div className="flex justify-between mb-2"><div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated (24H)</div><span className={`${theme.text} opacity-60 text-xs`}>Details {'\u2192'}</span></div>
-                <div className="flex items-baseline gap-2 mb-3"><span className="text-3xl font-bold text-green-400">{fmtUSD(valueGen24h)}</span><span className="text-white/50 text-base">from {fmtUSD(data?.vol)} vol</span></div>
-                <div className="flex flex-wrap gap-x-5 gap-y-2 text-lg">{cfg.taxBreakdown.map((item,i)=><div key={i} className="flex items-center gap-1"><span className="text-xl">{item.emoji}</span><span className="text-white/60">{item.name}:</span><span className={`font-bold ${theme.text}`}>{fmtUSD((data?.vol||0)*(item.pct/100))}</span></div>)}</div>
+              <div className={`bg-gradient-to-r from-emerald-500/15 via-emerald-600/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl p-4`}>
+                <div className="flex justify-between items-center mb-1">
+                  <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated</div>
+                  <div className="flex gap-1 bg-black/30 rounded-lg p-1">
+                    {['24h','7d','30d'].map(p=>(
+                      <button key={p} onClick={()=>setValueGenPeriod(p)} className={`px-2 py-1 rounded text-xs font-medium transition ${valueGenPeriod===p?`${theme.bg} text-black`:'text-white/60 hover:text-white'}`}>{p.toUpperCase()}</button>
+                    ))}
+                  </div>
+                </div>
+                {(()=>{
+                  // Reverse math: calculate volume from burn amount
+                  // Find burn percentage in tax breakdown
+                  const burnItem=cfg.taxBreakdown.find(t=>t.name.includes('Burn')&&!t.name.includes('PTGC'));
+                  const burnPct=(burnItem?.pct||0.5)/100; // e.g., 0.5% = 0.005
+                  
+                  // Get burn amount for selected period
+                  const burnAmounts={'24h':burnPeriods.h24,'7d':burnPeriods.d7,'30d':burnPeriods.d30};
+                  const periodBurn=burnAmounts[valueGenPeriod]||0;
+                  
+                  // Calculate volume: if burn is 0.5% of volume, then volume = burnAmount / 0.005
+                  const calculatedVol=burnPct>0?(periodBurn*(data?.price||0))/burnPct:0;
+                  
+                  // Total value generated from this volume
+                  const totalGen=calculatedVol*cfg.taxRate;
+                  
+                  return(
+                    <>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="text-3xl font-bold text-green-400">{fmtUSD(totalGen)}</span>
+                        <span className="text-white/50 text-sm">from {fmtUSD(calculatedVol)} vol</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-base">
+                        {cfg.taxBreakdown.map((item,i)=>(
+                          <div key={i} className="flex items-center gap-1">
+                            <span className="text-lg">{item.emoji}</span>
+                            <span className="text-white/60 text-sm">{item.name}:</span>
+                            <span className={`font-bold ${theme.text}`}>{fmtUSD(calculatedVol*(item.pct/100))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
               
               <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4`}>
@@ -1219,23 +1255,24 @@
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 mt-4 pt-3 border-t border-white/10">
-                  <div className="text-center">
-                    <div className="text-white/50 text-xs uppercase mb-1">Max Total Supply</div>
-                    <div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(cfg.totalSupply)}</div>
+                {!cfg.hasDAO&&(
+                  <div className="grid grid-cols-2 gap-4 mt-4 pt-3 border-t border-white/10">
+                    <div className="text-center">
+                      <div className="text-white/50 text-xs uppercase mb-1">Max Total Supply</div>
+                      <div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(cfg.totalSupply)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-white/50 text-xs uppercase mb-1">Circulating Supply</div>
+                      <div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(cfg.totalSupply-(burn?.total||0))}</div>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-white/50 text-xs uppercase mb-1">Circulating Supply</div>
-                    <div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(cfg.totalSupply-(burn?.total||0))}</div>
-                  </div>
-                </div>
+                )}
               </div>
               
               {cfg.hasDAO?(
                 <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4`}>
                   <div className="flex justify-between items-center mb-4">
                     <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F3DB}\u{FE0F}'} DAO Treasury</div>
-                    <a href={`https://app.aragon.org/#/daos/pulsechain/${cfg.daoContract}/dashboard`} target="_blank" className="text-blue-400/70 hover:text-blue-400 text-xs flex items-center gap-1">View DAO {'\u2197'}</a>
                   </div>
                   {daoLoading?(
                     <div className="flex items-center justify-center py-4">
@@ -1286,9 +1323,6 @@
                           <div className="text-white/50 text-xs uppercase flex items-center gap-1">{'\u{1F4CA}'} Total DAO Value</div>
                           <div className={`text-2xl font-bold text-green-400`}>{fmtUSD(daoData?.totalValue||0)}</div>
                         </div>
-                      </div>
-                      <div className="pt-2 border-t border-white/10 text-center">
-                        <div className="text-white/40 text-xs">DAO funded by 2% of all {token} trading volume</div>
                       </div>
                     </div>
                   )}
@@ -1341,16 +1375,11 @@
           </div>
           
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
-            <div className="flex justify-between mb-3 flex-wrap gap-2 items-center">
-              <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length} with $1K+ LP)</span></h2>
-              <div className={`${theme.card} border ${theme.border} rounded-lg px-3 py-2 flex items-center gap-2`}>
-                <span className="text-gray-400 text-xs">Sort:</span>
-                {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} className={`px-2 py-1 rounded text-xs ${sortBy===c?`${theme.text} bg-white/10`:'text-gray-500'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
-              </div>
-            </div>
             <div className="hidden sm:grid grid-cols-12 gap-2 items-center mb-2 px-3 sm:px-4">
               <div className="col-span-1"></div>
-              <div className="col-span-2"></div>
+              <div className="col-span-2">
+                <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
+              </div>
               <div className="col-span-2 text-right">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1 inline-block`}>
                   <span className="text-white/50 text-xs mr-1">Total:</span>
@@ -1363,7 +1392,19 @@
                   <span className={`font-bold ${theme.text} text-sm`}>{fmtUSD(data?.liq||0)}</span>
                 </div>
               </div>
-              <div className="col-span-5"></div>
+              <div className="col-span-5 flex justify-end">
+                <div className={`${theme.card} border ${theme.border} rounded-lg px-3 py-1 flex items-center gap-2`}>
+                  <span className="text-gray-400 text-xs">Sort:</span>
+                  {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} className={`px-2 py-1 rounded text-xs ${sortBy===c?`${theme.text} bg-white/10`:'text-gray-500'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
+                </div>
+              </div>
+            </div>
+            <div className="sm:hidden flex justify-between mb-3 flex-wrap gap-2 items-center">
+              <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
+              <div className={`${theme.card} border ${theme.border} rounded-lg px-3 py-2 flex items-center gap-2`}>
+                <span className="text-gray-400 text-xs">Sort:</span>
+                {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} className={`px-2 py-1 rounded text-xs ${sortBy===c?`${theme.text} bg-white/10`:'text-gray-500'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
+              </div>
             </div>
             <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>
             {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} className={`w-full ${theme.card} border ${theme.border} rounded-lg p-2 flex justify-between text-sm`}><span className="text-gray-400">{showLow?'Hide':'Show'} {low.length} pairs &lt;$1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>}</div>}
@@ -1371,7 +1412,6 @@
           
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
-          <ValueGenModal open={showValueGen} close={()=>setShowValueGen(false)} token={token} vol={data?.vol||0} cfg={cfg} theme={theme}/>
           <HolderChartModal open={showHolderChart} close={()=>setShowHolderChart(false)} token={token} currentHolders={holders} theme={theme} cfg={cfg}/>
         </div>
       );
