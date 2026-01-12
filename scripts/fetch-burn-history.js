@@ -99,37 +99,70 @@ async function moralisRequest(endpoint, params = {}) {
  */
 function loadExistingBurns(dataDir, token) {
   const allBurns = [];
+  console.log(`\nLoading existing ${token} burns...`);
+  console.log(`  Data directory: ${dataDir}`);
   
   if (token === 'PTGC') {
     // Load all PTGC period files
     for (const period of Object.keys(PERIODS)) {
       const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
+      console.log(`  Checking: ${filePath}`);
       try {
         if (fs.existsSync(filePath)) {
-          const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          allBurns.push(...data.burns);
-          console.log(`  Loaded ${data.burns.length} burns from ${filePath}`);
+          const stats = fs.statSync(filePath);
+          console.log(`    File exists, size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          console.log(`    Read ${fileContent.length} characters`);
+          const data = JSON.parse(fileContent);
+          console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
+          if (data.burns && data.burns.length > 0) {
+            allBurns.push(...data.burns);
+            console.log(`    Added ${data.burns.length} burns, total now: ${allBurns.length}`);
+          }
+        } else {
+          console.log(`    File does not exist`);
         }
       } catch (e) {
-        console.log(`  Could not load ${filePath}: ${e.message}`);
+        console.log(`    ERROR loading ${filePath}: ${e.message}`);
+        console.log(`    Stack: ${e.stack}`);
       }
     }
   } else {
     // Load UFO file
     const filePath = path.join(dataDir, 'ufo-burns.json');
+    console.log(`  Checking: ${filePath}`);
     try {
       if (fs.existsSync(filePath)) {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        allBurns.push(...data.burns);
-        console.log(`  Loaded ${data.burns.length} burns from ${filePath}`);
+        const stats = fs.statSync(filePath);
+        console.log(`    File exists, size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        console.log(`    Read ${fileContent.length} characters`);
+        const data = JSON.parse(fileContent);
+        console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
+        if (data.burns && data.burns.length > 0) {
+          allBurns.push(...data.burns);
+          console.log(`    Added ${data.burns.length} burns, total now: ${allBurns.length}`);
+        }
+      } else {
+        console.log(`    File does not exist`);
       }
     } catch (e) {
-      console.log(`  Could not load ${filePath}: ${e.message}`);
+      console.log(`    ERROR loading ${filePath}: ${e.message}`);
+      console.log(`    Stack: ${e.stack}`);
     }
   }
   
+  console.log(`  Total ${token} burns loaded from files: ${allBurns.length}`);
+  
   // Sort by timestamp descending
   allBurns.sort((a, b) => b.t - a.t);
+  
+  // Log timestamp range
+  if (allBurns.length > 0) {
+    console.log(`  Oldest burn: ${new Date(allBurns[allBurns.length - 1].t).toISOString()}`);
+    console.log(`  Newest burn: ${new Date(allBurns[0].t).toISOString()}`);
+  }
+  
   return allBurns;
 }
 
@@ -227,6 +260,7 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
   }
   
   console.log(`Fetched ${newBurns.length} new ${tokenSymbol} burns`);
+  console.log(`Existing ${tokenSymbol} burns: ${existingBurns.length}`);
   
   // Merge with existing burns
   const allBurns = [...newBurns, ...existingBurns];
@@ -234,7 +268,14 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
   // Sort by timestamp descending (newest first)
   allBurns.sort((a, b) => b.t - a.t);
   
-  console.log(`Total ${tokenSymbol} burns: ${allBurns.length}`);
+  console.log(`Total ${tokenSymbol} burns after merge: ${allBurns.length}`);
+  
+  // Log timestamp range
+  if (allBurns.length > 0) {
+    console.log(`  Oldest: ${new Date(allBurns[allBurns.length - 1].t).toISOString()}`);
+    console.log(`  Newest: ${new Date(allBurns[0].t).toISOString()}`);
+  }
+  
   return allBurns;
 }
 
@@ -409,17 +450,31 @@ async function main() {
   console.log('='.repeat(60));
   
   const dataDir = path.join(__dirname, '..', 'data');
+  console.log(`\nData directory: ${dataDir}`);
+  console.log(`Script directory: ${__dirname}`);
   
   // Ensure data directory exists
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+    console.log('Created data directory');
+  }
+  
+  // List files in data directory
+  console.log('\nFiles in data directory:');
+  try {
+    const files = fs.readdirSync(dataDir);
+    for (const file of files) {
+      const filePath = path.join(dataDir, file);
+      const stats = fs.statSync(filePath);
+      console.log(`  ${file} - ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+    }
+  } catch (e) {
+    console.log(`  ERROR listing directory: ${e.message}`);
   }
   
   // Load existing data
   const existingSummary = loadExistingSummary(dataDir);
-  console.log('\nLoading existing PTGC burns...');
   const existingPTGCBurns = loadExistingBurns(dataDir, 'PTGC');
-  console.log('\nLoading existing UFO burns...');
   const existingUFOBurns = loadExistingBurns(dataDir, 'UFO');
   
   // ============================================
@@ -450,10 +505,19 @@ async function main() {
   // CALCULATE TOTALS AND PERIODS
   // ============================================
   
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('CALCULATING PERIODS');
+  console.log(`${'='.repeat(50)}`);
+  console.log(`PTGC burns to process: ${ptgcBurns.length}`);
+  console.log(`UFO burns to process: ${ufoBurns.length}`);
+  
   const ptgcTotal = ptgcBurns.reduce((s, b) => s + b.a, 0);
   const ufoTotal = ufoBurns.reduce((s, b) => s + b.a, 0);
   const ptgcBuybackTotal = ptgcBuybackBurns.reduce((s, b) => s + b.a, 0);
   const ufoBuybackTotal = ufoBuybackBurns.reduce((s, b) => s + b.a, 0);
+  
+  console.log(`PTGC total tokens: ${ptgcTotal.toLocaleString()}`);
+  console.log(`UFO total tokens: ${ufoTotal.toLocaleString()}`);
   
   const ptgcPeriods = calculatePeriods(ptgcBurns);
   const ufoPeriods = calculatePeriods(ufoBurns);
