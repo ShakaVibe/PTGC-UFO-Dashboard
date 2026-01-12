@@ -1260,7 +1260,7 @@
                 </div>
               ):(
                 <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4`}>
-                  <div className="flex justify-between mb-2"><div className={`text-base font-bold text-blue-400 uppercase`}>{'\u{1F525}'} PTGC Burned by UFO</div></div>
+                  <div className="flex justify-between mb-2"><div className={`text-base font-bold text-blue-400 uppercase`}>{'\u{1F525}'} PTGC Burned by UFO</div><span className="text-blue-400/50 text-xs">LIFETIME</span></div>
                   {(()=>{
                     const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
                     const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
@@ -1268,6 +1268,7 @@
                     const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
                     const periods=ptgcByUFO?.periods||{h24:{amount:0},d7:{amount:0},d30:{amount:0}};
                     const whaleProgress=getWhaleProgress(burnPct);
+                    const creatures=getBurnC(burnPct,'Squid');
                     
                     return(
                       <div className="space-y-2">
@@ -1281,11 +1282,16 @@
                           <span className="text-lg">{'\u{1F40B}'}</span>
                           <span className="text-blue-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span>
                         </div>
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <span className="text-2xl animate-fire">{'\u{1F525}'}</span>
+                          {creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                           {[{l:'24H',v:periods.h24?.amount},{l:'7D',v:periods.d7?.amount},{l:'30D',v:periods.d30?.amount}].map(({l,v})=>(
-                            <div key={l} className="bg-black/30 rounded-lg px-2 py-1 text-center">
-                              <span className="text-white/50 text-xs mr-2">{l}</span>
-                              <span className="text-blue-400 font-bold text-sm">{fmtAbbr(v||0)}</span>
+                            <div key={l} className="bg-black/30 rounded-lg px-2 py-2 text-center">
+                              <div className="text-white/50 text-xs mb-1">{l}</div>
+                              <div className="text-blue-400 font-bold text-sm">{fmtAbbr(v||0)}</div>
+                              <div className="text-green-400 text-xs">{fmtUSD((v||0)*ptgcPrice)}</div>
                             </div>
                           ))}
                         </div>
