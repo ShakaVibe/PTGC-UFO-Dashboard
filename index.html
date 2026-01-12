@@ -187,13 +187,14 @@
     
     // Get burn periods from cache for a token
     const getBurnPeriods=(token)=>{
-      if(!burnHistoryCache||!burnHistoryCache[token])return{h12:0,h24:0,d7:0,d30:0};
+      if(!burnHistoryCache||!burnHistoryCache[token])return{h12:0,h24:0,d7:0,d30:0,d90:0};
       const p=burnHistoryCache[token].periods;
       return{
         h12:p.h12?.amount||0,
         h24:p.h24?.amount||0,
         d7:p.d7?.amount||0,
-        d30:p.d30?.amount||0
+        d30:p.d30?.amount||0,
+        d90:p.d90?.amount||0
       };
     };
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
@@ -981,7 +982,7 @@
       const[sortBy,setSortBy]=useState('volume');
       const[sortDir,setSortDir]=useState('desc');
       const[lastUpdate,setLastUpdate]=useState(new Date());
-      const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0});
+      const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0,d90:0});
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
       const[daoData,setDaoData]=useState(null);
       const[daoLoading,setDaoLoading]=useState(true);
@@ -1005,7 +1006,7 @@
         setHolderTiers({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
         setPtgcPrice(0);
         setHolderChange(null);
-        setBurnPeriods({h12:0,h24:0,d7:0,d30:0});
+        setBurnPeriods({h12:0,h24:0,d7:0,d30:0,d90:0});
         setValueGenPeriod('7d');
         
         const load=async()=>{
@@ -1164,7 +1165,7 @@
                 <div className="flex items-center gap-2 mb-1"><div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div><span className="text-lg">{'\u{1F40B}'}</span><span className="text-orange-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span></div>
                 <div className="flex items-center gap-2 flex-wrap mb-4"><span className="text-xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-2"><span className="text-xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}</div>
                 <div className="grid grid-cols-4 gap-2">
-                  {[{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:(burnPeriods.d30||0)*3}].map(({l,v})=>{
+                  {[{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v})=>{
                     const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
                     const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                     return(
@@ -1182,7 +1183,7 @@
                 <div className="flex justify-between items-center mb-2">
                   <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated</div>
                   <div className="flex gap-1 bg-black/30 rounded-lg p-1">
-                    {['24h','7d','30d'].map(p=>(
+                    {['24h','7d','30d','90d'].map(p=>(
                       <button key={p} onClick={()=>setValueGenPeriod(p)} className={`px-2 py-1 rounded text-xs font-medium transition ${valueGenPeriod===p?`${theme.bg} text-black`:'text-white/60 hover:text-white'}`}>{p.toUpperCase()}</button>
                     ))}
                   </div>
@@ -1193,7 +1194,7 @@
                   const burnPct=token==='PTGC'?0.005:0.01;
                   
                   // Get burn amount for selected period
-                  const burnAmounts={'24h':burnPeriods.h24,'7d':burnPeriods.d7,'30d':burnPeriods.d30};
+                  const burnAmounts={'24h':burnPeriods.h24,'7d':burnPeriods.d7,'30d':burnPeriods.d30,'90d':burnPeriods.d90};
                   const periodBurn=burnAmounts[valueGenPeriod]||0;
                   
                   // Calculate volume: volume = (burnAmount * price) / burnPct
