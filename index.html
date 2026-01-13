@@ -1540,6 +1540,7 @@
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+      const[showRHModal,setShowRHModal]=useState(false);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -1658,6 +1659,26 @@
       const filteredVol=filteredSorted.reduce((s,p)=>s+(p.vol||0),0);
       const filteredLiq=filteredSorted.reduce((s,p)=>s+(p.liq||0),0);
       
+      // RH Cores pairs (always computed for modal)
+      const rhCoresPairs=useMemo(()=>{
+        const rhPairs=sorted.map(p=>{
+          const baseSymbol=(p.baseToken?.symbol||'').toUpperCase();
+          const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
+          const matchedCore=RH_CORES.find(core=>baseSymbol===core||quoteSymbol===core);
+          if(matchedCore)return{...p,rhCore:matchedCore};
+          return null;
+        }).filter(Boolean);
+        const seen=new Map();
+        rhPairs.forEach(p=>{
+          const existing=seen.get(p.rhCore);
+          if(!existing||p.liq>existing.liq){
+            seen.set(p.rhCore,p);
+          }
+        });
+        return Array.from(seen.values()).sort((a,b)=>b.liq-a.liq);
+      },[sorted]);
+      const rhCoresLiq=rhCoresPairs.reduce((s,p)=>s+(p.liq||0),0);
+      
       const high=filteredSorted.filter(p=>p.liq>=MIN_LIQ),low=filteredSorted.filter(p=>p.liq<MIN_LIQ);
       const[showLow,setShowLow]=useState(false);
       const creatures=getBurnC(burn?.pct||0,'Squid');
@@ -1742,7 +1763,7 @@
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm font-semibold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'} {Math.abs(data?.change||0).toFixed(2)}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm font-semibold ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm font-semibold ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowRHModal(true)} className="absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-colors">RH</button><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm font-semibold ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">LIQ/MCAP Ratio</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&holderChange!==0&&<div className={`text-sm font-semibold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:<div className="text-white/50 text-sm">{tokensInLPPct}%</div>})()}</div>
@@ -2102,6 +2123,66 @@
             holderTiers={holderTiers}
             theme={theme}
           />
+          
+          {/* RH Cores LP Modal */}
+          {showRHModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowRHModal(false)}>
+              <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto`} onClick={e=>e.stopPropagation()}>
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <img src={cfg.logo} alt={token} className="w-14 h-14 rounded-full"/>
+                      <div>
+                        <h2 className={`text-xl font-bold ${theme.text}`}>LP with RH Core Coins</h2>
+                        <div className="text-white/50 text-sm">Total Liquidity: <span className={`font-bold ${theme.text}`}>{fmtUSD(rhCoresLiq)}</span></div>
+                      </div>
+                    </div>
+                    <button onClick={()=>setShowRHModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {rhCoresPairs.length>0?rhCoresPairs.map((pair,i)=>{
+                      const liq=pair.liq||0,vol=pair.vol||0;
+                      const ratio=liq>0?(vol/liq).toFixed(3):'0.000';
+                      const buys=pair.txns?.h24?.buys||0,sells=pair.txns?.h24?.sells||0;
+                      const chg=pair.priceChange?.h24||0,up=chg>=0;
+                      const isBase=pair.baseToken?.address?.toLowerCase()===cfg.address?.toLowerCase();
+                      const other=isBase?pair.quoteToken:pair.baseToken;
+                      const logo=getLogo(other?.address);
+                      return(
+                        <div key={pair.pairAddress||i} className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
+                          <div className="flex items-center gap-3">
+                            <img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={e=>e.target.style.display='none'}/>
+                            <div className="flex-1">
+                              <div className={`font-semibold ${theme.text}`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
+                              <div className="text-gray-500 text-xs">{pair.rhCore} pair</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-white font-semibold">{fmtUSD(liq)}</div>
+                              <div className="text-white/50 text-xs">Liquidity</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-white">{fmtUSD(vol)}</div>
+                              <div className="text-white/50 text-xs">Volume</div>
+                            </div>
+                            <div className="text-center">
+                              <div className={up?'text-green-400':'text-red-400'}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div>
+                              <div className="text-white/50 text-xs">24h</div>
+                            </div>
+                            <div className="flex gap-2">
+                              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">{'\u{1F4C8}'}</a>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }):(
+                      <div className="text-center text-white/50 py-8">No RH Core pairs found</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
