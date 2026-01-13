@@ -986,7 +986,7 @@
     };
     
     // KPI Content component with dual token support
-    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache})=>{
+    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose})=>{
       const[showBoth,setShowBoth]=useState(false);
       const[otherData,setOtherData]=useState(null);
       const[otherBurn,setOtherBurn]=useState({total:0,pct:0,supply:0});
@@ -1021,10 +1021,9 @@
           const h=await fetchHolders(otherCfg.address);
           setOtherHolders(h);
           
-          // Get holder change from burnHistoryCache
-          if(burnHistoryCache&&burnHistoryCache[otherToken]?.changes?.holders){
-            setOtherHolderChange(burnHistoryCache[otherToken].changes.holders);
-          }
+          // Calculate holder change using same method as main page
+          const hc=getHolderChange(otherToken,h);
+          if(hc!==null)setOtherHolderChange(hc);
           
           // Fetch burn data
           const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals);
@@ -1154,6 +1153,14 @@
       
       return(
         <>
+          {/* Close X button - positioned away from corner for screenshots */}
+          <button 
+            onClick={onClose} 
+            className="absolute top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-50 border border-gray-600"
+          >
+            ✕
+          </button>
+          
           {!showBoth?(
             <button onClick={()=>{loadOtherToken();setShowBoth(true);}} className="mb-3 px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 hover:opacity-80 transition-opacity" style={{background:token==='PTGC'?'#7CFC00':'#D9CA5D',color:'#000'}}>
               <span className="text-lg">+</span> Add {otherToken}
@@ -1650,7 +1657,7 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>setShowKPI(false)}>
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
               <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setShowKPI(false)}/>
               </div>
             </div>
           )}
