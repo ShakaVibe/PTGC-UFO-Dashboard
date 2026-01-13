@@ -422,8 +422,13 @@
       let page=0;
       let countedHolders=0;
       
+      console.log('=== HOLDER TIER FETCH START ===');
+      console.log('Token:', cfg.name, 'Total Supply:', cfg.totalSupply);
+      console.log('Dolphin threshold (0.01%):', cfg.totalSupply * 0.0001);
+      
       // Combine static LP addresses with dynamic ones (exclude LP pools only)
       const allLPAddresses=[...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase());
+      console.log('Excluded LP addresses:', allLPAddresses.length);
       
       try{
         while(page<maxPages){
@@ -441,20 +446,34 @@
             const data=await r.json();
             const items=data.items||[];
             
-            if(items.length===0)break;
+            console.log(`Page ${page}: ${items.length} items fetched`);
+            
+            if(items.length===0){
+              console.log('Stopping: No items returned');
+              break;
+            }
             
             let foundBelowDolphin=false;
+            let lastPct=0;
             
             for(const holder of items){
               const holderAddr=holder.address?.hash?.toLowerCase();
-              if(allLPAddresses.includes(holderAddr))continue;
-              if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())continue;
+              if(allLPAddresses.includes(holderAddr)){
+                console.log('Skipping LP:', holderAddr.slice(0,10));
+                continue;
+              }
+              if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase()){
+                console.log('Skipping staking contract');
+                continue;
+              }
               
               const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
               const pctOfSupply=(tokens/cfg.totalSupply)*100;
+              lastPct=pctOfSupply;
               
               // Stop at Dolphin threshold (0.01%)
               if(pctOfSupply<0.01){
+                console.log(`Found below Dolphin threshold: ${pctOfSupply.toFixed(6)}% (${tokens.toLocaleString()} tokens)`);
                 foundBelowDolphin=true;
                 break;
               }
@@ -468,14 +487,19 @@
             }
             
             totalFetched+=items.length;
+            console.log(`Page ${page} done. Counted: ${countedHolders}, Last %: ${lastPct.toFixed(4)}%, Counts:`, {...counts});
             
-            if(foundBelowDolphin)break;
+            if(foundBelowDolphin){
+              console.log('Stopping: Found holder below Dolphin threshold');
+              break;
+            }
             
             if(data.next_page_params){
               const params=new URLSearchParams();
               Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
               nextPageParams=params.toString();
             }else{
+              console.log('Stopping: No next_page_params');
               break;
             }
             page++;
@@ -489,9 +513,17 @@
             break; // Stop on any error
           }
         }
+        
+        if(page>=maxPages){
+          console.log('Stopping: Reached maxPages limit');
+        }
       }catch(e){
         console.error('Error fetching holders:',e);
       }
+      
+      console.log('=== HOLDER TIER FETCH COMPLETE ===');
+      console.log('Total pages:', page+1, 'Total fetched:', totalFetched, 'Counted holders:', countedHolders);
+      console.log('Final counts:', counts);
       
       // Squid & Below = total holders - counted tiers - LP addresses - staking contract
       const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
