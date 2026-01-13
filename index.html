@@ -1764,11 +1764,11 @@
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-5">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm font-semibold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'} {Math.abs(data?.change||0).toFixed(2)}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowVolumeModal(true)} className={`absolute top-1 right-1 text-sm ${theme.text} hover:opacity-70 transition-opacity`}>{'\u{1F4CA}'}</button><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm font-semibold ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowVolumeModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>ⓘ</button><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm font-semibold ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowRHModal(true)} className={`absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm font-semibold ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">LIQ/MCAP Ratio</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&holderChange!==0&&<div className={`text-sm font-semibold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>}</div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><span className={`absolute top-1 right-1 text-[10px] font-bold ${theme.text}`}>{tokensInLPPct}%</span><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><span className={`absolute top-1 right-1 text-xs font-bold ${theme.text}`}>{tokensInLPPct}%</span><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{(data?.buys||0)+(data?.sells||0)}</div><div className="text-sm"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></div></div>
               </div>
             </div>
@@ -2199,14 +2199,14 @@
           {/* Volume Details Modal */}
           {showVolumeModal&&(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowVolumeModal(false)}>
-              <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-md w-full`} onClick={e=>e.stopPropagation()}>
-                <div className="p-5">
+              <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e=>e.stopPropagation()}>
+                <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <img src={cfg.logo} alt={token} className="w-12 h-12 rounded-full"/>
+                      <img src={cfg.logo} alt={token} className="w-14 h-14 rounded-full"/>
                       <div>
-                        <span className={`font-orbitron text-xl font-bold ${theme.text}`}>{token}</span>
-                        <div className="text-white/50 text-sm">Volume Analytics</div>
+                        <span className={`font-orbitron text-2xl font-bold ${theme.text}`}>{token}</span>
+                        <div className="text-white/50 text-base">Volume Analytics</div>
                       </div>
                     </div>
                     <button onClick={()=>setShowVolumeModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
@@ -2215,42 +2215,41 @@
                   {/* Volume by Period */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     {[
-                      {label:'24H',value:data?.vol||0,source:'DexScreener'},
-                      {label:'7D',value:volumeByPeriod.vol7d,source:'GeckoTerminal'},
-                      {label:'30D',value:volumeByPeriod.vol30d,source:'GeckoTerminal'},
-                      {label:'90D',value:volumeByPeriod.vol90d,source:'GeckoTerminal'}
-                    ].map(({label,value,source})=>(
-                      <div key={label} className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
-                        <div className="text-white/50 text-xs uppercase">{label} Volume</div>
-                        <div className={`text-xl font-bold ${theme.text}`}>{fmtUSD(value)}</div>
-                        <div className="text-white/30 text-[10px]">{source}</div>
+                      {label:'24H',value:data?.vol||0},
+                      {label:'7D',value:volumeByPeriod.vol7d},
+                      {label:'30D',value:volumeByPeriod.vol30d},
+                      {label:'90D',value:volumeByPeriod.vol90d}
+                    ].map(({label,value})=>(
+                      <div key={label} className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
+                        <div className="text-white/50 text-base uppercase">{label} Volume</div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{fmtUSD(value)}</div>
                       </div>
                     ))}
                   </div>
                   
                   {/* Daily Averages */}
-                  <div className={`${theme.card} border ${theme.border} rounded-lg p-3 mb-4`}>
-                    <div className="text-white/50 text-xs uppercase mb-2">Daily Averages</div>
+                  <div className={`${theme.card} border ${theme.border} rounded-lg p-4 mb-4`}>
+                    <div className="text-white/50 text-base uppercase mb-3">Daily Averages</div>
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div>
-                        <div className="text-white/40 text-xs">7D Avg</div>
-                        <div className={`font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol7d/7)}</div>
+                        <div className="text-white/40 text-base">7D Avg</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol7d/7)}</div>
                       </div>
                       <div>
-                        <div className="text-white/40 text-xs">30D Avg</div>
-                        <div className={`font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol30d/30)}</div>
+                        <div className="text-white/40 text-base">30D Avg</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol30d/30)}</div>
                       </div>
                       <div>
-                        <div className="text-white/40 text-xs">90D Avg</div>
-                        <div className={`font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol90d/90)}</div>
+                        <div className="text-white/40 text-base">90D Avg</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol90d/90)}</div>
                       </div>
                     </div>
                   </div>
                   
                   {/* Comparisons */}
-                  <div className={`${theme.card} border ${theme.border} rounded-lg p-3 mb-4`}>
-                    <div className="text-white/50 text-xs uppercase mb-2">Today vs Averages</div>
-                    <div className="space-y-2">
+                  <div className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
+                    <div className="text-white/50 text-base uppercase mb-3">Today vs Averages</div>
+                    <div className="space-y-3">
                       {[
                         {label:'vs 7D Avg',avg:volumeByPeriod.vol7d/7},
                         {label:'vs 30D Avg',avg:volumeByPeriod.vol30d/30},
@@ -2260,28 +2259,13 @@
                         const change=avg>0?((vol24h-avg)/avg)*100:0;
                         return(
                           <div key={label} className="flex justify-between items-center">
-                            <span className="text-white/60 text-sm">{label}</span>
-                            <span className={`font-bold ${change>=0?'text-green-400':'text-red-400'}`}>
+                            <span className="text-white/60 text-lg">{label}</span>
+                            <span className={`text-xl font-bold ${change>=0?'text-green-400':'text-red-400'}`}>
                               {change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}%
                             </span>
                           </div>
                         );
                       })}
-                    </div>
-                  </div>
-                  
-                  {/* Ratios */}
-                  <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
-                    <div className="text-white/50 text-xs uppercase mb-2">Volume Ratios</div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-white/40 text-xs">Vol/Liquidity</div>
-                        <div className={`font-bold ${theme.text}`}>{data?.liq>0?((data?.vol||0)/data.liq*100).toFixed(2):'0'}%</div>
-                      </div>
-                      <div>
-                        <div className="text-white/40 text-xs">Vol/MCap</div>
-                        <div className={`font-bold ${theme.text}`}>{data?.mcap>0?((data?.vol||0)/data.mcap*100).toFixed(2):'0'}%</div>
-                      </div>
                     </div>
                   </div>
                 </div>
