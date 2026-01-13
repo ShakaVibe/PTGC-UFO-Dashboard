@@ -45,7 +45,10 @@
       }
     };
     
-    const LP_ADDRESSES=['0xf5a89a6487d62df5308cdda89c566c5b5ef94c11','0xbea0e55b82eb975280041f3b49c4d0bd937b72d5'];
+    const LP_ADDRESSES=[
+      '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', // PTGC/WPLS main pair
+      '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5'  // UFO/WPLS main pair
+    ];
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     const RPC='https://rpc.pulsechain.com';
@@ -377,6 +380,7 @@
     // Fetch holders - stop after Dolphin tier, calculate rest as Squid & Below
     const fetchHolderTiers=async(addr,cfg,totalHolderCount,lpAddresses=[])=>{
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0};
+      const whaleAddresses=[]; // Track whale addresses for debugging
       let nextPageParams=null;
       let totalFetched=0;
       const maxPages=10; // Reduced for faster loading
@@ -385,6 +389,7 @@
       
       // Combine static LP addresses with dynamic ones (exclude LP pools only)
       const allLPAddresses=[...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase());
+      console.log('Excluding LP addresses:', allLPAddresses);
       
       try{
         while(page<maxPages){
@@ -408,8 +413,14 @@
             
             for(const holder of items){
               const holderAddr=holder.address?.hash?.toLowerCase();
-              if(allLPAddresses.includes(holderAddr))continue;
-              if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase())continue;
+              if(allLPAddresses.includes(holderAddr)){
+                console.log('Excluding LP:', holderAddr);
+                continue;
+              }
+              if(cfg.stakingContract&&holderAddr===cfg.stakingContract.toLowerCase()){
+                console.log('Excluding staking contract:', holderAddr);
+                continue;
+              }
               
               const tokens=parseFloat(holder.value||0)/Math.pow(10,cfg.decimals);
               const pctOfSupply=(tokens/cfg.totalSupply)*100;
@@ -420,8 +431,15 @@
                 break;
               }
               
-              if(pctOfSupply>=10)counts.Poseidon++;
-              else if(pctOfSupply>=1)counts.Whale++;
+              if(pctOfSupply>=10){
+                counts.Poseidon++;
+                console.log('Poseidon:', holderAddr, pctOfSupply.toFixed(2)+'%');
+              }
+              else if(pctOfSupply>=1){
+                counts.Whale++;
+                whaleAddresses.push({addr:holderAddr,pct:pctOfSupply.toFixed(2)});
+                console.log('Whale:', holderAddr, pctOfSupply.toFixed(2)+'%');
+              }
               else if(pctOfSupply>=0.1)counts.Shark++;
               else if(pctOfSupply>=0.01)counts.Dolphin++;
               
@@ -457,6 +475,13 @@
       // Squid & Below = total holders - counted tiers - LP addresses - staking contract
       const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
       const squidAndBelow=Math.max(0,totalHolderCount-countedHolders-excludedAddresses);
+      
+      console.log('=== HOLDER TIER SUMMARY ===');
+      console.log('Poseidon:', counts.Poseidon);
+      console.log('Whale:', counts.Whale, whaleAddresses);
+      console.log('Shark:', counts.Shark);
+      console.log('Dolphin:', counts.Dolphin);
+      console.log('===========================');
       
       return{counts,countedHolders,squidAndBelow,total:totalFetched};
     };
