@@ -1453,15 +1453,39 @@
                         <span className="text-white/50 text-sm">from {fmtUSD(calculatedVol)} vol</span>
                       </div>
                       <div className={`grid ${token==='PTGC'?'grid-cols-3':'grid-cols-2'} gap-2`}>
-                        {orderedItems.map((item,i)=>(
-                          <div key={i} className={`bg-black/20 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg px-2 py-2`}>
-                            <div className="flex items-center gap-1 mb-1">
-                              <span className="text-xl">{item.emoji}</span>
-                              <span className="text-white/70 text-sm">{item.name}</span>
+                        {orderedItems.map((item,i)=>{
+                          const dollarVal=calculatedVol*(item.pct/100);
+                          // For UFO, calculate token quantities
+                          let tokenQty=null;
+                          let tokenSymbol='';
+                          if(token==='UFO'){
+                            if(item.name==='Holders'||item.name==='Burn UFO'){
+                              // UFO tokens
+                              tokenQty=data?.price>0?dollarVal/data.price:0;
+                              tokenSymbol='UFO';
+                            }else if(item.name==='LP Providers'){
+                              // PLS tokens
+                              tokenQty=pls>0?dollarVal/pls:0;
+                              tokenSymbol='PLS';
+                            }else if(item.name==='Burn PTGC'){
+                              // PTGC tokens - use fetched price
+                              tokenQty=ptgcPrice>0?dollarVal/ptgcPrice:0;
+                              tokenSymbol='PTGC';
+                            }
+                          }
+                          return(
+                            <div key={i} className={`bg-black/20 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg px-2 py-2`}>
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-xl">{item.emoji}</span>
+                                <span className="text-white/70 text-sm">{item.name}</span>
+                              </div>
+                              {token==='UFO'&&tokenQty!==null&&(
+                                <div className="text-white font-bold text-lg text-right">{fmtAbbr(tokenQty)} <span className="text-white/60 text-sm">{tokenSymbol}</span></div>
+                              )}
+                              <div className={`font-bold ${token==='UFO'?'text-base':'text-xl'} text-right ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(dollarVal)}</div>
                             </div>
-                            <div className={`font-bold text-xl text-right ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(calculatedVol*(item.pct/100))}</div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </>
                   );
