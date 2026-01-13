@@ -1283,19 +1283,20 @@
       // Filter for RH Cores if enabled
       const filteredSorted=useMemo(()=>{
         if(!showRHCores)return sorted;
-        // Filter to RH Cores pairs
-        const rhPairs=sorted.filter(p=>{
+        // Filter to RH Cores pairs and find which RH core matched
+        const rhPairs=sorted.map(p=>{
           const baseSymbol=(p.baseToken?.symbol||'').toUpperCase();
           const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
-          return RH_CORES.some(core=>baseSymbol===core||quoteSymbol===core);
-        });
-        // Dedupe: keep only highest liquidity pair for each quote token
+          const matchedCore=RH_CORES.find(core=>baseSymbol===core||quoteSymbol===core);
+          if(matchedCore)return{...p,rhCore:matchedCore};
+          return null;
+        }).filter(Boolean);
+        // Dedupe: keep only highest liquidity pair for each RH core
         const seen=new Map();
         rhPairs.forEach(p=>{
-          const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
-          const existing=seen.get(quoteSymbol);
+          const existing=seen.get(p.rhCore);
           if(!existing||p.liq>existing.liq){
-            seen.set(quoteSymbol,p);
+            seen.set(p.rhCore,p);
           }
         });
         return Array.from(seen.values()).sort((a,b)=>b.liq-a.liq);
@@ -1399,7 +1400,7 @@
           </div>
           
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-end">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 h-full flex flex-col">
                 <div className="flex justify-between mb-1"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned</div></div>
                 <div className="flex items-center gap-3 mb-1 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span><span className="text-white/50">{(burn?.pct||0).toFixed(2)}%</span></div>
@@ -1519,7 +1520,7 @@
                 </div>
               </div>
               
-              <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4`}>
+              <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4 h-full`}>
                 <div className="flex justify-between mb-3"><div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation</div></div>
                 <div className="flex items-center gap-4">
                   <DonutChart data={chartData} colors={chartColors} size={90}/>
@@ -1565,7 +1566,7 @@
               </div>
               
               {cfg.hasDAO?(
-                <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4`}>
+                <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4 h-full`}>
                   <div className="flex justify-between items-center mb-5">
                     <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F3DB}\u{FE0F}'} DAO Treasury</div>
                   </div>
@@ -1623,7 +1624,7 @@
                   )}
                 </div>
               ):(
-                <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4`}>
+                <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4 h-full`}>
                   <div className="flex justify-between mb-2"><div className={`text-lg font-bold text-blue-400 uppercase`}>{'\u{1F525}'} PTGC Burned by UFO</div><span className="text-blue-400/50 text-xs">LIFETIME</span></div>
                   {(()=>{
                     const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
@@ -1671,9 +1672,9 @@
           
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4">
             <div className="hidden sm:grid grid-cols-12 gap-2 items-center mb-2 px-3 sm:px-4">
-              <div className="col-span-1"></div>
+              <div className="col-span-1 flex justify-center"><img src={cfg.logo} alt={token} className="w-10 h-10 rounded-full"/></div>
               <div className="col-span-2">
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2"><img src={cfg.logo} alt={token} className="w-6 h-6 rounded-full"/>LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
+                <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
               </div>
               <div className="col-span-2 text-right">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1 inline-block`}>
@@ -1700,7 +1701,7 @@
               </div>
             </div>
             <div className="sm:hidden flex justify-between mb-3 flex-wrap gap-2 items-center">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2"><img src={cfg.logo} alt={token} className="w-6 h-6 rounded-full"/>LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2"><img src={cfg.logo} alt={token} className="w-8 h-8 rounded-full"/>LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
               <div className="flex gap-2 items-center">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1.5 flex items-center gap-1`}>
                   <span className={`text-xs font-medium ${!showRHCores?theme.text:'text-gray-500'}`}>All</span>
