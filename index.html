@@ -238,6 +238,37 @@
     };
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
     
+    // GeckoTerminal historical volume - fetches OHLCV data for volume
+    const fetchGeckoVolume=async(poolAddress,days=90)=>{
+      try{
+        // GeckoTerminal OHLCV endpoint - daily candles
+        const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=${days}`;
+        const r=await fetch(url);
+        const data=await r.json();
+        
+        if(!data.data?.attributes?.ohlcv_list)return null;
+        
+        const candles=data.data.attributes.ohlcv_list;
+        // Each candle: [timestamp, open, high, low, close, volume]
+        // Volume is in USD
+        
+        let vol24h=0,vol7d=0,vol30d=0,vol90d=0;
+        
+        candles.forEach((c,i)=>{
+          const vol=c[5]||0; // volume is index 5
+          if(i<1)vol24h+=vol;
+          if(i<7)vol7d+=vol;
+          if(i<30)vol30d+=vol;
+          if(i<90)vol90d+=vol;
+        });
+        
+        return{vol24h,vol7d,vol30d,vol90d};
+      }catch(e){
+        console.error('GeckoTerminal error:',e);
+        return null;
+      }
+    };
+    
     const fetchPLSBalance=async(addr)=>{try{const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1});return Number(BigInt(r.result||'0x0'))/1e18}catch{return 0}};
     
     const fetchTokenBalance=async(tokenAddr,walletAddr,decimals)=>{
@@ -1504,6 +1535,7 @@
       const[showKPI,setShowKPI]=useState(false);
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
+      const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -1522,6 +1554,7 @@
         setBurnPeriods({h12:0,h24:0,d7:0,d30:0,d90:0});
         setValueGenPeriod('7d');
         setShowRHCores(false);
+        setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
         
         const load=async()=>{
           // Load burn history cache first (needed for holders from Moralis)
@@ -1572,6 +1605,23 @@
               .then(d=>setPtgcPrice(parseFloat(d.pair?.priceUsd)||0))
               .catch(()=>{});
           }
+          
+          // Fetch real volume from GeckoTerminal
+          fetchGeckoVolume(cfg.mainPair,90).then(vol=>{
+            if(vol){
+              // Use 24h from DexScreener (more real-time), rest from GeckoTerminal
+              setVolumeByPeriod({
+                vol24h:d?.vol||vol.vol24h,
+                vol7d:Math.max(vol.vol7d,d?.vol||0),
+                vol30d:Math.max(vol.vol30d,vol.vol7d),
+                vol90d:Math.max(vol.vol90d,vol.vol30d)
+              });
+            }else{
+              // Fallback: use DexScreener 24h volume
+              const v24=d?.vol||0;
+              setVolumeByPeriod({vol24h:v24,vol7d:v24*7,vol30d:v24*30,vol90d:v24*90});
+            }
+          });
         };
         load();
       },[token]);
@@ -1712,7 +1762,7 @@
                     return(
                       <div key={l} className="bg-black/30 border border-orange-500/30 rounded-lg px-2 py-2">
                         <div className="text-white font-bold text-sm mb-1">{l}</div>
-                        <div className="text-2xl text-center mb-1">{c.e}{c.cnt>1&&<span className="text-white/70 text-sm font-bold ml-1">x{c.cnt}</span>}</div>
+                        <div className="text-2xl text-center mb-1">{c.e}{c.cnt>0&&<span className="text-white/70 text-sm font-bold ml-1">x{c.cnt}</span>}</div>
                         <div className="text-green-400 font-bold text-lg text-center">{fmtUSD(v*(data?.price||0))}</div>
                       </div>
                     );
@@ -1731,19 +1781,12 @@
                 </div>
                 <div className="flex-1 flex flex-col justify-end">
                 {(()=>{
-                  // Reverse math: calculate volume from burn amount
-                  // PTGC burns 0.5% of volume, UFO burns 1% of volume
-                  const burnPct=token==='PTGC'?0.005:0.01;
+                  // Use real volume data from GeckoTerminal
+                  const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
+                  const periodVol=volAmounts[valueGenPeriod]||0;
                   
-                  // Get burn amount for selected period
-                  const burnAmounts={'24h':burnPeriods.h24,'7d':burnPeriods.d7,'30d':burnPeriods.d30,'90d':burnPeriods.d90};
-                  const periodBurn=burnAmounts[valueGenPeriod]||0;
-                  
-                  // Calculate volume: volume = (burnAmount * price) / burnPct
-                  const calculatedVol=burnPct>0?(periodBurn*(data?.price||0))/burnPct:0;
-                  
-                  // Total value generated from this volume
-                  const totalGen=calculatedVol*cfg.taxRate;
+                  // Total value generated from this volume (volume * tax rate)
+                  const totalGen=periodVol*cfg.taxRate;
                   
                   // Reorder items based on token
                   let orderedItems=[];
@@ -1771,11 +1814,11 @@
                     <>
                       <div className="flex items-baseline gap-2 mb-3">
                         <span className="text-3xl font-bold text-green-400">{fmtUSD(totalGen)}</span>
-                        <span className="text-white/50 text-sm">from {fmtUSD(calculatedVol)} vol</span>
+                        <span className="text-white/50 text-sm">from {fmtUSD(periodVol)} vol</span>
                       </div>
                       <div className={`grid ${token==='PTGC'?'grid-cols-3':'grid-cols-2'} gap-2`}>
                         {orderedItems.map((item,i)=>{
-                          const dollarVal=calculatedVol*(item.pct/100);
+                          const dollarVal=periodVol*(item.pct/100);
                           // For UFO, calculate token quantities
                           let tokenQty=null;
                           let tokenSymbol='';
