@@ -1360,6 +1360,126 @@
       );
     };
     
+    // Tier Info Modal - Shows token supply and holder tier thresholds
+    const TierInfoModal=({open,close,token,cfg,price,holders,burn,holderTiers,theme})=>{
+      if(!open)return null;
+      
+      const now=new Date();
+      const date=`${now.getMonth()+1}-${now.getDate()}-${String(now.getFullYear()).slice(-2)}`;
+      const startingSupply=cfg.totalSupply;
+      const burnedQty=burn?.total||0;
+      const currentSupply=startingSupply-burnedQty;
+      
+      // Calculate tier thresholds based on starting supply
+      const tiers=[
+        {name:'Poseidon',emoji:'🔱',threshold:startingSupply*0.10},
+        {name:'Whale',emoji:'🐋',threshold:startingSupply*0.01},
+        {name:'Shark',emoji:'🦈',threshold:startingSupply*0.001},
+        {name:'Dolphin',emoji:'🐬',threshold:startingSupply*0.0001},
+        {name:'Squid',emoji:'🦑',threshold:startingSupply*0.00001},
+        {name:'Turtle',emoji:'🐢',threshold:startingSupply*0.000001},
+        {name:'Shrimp',emoji:'🦐',threshold:startingSupply*0.0000001},
+        {name:'Shell',emoji:'🐚',threshold:startingSupply*0.00000001},
+      ];
+      
+      const isPTGC=token==='PTGC';
+      const pc=isPTGC?'#D9CA5D':'#7CFC00';
+      
+      // Format USD price for table: commas, no decimals unless < $1
+      const formatTablePrice=(val)=>{
+        if(!val||isNaN(val)||val===0)return'—';
+        if(val>=1)return'$'+Math.floor(val).toLocaleString();
+        return'$'+val.toFixed(2);
+      };
+      
+      // Format token price at top - PTGC normal, UFO with subscript
+      const formatTokenPrice=(p)=>{
+        if(!p||isNaN(p)||p===0)return'—';
+        if(isPTGC){
+          // PTGC format - like main page
+          if(p>=1)return'$'+p.toFixed(2);
+          return'$'+p.toFixed(6);
+        }else{
+          // UFO format - subscript for small values
+          if(p>=1)return{type:'string',val:'$'+p.toFixed(2)};
+          if(p>=0.01)return{type:'string',val:'$'+p.toFixed(4)};
+          const s=p.toExponential(4);
+          const[m,e]=s.split('e');
+          const exp=Math.abs(parseInt(e));
+          return{type:'sub',pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)};
+        }
+      };
+      
+      const TokenPriceDisplay=()=>{
+        const f=formatTokenPrice(price);
+        if(typeof f==='string')return<span>{f}</span>;
+        if(f.type==='string')return<span>{f.val}</span>;
+        return<span>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>;
+      };
+      
+      return(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={close}>
+          <div className="bg-[#0a0a0a] border-2 rounded-2xl max-w-lg w-full overflow-hidden" style={{borderColor:pc}} onClick={e=>e.stopPropagation()}>
+            {/* Header with logo */}
+            <div className="p-6 text-center" style={{background:`linear-gradient(180deg, ${pc}20 0%, transparent 100%)`}}>
+              <div className="flex justify-center mb-4">
+                <div className="w-32 h-32 rounded-full flex items-center justify-center" style={{background:`${pc}20`,border:`4px solid ${pc}`}}>
+                  <img src={cfg.logo} alt={token} className="w-28 h-28 object-contain"/>
+                </div>
+              </div>
+              <div className="text-lg text-white/60">Price {date}</div>
+              <div className="text-3xl font-bold" style={{color:pc}}>
+                <TokenPriceDisplay/>
+              </div>
+            </div>
+            
+            {/* Supply Info */}
+            <div className="px-6 py-4 border-t border-b" style={{borderColor:`${pc}30`}}>
+              <div className="grid grid-cols-2 gap-3 text-lg">
+                <div style={{color:pc}}>Starting Supply</div>
+                <div className="text-right font-bold text-white">{fmt(startingSupply)}</div>
+                <div className="text-orange-400 flex items-center gap-1">🔥 Burned As of {date}</div>
+                <div className="text-right font-bold text-orange-400">{fmt(burnedQty)}</div>
+                <div style={{color:pc}}>Current Supply</div>
+                <div className="text-right font-bold text-white">{fmt(currentSupply)}</div>
+              </div>
+            </div>
+            
+            {/* Tier Table */}
+            <div className="p-6">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-sm uppercase">
+                    <th className="text-left pb-3"></th>
+                    <th className="text-left pb-3"></th>
+                    <th className="text-right pb-3" style={{color:pc}}>Tokens</th>
+                    <th className="text-right pb-3" style={{color:pc}}>Price USD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tiers.map((tier,i)=>(
+                    <tr key={i} className="border-t border-white/10">
+                      <td className="py-2 text-3xl">{tier.emoji}</td>
+                      <td className="py-2 text-lg font-semibold text-white">{tier.name}</td>
+                      <td className="py-2 text-right text-lg text-white/80">{fmtAbbr(tier.threshold)}</td>
+                      <td className="py-2 text-right text-lg text-green-400 font-bold">{formatTablePrice(tier.threshold*price)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Close button */}
+            <div className="p-6 pt-0">
+              <button onClick={close} className="w-full py-3 rounded-lg font-bold text-lg text-black transition-colors" style={{background:pc}}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
     const Dashboard=({token,onBack,onSwitch})=>{
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#D9CA5D]':'text-[#7CFC00]',border:isGold?'border-[#D9CA5D]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D9CA5D]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
@@ -1383,6 +1503,7 @@
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
       const[showRHCores,setShowRHCores]=useState(false);
+      const[showTierInfo,setShowTierInfo]=useState(false);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -1698,7 +1819,12 @@
               </div>
               
               <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4 h-full`}>
-                <div className="flex justify-between mb-3"><div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation</div></div>
+                <div className="flex justify-between mb-3">
+                  <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation</div>
+                  <button onClick={()=>setShowTierInfo(true)} className="px-3 py-1 rounded-lg text-sm font-bold text-purple-300 border border-purple-500/50 bg-purple-500/20 hover:bg-purple-500/30 transition-colors">
+                    Leagues
+                  </button>
+                </div>
                 <div className="flex items-center gap-4">
                   <DonutChart data={chartData} colors={chartColors} size={90}/>
                   <div className="space-y-1">
@@ -1913,7 +2039,19 @@
               </div>
             </div>
           )}
-          )}
+          
+          {/* Tier Info Modal */}
+          <TierInfoModal 
+            open={showTierInfo} 
+            close={()=>setShowTierInfo(false)} 
+            token={token} 
+            cfg={cfg} 
+            price={data?.price||0} 
+            holders={holders} 
+            burn={burn} 
+            holderTiers={holderTiers}
+            theme={theme}
+          />
           
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Not financial advice. DYOR.</p></footer>
           
