@@ -1206,7 +1206,7 @@
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
       const[showRHCores,setShowRHCores]=useState(false);
-      const RH_CORES=['WPLS','PLSX','INC','HEX','eHEX'];
+      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
       useEffect(()=>{
@@ -1283,11 +1283,22 @@
       // Filter for RH Cores if enabled
       const filteredSorted=useMemo(()=>{
         if(!showRHCores)return sorted;
-        return sorted.filter(p=>{
+        // Filter to RH Cores pairs
+        const rhPairs=sorted.filter(p=>{
           const baseSymbol=(p.baseToken?.symbol||'').toUpperCase();
           const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
           return RH_CORES.some(core=>baseSymbol===core||quoteSymbol===core);
         });
+        // Dedupe: keep only highest liquidity pair for each quote token
+        const seen=new Map();
+        rhPairs.forEach(p=>{
+          const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
+          const existing=seen.get(quoteSymbol);
+          if(!existing||p.liq>existing.liq){
+            seen.set(quoteSymbol,p);
+          }
+        });
+        return Array.from(seen.values()).sort((a,b)=>b.liq-a.liq);
       },[sorted,showRHCores]);
       
       // Calculate totals based on filter
@@ -1388,12 +1399,13 @@
           </div>
           
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-end">
+              <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 h-full flex flex-col">
                 <div className="flex justify-between mb-1"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned</div></div>
                 <div className="flex items-center gap-3 mb-1 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span><span className="text-white/50">{(burn?.pct||0).toFixed(2)}%</span></div>
                 <div className="flex items-center gap-2 mb-2"><div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div><span className="text-lg">{'\u{1F40B}'}</span><span className="text-orange-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span></div>
                 <div className="flex items-center gap-3 flex-wrap mb-3"><span className="text-3xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/70 text-base font-bold">x{c.cnt}</span></span>)}</div>
+                <div className="flex-1"></div>
                 <div className="grid grid-cols-4 gap-2">
                   {[{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v})=>{
                     const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
@@ -1409,7 +1421,7 @@
                 </div>
               </div>
               
-              <div className={`bg-gradient-to-r from-emerald-500/15 via-emerald-600/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl p-4`}>
+              <div className={`bg-gradient-to-r from-emerald-500/15 via-emerald-600/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl p-4 h-full flex flex-col`}>
                 <div className="flex justify-between items-center mb-2">
                   <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated</div>
                   <div className="flex gap-1 bg-black/30 rounded-lg p-1">
@@ -1418,6 +1430,7 @@
                     ))}
                   </div>
                 </div>
+                <div className="flex-1 flex flex-col justify-end">
                 {(()=>{
                   // Reverse math: calculate volume from burn amount
                   // PTGC burns 0.5% of volume, UFO burns 1% of volume
@@ -1503,6 +1516,7 @@
                     </>
                   );
                 })()}
+                </div>
               </div>
               
               <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4`}>
@@ -1659,7 +1673,7 @@
             <div className="hidden sm:grid grid-cols-12 gap-2 items-center mb-2 px-3 sm:px-4">
               <div className="col-span-1"></div>
               <div className="col-span-2">
-                <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2"><img src={cfg.logo} alt={token} className="w-6 h-6 rounded-full"/>LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
               </div>
               <div className="col-span-2 text-right">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1 inline-block`}>
@@ -1686,7 +1700,7 @@
               </div>
             </div>
             <div className="sm:hidden flex justify-between mb-3 flex-wrap gap-2 items-center">
-              <h2 className="text-lg font-semibold text-white">LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2"><img src={cfg.logo} alt={token} className="w-6 h-6 rounded-full"/>LP Pairs <span className="text-gray-500 text-sm">({high.length})</span></h2>
               <div className="flex gap-2 items-center">
                 <div className={`${theme.card} border ${theme.border} rounded-lg px-2 py-1.5 flex items-center gap-1`}>
                   <span className={`text-xs font-medium ${!showRHCores?theme.text:'text-gray-500'}`}>All</span>
