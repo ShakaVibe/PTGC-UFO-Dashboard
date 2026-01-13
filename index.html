@@ -644,7 +644,11 @@
                   {HOLDER_TIERS_DISPLAY.map(tier=>(
                     <div key={tier.n} className="text-center">
                       <div className="text-2xl mb-1">{tier.e}</div>
-                      <div className={`text-lg font-bold ${theme.text}`}>{displayCounts[tier.n]||0}</div>
+                      {loading?(
+                        <div className="text-lg font-bold text-white/30">⏳</div>
+                      ):(
+                        <div className={`text-lg font-bold ${theme.text}`}>{displayCounts[tier.n]||0}</div>
+                      )}
                       <div className="text-white/50 text-xs">{tier.n}</div>
                     </div>
                   ))}
@@ -1781,6 +1785,9 @@
                 </div>
                 <div className="flex-1 flex flex-col justify-end">
                 {(()=>{
+                  // Check if volume data is still loading
+                  const isVolumeLoading=volumeByPeriod.vol24h===0&&loading;
+                  
                   // Use real volume data from GeckoTerminal
                   const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
                   const periodVol=volAmounts[valueGenPeriod]||0;
