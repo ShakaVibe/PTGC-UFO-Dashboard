@@ -1,0 +1,48 @@
+name: Update Metrics History
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  update-metrics:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Create data directory
+        run: mkdir -p data
+
+      - name: Run metrics collector
+        env:
+          MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
+        run: node fetch-metrics.js
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet data/metrics-history.json 2>/dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/metrics-history.json
+          git commit -m "Update metrics $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
