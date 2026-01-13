@@ -1921,9 +1921,70 @@
       );
     };
     
+    // Disclaimer Modal Component
+    const DisclaimerModal=({onAccept})=>{
+      return(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95">
+          <div className="bg-[#111] border border-yellow-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="text-4xl mb-3">⚠️</div>
+              <h2 className="text-2xl font-bold text-yellow-400 font-orbitron">Disclaimer</h2>
+            </div>
+            
+            <div className="space-y-4 text-white/80 text-sm mb-6">
+              <p>
+                <span className="text-yellow-400 font-semibold">Community Project:</span> This dashboard is built by and for the community. It is not an official product and is not affiliated with or endorsed by any token team or project.
+              </p>
+              
+              <p>
+                <span className="text-yellow-400 font-semibold">No Guarantees:</span> While we strive for accuracy, we cannot guarantee that all data displayed is correct, complete, or up-to-date. Data is sourced from third-party APIs and blockchain queries which may contain errors or delays.
+              </p>
+              
+              <p>
+                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, legal, or tax advice. Always do your own research (DYOR) before making any investment decisions.
+              </p>
+              
+              <p>
+                <span className="text-yellow-400 font-semibold">No Liability:</span> The creators of this dashboard accept no responsibility or liability for any losses, damages, or decisions made based on information displayed here.
+              </p>
+              
+              <p>
+                <span className="text-yellow-400 font-semibold">Use at Your Own Risk:</span> By using this dashboard, you acknowledge that you understand these risks and agree to use it at your own discretion.
+              </p>
+            </div>
+            
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={onAccept}
+                className="w-full py-3 px-6 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-bold rounded-lg transition-all text-lg"
+              >
+                I Understand & Accept
+              </button>
+              <p className="text-white/40 text-xs text-center">
+                By clicking above, you agree to these terms. This message will not appear again.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
     const App=()=>{
       const[view,setView]=useState('home');
       const[token,setToken]=useState(null);
+      const[disclaimerAccepted,setDisclaimerAccepted]=useState(()=>{
+        try{return localStorage.getItem('ptgc_ufo_disclaimer_accepted')==='true';}catch(e){return false;}
+      });
+      
+      const handleAcceptDisclaimer=()=>{
+        try{localStorage.setItem('ptgc_ufo_disclaimer_accepted','true');}catch(e){}
+        setDisclaimerAccepted(true);
+      };
+      
+      if(!disclaimerAccepted){
+        return<DisclaimerModal onAccept={handleAcceptDisclaimer}/>;
+      }
+      
       if(view==='dashboard'&&token)return<Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)}/>;
       return<Home onSelect={t=>{setToken(t);setView('dashboard')}}/>;
     };
