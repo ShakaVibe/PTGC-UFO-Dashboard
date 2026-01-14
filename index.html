@@ -267,20 +267,30 @@
       }
     };
     
-    // Get holder change vs yesterday (24hr) from burn summary snapshots
+    // Get holder change vs 24 hours ago from holder history snapshots
     const getHolderChange=(token,currentHolders)=>{
-      // Try burn summary snapshots first (daily data)
+      // Use new holder history snapshots (every 30 min)
+      if(holderHistoryCacheNew?.snapshots?.length>=1){
+        const snapshots=holderHistoryCacheNew.snapshots;
+        // Find snapshot closest to 24 hours ago
+        const past = findSnapshotAt(snapshots, 24);
+        if(past && past[token] > 0 && currentHolders > 0){
+          return currentHolders - past[token];
+        }
+      }
+      
+      // Fallback to burn summary snapshots (daily data)
       if(burnHistoryCache&&burnHistoryCache[token]?.snapshots?.length>=2){
         const snapshots=burnHistoryCache[token].snapshots;
-        const today=snapshots[0];
-        const yesterday=snapshots[1];
+        const today=snapshots[snapshots.length - 1];
+        const yesterday=snapshots[snapshots.length - 2];
         if(today&&yesterday&&yesterday.holders>0){
           const todayHolders=currentHolders||today.holders||0;
           return todayHolders-yesterday.holders;
         }
       }
       
-      // Fallback to holder history (monthly data)
+      // Final fallback to holder history (monthly data)
       if(!holderHistoryCache||!holderHistoryCache.data||holderHistoryCache.data.length<2)return null;
       const key=token.toLowerCase();
       const data=holderHistoryCache.data;
@@ -323,10 +333,12 @@
     const COINGECKO_DATA_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/coingecko-data.json';
     const LIQUIDITY_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/liquidity-history.json';
     const TRANSACTION_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/transaction-history.json';
+    const HOLDER_HISTORY_URL_NEW = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/holder-history.json';
 
     let coingeckoDataCache = null;
     let liquidityHistoryCache = null;
     let transactionHistoryCache = null;
+    let holderHistoryCacheNew = null;
 
     const fetchCoingeckoData = async () => {
       if (coingeckoDataCache) return coingeckoDataCache;
@@ -363,6 +375,19 @@
         return transactionHistoryCache;
       } catch (e) {
         console.error('Failed to load transaction history:', e);
+        return null;
+      }
+    };
+
+    const fetchHolderHistoryNew = async () => {
+      if (holderHistoryCacheNew) return holderHistoryCacheNew;
+      try {
+        const r = await fetch(HOLDER_HISTORY_URL_NEW + '?t=' + Date.now());
+        holderHistoryCacheNew = await r.json();
+        console.log('Holder history loaded:', holderHistoryCacheNew.snapshots?.length, 'snapshots');
+        return holderHistoryCacheNew;
+      } catch (e) {
+        console.error('Failed to load holder history:', e);
         return null;
       }
     };
@@ -1971,6 +1996,7 @@
           await fetchCoingeckoData();
           await fetchLiquidityHistory();
           await fetchTransactionHistory();
+          await fetchHolderHistoryNew();
           
           // Load burn periods from cache
           const periods=getBurnPeriods(token);
