@@ -1477,7 +1477,7 @@
       const otherBurnPeriods=getOtherBurnPeriods();
       
       // Twitter Card Component for screenshot
-      const TwitterCard=({t,c,d,b,bp,h})=>{
+      const TwitterCard=({t,c,d,b,bp,h,hc})=>{
         const isPTGC=t==='PTGC';
         const pc=isPTGC?'#D9CA5D':'#7CFC00';
         const price=d?.price||0;
@@ -1489,6 +1489,7 @@
         const burn7dCreature=get24hBurnCreature(burn7d,t);
         const date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         const liqMcapPct=d?.mcap>0?((d?.liq||0)/d.mcap*100).toFixed(1)+'%':'—';
+        const holderChangeDisplay=hc!==null&&hc!==undefined?(hc>=0?`+${hc}`:hc):null;
         
         return(
           <div className="rounded-2xl p-4 flex flex-col border-2 overflow-hidden h-full" style={{borderColor:pc,background:`linear-gradient(180deg, ${pc}20 0%, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0.95) 100%)`,boxShadow:`0 -20px 60px ${pc}40, inset 0 1px 0 ${pc}40`}}>
@@ -1534,7 +1535,7 @@
                 <div className="text-3xl font-bold text-white">{fmtUSD(d?.liq)}</div>
               </div>
               <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>👥</span> Holders</div>
+                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>👥</span> Holders{holderChangeDisplay!==null&&<span className={`ml-2 text-xs font-bold ${hc>=0?'text-green-400':'text-red-400'}`}>{hc>=0?'▲':'▼'}{holderChangeDisplay}</span>}</div>
                 <div className="text-3xl font-bold text-white">{fmt(h)}</div>
               </div>
               <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
@@ -1592,14 +1593,14 @@
               id="twitter-capture"
               className="relative" 
               style={{
-                width:'1200px',height:'675px',
+                width:'1200px',height:'628px',
                 background:'radial-gradient(ellipse at 25% 0%, rgba(217,202,93,0.3) 0%, transparent 40%), radial-gradient(ellipse at 75% 0%, rgba(124,252,0,0.3) 0%, transparent 40%), radial-gradient(ellipse at 50% 100%, rgba(180,80,20,0.25) 0%, transparent 50%), linear-gradient(180deg, #0d0d0d 0%, #080808 50%, #0a0805 100%)'
               }}
               onClick={e=>e.stopPropagation()}
             >
               <div className="w-full h-full p-5 grid grid-cols-2 gap-5">
-                <TwitterCard t={token} c={cfg} d={data} b={burn} bp={burnPeriods} h={holders}/>
-                <TwitterCard t={otherToken} c={otherCfg} d={otherData} b={otherBurn} bp={otherBurnPeriods} h={otherHolders}/>
+                <TwitterCard t={token} c={cfg} d={data} b={burn} bp={burnPeriods} h={holders} hc={holderChange}/>
+                <TwitterCard t={otherToken} c={otherCfg} d={otherData} b={otherBurn} bp={otherBurnPeriods} h={otherHolders} hc={otherHolderChange}/>
               </div>
             </div>
           </div>
