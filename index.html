@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The Grays Dashboard</title>
+  <link rel="icon" type="image/png" href="07_Two_Color_Alien_Transparent.png">
+  <link rel="apple-touch-icon" href="07_Two_Color_Alien_Transparent.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -141,7 +143,85 @@
       if(burn24h>=t.WHALE)return'🐋';if(burn24h>=t.SHARK)return'🦈';if(burn24h>=t.DOLPHIN)return'🐬';if(burn24h>=t.SQUID)return'🦑';if(burn24h>=t.TURTLE)return'🐢';if(burn24h>=t.SHRIMP)return'🦐';return'🐚';
     };
     
-    const fetchDex=async(addr,mainPair)=>{try{let mp=null;if(mainPair){const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);const d=await r.json();if(d.pair)mp=d.pair}const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);const data=await res.json();if(data.pairs&&data.pairs.length>0){const pairs=data.pairs.map(p=>({...p,liq:p.liquidity?.usd||0,vol:p.volume?.h24||0})).sort((a,b)=>b.liq-a.liq);const pp=mp||pairs[0];let totalTokensInLP=0;pairs.forEach(p=>{const isBase=p.baseToken?.address?.toLowerCase()===addr.toLowerCase();if(isBase&&p.liquidity?.base)totalTokensInLP+=p.liquidity.base;else if(!isBase&&p.liquidity?.quote)totalTokensInLP+=p.liquidity.quote});return{price:parseFloat(pp.priceUsd)||0,change:pp.priceChange?.h24||0,mcap:pp.marketCap||pp.fdv||0,liq:pairs.reduce((s,p)=>s+p.liq,0),vol:pairs.reduce((s,p)=>s+p.vol,0),buys:pairs.reduce((s,p)=>s+(p.txns?.h24?.buys||0),0),sells:pairs.reduce((s,p)=>s+(p.txns?.h24?.sells||0),0),tokensInLP:totalTokensInLP,pairs}}return null}catch(e){console.error(e);return null}};
+    const fetchDex=async(addr,mainPair)=>{
+      try{
+        let mp=null;
+        if(mainPair){
+          const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);
+          const d=await r.json();
+          if(d.pair)mp=d.pair;
+        }
+        
+        // Fetch from both endpoints to ensure we get all pairs
+        const [tokensRes, pairsRes] = await Promise.all([
+          fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`),
+          fetch(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${addr}`)
+        ]);
+        
+        const tokensData = await tokensRes.json();
+        let pairsData = [];
+        try {
+          pairsData = await pairsRes.json();
+        } catch(e) {
+          pairsData = [];
+        }
+        
+        // Combine pairs from both endpoints, dedupe by pairAddress
+        const allPairsMap = new Map();
+        
+        // Add pairs from tokens endpoint
+        if(tokensData.pairs && tokensData.pairs.length > 0) {
+          tokensData.pairs.forEach(p => {
+            allPairsMap.set(p.pairAddress?.toLowerCase(), p);
+          });
+        }
+        
+        // Add pairs from token-pairs endpoint (may have additional pairs)
+        if(Array.isArray(pairsData) && pairsData.length > 0) {
+          pairsData.forEach(p => {
+            if(p.pairAddress && !allPairsMap.has(p.pairAddress.toLowerCase())) {
+              allPairsMap.set(p.pairAddress.toLowerCase(), p);
+            }
+          });
+        }
+        
+        const allPairs = Array.from(allPairsMap.values());
+        console.log(`fetchDex: Found ${allPairs.length} total pairs for ${addr.slice(0,8)}...`);
+        
+        if(allPairs.length > 0) {
+          const pairs = allPairs.map(p => ({
+            ...p,
+            liq: p.liquidity?.usd || 0,
+            vol: p.volume?.h24 || 0
+          })).sort((a, b) => b.liq - a.liq);
+          
+          const pp = mp || pairs[0];
+          let totalTokensInLP = 0;
+          
+          pairs.forEach(p => {
+            const isBase = p.baseToken?.address?.toLowerCase() === addr.toLowerCase();
+            if(isBase && p.liquidity?.base) totalTokensInLP += p.liquidity.base;
+            else if(!isBase && p.liquidity?.quote) totalTokensInLP += p.liquidity.quote;
+          });
+          
+          return {
+            price: parseFloat(pp.priceUsd) || 0,
+            change: pp.priceChange?.h24 || 0,
+            mcap: pp.marketCap || pp.fdv || 0,
+            liq: pairs.reduce((s, p) => s + p.liq, 0),
+            vol: pairs.reduce((s, p) => s + p.vol, 0),
+            buys: pairs.reduce((s, p) => s + (p.txns?.h24?.buys || 0), 0),
+            sells: pairs.reduce((s, p) => s + (p.txns?.h24?.sells || 0), 0),
+            tokensInLP: totalTokensInLP,
+            pairs
+          };
+        }
+        return null;
+      } catch(e) {
+        console.error('fetchDex error:', e);
+        return null;
+      }
+    };
     const fetchHolders=async addr=>{
       const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
       const key=token.toLowerCase();
@@ -238,38 +318,136 @@
       };
     };
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
-    
-    // GeckoTerminal historical volume - fetches OHLCV data for volume
-    const fetchGeckoVolume=async(poolAddress,days=90)=>{
-      try{
-        // GeckoTerminal OHLCV endpoint - daily candles
-        const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=${days}`;
-        const r=await fetch(url);
-        const data=await r.json();
-        
-        if(!data.data?.attributes?.ohlcv_list)return null;
-        
-        const candles=data.data.attributes.ohlcv_list;
-        // Each candle: [timestamp, open, high, low, close, volume]
-        // Volume is in USD
-        
-        let vol24h=0,vol7d=0,vol30d=0,vol90d=0;
-        
-        candles.forEach((c,i)=>{
-          const vol=c[5]||0; // volume is index 5
-          if(i<1)vol24h+=vol;
-          if(i<7)vol7d+=vol;
-          if(i<30)vol30d+=vol;
-          if(i<90)vol90d+=vol;
-        });
-        
-        return{vol24h,vol7d,vol30d,vol90d};
-      }catch(e){
-        console.error('GeckoTerminal error:',e);
+
+    // ===== CoinGecko Pre-fetched Data (from GitHub) =====
+    const COINGECKO_DATA_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/coingecko-data.json';
+    const LIQUIDITY_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/liquidity-history.json';
+    const TRANSACTION_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/transaction-history.json';
+
+    let coingeckoDataCache = null;
+    let liquidityHistoryCache = null;
+    let transactionHistoryCache = null;
+
+    const fetchCoingeckoData = async () => {
+      if (coingeckoDataCache) return coingeckoDataCache;
+      try {
+        const r = await fetch(COINGECKO_DATA_URL + '?t=' + Date.now());
+        coingeckoDataCache = await r.json();
+        console.log('CoinGecko data loaded:', coingeckoDataCache.lastUpdated);
+        return coingeckoDataCache;
+      } catch (e) {
+        console.error('Failed to load CoinGecko data:', e);
         return null;
       }
     };
-    
+
+    const fetchLiquidityHistory = async () => {
+      if (liquidityHistoryCache) return liquidityHistoryCache;
+      try {
+        const r = await fetch(LIQUIDITY_HISTORY_URL + '?t=' + Date.now());
+        liquidityHistoryCache = await r.json();
+        console.log('Liquidity history loaded:', liquidityHistoryCache.snapshots?.length, 'snapshots');
+        return liquidityHistoryCache;
+      } catch (e) {
+        console.error('Failed to load liquidity history:', e);
+        return null;
+      }
+    };
+
+    const fetchTransactionHistory = async () => {
+      if (transactionHistoryCache) return transactionHistoryCache;
+      try {
+        const r = await fetch(TRANSACTION_HISTORY_URL + '?t=' + Date.now());
+        transactionHistoryCache = await r.json();
+        console.log('Transaction history loaded:', transactionHistoryCache.snapshots?.length, 'snapshots');
+        return transactionHistoryCache;
+      } catch (e) {
+        console.error('Failed to load transaction history:', e);
+        return null;
+      }
+    };
+
+    // Find snapshot closest to target time ago
+    const findSnapshotAt = (snapshots, hoursAgo) => {
+      if (!snapshots || snapshots.length === 0) return null;
+      const targetTime = Date.now() - (hoursAgo * 60 * 60 * 1000);
+      let closest = null;
+      let closestDiff = Infinity;
+      for (const snap of snapshots) {
+        const snapTime = new Date(snap.timestamp).getTime();
+        const diff = Math.abs(snapTime - targetTime);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closest = snap;
+        }
+      }
+      // Only return if within 2 hours of target
+      return closestDiff < 2 * 60 * 60 * 1000 ? closest : null;
+    };
+
+    const getLiquidityChange = (token, hoursAgo = 24) => {
+      if (!liquidityHistoryCache?.snapshots || liquidityHistoryCache.snapshots.length < 2) return null;
+      const snapshots = liquidityHistoryCache.snapshots;
+      const current = snapshots[snapshots.length - 1];
+      const past = findSnapshotAt(snapshots, hoursAgo);
+      if (!current || !past) return null;
+      const currentVal = current[token] || 0;
+      const pastVal = past[token] || 0;
+      if (pastVal === 0) return null;
+      return {
+        change: currentVal - pastVal,
+        changePercent: ((currentVal - pastVal) / pastVal) * 100,
+        current: currentVal,
+        past: pastVal
+      };
+    };
+
+    const getTransactionChange = (token, hoursAgo = 24) => {
+      if (!transactionHistoryCache?.snapshots || transactionHistoryCache.snapshots.length < 2) return null;
+      const snapshots = transactionHistoryCache.snapshots;
+      const current = snapshots[snapshots.length - 1];
+      const past = findSnapshotAt(snapshots, hoursAgo);
+      if (!current || !past) return null;
+      const currentTxns = current[token]?.total || 0;
+      const pastTxns = past[token]?.total || 0;
+      if (pastTxns === 0) return null;
+      return {
+        change: currentTxns - pastTxns,
+        changePercent: ((currentTxns - pastTxns) / pastTxns) * 100,
+        current: current[token],
+        past: past[token]
+      };
+    };
+
+    const getMultiPeriodChanges = (historyCache, token, getValue) => {
+      if (!historyCache?.snapshots || historyCache.snapshots.length < 2) return {};
+      const snapshots = historyCache.snapshots;
+      const current = snapshots[snapshots.length - 1];
+      const currentVal = getValue(current, token);
+      const periods = [
+        { label: '24H', hours: 24 },
+        { label: '7D', hours: 24 * 7 },
+        { label: '30D', hours: 24 * 30 },
+        { label: '90D', hours: 24 * 90 }
+      ];
+      const result = {};
+      for (const period of periods) {
+        const past = findSnapshotAt(snapshots, period.hours);
+        if (past) {
+          const pastVal = getValue(past, token);
+          if (pastVal > 0) {
+            result[period.label] = {
+              change: currentVal - pastVal,
+              changePercent: ((currentVal - pastVal) / pastVal) * 100,
+              current: currentVal,
+              past: pastVal
+            };
+          }
+        }
+      }
+      return result;
+    };
+
     const fetchPLSBalance=async(addr)=>{try{const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1});return Number(BigInt(r.result||'0x0'))/1e18}catch{return 0}};
     
     const fetchTokenBalance=async(tokenAddr,walletAddr,decimals)=>{
@@ -1518,6 +1696,215 @@
       );
     };
     
+
+    // Liquidity History Modal
+    const LiquidityModal = ({ open, close, token, currentLiquidity, theme, cfg }) => {
+      const [changes, setChanges] = useState({});
+      const [chartData, setChartData] = useState([]);
+      const chartRef = React.useRef(null);
+      const chartInstance = React.useRef(null);
+      
+      useEffect(() => {
+        if (!open) return;
+        const multiChanges = getMultiPeriodChanges(liquidityHistoryCache, token, (snap, t) => snap[t] || 0);
+        setChanges(multiChanges);
+        if (liquidityHistoryCache?.snapshots) {
+          const data = liquidityHistoryCache.snapshots
+            .slice(-168)
+            .filter((_, i) => i % 4 === 0)
+            .map(s => ({
+              time: new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
+              value: s[token] || 0
+            }));
+          setChartData(data);
+        }
+      }, [open, token]);
+      
+      useEffect(() => {
+        if (!open || !chartRef.current || chartData.length === 0 || !window.Chart) return;
+        if (chartInstance.current) chartInstance.current.destroy();
+        const ctx = chartRef.current.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+        gradient.addColorStop(0, cfg.colorHex + '66');
+        gradient.addColorStop(1, cfg.colorHex + '00');
+        chartInstance.current = new window.Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: chartData.map(d => d.time),
+            datasets: [{
+              label: 'Liquidity',
+              data: chartData.map(d => d.value),
+              borderColor: cfg.colorHex,
+              backgroundColor: gradient,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1a', borderColor: cfg.colorHex, borderWidth: 1, callbacks: { label: (ctx) => '$' + ctx.parsed.y.toLocaleString() } } },
+            scales: { x: { display: false }, y: { grid: { color: '#333' }, ticks: { color: '#999', callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v) } } }
+          }
+        });
+        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+      }, [open, chartData, cfg.colorHex]);
+      
+      if (!open) return null;
+      const Badge = ({ value }) => {
+        if (value === undefined || value === null) return <span className="text-white/40">{'\u2014'}</span>;
+        const isUp = value >= 0;
+        return <span className={`font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '\u25B2' : '\u25BC'} {Math.abs(value).toFixed(2)}%</span>;
+      };
+      
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={close}>
+          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{'\u{1F4A7}'}</span>
+                  <div>
+                    <span className={`font-orbitron text-2xl font-bold ${theme.text}`}>{token}</span>
+                    <div className="text-white/50 text-base">Liquidity History</div>
+                  </div>
+                </div>
+                <button onClick={close} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
+              </div>
+              <div className={`${theme.card} border ${theme.border} rounded-lg p-4 mb-4`}>
+                <div className="text-white/50 text-sm uppercase">Current Liquidity</div>
+                <div className={`text-3xl font-bold ${theme.text}`}>{fmtUSD(currentLiquidity)}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {['24H', '7D', '30D', '90D'].map(period => (
+                  <div key={period} className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
+                    <div className="text-white/50 text-sm uppercase">{period} Change</div>
+                    <div className="text-xl"><Badge value={changes[period]?.changePercent} /></div>
+                    {changes[period] && <div className="text-white/40 text-xs mt-1">{changes[period].change >= 0 ? '+' : ''}{fmtUSD(changes[period].change)}</div>}
+                  </div>
+                ))}
+              </div>
+              <div className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
+                <div className="text-white/50 text-sm uppercase mb-2">7 Day Trend</div>
+                <div style={{ height: '150px' }}>
+                  <canvas ref={chartRef}></canvas>
+                  {chartData.length === 0 && <div className="flex items-center justify-center h-full text-white/40">Loading chart data...</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Transaction History Modal
+    const TransactionModal = ({ open, close, token, currentTxns, currentBuys, currentSells, theme, cfg }) => {
+      const [changes, setChanges] = useState({});
+      const [chartData, setChartData] = useState([]);
+      const chartRef = React.useRef(null);
+      const chartInstance = React.useRef(null);
+      
+      useEffect(() => {
+        if (!open) return;
+        const multiChanges = getMultiPeriodChanges(transactionHistoryCache, token, (snap, t) => snap[t]?.total || 0);
+        setChanges(multiChanges);
+        if (transactionHistoryCache?.snapshots) {
+          const data = transactionHistoryCache.snapshots
+            .slice(-168)
+            .filter((_, i) => i % 4 === 0)
+            .map(s => ({
+              time: new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
+              buys: s[token]?.buys || 0,
+              sells: s[token]?.sells || 0,
+              total: s[token]?.total || 0
+            }));
+          setChartData(data);
+        }
+      }, [open, token]);
+      
+      useEffect(() => {
+        if (!open || !chartRef.current || chartData.length === 0 || !window.Chart) return;
+        if (chartInstance.current) chartInstance.current.destroy();
+        const ctx = chartRef.current.getContext('2d');
+        chartInstance.current = new window.Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: chartData.map(d => d.time),
+            datasets: [
+              { label: 'Buys', data: chartData.map(d => d.buys), backgroundColor: '#22c55e88', borderColor: '#22c55e', borderWidth: 1 },
+              { label: 'Sells', data: chartData.map(d => d.sells), backgroundColor: '#ef444488', borderColor: '#ef4444', borderWidth: 1 }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: true, labels: { color: '#999' } } },
+            scales: { x: { display: false, stacked: true }, y: { stacked: true, grid: { color: '#333' }, ticks: { color: '#999' } } }
+          }
+        });
+        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+      }, [open, chartData]);
+      
+      if (!open) return null;
+      const Badge = ({ value }) => {
+        if (value === undefined || value === null) return <span className="text-white/40">{'\u2014'}</span>;
+        const isUp = value >= 0;
+        return <span className={`font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '\u25B2' : '\u25BC'} {Math.abs(value).toFixed(1)}%</span>;
+      };
+      const buyRatio = currentTxns > 0 ? (currentBuys / currentTxns * 100).toFixed(0) : 50;
+      
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={close}>
+          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{'\u26A1'}</span>
+                  <div>
+                    <span className={`font-orbitron text-2xl font-bold ${theme.text}`}>{token}</span>
+                    <div className="text-white/50 text-base">Transaction History</div>
+                  </div>
+                </div>
+                <button onClick={close} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
+              </div>
+              <div className={`${theme.card} border ${theme.border} rounded-lg p-4 mb-4`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="text-white/50 text-sm uppercase">24H Transactions</div>
+                    <div className={`text-3xl font-bold ${theme.text}`}>{currentTxns}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm"><span className="text-green-400 font-bold">{currentBuys}</span><span className="text-white/30 mx-1">/</span><span className="text-red-400 font-bold">{currentSells}</span></div>
+                    <div className="text-white/40 text-xs">buys / sells</div>
+                  </div>
+                </div>
+                <div className="h-2 bg-red-500/30 rounded-full overflow-hidden"><div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${buyRatio}%` }} /></div>
+                <div className="text-center text-white/50 text-xs mt-1">{buyRatio}% buys</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {['24H', '7D', '30D', '90D'].map(period => (
+                  <div key={period} className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
+                    <div className="text-white/50 text-sm uppercase">{period} Change</div>
+                    <div className="text-xl"><Badge value={changes[period]?.changePercent} /></div>
+                    {changes[period] && <div className="text-white/40 text-xs mt-1">{changes[period].change >= 0 ? '+' : ''}{changes[period].change} txns</div>}
+                  </div>
+                ))}
+              </div>
+              <div className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
+                <div className="text-white/50 text-sm uppercase mb-2">7 Day Activity</div>
+                <div style={{ height: '150px' }}>
+                  <canvas ref={chartRef}></canvas>
+                  {chartData.length === 0 && <div className="flex items-center justify-center h-full text-white/40">Loading chart data...</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const Dashboard=({token,onBack,onSwitch})=>{
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#D9CA5D]':'text-[#7CFC00]',border:isGold?'border-[#D9CA5D]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D9CA5D]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
@@ -1549,6 +1936,10 @@
       const[showValueGenShareModal,setShowValueGenShareModal]=useState(false);
       const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
       const[showDAOShareModal,setShowDAOShareModal]=useState(false);
+      const[showLiquidityModal,setShowLiquidityModal]=useState(false);
+      const[showTransactionModal,setShowTransactionModal]=useState(false);
+      const[liquidityChange24h,setLiquidityChange24h]=useState(null);
+      const[txnChange24h,setTxnChange24h]=useState(null);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -1568,12 +1959,18 @@
         setValueGenPeriod('7d');
         setShowRHCores(false);
         setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+        setLiquidityChange24h(null);
+        setTxnChange24h(null);
         
         const load=async()=>{
           // Load burn history cache first (needed for holders from Moralis)
           await fetchBurnHistory();
           // Load holder history cache (for holder chart and change indicator)
           await fetchHolderHistory();
+          // Load CoinGecko pre-fetched data
+          await fetchCoingeckoData();
+          await fetchLiquidityHistory();
+          await fetchTransactionHistory();
           
           // Load burn periods from cache
           const periods=getBurnPeriods(token);
@@ -1585,6 +1982,13 @@
           // Update holder change with current holder count
           const hc=getHolderChange(token,h);
           if(hc!==null)setHolderChange(hc);
+          
+          // Calculate liquidity and transaction changes from history
+          const liqChange = getLiquidityChange(token, 24);
+          if (liqChange) setLiquidityChange24h(liqChange.changePercent);
+          
+          const txnChange = getTransactionChange(token, 24);
+          if (txnChange) setTxnChange24h(txnChange.changePercent);
           
           // Start these in parallel after initial load
           if(cfg.stakingContract){
@@ -1619,22 +2023,19 @@
               .catch(()=>{});
           }
           
-          // Fetch real volume from GeckoTerminal
-          fetchGeckoVolume(cfg.mainPair,90).then(vol=>{
-            if(vol){
-              // Use 24h from DexScreener (more real-time), rest from GeckoTerminal
-              setVolumeByPeriod({
-                vol24h:d?.vol||vol.vol24h,
-                vol7d:Math.max(vol.vol7d,d?.vol||0),
-                vol30d:Math.max(vol.vol30d,vol.vol7d),
-                vol90d:Math.max(vol.vol90d,vol.vol30d)
-              });
-            }else{
-              // Fallback: use DexScreener 24h volume
-              const v24=d?.vol||0;
-              setVolumeByPeriod({vol24h:v24,vol7d:v24*7,vol30d:v24*30,vol90d:v24*90});
-            }
-          });
+          // Use pre-fetched CoinGecko data for volume (7d, 30d, 90d)
+          if (coingeckoDataCache && coingeckoDataCache[token]) {
+            const v24 = d?.vol || 0;
+            setVolumeByPeriod({
+              vol24h: v24,
+              vol7d: coingeckoDataCache[token].volume?.vol7d || 0,
+              vol30d: coingeckoDataCache[token].volume?.vol30d || 0,
+              vol90d: coingeckoDataCache[token].volume?.vol90d || 0
+            });
+          } else {
+            // Fallback - only show 24h
+            setVolumeByPeriod({ vol24h: d?.vol || 0, vol7d: null, vol30d: null, vol90d: null });
+          }
         };
         load();
       },[token]);
@@ -1766,20 +2167,20 @@
             </div>
           </header>
           
+          
           <div className="border-b border-white/10 mt-4">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-5">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm font-semibold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'} {Math.abs(data?.change||0).toFixed(2)}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowVolumeModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>ⓘ</button><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm font-semibold ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowRHModal(true)} className={`absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm font-semibold ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowVolumeModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm font-semibold ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowLiquidityModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><button onClick={()=>setShowRHModal(true)} className={`absolute top-1 right-6 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{liquidityChange24h!==null?<div className={`text-sm font-semibold ${liquidityChange24h>=0?'text-green-400':'text-red-400'}`}>{liquidityChange24h>=0?'\u25B2':'\u25BC'} {Math.abs(liquidityChange24h).toFixed(2)}%</div>:(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm font-semibold ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">LIQ/MCAP Ratio</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&holderChange!==0&&<div className={`text-sm font-semibold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><span className={`absolute top-1 right-1 text-xs font-bold ${theme.text}`}>{tokensInLPPct}%</span><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:null})()}</div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="flex items-baseline gap-2"><span className={`text-2xl font-bold ${theme.text}`}>{(data?.buys||0)+(data?.sells||0)}</span><span className="text-sm"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></span></div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(1)}%</div>:null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowTransactionModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="flex items-baseline gap-2"><span className={`text-2xl font-bold ${theme.text}`}>{(data?.buys||0)+(data?.sells||0)}</span><span className="text-sm"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></span></div>{txnChange24h!==null?<div className={`text-sm font-semibold ${txnChange24h>=0?'text-green-400':'text-red-400'}`}>{txnChange24h>=0?'\u25B2':'\u25BC'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(1)}%</div>:null})()}</div>
               </div>
             </div>
           </div>
-          
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 h-full flex flex-col">
@@ -1819,10 +2220,11 @@
                   
                   // Use real volume data from GeckoTerminal
                   const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
-                  const periodVol=volAmounts[valueGenPeriod]||0;
+                  const periodVol=volAmounts[valueGenPeriod];
+                  const hasData=periodVol!==null&&periodVol!==undefined;
                   
                   // Total value generated from this volume (volume * tax rate)
-                  const totalGen=periodVol*cfg.taxRate;
+                  const totalGen=hasData?periodVol*cfg.taxRate:0;
                   
                   // Reorder items based on token
                   let orderedItems=[];
@@ -1849,10 +2251,16 @@
                   return(
                     <>
                       <div className="flex items-baseline gap-2 mb-3">
-                        <span className="text-3xl font-bold text-green-400">{fmtUSD(totalGen)}</span>
-                        <span className="text-white/50 text-sm">from {fmtUSD(periodVol)} vol</span>
+                        {hasData?(
+                          <>
+                            <span className="text-3xl font-bold text-green-400">{fmtUSD(totalGen)}</span>
+                            <span className="text-white/50 text-sm">from {fmtUSD(periodVol)} vol</span>
+                          </>
+                        ):(
+                          <span className="text-xl text-white/50">Data unavailable for {valueGenPeriod}</span>
+                        )}
                       </div>
-                      <div className={`grid ${token==='PTGC'?'grid-cols-3':'grid-cols-2'} gap-2`}>
+                      {hasData&&<div className={`grid ${token==='PTGC'?'grid-cols-3':'grid-cols-2'} gap-2`}>
                         {orderedItems.map((item,i)=>{
                           const dollarVal=periodVol*(item.pct/100);
                           // For UFO, calculate token quantities
@@ -1890,7 +2298,7 @@
                             </div>
                           );
                         })}
-                      </div>
+                      </div>}
                     </>
                   );
                 })()}
@@ -2228,7 +2636,7 @@
                     ].map(({label,value})=>(
                       <div key={label} className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
                         <div className="text-white/50 text-base uppercase">{label} Volume</div>
-                        <div className={`text-3xl font-bold ${theme.text}`}>{fmtUSD(value)}</div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{value!==null&&value!==undefined?fmtUSD(value):'\u2014'}</div>
                       </div>
                     ))}
                   </div>
@@ -2239,15 +2647,15 @@
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div>
                         <div className="text-white/40 text-base">7D Avg</div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol7d/7)}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{volumeByPeriod.vol7d!==null?fmtUSD(volumeByPeriod.vol7d/7):'\u2014'}</div>
                       </div>
                       <div>
                         <div className="text-white/40 text-base">30D Avg</div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol30d/30)}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{volumeByPeriod.vol30d!==null?fmtUSD(volumeByPeriod.vol30d/30):'\u2014'}</div>
                       </div>
                       <div>
                         <div className="text-white/40 text-base">90D Avg</div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(volumeByPeriod.vol90d/90)}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{volumeByPeriod.vol90d!==null?fmtUSD(volumeByPeriod.vol90d/90):'\u2014'}</div>
                       </div>
                     </div>
                   </div>
@@ -2257,10 +2665,18 @@
                     <div className="text-white/50 text-base uppercase mb-3">Today vs Averages</div>
                     <div className="space-y-3">
                       {[
-                        {label:'vs 7D Avg',avg:volumeByPeriod.vol7d/7},
-                        {label:'vs 30D Avg',avg:volumeByPeriod.vol30d/30},
-                        {label:'vs 90D Avg',avg:volumeByPeriod.vol90d/90}
+                        {label:'vs 7D Avg',avg:volumeByPeriod.vol7d!==null?volumeByPeriod.vol7d/7:null},
+                        {label:'vs 30D Avg',avg:volumeByPeriod.vol30d!==null?volumeByPeriod.vol30d/30:null},
+                        {label:'vs 90D Avg',avg:volumeByPeriod.vol90d!==null?volumeByPeriod.vol90d/90:null}
                       ].map(({label,avg})=>{
+                        if(avg===null){
+                          return(
+                            <div key={label} className="flex justify-between items-center">
+                              <span className="text-white/60 text-lg">{label}</span>
+                              <span className="text-xl text-white/40">{'\u2014'}</span>
+                            </div>
+                          );
+                        }
                         const vol24h=data?.vol||0;
                         const change=avg>0?((vol24h-avg)/avg)*100:0;
                         return(
@@ -2632,6 +3048,30 @@
                 </div>
               </div>
             </div>
+          )}
+          
+          {showLiquidityModal && (
+            <LiquidityModal
+              open={showLiquidityModal}
+              close={() => setShowLiquidityModal(false)}
+              token={token}
+              currentLiquidity={data?.liq || 0}
+              theme={theme}
+              cfg={cfg}
+            />
+          )}
+          
+          {showTransactionModal && (
+            <TransactionModal
+              open={showTransactionModal}
+              close={() => setShowTransactionModal(false)}
+              token={token}
+              currentTxns={(data?.buys || 0) + (data?.sells || 0)}
+              currentBuys={data?.buys || 0}
+              currentSells={data?.sells || 0}
+              theme={theme}
+              cfg={cfg}
+            />
           )}
           
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data accuracy cannot be guaranteed. Not financial advice. DYOR.</p></footer>
