@@ -85,6 +85,36 @@ async function fetchHolderCount(tokenAddress) {
   }
 }
 
+// Fetch tokensInLP from DexScreener (free, no API key needed)
+async function fetchTokensInLP(tokenAddress) {
+  try {
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (!data.pairs || data.pairs.length === 0) {
+      return 0;
+    }
+    
+    let totalTokensInLP = 0;
+    for (const pair of data.pairs) {
+      const isBase = pair.baseToken?.address?.toLowerCase() === tokenAddress.toLowerCase();
+      if (isBase && pair.liquidity?.base) {
+        totalTokensInLP += pair.liquidity.base;
+      } else if (!isBase && pair.liquidity?.quote) {
+        totalTokensInLP += pair.liquidity.quote;
+      }
+    }
+    console.log(`  Tokens in LP for ${tokenAddress.slice(0, 10)}...: ${totalTokensInLP.toLocaleString()}`);
+    return totalTokensInLP;
+  } catch (error) {
+    console.error(`DexScreener tokensInLP error for ${tokenAddress}:`, error.message);
+    return null;
+  }
+}
+
 // Fetch all pools for a token
 async function fetchTokenPools(address) {
   console.log(`Fetching pools for ${address.slice(0, 10)}...`);
@@ -217,6 +247,7 @@ async function fetchTokenData(tokenName, tokenConfig) {
     volume: { vol7d: 0, vol30d: 0, vol90d: 0 },
     transactions: { buys: 0, sells: 0, total: 0, buyVolume: 0, sellVolume: 0 },
     holders: null,
+    tokensInLP: null,
     poolCount: 0,
     errors: []
   };
@@ -224,6 +255,10 @@ async function fetchTokenData(tokenName, tokenConfig) {
   try {
     // Fetch holder count first (from PulseScan - free)
     result.holders = await fetchHolderCount(tokenConfig.address);
+    await sleep(500);
+    
+    // Fetch tokensInLP from DexScreener (free)
+    result.tokensInLP = await fetchTokensInLP(tokenConfig.address);
     await sleep(500);
     
     // Get all pools
@@ -285,6 +320,7 @@ async function fetchTokenData(tokenName, tokenConfig) {
   
   console.log(`\n${tokenName} TOTALS:`);
   console.log(`  Holders: ${result.holders || 'N/A'}`);
+  console.log(`  Tokens in LP: ${result.tokensInLP?.toLocaleString() || 'N/A'}`);
   console.log(`  Liquidity: $${result.liquidity.toLocaleString()}`);
   console.log(`  Volume 7D: $${result.volume.vol7d.toLocaleString()}`);
   console.log(`  Volume 30D: $${result.volume.vol30d.toLocaleString()}`);
@@ -311,6 +347,7 @@ async function main() {
   const liquidityHistory = loadHistory('liquidity-history.json');
   const transactionHistory = loadHistory('transaction-history.json');
   const holderHistory = loadHistory('holder-history.json');
+  const tokensInLPHistory = loadHistory('tokensinlp-history.json');
   
   // Fetch data for each token
   const tokenData = {};
@@ -342,14 +379,25 @@ async function main() {
     });
   }
   
+  // Only add tokensInLP snapshot if we got valid data
+  if (tokenData.PTGC.tokensInLP !== null || tokenData.UFO.tokensInLP !== null) {
+    tokensInLPHistory.snapshots.push({
+      timestamp,
+      PTGC: tokenData.PTGC.tokensInLP,
+      UFO: tokenData.UFO.tokensInLP
+    });
+  }
+  
   // Save history files
   liquidityHistory.lastUpdated = timestamp;
   transactionHistory.lastUpdated = timestamp;
   holderHistory.lastUpdated = timestamp;
+  tokensInLPHistory.lastUpdated = timestamp;
   
   saveData('liquidity-history.json', liquidityHistory);
   saveData('transaction-history.json', transactionHistory);
   saveData('holder-history.json', holderHistory);
+  saveData('tokensinlp-history.json', tokensInLPHistory);
   
   // Save current aggregates (volume periods + current snapshot)
   const coingeckoData = {
@@ -359,6 +407,7 @@ async function main() {
       liquidity: tokenData.PTGC.liquidity,
       transactions: tokenData.PTGC.transactions,
       holders: tokenData.PTGC.holders,
+      tokensInLP: tokenData.PTGC.tokensInLP,
       poolCount: tokenData.PTGC.poolCount
     },
     UFO: {
@@ -366,6 +415,7 @@ async function main() {
       liquidity: tokenData.UFO.liquidity,
       transactions: tokenData.UFO.transactions,
       holders: tokenData.UFO.holders,
+      tokensInLP: tokenData.UFO.tokensInLP,
       poolCount: tokenData.UFO.poolCount
     }
   };
