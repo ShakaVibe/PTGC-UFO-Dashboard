@@ -270,12 +270,28 @@
     // Get holder change vs 24 hours ago from holder history snapshots
     const getHolderChange=(token,currentHolders)=>{
       // Use new holder history snapshots (every 30 min)
-      if(holderHistoryCacheNew?.snapshots?.length>=1){
+      if(holderHistoryCacheNew?.snapshots?.length>=2){
         const snapshots=holderHistoryCacheNew.snapshots;
-        // Find snapshot closest to 24 hours ago
-        const past = findSnapshotAt(snapshots, 24);
-        if(past && past[token] > 0 && currentHolders > 0){
-          return currentHolders - past[token];
+        const now = Date.now();
+        const targetTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
+        
+        // Find closest snapshot to 24 hours ago (with 12 hour tolerance for sparse data)
+        let closest = null;
+        let closestDiff = Infinity;
+        for (const snap of snapshots) {
+          const snapTime = new Date(snap.timestamp).getTime();
+          // Only consider snapshots older than 6 hours (not the current one)
+          if (snapTime > now - (6 * 60 * 60 * 1000)) continue;
+          const diff = Math.abs(snapTime - targetTime);
+          if (diff < closestDiff) {
+            closestDiff = diff;
+            closest = snap;
+          }
+        }
+        
+        // Accept if within 12 hours of target (more lenient for daily data)
+        if(closest && closestDiff < 12 * 60 * 60 * 1000 && closest[token] > 0 && currentHolders > 0){
+          return currentHolders - closest[token];
         }
       }
       
@@ -334,11 +350,13 @@
     const LIQUIDITY_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/liquidity-history.json';
     const TRANSACTION_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/transaction-history.json';
     const HOLDER_HISTORY_URL_NEW = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/holder-history.json';
+    const TOKENSINLP_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/tokensinlp-history.json';
 
     let coingeckoDataCache = null;
     let liquidityHistoryCache = null;
     let transactionHistoryCache = null;
     let holderHistoryCacheNew = null;
+    let tokensInLPHistoryCache = null;
 
     const fetchCoingeckoData = async () => {
       if (coingeckoDataCache) return coingeckoDataCache;
@@ -392,6 +410,19 @@
       }
     };
 
+    const fetchTokensInLPHistory = async () => {
+      if (tokensInLPHistoryCache) return tokensInLPHistoryCache;
+      try {
+        const r = await fetch(TOKENSINLP_HISTORY_URL + '?t=' + Date.now());
+        tokensInLPHistoryCache = await r.json();
+        console.log('TokensInLP history loaded:', tokensInLPHistoryCache.snapshots?.length, 'snapshots');
+        return tokensInLPHistoryCache;
+      } catch (e) {
+        console.error('Failed to load tokensInLP history:', e);
+        return null;
+      }
+    };
+
     // Find snapshot closest to target time ago
     const findSnapshotAt = (snapshots, hoursAgo) => {
       if (!snapshots || snapshots.length === 0) return null;
@@ -441,6 +472,23 @@
         changePercent: ((currentTxns - pastTxns) / pastTxns) * 100,
         current: current[token],
         past: past[token]
+      };
+    };
+
+    const getTokensInLPChange = (token, hoursAgo = 24) => {
+      if (!tokensInLPHistoryCache?.snapshots || tokensInLPHistoryCache.snapshots.length < 2) return null;
+      const snapshots = tokensInLPHistoryCache.snapshots;
+      const current = snapshots[snapshots.length - 1];
+      const past = findSnapshotAt(snapshots, hoursAgo);
+      if (!current || !past) return null;
+      const currentVal = current[token] || 0;
+      const pastVal = past[token] || 0;
+      if (pastVal === 0) return null;
+      return {
+        change: currentVal - pastVal,
+        changePercent: ((currentVal - pastVal) / pastVal) * 100,
+        current: currentVal,
+        past: pastVal
       };
     };
 
@@ -1965,6 +2013,7 @@
       const[showTransactionModal,setShowTransactionModal]=useState(false);
       const[liquidityChange24h,setLiquidityChange24h]=useState(null);
       const[txnChange24h,setTxnChange24h]=useState(null);
+      const[tokensInLPChange24h,setTokensInLPChange24h]=useState(null);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -1997,6 +2046,7 @@
           await fetchLiquidityHistory();
           await fetchTransactionHistory();
           await fetchHolderHistoryNew();
+          await fetchTokensInLPHistory();
           
           // Load burn periods from cache
           const periods=getBurnPeriods(token);
@@ -2015,6 +2065,9 @@
           
           const txnChange = getTransactionChange(token, 24);
           if (txnChange) setTxnChange24h(txnChange.changePercent);
+          
+          const tilpChange = getTokensInLPChange(token, 24);
+          if (tilpChange) setTokensInLPChange24h(tilpChange.changePercent);
           
           // Start these in parallel after initial load
           if(cfg.stakingContract){
@@ -2202,7 +2255,7 @@
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowLiquidityModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><button onClick={()=>setShowRHModal(true)} className={`absolute top-1 right-6 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div>{liquidityChange24h!==null?<div className={`text-sm font-semibold ${liquidityChange24h>=0?'text-green-400':'text-red-400'}`}>{liquidityChange24h>=0?'\u25B2':'\u25BC'} {Math.abs(liquidityChange24h).toFixed(2)}%</div>:(()=>{const lc=burnHistoryCache?.[token]?.changes?.liquidity;return lc!==undefined?<div className={`text-sm font-semibold ${lc>=0?'text-green-400':'text-red-400'}`}>{lc>=0?'\u25B2':'\u25BC'} {Math.abs(lc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">LIQ/MCAP Ratio</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&holderChange!==0&&<div className={`text-sm font-semibold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>}</div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><span className={`absolute top-1 right-1 text-xs font-bold ${theme.text}`}>{tokensInLPPct}%</span><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:null})()}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><span className={`absolute top-1 right-1 text-xs font-bold ${theme.text}`}>{tokensInLPPct}%</span><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div>{tokensInLPChange24h!==null?<div className={`text-sm font-semibold ${tokensInLPChange24h>=0?'text-green-400':'text-red-400'}`}>{tokensInLPChange24h>=0?'\u25B2':'\u25BC'} {Math.abs(tokensInLPChange24h).toFixed(2)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.tokensInLP;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(2)}%</div>:null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowTransactionModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="flex items-baseline gap-2"><span className={`text-2xl font-bold ${theme.text}`}>{(data?.buys||0)+(data?.sells||0)}</span><span className="text-sm"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></span></div>{txnChange24h!==null?<div className={`text-sm font-semibold ${txnChange24h>=0?'text-green-400':'text-red-400'}`}>{txnChange24h>=0?'\u25B2':'\u25BC'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(1)}%</div>:null})()}</div>
               </div>
             </div>
