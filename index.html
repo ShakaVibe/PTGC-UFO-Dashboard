@@ -1014,20 +1014,22 @@
     
     const Home=({onSelect})=>{
       const[data,setData]=useState({PTGC:null,UFO:null});
+      const[pls,setPls]=useState(0);
       const[loading,setLoading]=useState(true);
-      useEffect(()=>{const load=async()=>{const[p,u]=await Promise.all([fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair)]);setData({PTGC:p,UFO:u});setLoading(false)};load()},[]);
+      useEffect(()=>{const load=async()=>{const[p,u,plsPrice]=await Promise.all([fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair),fetchPLS()]);setData({PTGC:p,UFO:u});setPls(plsPrice);setLoading(false)};load()},[]);
       const Card=({token,d})=>{
         const cfg=TOKENS[token],isGold=cfg.color==='gold';
         const border=isGold?'border-[#D9CA5D]/50':'border-[#7CFC00]/50',text=isGold?'text-[#D9CA5D]':'text-[#7CFC00]';
         const bg=isGold?'bg-gradient-to-r from-[#D9CA5D]/20 via-[#1a1a1a] to-[#1a1a1a]':'bg-gradient-to-r from-[#7CFC00]/20 via-[#1a1a1a] to-[#1a1a1a]';
         const hover=isGold?'token-card-gold':'token-card-green',up=(d?.change||0)>=0;
+        const plsRatio=pls>0&&d?.price?(d.price/pls).toFixed(2):'\u2014';
         return(
           <div onClick={()=>onSelect(token)} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8`}>
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
               <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
               <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${text}`}>{token}</div><div className="text-white/40 text-xs font-mono mt-1">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</div></div>
-              <div className="flex-1 text-center sm:text-right"><Price p={d?.price} c="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/><div className="text-white/50 text-sm sm:text-lg mt-1">MCap: {fmtUSD(d?.mcap)}</div><div className="text-white/50 text-sm sm:text-base">Vol: {fmtUSD(d?.vol)}</div></div>
-              <div className="flex items-center gap-2 sm:gap-4"><svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points={up?"0,20 30,14 60,11 100,5":"0,5 30,10 60,12 100,18"} fill="none" stroke={up?'#22c55e':'#ef4444'} strokeWidth="2"/></svg><div className={`px-2 sm:px-3 py-1 rounded-lg text-sm sm:text-lg font-bold ${up?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(d?.change||0).toFixed(2)}%</div></div>
+              <div className="flex-1 text-center sm:text-right"><Price p={d?.price} c="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/><div className="text-white/50 text-xs sm:text-base mt-1">MCap: {fmtUSD(d?.mcap)}</div><div className="text-white/50 text-xs sm:text-sm">Vol: {fmtUSD(d?.vol)}</div><div className="text-white/50 text-xs sm:text-sm">PLS Ratio: {plsRatio}</div></div>
+              <div className="flex items-center gap-2 sm:gap-4"><svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points={up?"0,20 30,14 60,11 100,5":"0,5 30,10 60,12 100,18"} fill="none" stroke={up?'#22c55e':'#ef4444'} strokeWidth="2"/></svg><div className={`px-3 sm:px-4 py-2 rounded-lg ${up?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}><span className="text-[10px]">{up?'\u25B2':'\u25BC'}</span> <span className="text-xl sm:text-2xl font-bold">{Math.abs(d?.change||0).toFixed(2)}%</span></div></div>
             </div>
           </div>
         );
@@ -1035,7 +1037,7 @@
       return(
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
-          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-4xl w-full">{loading?<><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/></>}</div></div>
+          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl w-full">{loading?<><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/></>}</div></div>
           <footer className="text-center py-4 border-t border-white/10"><p className="text-white/30 text-xs">Data accuracy cannot be guaranteed. Not financial advice. DYOR.</p></footer>
         </div>
       );
@@ -1362,7 +1364,7 @@
               disabled={!bothLoaded}
               className={`mb-3 px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-opacity ${bothLoaded?'bg-[#1DA1F2] hover:opacity-80':'bg-gray-600 cursor-not-allowed'} text-white`}
             >
-              <span>📸</span> Twitter Screenshot {!bothLoaded&&'(Loading...)'}
+              <span>{'\u{1F4F7}'}</span>
             </button>
           )}
           
@@ -1543,6 +1545,10 @@
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
+      const[showBurnShareModal,setShowBurnShareModal]=useState(false);
+      const[showValueGenShareModal,setShowValueGenShareModal]=useState(false);
+      const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
+      const[showDAOShareModal,setShowDAOShareModal]=useState(false);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -1740,7 +1746,7 @@
                   </div>
                   <div className={`${theme.card} border ${theme.border} rounded-xl px-5 py-3 flex items-center gap-3`}>
                     <Price p={data?.price} c={`text-3xl sm:text-4xl font-bold ${theme.text}`}/>
-                    <span className={`text-xl font-bold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'}{Math.abs(data?.change||0).toFixed(2)}%</span>
+                    <span className={`text-3xl font-bold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'}{Math.abs(data?.change||0).toFixed(2)}%</span>
                   </div>
                   <div className={`${theme.card} border ${theme.border} rounded-xl px-5 py-3 flex items-center gap-2`}>
                     <div className="text-white/60 text-xs leading-tight">PLS<br/>Ratio</div>
@@ -1777,7 +1783,7 @@
           <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-4 h-full flex flex-col">
-                <div className="flex justify-between mb-1"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned - {token}</div></div>
+                <div className="flex justify-between mb-1"><div className="text-lg font-bold text-orange-400 uppercase">{'\u{1F525}'} Total Supply Burned - {token} <button onClick={()=>setShowBurnShareModal(true)} className="ml-2 text-sm opacity-50 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button></div></div>
                 <div className="flex items-center gap-3 mb-1 flex-wrap"><span className={`text-2xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span><span className="text-lg font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span><span className="text-white/50">{(burn?.pct||0).toFixed(2)}%</span></div>
                 <div className="flex items-center gap-2 mb-2"><div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div><span className="text-lg">{'\u{1F40B}'}</span><span className="text-orange-400/70 text-xs">{whaleProgress.progress.toFixed(1)}%</span></div>
                 <div className="flex items-center gap-3 flex-wrap mb-3"><span className="text-3xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/70 text-base font-bold">x{c.cnt}</span></span>)}</div>
@@ -1799,7 +1805,7 @@
               
               <div className={`bg-gradient-to-r from-emerald-500/15 via-emerald-600/10 to-emerald-500/15 border border-emerald-500/30 rounded-xl p-4 h-full flex flex-col`}>
                 <div className="flex justify-between items-center mb-2">
-                  <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated - {token}</div>
+                  <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4B0}'} Value Generated - {token} <button onClick={()=>setShowValueGenShareModal(true)} className="ml-2 text-sm opacity-50 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button></div>
                   <div className="flex gap-1 bg-black/30 rounded-lg p-1">
                     {['24h','7d','30d','90d'].map(p=>(
                       <button key={p} onClick={()=>setValueGenPeriod(p)} className={`px-2 py-1 rounded text-xs font-medium transition ${valueGenPeriod===p?`${theme.bg} text-black`:'text-white/60 hover:text-white'}`}>{p.toUpperCase()}</button>
@@ -1893,7 +1899,7 @@
               
               <div className={`bg-gradient-to-r from-purple-500/15 via-purple-600/10 to-purple-500/15 border border-purple-500/30 rounded-xl p-4 h-full`}>
                 <div className="flex justify-between mb-3">
-                  <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation - {token}</div>
+                  <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F4CA}'} Token Allocation - {token} <button onClick={()=>setShowAllocationShareModal(true)} className="ml-2 text-sm opacity-50 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button></div>
                   <button onClick={()=>setShowTierInfo(true)} className="px-3 py-1 rounded-lg text-sm font-bold text-purple-300 border border-purple-500/50 bg-purple-500/20 hover:bg-purple-500/30 transition-colors">
                     Leagues
                   </button>
@@ -1944,7 +1950,7 @@
               {cfg.hasDAO?(
                 <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4 h-full`}>
                   <div className="flex justify-between items-center mb-5">
-                    <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F3DB}\u{FE0F}'} DAO Treasury - {token}</div>
+                    <div className={`text-lg font-bold ${theme.text} uppercase`}>{'\u{1F3DB}\u{FE0F}'} DAO Treasury - {token} <button onClick={()=>setShowDAOShareModal(true)} className="ml-2 text-sm opacity-50 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button></div>
                   </div>
                   {daoLoading?(
                     <div className="flex items-center justify-center py-4">
@@ -2001,7 +2007,7 @@
                 </div>
               ):(
                 <div className={`bg-gradient-to-r from-blue-500/15 via-blue-600/10 to-blue-500/15 border border-blue-500/30 rounded-xl p-4 h-full`}>
-                  <div className="flex justify-between mb-2"><div className={`text-lg font-bold text-blue-400 uppercase`}>{'\u{1F525}'} PTGC Burned by UFO</div><span className="text-blue-400/50 text-xs">LIFETIME</span></div>
+                  <div className="flex justify-between mb-2"><div className={`text-lg font-bold text-blue-400 uppercase`}>{'\u{1F525}'} PTGC Burned by UFO <button onClick={()=>setShowDAOShareModal(true)} className="ml-2 text-sm opacity-50 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button></div><span className="text-blue-400/50 text-xs">LIFETIME</span></div>
                   {(()=>{
                     const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
                     const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
@@ -2268,6 +2274,361 @@
                       })}
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
+          {showBurnShareModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowBurnShareModal(false)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>setShowBurnShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                {/* Twitter Card - 600x314 (1.91:1 ratio, scales to 1200x628) */}
+                <div id="burn-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
+                  <div className={`h-full border-2 ${theme.border} rounded-xl p-5 flex flex-col`}>
+                    
+                    {/* Header row - logo, name/title, date */}
+                    <div className="flex items-center gap-4 mb-2">
+                      <img src={cfg.logo} alt={token} className="w-20 h-20 rounded-full"/>
+                      <div className="flex-1">
+                        <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
+                        <div className="text-orange-400 text-xl font-bold">{'\u{1F525}'} Total Supply Burned</div>
+                      </div>
+                      <span className="text-white/40 text-sm">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                    </div>
+                    
+                    {/* Main content - two columns */}
+                    <div className="flex gap-4 flex-1">
+                      {/* Left column - stats */}
+                      <div className="flex-1">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className={`text-3xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span>
+                          <span className="text-xl font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span>
+                        </div>
+                        <div className="text-white/50 text-sm mb-2">({(burn?.pct||0).toFixed(2)}% of supply)</div>
+                        
+                        {/* Whale progress bar */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div>
+                          </div>
+                          <span className="text-xl">{'\u{1F40B}'}</span>
+                          <span className="text-orange-400 text-xs font-bold">{whaleProgress.progress.toFixed(1)}%</span>
+                        </div>
+                        
+                        {/* Creatures */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-2xl">{'\u{1F525}'}</span>
+                          {creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}
+                        </div>
+                      </div>
+                      
+                      {/* Right column - period boxes */}
+                      <div className="grid grid-cols-2 gap-2 w-[220px]">
+                        {[{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v})=>{
+                          const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
+                          const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
+                          return(
+                            <div key={l} className="bg-black/50 border border-orange-500/30 rounded-lg p-2 relative h-[85px]">
+                              <div className="text-white font-bold text-sm absolute top-1 left-2">{l}</div>
+                              <div className="text-2xl text-center mt-4">{c.e}{c.cnt>0&&<span className="text-white/70 text-sm ml-1">x{c.cnt}</span>}</div>
+                              <div className="text-green-400 font-bold text-lg text-center">{fmtUSD(v*(data?.price||0))}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    {/* Footer watermark */}
+                    <div className="text-right mt-1">
+                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Right-click the image and "Save Image As" or take a screenshot
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Value Generated Share Modal - Twitter optimized */}
+          {showValueGenShareModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowValueGenShareModal(false)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>setShowValueGenShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                {/* Twitter Card - 600x314 */}
+                <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
+                  <div className={`h-full border-2 border-emerald-500/50 rounded-xl p-5 flex flex-col`}>
+                    
+                    {/* Header row */}
+                    <div className="flex items-center gap-4 mb-3">
+                      <img src={cfg.logo} alt={token} className="w-20 h-20 rounded-full"/>
+                      <div className="flex-1">
+                        <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
+                        <div className="text-emerald-400 text-xl font-bold">{'\u{1F4B0}'} Value Generated</div>
+                      </div>
+                      <span className="text-white/40 text-sm">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                    </div>
+                    
+                    {/* Content */}
+                    {(()=>{
+                      const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
+                      const periodVol=volAmounts[valueGenPeriod]||0;
+                      const totalGen=periodVol*cfg.taxRate;
+                      
+                      let orderedItems=[];
+                      if(token==='PTGC'){
+                        const dao=cfg.taxBreakdown.find(t=>t.name==='DAO');
+                        const addLP=cfg.taxBreakdown.find(t=>t.name==='Add LP');
+                        const burn=cfg.taxBreakdown.find(t=>t.name==='Buy & Burn');
+                        const holders=cfg.taxBreakdown.find(t=>t.name==='Holders');
+                        const stakers=cfg.taxBreakdown.find(t=>t.name==='Stakers');
+                        orderedItems=[dao,addLP,burn,holders,stakers].filter(Boolean);
+                        const holderTotal=(holders?.pct||0)+(stakers?.pct||0);
+                        orderedItems.push({name:'Total H&S',pct:holderTotal,emoji:'\u{1F48E}',isTotal:true,tripleIcon:true});
+                      }else{
+                        const holders=cfg.taxBreakdown.find(t=>t.name==='Holders');
+                        const lp=cfg.taxBreakdown.find(t=>t.name==='LP Providers');
+                        const burnUFO=cfg.taxBreakdown.find(t=>t.name==='Burn UFO');
+                        const burnPTGC=cfg.taxBreakdown.find(t=>t.name==='Burn PTGC');
+                        orderedItems=[holders,lp,burnUFO,burnPTGC].filter(Boolean);
+                      }
+                      
+                      return(
+                        <div className="flex gap-4 flex-1">
+                          {/* Left - totals */}
+                          <div className="w-[180px]">
+                            <div className="text-white/50 text-sm mb-1">{valueGenPeriod.toUpperCase()} Volume</div>
+                            <div className="text-xl font-bold text-white/80 mb-2">{fmtUSD(periodVol)}</div>
+                            <div className="text-white/50 text-sm mb-1">Value Generated</div>
+                            <div className="text-4xl font-bold text-green-400">{fmtUSD(totalGen)}</div>
+                            <div className="text-white/40 text-xs mt-1">{(cfg.taxRate*100).toFixed(0)}% tax rate</div>
+                          </div>
+                          
+                          {/* Right - breakdown boxes */}
+                          <div className={`flex-1 grid ${token==='PTGC'?'grid-cols-3':'grid-cols-2'} gap-2`}>
+                            {orderedItems.map((item,i)=>{
+                              const dollarVal=periodVol*(item.pct/100);
+                              return(
+                                <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg p-2`}>
+                                  <div className="flex items-center gap-1 mb-1">
+                                    {item.tripleIcon?<span className="text-sm">{'\u{1F48E}'}{'\u{1F48E}'}{'\u{1F48E}'}</span>:<span className="text-lg">{item.emoji}</span>}
+                                    <span className="text-white/70 text-xs">{item.name}</span>
+                                  </div>
+                                  <div className={`font-bold text-xl ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(dollarVal)}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Footer */}
+                    <div className="text-right mt-2">
+                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Right-click the image and "Save Image As" or take a screenshot
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Token Allocation Share Modal - Twitter optimized */}
+          {showAllocationShareModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowAllocationShareModal(false)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>setShowAllocationShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                {/* Twitter Card - 600x314 */}
+                <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
+                  <div className={`h-full border-2 border-purple-500/50 rounded-xl p-4 flex flex-col`}>
+                    
+                    {/* Header row */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <img src={cfg.logo} alt={token} className="w-20 h-20 rounded-full"/>
+                      <div className="flex-1">
+                        <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
+                        <div className="text-purple-400 text-lg font-bold">{'\u{1F4CA}'} Token Allocation</div>
+                      </div>
+                      <span className="text-white/40 text-xs">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                    </div>
+                    
+                    {/* Main content - three columns */}
+                    <div className="flex gap-3 flex-1">
+                      {/* Left - Donut */}
+                      <div className="flex flex-col items-center justify-center">
+                        <DonutChart data={chartData} colors={chartColors} size={100}/>
+                      </div>
+                      
+                      {/* Middle - Legend */}
+                      <div className="flex flex-col justify-center space-y-1">
+                        {chartData.map((d,i)=>{
+                          const shortLabel=d.label==='Locked & Staked'?'Stk & Lock':d.label;
+                          return(
+                            <div key={i} className="flex items-center gap-1 text-base">
+                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{background:chartColors[i]}}></div>
+                              <span className="text-white/60">{shortLabel}:</span>
+                              <span className={`font-bold ${theme.text}`}>{d.value.toFixed(1)}%</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Right - Holder Tiers */}
+                      <div className="flex-1 bg-black/30 border border-purple-500/30 rounded-lg p-3">
+                        <div className="text-white/50 text-xs mb-2 uppercase">Holder Tiers</div>
+                        <div className="grid grid-cols-5 gap-1 text-center">
+                          <div><div className="text-4xl">{'\u{1F531}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Poseidon||0}</div><div className="text-white/40 text-[10px]">Poseidon</div></div>
+                          <div><div className="text-4xl">{'\u{1F40B}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Whale||0}</div><div className="text-white/40 text-[10px]">Whale</div></div>
+                          <div><div className="text-4xl">{'\u{1F988}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Shark||0}</div><div className="text-white/40 text-[10px]">Shark</div></div>
+                          <div><div className="text-4xl">{'\u{1F42C}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Dolphin||0}</div><div className="text-white/40 text-[10px]">Dolphin</div></div>
+                          <div><div className="text-2xl">{'\u{1F991}'}<span className="text-white/50">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(holderTiers?.SquidAndBelow||0)}</div><div className="text-white/40 text-[10px]">Others</div></div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Footer */}
+                    <div className="text-right mt-1">
+                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Right-click the image and "Save Image As" or take a screenshot
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
+          {showDAOShareModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowDAOShareModal(false)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>setShowDAOShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                {/* Twitter Card - 600x314 */}
+                <div id="dao-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
+                  <div className={`h-full border-2 border-blue-500/50 rounded-xl p-5 flex flex-col`}>
+                    
+                    {/* Header row */}
+                    <div className="flex items-center gap-4 mb-3">
+                      <img src={cfg.logo} alt={token} className="w-20 h-20 rounded-full"/>
+                      <div className="flex-1">
+                        <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
+                        <div className="text-blue-400 text-xl font-bold">{cfg.hasDAO?'\u{1F3DB}\uFE0F DAO Treasury':'\u{1F525} PTGC Burned by UFO'}</div>
+                      </div>
+                      <span className="text-white/40 text-sm">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                    </div>
+                    
+                    {cfg.hasDAO?(
+                      /* DAO Treasury Content */
+                      <div className="flex-1 grid grid-cols-2 gap-3">
+                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
+                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F4B0}'} Available for Proposals</div>
+                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.availableUSD||0)}</div>
+                          <div className="text-white/50 text-sm">{fmtAbbr(daoData?.availablePLS||0)} PLS</div>
+                        </div>
+                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3 relative">
+                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{23F3}'} Pending in Proposals</div>
+                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.pendingUSD||0)}</div>
+                          <div className="text-white/50 text-sm">{fmtAbbr(daoData?.pendingPLS||0)} PLS</div>
+                          <div className="absolute bottom-2 right-3 text-blue-400/60 text-xs">{daoData?.pendingCount||0} pending</div>
+                        </div>
+                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
+                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F3E6}'} Ready for Deployment</div>
+                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.managementValue||0)}</div>
+                        </div>
+                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
+                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F4CA}'} Total DAO Value</div>
+                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.totalValue||0)}</div>
+                        </div>
+                      </div>
+                    ):(
+                      /* PTGC Burned by UFO Content */
+                      (()=>{
+                        const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
+                        const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
+                        const totalBurned=ptgcByUFO?.totalBurned||0;
+                        const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
+                        const periods=ptgcByUFO?.periods||{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
+                        const whaleProgressUFO=getWhaleProgress(burnPct);
+                        const creaturesUFO=getBurnC(burnPct,'Squid');
+                        
+                        return(
+                          <div className="flex gap-4 flex-1">
+                            {/* Left column */}
+                            <div className="flex-1">
+                              <div className="grid grid-cols-3 gap-2 mb-2">
+                                <div className="bg-black/30 border border-blue-500/30 rounded-lg p-2 text-center">
+                                  <div className="text-blue-400/70 text-xs uppercase">Burned</div>
+                                  <div className="text-lg font-bold text-[#D9CA5D]">{fmtAbbr(totalBurned)}</div>
+                                </div>
+                                <div className="bg-black/30 border border-blue-500/30 rounded-lg p-2 text-center">
+                                  <div className="text-blue-400/70 text-xs uppercase">USD Value</div>
+                                  <div className="text-lg font-bold text-green-400">{fmtUSD(totalBurned*ptgcPrice)}</div>
+                                </div>
+                                <div className="bg-black/30 border border-blue-500/30 rounded-lg p-2 text-center">
+                                  <div className="text-blue-400/70 text-xs uppercase">% of PTGC</div>
+                                  <div className="text-lg font-bold text-white">{burnPct.toFixed(4)}%</div>
+                                </div>
+                              </div>
+                              
+                              {/* Whale progress */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden">
+                                  <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" style={{width:`${whaleProgressUFO.progress}%`}}></div>
+                                </div>
+                                <span className="text-xl">{'\u{1F40B}'}</span>
+                                <span className="text-blue-400 text-xs font-bold">{whaleProgressUFO.progress.toFixed(1)}%</span>
+                              </div>
+                              
+                              {/* Creatures */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-2xl">{'\u{1F525}'}</span>
+                                {creaturesUFO.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}
+                              </div>
+                            </div>
+                            
+                            {/* Separator line */}
+                            <div className="w-px bg-blue-500/30"></div>
+                            
+                            {/* Right column - period boxes */}
+                            <div className="grid grid-cols-2 gap-2 w-[200px]">
+                              {[{l:'24H',v:periods.h24?.amount},{l:'7D',v:periods.d7?.amount},{l:'30D',v:periods.d30?.amount},{l:'90D',v:periods.d90?.amount}].map(({l,v})=>(
+                                <div key={l} className="bg-black/30 border border-blue-500/30 rounded-lg p-2 relative h-[80px]">
+                                  <div className="text-white font-bold text-sm absolute top-1 left-2">{l}</div>
+                                  <div className="text-right mt-4">
+                                    <div className="text-blue-400 font-bold text-lg">{fmtAbbr(v||0)}</div>
+                                    <div className="text-green-400 text-sm">{fmtUSD((v||0)*ptgcPrice)}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    )}
+                    
+                    {/* Footer */}
+                    <div className="text-right mt-2">
+                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Right-click the image and "Save Image As" or take a screenshot
                 </div>
               </div>
             </div>
