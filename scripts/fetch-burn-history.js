@@ -40,6 +40,7 @@ const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
 
 const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
+const DEXSCREENER_BASE = 'https://api.dexscreener.com/latest/dex';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -91,6 +92,43 @@ async function moralisRequest(endpoint, params = {}) {
   } catch (error) {
     console.log(`  API Error: ${error.message}`);
     return null;
+  }
+}
+
+/**
+ * Fetch transaction count from DexScreener
+ */
+async function fetchTransactionCount(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} transaction count from DexScreener...`);
+  
+  try {
+    const response = await fetch(`${DEXSCREENER_BASE}/tokens/${tokenAddress}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.pairs && data.pairs.length > 0) {
+      // Sum up all transactions across all pairs
+      let totalBuys = 0;
+      let totalSells = 0;
+      
+      for (const pair of data.pairs) {
+        totalBuys += pair.txns?.h24?.buys || 0;
+        totalSells += pair.txns?.h24?.sells || 0;
+      }
+      
+      const totalTxns = totalBuys + totalSells;
+      console.log(`  ${tokenSymbol} 24h transactions: ${totalTxns} (${totalBuys} buys, ${totalSells} sells)`);
+      
+      return totalTxns;
+    }
+    
+    return 0;
+  } catch (error) {
+    console.log(`  DexScreener Error: ${error.message}`);
+    return 0;
   }
 }
 
@@ -552,6 +590,13 @@ async function main() {
   await delay(300);
   
   const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
+  await delay(300);
+  
+  // Fetch transaction counts from DexScreener
+  const ptgcTxns = await fetchTransactionCount(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoTxns = await fetchTransactionCount(UFO_ADDRESS, 'UFO');
   
   // Get tokens in LP from pairs data
   const ptgcTokensInLP = ptgcPairs.totalTokensInLP || 0;
@@ -571,7 +616,8 @@ async function main() {
     liquidity: ptgcPairs.totalLiquidity,
     price: ptgcPrice.usd,
     volume: ptgcVolume.volume24h,
-    tokensInLP: ptgcTokensInLP
+    tokensInLP: ptgcTokensInLP,
+    txns: ptgcTxns
   };
   
   const ufoSnapshot = {
@@ -580,7 +626,8 @@ async function main() {
     liquidity: ufoPairs.totalLiquidity,
     price: ufoPrice.usd,
     volume: ufoVolume.volume24h,
-    tokensInLP: ufoTokensInLP
+    tokensInLP: ufoTokensInLP,
+    txns: ufoTxns
   };
   
   const ptgcSnapshots = [ptgcSnapshot, ...existingPTGCSnapshots.filter(s => s.date !== today)].slice(0, 30);
@@ -593,13 +640,15 @@ async function main() {
   const ptgcChanges = ptgcYesterday ? {
     holders: ptgcYesterday.holders ? ((ptgcHolders - ptgcYesterday.holders) / ptgcYesterday.holders * 100) : 0,
     liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0,
-    tokensInLP: ptgcYesterday.tokensInLP ? ((ptgcTokensInLP - ptgcYesterday.tokensInLP) / ptgcYesterday.tokensInLP * 100) : 0
+    tokensInLP: ptgcYesterday.tokensInLP ? ((ptgcTokensInLP - ptgcYesterday.tokensInLP) / ptgcYesterday.tokensInLP * 100) : 0,
+    txns: ptgcYesterday.txns ? ((ptgcTxns - ptgcYesterday.txns) / ptgcYesterday.txns * 100) : 0
   } : null;
   
   const ufoChanges = ufoYesterday ? {
     holders: ufoYesterday.holders ? ((ufoHolders - ufoYesterday.holders) / ufoYesterday.holders * 100) : 0,
     liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0,
-    tokensInLP: ufoYesterday.tokensInLP ? ((ufoTokensInLP - ufoYesterday.tokensInLP) / ufoYesterday.tokensInLP * 100) : 0
+    tokensInLP: ufoYesterday.tokensInLP ? ((ufoTokensInLP - ufoYesterday.tokensInLP) / ufoYesterday.tokensInLP * 100) : 0,
+    txns: ufoYesterday.txns ? ((ufoTxns - ufoYesterday.txns) / ufoYesterday.txns * 100) : 0
   } : null;
   
   // ============================================
@@ -685,6 +734,7 @@ async function main() {
       pairs: ptgcPairs,
       holders: ptgcHolders,
       tokensInLP: ptgcTokensInLP,
+      txns: ptgcTxns,
       snapshots: ptgcSnapshots,
       changes: ptgcChanges,
       // File references for loading burns
@@ -705,6 +755,7 @@ async function main() {
       pairs: ufoPairs,
       holders: ufoHolders,
       tokensInLP: ufoTokensInLP,
+      txns: ufoTxns,
       snapshots: ufoSnapshots,
       changes: ufoChanges,
       burnFile: 'ufo-burns.json'
@@ -772,6 +823,20 @@ async function main() {
   console.log(`\nHOLDERS:`);
   console.log(`  PTGC: ${ptgcHolders.toLocaleString()}`);
   console.log(`  UFO: ${ufoHolders.toLocaleString()}`);
+  
+  console.log(`\nTRANSACTIONS (24H):`);
+  console.log(`  PTGC: ${ptgcTxns}`);
+  console.log(`  UFO: ${ufoTxns}`);
+  
+  if (ptgcChanges) {
+    console.log(`\nPTGC CHANGES vs YESTERDAY:`);
+    console.log(`  Txns: ${ptgcChanges.txns.toFixed(1)}%`);
+  }
+  
+  if (ufoChanges) {
+    console.log(`\nUFO CHANGES vs YESTERDAY:`);
+    console.log(`  Txns: ${ufoChanges.txns.toFixed(1)}%`);
+  }
   
   console.log('\n' + '='.repeat(60));
   console.log('FILES WRITTEN:');
