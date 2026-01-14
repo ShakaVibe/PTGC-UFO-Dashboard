@@ -1,7 +1,7 @@
 /**
  * CoinGecko Pro API Data Fetcher
  * 
- * Fetches volume, liquidity, and transaction data for PTGC and UFO tokens.
+ * Fetches volume, liquidity, transaction data, and holder counts for PTGC and UFO tokens.
  * Runs every 30 minutes via GitHub Actions.
  * Stores timestamped snapshots for rolling window calculations.
  */
@@ -64,6 +64,24 @@ async function fetchAPI(endpoint, retries = 3) {
       if (attempt === retries) throw error;
       await sleep(2000 * attempt);
     }
+  }
+}
+
+// Fetch holder count from PulseScan (free, no API key needed)
+async function fetchHolderCount(tokenAddress) {
+  try {
+    const url = `https://api.scan.pulsechain.com/api/v2/tokens/${tokenAddress}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const holders = data.holders ? parseInt(data.holders) : null;
+    console.log(`  Holders for ${tokenAddress.slice(0, 10)}...: ${holders}`);
+    return holders;
+  } catch (error) {
+    console.error(`PulseScan holder error for ${tokenAddress}:`, error.message);
+    return null;
   }
 }
 
@@ -198,11 +216,16 @@ async function fetchTokenData(tokenName, tokenConfig) {
     liquidity: 0,
     volume: { vol7d: 0, vol30d: 0, vol90d: 0 },
     transactions: { buys: 0, sells: 0, total: 0, buyVolume: 0, sellVolume: 0 },
+    holders: null,
     poolCount: 0,
     errors: []
   };
   
   try {
+    // Fetch holder count first (from PulseScan - free)
+    result.holders = await fetchHolderCount(tokenConfig.address);
+    await sleep(500);
+    
     // Get all pools
     const pools = await fetchTokenPools(tokenConfig.address);
     result.poolCount = pools.length;
@@ -261,6 +284,7 @@ async function fetchTokenData(tokenName, tokenConfig) {
   }
   
   console.log(`\n${tokenName} TOTALS:`);
+  console.log(`  Holders: ${result.holders || 'N/A'}`);
   console.log(`  Liquidity: $${result.liquidity.toLocaleString()}`);
   console.log(`  Volume 7D: $${result.volume.vol7d.toLocaleString()}`);
   console.log(`  Volume 30D: $${result.volume.vol30d.toLocaleString()}`);
@@ -286,6 +310,7 @@ async function main() {
   // Load existing histories
   const liquidityHistory = loadHistory('liquidity-history.json');
   const transactionHistory = loadHistory('transaction-history.json');
+  const holderHistory = loadHistory('holder-history.json');
   
   // Fetch data for each token
   const tokenData = {};
@@ -308,12 +333,23 @@ async function main() {
     UFO: tokenData.UFO.transactions
   });
   
+  // Only add holder snapshot if we got valid data
+  if (tokenData.PTGC.holders !== null || tokenData.UFO.holders !== null) {
+    holderHistory.snapshots.push({
+      timestamp,
+      PTGC: tokenData.PTGC.holders,
+      UFO: tokenData.UFO.holders
+    });
+  }
+  
   // Save history files
   liquidityHistory.lastUpdated = timestamp;
   transactionHistory.lastUpdated = timestamp;
+  holderHistory.lastUpdated = timestamp;
   
   saveData('liquidity-history.json', liquidityHistory);
   saveData('transaction-history.json', transactionHistory);
+  saveData('holder-history.json', holderHistory);
   
   // Save current aggregates (volume periods + current snapshot)
   const coingeckoData = {
@@ -322,12 +358,14 @@ async function main() {
       volume: tokenData.PTGC.volume,
       liquidity: tokenData.PTGC.liquidity,
       transactions: tokenData.PTGC.transactions,
+      holders: tokenData.PTGC.holders,
       poolCount: tokenData.PTGC.poolCount
     },
     UFO: {
       volume: tokenData.UFO.volume,
       liquidity: tokenData.UFO.liquidity,
       transactions: tokenData.UFO.transactions,
+      holders: tokenData.UFO.holders,
       poolCount: tokenData.UFO.poolCount
     }
   };
