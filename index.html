@@ -51,8 +51,21 @@
     const LP_ADDRESSES=[
       '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', // PTGC/WPLS main pair
       '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', // UFO/WPLS main pair
-      '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', // UFO LP (not returned by DexScreener)
-      '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca'  // UFO LP #2
+      '0x31c77e0519a0347aa547aeab6e866c30a1a32123', // UFO/PLSX
+      '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', // UFO/INC
+      '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', // UFO/HEX
+      '0xd3a87bda2238ee28b424d38991df1fbadd2be666', // UFO/EHEX
+      '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca'  // UFO/PTGC (also PTGC LP)
+    ];
+    
+    // Hardcoded UFO pairs that should always show (even if DexScreener doesn't return them)
+    const HARDCODED_UFO_PAIRS = [
+      { address: '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS' },
+      { address: '0x31c77e0519a0347aa547aeab6e866c30a1a32123', quoteSymbol: 'PLSX', quoteName: 'PulseX' },
+      { address: '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', quoteSymbol: 'INC', quoteName: 'Incentive' },
+      { address: '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', quoteSymbol: 'HEX', quoteName: 'HEX' },
+      { address: '0xd3a87bda2238ee28b424d38991df1fbadd2be666', quoteSymbol: 'EHEX', quoteName: 'HEX from Ethereum' },
+      { address: '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', quoteSymbol: 'PTGC', quoteName: 'PTGC' }
     ];
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
@@ -183,6 +196,25 @@
               allPairsMap.set(p.pairAddress.toLowerCase(), p);
             }
           });
+        }
+        
+        // For UFO token, fetch hardcoded pairs that might be missing
+        const isUFO = addr.toLowerCase() === TOKENS.UFO.address.toLowerCase();
+        if(isUFO) {
+          for(const hcPair of HARDCODED_UFO_PAIRS) {
+            if(!allPairsMap.has(hcPair.address.toLowerCase())) {
+              try {
+                const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${hcPair.address}`);
+                const pairData = await pairRes.json();
+                if(pairData.pair) {
+                  allPairsMap.set(hcPair.address.toLowerCase(), pairData.pair);
+                  console.log(`Added hardcoded UFO/${hcPair.quoteSymbol} pair`);
+                }
+              } catch(e) {
+                console.log(`Could not fetch hardcoded pair ${hcPair.quoteSymbol}:`, e.message);
+              }
+            }
+          }
         }
         
         const allPairs = Array.from(allPairsMap.values());
