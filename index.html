@@ -600,7 +600,7 @@
         const daoBalancePLS=Number(daoBalanceWei)/1e18;
         console.log('DAO contract total:',daoBalancePLS,'PLS');
         
-        // 2. Get lockedAmount() from DAO contract - selector 0x6ab28bc8
+        // 2. Get lockedAmount() from DAO contract - selector 0x6ab28bc8 (for reference)
         let lockedAmountWei=0n;
         try{
           const lockResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x6ab28bc8'},'latest'],id:2});
@@ -610,32 +610,72 @@
           }
         }catch(e){console.error('lockedAmount error:',e)}
         const lockedAmountPLS=Number(lockedAmountWei)/1e18;
-        console.log('Locked/pending amount:',lockedAmountPLS,'PLS');
+        console.log('Locked/pending amount (total from contract):',lockedAmountPLS,'PLS');
         
-        // 2b. Get proposal count and count active ones - proposalCount() selector 0xda35c664
+        // 2b. Get proposal count and fetch active proposals with their amounts
         let pendingCount=0;
+        let activeProposalsPLS=0;
         try{
           const pcResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0xda35c664'},'latest'],id:5});
           if(pcResult.result&&pcResult.result!=='0x'){
             const proposalCount=parseInt(pcResult.result,16);
-            // Check state of recent proposals in parallel - state() selector 0x3e4f49e6
-            const startId=Math.max(1,proposalCount-10);
-            const statePromises=[];
+            console.log('Total proposal count:',proposalCount);
+            
+            // Check state and get amounts of recent proposals in parallel
+            const startId=Math.max(1,proposalCount-15);
+            const proposalPromises=[];
+            
             for(let i=proposalCount;i>=startId;i--){
               const idHex=i.toString(16).padStart(64,'0');
-              statePromises.push(
-                rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6})
-                  .then(r=>r.result?parseInt(r.result,16):-1)
-                  .catch(()=>-1)
+              proposalPromises.push(
+                (async()=>{
+                  try{
+                    // Get state - selector 0x3e4f49e6
+                    const stateResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x3e4f49e6'+idHex},'latest'],id:6});
+                    const state=stateResult.result?parseInt(stateResult.result,16):-1;
+                    
+                    // Only fetch proposal details if active (state 0=Pending or 1=Active)
+                    if(state===0||state===1){
+                      // Get proposal data - selector 0x013cf08b
+                      const propResult=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:daoContract,data:'0x013cf08b'+idHex},'latest'],id:7});
+                      if(propResult.result&&propResult.result.length>66){
+                        // Proposal struct typically has amount in first few slots
+                        // Parse the result - each slot is 64 hex chars (32 bytes)
+                        const data=propResult.result.slice(2); // remove 0x
+                        // Try slot 1 (after proposer address) for amount - this is common
+                        const slot1=data.slice(64,128); // 2nd 32-byte slot
+                        const amountWei=BigInt('0x'+slot1);
+                        const amountPLS=Number(amountWei)/1e18;
+                        console.log(`Proposal ${i}: state=${state}, amount=${amountPLS.toLocaleString()} PLS`);
+                        return{id:i,state,amount:amountPLS};
+                      }
+                    }
+                    return{id:i,state,amount:0};
+                  }catch(e){
+                    console.error(`Error fetching proposal ${i}:`,e);
+                    return{id:i,state:-1,amount:0};
+                  }
+                })()
               );
             }
-            const states=await Promise.all(statePromises);
-            pendingCount=states.filter(s=>s===0||s===1).length;
+            
+            const proposals=await Promise.all(proposalPromises);
+            proposals.forEach(p=>{
+              if(p.state===0||p.state===1){
+                pendingCount++;
+                activeProposalsPLS+=p.amount;
+              }
+            });
+            console.log('Active proposals:',pendingCount,'Total PLS in active:',activeProposalsPLS);
           }
         }catch(e){console.error('proposalCount error:',e)}
-        console.log('Active proposals:',pendingCount);
         
-        // 3. Calculate available = total - locked (using BigInt for precision)
+        // Use activeProposalsPLS (sum of individual proposals) instead of lockedAmount
+        const truePendingPLS=activeProposalsPLS;
+        console.log('True pending (sum of active proposals):',truePendingPLS,'PLS');
+        console.log('Difference from lockedAmount:',(lockedAmountPLS-truePendingPLS).toLocaleString(),'PLS (possibly stuck funds)');
+        
+        // 3. Calculate available = total - locked (using lockedAmount since that's what's actually locked)
         const availableWei=daoBalanceWei>lockedAmountWei?daoBalanceWei-lockedAmountWei:0n;
         const availablePLS=Number(availableWei)/1e18;
         console.log('Available for new proposals:',availablePLS,'PLS');
@@ -677,9 +717,9 @@
         });
         console.log('Management wallet total USD:',managementTotalUSD);
         
-        // 6. Calculate totals
+        // 6. Calculate totals - use truePendingPLS for display
         const availableUSD=availablePLS*plsPrice;
-        const pendingUSD=lockedAmountPLS*plsPrice;
+        const pendingUSD=truePendingPLS*plsPrice;
         const totalValue=availableUSD+pendingUSD+managementTotalUSD;
         
         console.log('Total DAO value:',totalValue);
@@ -687,7 +727,7 @@
         return{
           availablePLS,
           availableUSD,
-          pendingPLS:lockedAmountPLS,
+          pendingPLS:truePendingPLS,
           pendingUSD,
           pendingCount,
           managementValue:managementTotalUSD,
