@@ -2089,6 +2089,7 @@
       const[ptgcPrice,setPtgcPrice]=useState(0);
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
+      const[activeTab,setActiveTab]=useState('dashboard');
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
@@ -2334,14 +2335,23 @@
                     <span className="text-white/70 text-sm font-medium">Switch</span>
                   </button>
                   <a href={cfg.pulseScanUrl} target="_blank" className={`px-4 py-2 rounded-lg border ${theme.border} ${theme.text} font-medium hover:bg-white/5`}>Explorer</a>
-                  <button onClick={()=>setShowKPI(true)} className={`px-4 py-2 rounded-lg ${theme.bg} text-black font-bold hover:opacity-90 transition-opacity`}>KPI Report</button>
+                </div>
+              </div>
+              {/* Page Navigation */}
+              <div className="flex justify-end mt-1">
+                <div className="flex items-center gap-1">
+                  <button onClick={()=>setActiveTab('dashboard')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='dashboard'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Dashboard</button>
+                  <button onClick={()=>setActiveTab('kpi')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='kpi'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>KPI Report</button>
+                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
+                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
                 </div>
               </div>
             </div>
           </header>
           
-          
-          <div className="border-b border-white/10 mt-4">
+          {/* Dashboard Tab Content */}
+          {activeTab==='dashboard'&&(<>
+          <div className="border-b border-white/10 mt-1">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-5">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Market Cap</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.mcap)}</div><div className={`text-sm font-semibold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'} {Math.abs(data?.change||0).toFixed(2)}%</div></div>
@@ -2682,8 +2692,16 @@
             <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>
             {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} className={`w-full ${theme.card} border ${theme.border} rounded-lg p-2 flex justify-between text-sm`}><span className="text-gray-400">{showLow?'Hide':'Show'} {low.length} pairs &lt;$1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>}</div>}
           </div>
+          </>)}
           
-          {/* KPI Report Modal */}
+          {/* KPI Report Tab Content */}
+          {activeTab==='kpi'&&(
+            <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
+              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')}/>
+            </div>
+          )}
+          
+          {/* KPI Report Modal (legacy - kept for direct link) */}
           {showKPI&&(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>setShowKPI(false)}>
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
