@@ -59,14 +59,59 @@
     ];
     
     // Hardcoded UFO pairs that should always show (even if DexScreener doesn't return them)
+    // Note: PTGC is NOT an RH core, but we still want to show that pair
     const HARDCODED_UFO_PAIRS = [
-      { address: '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS' },
-      { address: '0x31c77e0519a0347aa547aeab6e866c30a1a32123', quoteSymbol: 'PLSX', quoteName: 'PulseX' },
-      { address: '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', quoteSymbol: 'INC', quoteName: 'Incentive' },
-      { address: '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', quoteSymbol: 'HEX', quoteName: 'HEX' },
-      { address: '0xd3a87bda2238ee28b424d38991df1fbadd2be666', quoteSymbol: 'EHEX', quoteName: 'HEX from Ethereum' },
-      { address: '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', quoteSymbol: 'PTGC', quoteName: 'PTGC' }
+      { address: '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS', quoteAddress: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', isRHCore: true },
+      { address: '0x31c77e0519a0347aa547aeab6e866c30a1a32123', quoteSymbol: 'PLSX', quoteName: 'PulseX', quoteAddress: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', isRHCore: true },
+      { address: '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', quoteSymbol: 'INC', quoteName: 'Incentive', quoteAddress: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', isRHCore: true },
+      { address: '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', quoteSymbol: 'HEX', quoteName: 'HEX', quoteAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', isRHCore: true },
+      { address: '0xd3a87bda2238ee28b424d38991df1fbadd2be666', quoteSymbol: 'EHEX', quoteName: 'HEX from Ethereum', quoteAddress: '0x57fde0a71132198BBeC939B98976993d8D89D225', isRHCore: true },
+      { address: '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', quoteSymbol: 'PTGC', quoteName: 'PTGC', quoteAddress: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', isRHCore: false }
     ];
+    
+    // Fetch LP data directly from blockchain (for pairs DexScreener doesn't track)
+    // Uses balanceOf on token contract - works for any LP type (V2, V3, etc)
+    const fetchLPFromChain = async (pairAddress, tokenAddress, tokenDecimals, tokenPrice) => {
+      try {
+        // balanceOf(address) = 0x70a08231 + padded address
+        const paddedLP = pairAddress.slice(2).toLowerCase().padStart(64, '0');
+        const balanceRes = await rpcFetch({
+          jsonrpc: '2.0',
+          method: 'eth_call',
+          params: [{ to: tokenAddress, data: '0x70a08231' + paddedLP }, 'latest'],
+          id: 1
+        });
+        
+        if (!balanceRes.result || balanceRes.result === '0x') {
+          console.log(`No balance data for LP ${pairAddress.slice(0,10)}...`);
+          return null;
+        }
+        
+        // Parse balance
+        const balanceBigInt = BigInt(balanceRes.result);
+        const divisor = BigInt(10 ** tokenDecimals);
+        const tokenAmount = Number(balanceBigInt / divisor);
+        
+        // Calculate USD liquidity (token side * price * 2 for both sides of LP)
+        const liquidityUsd = tokenPrice > 0 ? tokenAmount * tokenPrice * 2 : 0;
+        
+        console.log(`LP ${pairAddress.slice(0,10)}...: ${tokenAmount.toLocaleString()} UFO tokens, $${liquidityUsd.toLocaleString()} liquidity`);
+        
+        // Sanity check
+        if (tokenAmount > 500000000000) { // 500 billion max
+          console.warn(`  Token amount ${tokenAmount.toLocaleString()} seems too high, skipping`);
+          return null;
+        }
+        
+        return {
+          tokenAmount,
+          liquidityUsd
+        };
+      } catch (e) {
+        console.error(`Error fetching LP data for ${pairAddress}:`, e);
+        return null;
+      }
+    };
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     const RPC='https://rpc.pulsechain.com';
@@ -198,20 +243,41 @@
           });
         }
         
-        // For UFO token, fetch hardcoded pairs that might be missing
+        // For UFO token, add hardcoded pairs that DexScreener doesn't return
         const isUFO = addr.toLowerCase() === TOKENS.UFO.address.toLowerCase();
         if(isUFO) {
+          // Get UFO price from existing pairs
+          let ufoPrice = 0;
+          const existingPairs = Array.from(allPairsMap.values());
+          if(existingPairs.length > 0) {
+            const mainPairData = existingPairs.find(p => parseFloat(p.priceUsd) > 0) || existingPairs[0];
+            ufoPrice = parseFloat(mainPairData.priceUsd) || 0;
+          }
+          
           for(const hcPair of HARDCODED_UFO_PAIRS) {
+            // Only fetch from chain if DexScreener doesn't have this pair
             if(!allPairsMap.has(hcPair.address.toLowerCase())) {
               try {
-                const pairRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${hcPair.address}`);
-                const pairData = await pairRes.json();
-                if(pairData.pair) {
-                  allPairsMap.set(hcPair.address.toLowerCase(), pairData.pair);
-                  console.log(`Added hardcoded UFO/${hcPair.quoteSymbol} pair`);
+                console.log(`DexScreener missing UFO/${hcPair.quoteSymbol}, fetching from chain...`);
+                const chainData = await fetchLPFromChain(hcPair.address, TOKENS.UFO.address, TOKENS.UFO.decimals, ufoPrice);
+                
+                if(chainData) {
+                  const chainPair = {
+                    pairAddress: hcPair.address,
+                    baseToken: { symbol: 'UFO', address: TOKENS.UFO.address },
+                    quoteToken: { symbol: hcPair.quoteSymbol, name: hcPair.quoteName, address: hcPair.quoteAddress },
+                    liquidity: { usd: chainData.liquidityUsd, base: chainData.tokenAmount },
+                    volume: { h24: 0 },
+                    priceUsd: String(ufoPrice),
+                    txns: { h24: { buys: 0, sells: 0 } },
+                    _fromChain: true,
+                    _rhCore: hcPair.isRHCore ? hcPair.quoteSymbol : null
+                  };
+                  allPairsMap.set(hcPair.address.toLowerCase(), chainPair);
+                  console.log(`Added UFO/${hcPair.quoteSymbol} from chain: $${chainData.liquidityUsd.toLocaleString()} liquidity`);
                 }
               } catch(e) {
-                console.log(`Could not fetch hardcoded pair ${hcPair.quoteSymbol}:`, e.message);
+                console.log(`Could not fetch pair ${hcPair.quoteSymbol}:`, e.message);
               }
             }
           }
@@ -2146,15 +2212,19 @@
       
       // Filter for RH Cores if enabled
       const filteredSorted=useMemo(()=>{
-        if(!showRHCores)return sorted;
-        // Filter to RH Cores pairs and find which RH core matched
-        const rhPairs=sorted.map(p=>{
+        // First, add rhCore property to all pairs (including from _rhCore placeholder)
+        const withRhCore=sorted.map(p=>{
+          if(p._rhCore)return{...p,rhCore:p._rhCore};
           const baseSymbol=(p.baseToken?.symbol||'').toUpperCase();
           const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
           const matchedCore=RH_CORES.find(core=>baseSymbol===core||quoteSymbol===core);
           if(matchedCore)return{...p,rhCore:matchedCore};
-          return null;
-        }).filter(Boolean);
+          return p;
+        });
+        
+        if(!showRHCores)return withRhCore;
+        // Filter to RH Cores pairs only
+        const rhPairs=withRhCore.filter(p=>p.rhCore);
         // Dedupe: keep only highest liquidity pair for each RH core
         const seen=new Map();
         rhPairs.forEach(p=>{
@@ -2173,6 +2243,7 @@
       // RH Cores pairs (always computed for modal)
       const rhCoresPairs=useMemo(()=>{
         const rhPairs=sorted.map(p=>{
+          if(p._rhCore)return{...p,rhCore:p._rhCore};
           const baseSymbol=(p.baseToken?.symbol||'').toUpperCase();
           const quoteSymbol=(p.quoteToken?.symbol||'').toUpperCase();
           const matchedCore=RH_CORES.find(core=>baseSymbol===core||quoteSymbol===core);
@@ -2190,7 +2261,7 @@
       },[sorted]);
       const rhCoresLiq=rhCoresPairs.reduce((s,p)=>s+(p.liq||0),0);
       
-      const high=filteredSorted.filter(p=>p.liq>=MIN_LIQ),low=filteredSorted.filter(p=>p.liq<MIN_LIQ);
+      const high=filteredSorted.filter(p=>p.liq>=MIN_LIQ||p.rhCore||p._fromChain),low=filteredSorted.filter(p=>p.liq<MIN_LIQ&&!p.rhCore&&!p._fromChain);
       const[showLow,setShowLow]=useState(false);
       const creatures=getBurnC(burn?.pct||0,'Squid');
       const plsRatio=data?.price&&pls?(data.price/pls).toFixed(2):'\u2014';
