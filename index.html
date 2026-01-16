@@ -269,18 +269,22 @@
     
     // Get holder change vs 24 hours ago from holder history snapshots
     const getHolderChange=(token,currentHolders)=>{
-      // Use new holder history snapshots (every 30 min)
+      // Use new holder history snapshots (every 30 min) - compare snapshot to snapshot
       if(holderHistoryCacheNew?.snapshots?.length>=2){
         const snapshots=holderHistoryCacheNew.snapshots;
         const now = Date.now();
         const targetTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
         
-        // Find closest snapshot to 24 hours ago (with 12 hour tolerance for sparse data)
+        // Get the latest snapshot value (not live API, to keep comparison consistent)
+        const latestSnap = snapshots[snapshots.length - 1];
+        const latestHolders = latestSnap?.[token];
+        
+        // Find closest snapshot to 24 hours ago
         let closest = null;
         let closestDiff = Infinity;
         for (const snap of snapshots) {
           const snapTime = new Date(snap.timestamp).getTime();
-          // Only consider snapshots older than 6 hours (not the current one)
+          // Only consider snapshots older than 6 hours
           if (snapTime > now - (6 * 60 * 60 * 1000)) continue;
           const diff = Math.abs(snapTime - targetTime);
           if (diff < closestDiff) {
@@ -289,9 +293,9 @@
           }
         }
         
-        // Accept if within 12 hours of target (more lenient for daily data)
-        if(closest && closestDiff < 12 * 60 * 60 * 1000 && closest[token] > 0 && currentHolders > 0){
-          return currentHolders - closest[token];
+        // Use snapshot-to-snapshot comparison for consistency
+        if(closest && closestDiff < 12 * 60 * 60 * 1000 && closest[token] > 0 && latestHolders > 0){
+          return latestHolders - closest[token];
         }
       }
       
@@ -300,22 +304,22 @@
         const snapshots=burnHistoryCache[token].snapshots;
         const today=snapshots[snapshots.length - 1];
         const yesterday=snapshots[snapshots.length - 2];
-        if(today&&yesterday&&yesterday.holders>0){
-          const todayHolders=currentHolders||today.holders||0;
-          return todayHolders-yesterday.holders;
+        if(today&&yesterday&&yesterday.holders>0&&today.holders>0){
+          return today.holders-yesterday.holders;
         }
       }
       
-      // Final fallback to holder history (monthly data)
+      // Final fallback to holder history (monthly data) - snapshot to snapshot only
       if(!holderHistoryCache||!holderHistoryCache.data||holderHistoryCache.data.length<2)return null;
       const key=token.toLowerCase();
       const data=holderHistoryCache.data;
       const lastMonth=data[data.length-1];
       const prevMonth=data[data.length-2];
       if(!lastMonth||!prevMonth)return null;
-      const lastVal=currentHolders||lastMonth[key]||0;
+      const lastVal=lastMonth[key]||0;
       const prevVal=prevMonth[key]||0;
-      return lastVal-prevVal;
+      if(lastVal>0 && prevVal>0) return lastVal-prevVal;
+      return null;
     };
     
     const fetchBurnHistory=async()=>{
