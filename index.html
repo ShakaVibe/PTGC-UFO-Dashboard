@@ -268,39 +268,44 @@
     };
     
     // Get holder change vs 24 hours ago from holder history snapshots
+    // IMPORTANT: Compare stored-to-stored, not live-to-stored (different sources can have different values)
     const getHolderChange=(token,currentHolders)=>{
-      // Use new holder history snapshots (every 30 min)
-      if(holderHistoryCacheNew?.snapshots?.length>=2){
-        const snapshots=holderHistoryCacheNew.snapshots;
-        const now = Date.now();
-        const targetTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
+      if(!holderHistoryCacheNew?.snapshots || holderHistoryCacheNew.snapshots.length < 2) return null;
+      
+      const snapshots = holderHistoryCacheNew.snapshots;
+      const now = Date.now();
+      const targetTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
+      
+      // Get the NEWEST snapshot (not live data - to keep sources consistent)
+      const newest = snapshots[snapshots.length - 1];
+      const newestTime = new Date(newest.timestamp).getTime();
+      
+      // Find the snapshot closest to 24 hours before the newest snapshot
+      const target24hAgo = newestTime - (24 * 60 * 60 * 1000);
+      let pastSnapshot = null;
+      let closestDiff = Infinity;
+      
+      for (const snap of snapshots) {
+        const snapTime = new Date(snap.timestamp).getTime();
+        // Must be older than newest by at least 20 hours
+        if (snapTime >= newestTime - (20 * 60 * 60 * 1000)) continue;
         
-        // Find the snapshot closest to 24 hours ago
-        let closest = null;
-        let closestDiff = Infinity;
-        for (const snap of snapshots) {
-          const snapTime = new Date(snap.timestamp).getTime();
-          const diff = Math.abs(snapTime - targetTime);
-          if (diff < closestDiff) {
-            closestDiff = diff;
-            closest = snap;
-          }
-        }
-        
-        // Make sure we're not comparing to the same snapshot (must be at least 12 hours old)
-        if(closest){
-          const closestTime = new Date(closest.timestamp).getTime();
-          const hoursAgo = (now - closestTime) / (1000 * 60 * 60);
-          
-          // Only use if snapshot is between 12-36 hours old and has valid data
-          if(hoursAgo >= 12 && hoursAgo <= 36 && closest[token] > 0 && currentHolders > 0){
-            console.log(`Holder change for ${token}: ${currentHolders} - ${closest[token]} = ${currentHolders - closest[token]} (snapshot from ${hoursAgo.toFixed(1)}h ago)`);
-            return currentHolders - closest[token];
-          }
+        const diff = Math.abs(snapTime - target24hAgo);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          pastSnapshot = snap;
         }
       }
       
-      // No valid data - return null (don't use old monthly data)
+      // Only show if we found a valid past snapshot with data
+      if (pastSnapshot && pastSnapshot[token] > 0 && newest[token] > 0) {
+        const change = newest[token] - pastSnapshot[token];
+        const pastTime = new Date(pastSnapshot.timestamp).getTime();
+        const hoursDiff = (newestTime - pastTime) / (1000 * 60 * 60);
+        console.log(`Holder change for ${token}: ${newest[token]} - ${pastSnapshot[token]} = ${change} (comparing snapshots ${hoursDiff.toFixed(1)}h apart)`);
+        return change;
+      }
+      
       return null;
     };
     
