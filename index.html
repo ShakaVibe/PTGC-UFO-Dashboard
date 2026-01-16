@@ -118,7 +118,7 @@
     const MIN_LIQ=1000;
     
     // Simple RPC fetch with timeout
-    const rpcFetch=async(body,timeout=8000)=>{
+    const rpcFetch=async(body,timeout=6000)=>{
       try{
         const controller=new AbortController();
         const timeoutId=setTimeout(()=>controller.abort(),timeout);
@@ -254,15 +254,15 @@
             ufoPrice = parseFloat(mainPairData.priceUsd) || 0;
           }
           
-          for(const hcPair of HARDCODED_UFO_PAIRS) {
-            // Only fetch from chain if DexScreener doesn't have this pair
-            if(!allPairsMap.has(hcPair.address.toLowerCase())) {
+          // Find missing pairs and fetch them in parallel
+          const missingPairs = HARDCODED_UFO_PAIRS.filter(hcPair => !allPairsMap.has(hcPair.address.toLowerCase()));
+          if(missingPairs.length > 0) {
+            console.log(`Fetching ${missingPairs.length} missing UFO pairs from chain...`);
+            const chainResults = await Promise.all(missingPairs.map(async hcPair => {
               try {
-                console.log(`DexScreener missing UFO/${hcPair.quoteSymbol}, fetching from chain...`);
                 const chainData = await fetchLPFromChain(hcPair.address, TOKENS.UFO.address, TOKENS.UFO.decimals, ufoPrice);
-                
                 if(chainData) {
-                  const chainPair = {
+                  return {
                     pairAddress: hcPair.address,
                     baseToken: { symbol: 'UFO', address: TOKENS.UFO.address },
                     quoteToken: { symbol: hcPair.quoteSymbol, name: hcPair.quoteName, address: hcPair.quoteAddress },
@@ -273,13 +273,17 @@
                     _fromChain: true,
                     _rhCore: hcPair.isRHCore ? hcPair.quoteSymbol : null
                   };
-                  allPairsMap.set(hcPair.address.toLowerCase(), chainPair);
-                  console.log(`Added UFO/${hcPair.quoteSymbol} from chain: $${chainData.liquidityUsd.toLocaleString()} liquidity`);
                 }
               } catch(e) {
                 console.log(`Could not fetch pair ${hcPair.quoteSymbol}:`, e.message);
               }
-            }
+              return null;
+            }));
+            
+            chainResults.filter(Boolean).forEach(pair => {
+              allPairsMap.set(pair.pairAddress.toLowerCase(), pair);
+              console.log(`Added UFO pair from chain: $${pair.liquidity.usd.toLocaleString()} liquidity`);
+            });
           }
         }
         
@@ -342,7 +346,7 @@
         return parseInt(data.token_holders_count)||0;
       }catch{return 0}
     };
-    const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
+    const fetchBurn=async(addr,dec,knownSupply=0)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);let supply=knownSupply;try{const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const contractSupply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);if(contractSupply>0)supply=contractSupply}catch(e){console.log('Using known supply as fallback')}return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:knownSupply}}};
     
     // Burn history cache - loaded from pre-generated JSON file
     let burnHistoryCache=null;
@@ -1439,7 +1443,7 @@
           if(hc!==null)setOtherHolderChange(hc);
           
           // Fetch burn data
-          const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals);
+          const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals,otherCfg.totalSupply);
           setOtherBurn(burnData);
         }catch(e){console.error('Failed to load other token:',e);}
         setOtherLoading(false);
@@ -2142,7 +2146,7 @@
           const periods=getBurnPeriods(token);
           setBurnPeriods(periods);
           
-          const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
+          const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals,cfg.totalSupply),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
           // Update holder change with current holder count
