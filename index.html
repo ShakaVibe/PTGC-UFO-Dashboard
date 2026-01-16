@@ -118,7 +118,7 @@
     const MIN_LIQ=1000;
     
     // Simple RPC fetch with timeout
-    const rpcFetch=async(body,timeout=6000)=>{
+    const rpcFetch=async(body,timeout=8000)=>{
       try{
         const controller=new AbortController();
         const timeoutId=setTimeout(()=>controller.abort(),timeout);
@@ -346,7 +346,7 @@
         return parseInt(data.token_holders_count)||0;
       }catch{return 0}
     };
-    const fetchBurn=async(addr,dec,knownSupply=0)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);let supply=knownSupply;try{const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const contractSupply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);if(contractSupply>0)supply=contractSupply}catch(e){console.log('Using known supply as fallback')}return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:knownSupply}}};
+    const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
     
     // Burn history cache - loaded from pre-generated JSON file
     let burnHistoryCache=null;
@@ -1402,14 +1402,14 @@
     };
     
     // KPI Content component with dual token support
-    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose})=>{
-      const[showBoth,setShowBoth]=useState(false);
+    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false})=>{
+      const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
       const[otherData,setOtherData]=useState(null);
       const[otherBurn,setOtherBurn]=useState({total:0,pct:0,supply:0});
       const[otherHolders,setOtherHolders]=useState(0);
       const[otherHolderChange,setOtherHolderChange]=useState(null);
-      const[otherLoading,setOtherLoading]=useState(false);
+      const[otherLoading,setOtherLoading]=useState(startWithBoth);
       
       const otherToken=token==='PTGC'?'UFO':'PTGC';
       const otherCfg=TOKENS[otherToken];
@@ -1427,7 +1427,11 @@
       };
       
       const loadOtherToken=async()=>{
-        if(otherData&&otherBurn.total>0)return;
+        if(otherData&&otherBurn.total>0){
+          // Already loaded, just switch to twitter mode if requested
+          if(startInTwitterMode)setTwitterMode(true);
+          return;
+        }
         setOtherLoading(true);
         try{
           // Fetch price/market data from DexScreener
@@ -1443,11 +1447,23 @@
           if(hc!==null)setOtherHolderChange(hc);
           
           // Fetch burn data
-          const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals,otherCfg.totalSupply);
+          const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals);
           setOtherBurn(burnData);
+          
+          // If startInTwitterMode, switch to twitter mode after data loads
+          if(startInTwitterMode){
+            setTimeout(()=>setTwitterMode(true),100);
+          }
         }catch(e){console.error('Failed to load other token:',e);}
         setOtherLoading(false);
       };
+      
+      // Auto-load other token if startWithBoth is true
+      useEffect(()=>{
+        if(startWithBoth&&!otherData){
+          loadOtherToken();
+        }
+      },[startWithBoth]);
       
       // Render a single KPI card
       const renderKPICard=(t,c,d,b,bp,h,hChange,isMain=true)=>{
@@ -2094,6 +2110,21 @@
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
       const[activeTab,setActiveTab]=useState('dashboard');
+      const[socialReturn,setSocialReturn]=useState(false);
+      const[showRHCoresShareModal,setShowRHCoresShareModal]=useState(false);
+      const[showPTGCLogosModal,setShowPTGCLogosModal]=useState(false);
+      const[showUFOLogosModal,setShowUFOLogosModal]=useState(false);
+      const[showCombinedLogosModal,setShowCombinedLogosModal]=useState(false);
+      const[showCombinedKPI,setShowCombinedKPI]=useState(false);
+      const[otherTokenPairs,setOtherTokenPairs]=useState([]);
+      
+      const closeModalAndReturn=(setModalFn)=>{
+        setModalFn(false);
+        if(socialReturn){
+          setActiveTab('social');
+          setSocialReturn(false);
+        }
+      };
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
@@ -2110,6 +2141,17 @@
       const[tokensInLPChange24h,setTokensInLPChange24h]=useState(null);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
+      
+      // Load other token pairs when RH Cores modal opens
+      useEffect(()=>{
+        if(showRHCoresShareModal&&otherTokenPairs.length===0){
+          const otherToken=token==='PTGC'?'UFO':'PTGC';
+          const otherCfg=TOKENS[otherToken];
+          fetchDex(otherCfg.address,otherCfg.mainPair).then(d=>{
+            if(d?.pairs)setOtherTokenPairs(d.pairs);
+          });
+        }
+      },[showRHCoresShareModal]);
       
       useEffect(()=>{
         // Reset all state immediately when token changes
@@ -2146,7 +2188,7 @@
           const periods=getBurnPeriods(token);
           setBurnPeriods(periods);
           
-          const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals,cfg.totalSupply),fetchPLS()]);
+          const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
           // Update holder change with current holder count
@@ -2342,10 +2384,11 @@
                 </div>
               </div>
               {/* Page Navigation */}
-              <div className="flex justify-end -mt-3 -mb-3">
+              <div className="flex justify-end -mt-1 -mb-3">
                 <div className="flex items-center gap-1">
                   <button onClick={()=>setActiveTab('dashboard')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='dashboard'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Dashboard</button>
                   <button onClick={()=>setActiveTab('kpi')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='kpi'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>KPI Report</button>
+                  <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
                 </div>
@@ -2705,19 +2748,121 @@
             </div>
           )}
           
+          {/* Social Tab Content */}
+          {activeTab==='social'&&(
+            <div className="max-w-5xl mx-auto px-3 sm:px-6 py-6">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-white mb-2">📱 Social Sharing Hub</h2>
+                <p className="text-white/50">Generate Twitter-optimized images for sharing</p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* PTGC Column */}
+                <div className="space-y-3">
+                  <div className="text-center mb-4 h-[104px] flex flex-col items-center justify-end">
+                    <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-20 h-20 mb-2"/>
+                    <h3 className="text-xl font-bold text-[#D9CA5D]">PTGC</h3>
+                  </div>
+                  <button onClick={()=>{setSocialReturn(true);setShowPTGCLogosModal(true)}} className="w-full px-4 py-3 rounded-lg bg-[#D9CA5D]/20 border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-[#D9CA5D]/30 transition-all text-left">
+                    <div className="font-bold">🖼️ PTGC Logos</div>
+                    <div className="text-xs text-white/50">Download official logos</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowBurnShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:bg-orange-500/30 transition-all text-left">
+                    <div className="font-bold">🔥 Burn Stats</div>
+                    <div className="text-xs text-white/50">Total supply burned</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowValueGenShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-all text-left">
+                    <div className="font-bold">💰 Value Generated</div>
+                    <div className="text-xs text-white/50">Tax distribution breakdown</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowAllocationShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-all text-left">
+                    <div className="font-bold">📊 Token Allocation</div>
+                    <div className="text-xs text-white/50">Supply distribution</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowDAOShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 transition-all text-left">
+                    <div className="font-bold">🏛️ DAO Treasury</div>
+                    <div className="text-xs text-white/50">Treasury breakdown</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowKPI(true),100)}} className="w-full px-4 py-3 rounded-lg bg-[#D9CA5D]/20 border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-[#D9CA5D]/30 transition-all text-left">
+                    <div className="font-bold">📋 KPI Report</div>
+                    <div className="text-xs text-white/50">Full stats card</div>
+                  </button>
+                </div>
+                
+                {/* UFO Column */}
+                <div className="space-y-3">
+                  <div className="text-center mb-4 h-[104px] flex flex-col items-center justify-end">
+                    <img src={TOKENS.UFO.logo} alt="UFO" className="w-20 h-20 mb-2"/>
+                    <h3 className="text-xl font-bold text-[#7CFC00]">UFO</h3>
+                  </div>
+                  <button onClick={()=>{setSocialReturn(true);setShowUFOLogosModal(true)}} className="w-full px-4 py-3 rounded-lg bg-[#7CFC00]/20 border border-[#7CFC00]/30 text-[#7CFC00] hover:bg-[#7CFC00]/30 transition-all text-left">
+                    <div className="font-bold">🖼️ UFO Logos</div>
+                    <div className="text-xs text-white/50">Download official logos</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowBurnShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-orange-500/20 border border-orange-500/30 text-orange-400 hover:bg-orange-500/30 transition-all text-left">
+                    <div className="font-bold">🔥 Burn Stats</div>
+                    <div className="text-xs text-white/50">Total supply burned</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowValueGenShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-all text-left">
+                    <div className="font-bold">💰 Value Generated</div>
+                    <div className="text-xs text-white/50">Tax distribution breakdown</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowAllocationShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-all text-left">
+                    <div className="font-bold">📊 Token Allocation</div>
+                    <div className="text-xs text-white/50">Supply distribution</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowDAOShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 transition-all text-left">
+                    <div className="font-bold">🛸 PTGC Burned by UFO</div>
+                    <div className="text-xs text-white/50">Cross-token burn stats</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowKPI(true),100)}} className="w-full px-4 py-3 rounded-lg bg-[#7CFC00]/20 border border-[#7CFC00]/30 text-[#7CFC00] hover:bg-[#7CFC00]/30 transition-all text-left">
+                    <div className="font-bold">📋 KPI Report</div>
+                    <div className="text-xs text-white/50">Full stats card</div>
+                  </button>
+                </div>
+                
+                {/* Combined Column */}
+                <div className="space-y-3">
+                  <div className="text-center mb-4 h-[104px] flex flex-col items-center justify-end">
+                    <img src={COMBINED_LOGO} alt="Combined" className="h-20 mb-2" style={{transform:'scale(2)'}}/>
+                    <h3 className="text-xl font-bold text-white">Combined</h3>
+                  </div>
+                  <button onClick={()=>{setSocialReturn(true);setShowCombinedLogosModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[#D9CA5D]/20 to-[#7CFC00]/20 border border-white/30 text-white hover:from-[#D9CA5D]/30 hover:to-[#7CFC00]/30 transition-all text-left">
+                    <div className="font-bold">🖼️ Combined Logos</div>
+                    <div className="text-xs text-white/50">Download official logos</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);setShowCombinedKPI(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
+                    <div className="font-bold">📋 Combined KPI Report</div>
+                    <div className="text-xs text-white/50">Both tokens side-by-side</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);setShowRHCoresShareModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
+                    <div className="font-bold">💎 RH Core Liquidity</div>
+                    <div className="text-xs text-white/50">LP breakdown by RH cores</div>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mt-8 text-center">
+                <button onClick={()=>setActiveTab('dashboard')} className="px-6 py-2 rounded-lg border border-white/20 text-white/60 hover:text-white hover:border-white/40 transition-all">
+                  ← Back to Dashboard
+                </button>
+              </div>
+            </div>
+          )}
+          
           {/* KPI Report Modal (legacy - kept for direct link) */}
           {showKPI&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>setShowKPI(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>closeModalAndReturn(setShowKPI)}>
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
               {/* X close button - always top right of screen */}
               <button 
-                onClick={()=>setShowKPI(false)} 
+                onClick={()=>closeModalAndReturn(setShowKPI)} 
                 className="fixed top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600"
               >
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setShowKPI(false)}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)}/>
               </div>
             </div>
           )}
@@ -2740,6 +2885,21 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowRHModal(false)}>
               <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto`} onClick={e=>e.stopPropagation()}>
                 <div className="p-5">
+                  {/* Token switch buttons */}
+                  <div className="flex justify-center gap-2 mb-4">
+                    <button 
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${token==='PTGC'?'bg-[#D9CA5D] text-black':'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      onClick={()=>{if(token!=='PTGC'){setShowRHModal(false);onSwitch('PTGC')}}}
+                    >
+                      <span className="flex items-center gap-2"><img src={TOKENS.PTGC.logo} className="w-5 h-5"/>PTGC</span>
+                    </button>
+                    <button 
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${token==='UFO'?'bg-[#7CFC00] text-black':'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                      onClick={()=>{if(token!=='UFO'){setShowRHModal(false);onSwitch('UFO')}}}
+                    >
+                      <span className="flex items-center gap-2"><img src={TOKENS.UFO.logo} className="w-5 h-5"/>UFO</span>
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-4">
                       <img src={cfg.logo} alt={token} className="w-14 h-14 rounded-full"/>
@@ -2892,9 +3052,9 @@
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
           {showBurnShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowBurnShareModal(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowBurnShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>setShowBurnShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                <button onClick={()=>closeModalAndReturn(setShowBurnShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 (1.91:1 ratio, scales to 1200x628) */}
                 <div id="burn-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
@@ -2968,9 +3128,9 @@
           
           {/* Value Generated Share Modal - Twitter optimized */}
           {showValueGenShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowValueGenShareModal(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>setShowValueGenShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                <button onClick={()=>closeModalAndReturn(setShowValueGenShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
                 <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
@@ -3056,9 +3216,9 @@
           
           {/* Token Allocation Share Modal - Twitter optimized */}
           {showAllocationShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowAllocationShareModal(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowAllocationShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>setShowAllocationShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                <button onClick={()=>closeModalAndReturn(setShowAllocationShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
                 <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
@@ -3124,9 +3284,9 @@
           
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
           {showDAOShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>setShowDAOShareModal(false)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowDAOShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>setShowDAOShareModal(false)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                <button onClick={()=>closeModalAndReturn(setShowDAOShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
                 <div id="dao-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
@@ -3240,6 +3400,280 @@
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Right-click the image and "Save Image As" or take a screenshot
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Combined KPI Modal - triggers Twitter mode */}
+          {showCombinedKPI&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}}>
+              <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
+              <button 
+                onClick={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} 
+                className="fixed top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600"
+              >
+                ✕
+              </button>
+              <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true}/>
+              </div>
+            </div>
+          )}
+          
+          {/* RH Cores Liquidity Share Modal */}
+          {showRHCoresShareModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                <div 
+                  id="rhcores-capture"
+                  className="relative overflow-hidden border-2 border-white/30"
+                  style={{
+                    width:'1200px',height:'675px',
+                    background:'linear-gradient(180deg, #0a0a0a 0%, #050505 100%)'
+                  }}
+                >
+                  {/* Gold glow for PTGC column (left) */}
+                  <div className="absolute left-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(217,202,93,0.25) 0%, transparent 60%)'}}></div>
+                  {/* Green glow for UFO column (right) */}
+                  <div className="absolute right-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(124,252,0,0.25) 0%, transparent 60%)'}}></div>
+                  
+                  <div className="relative w-full h-full p-6 flex flex-col">
+                    {/* Header with Combined Total */}
+                    <div className="flex items-center justify-between mb-5">
+                      <div>
+                        <div className="text-2xl font-bold text-white">Liquidity with RH Core Tokens</div>
+                        <div className="text-white/50 text-sm mt-1">The Grays — Proudly supporting Richard Heart and the PulseChain ecosystem</div>
+                      </div>
+                      {(()=>{
+                        const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
+                        const currentPairs=data?.pairs||[];
+                        const otherPairs=otherTokenPairs||[];
+                        const ptgcPairs=token==='PTGC'?currentPairs:otherPairs;
+                        const ufoPairs=token==='UFO'?currentPairs:otherPairs;
+                        const getPairData=(pairs,core)=>{
+                          const pair=pairs.find(p=>{
+                            const qSym=(p.quoteToken?.symbol||'').toUpperCase();
+                            const bSym=(p.baseToken?.symbol||'').toUpperCase();
+                            return qSym===core||bSym===core;
+                          });
+                          return pair?.liq||0;
+                        };
+                        const ptgcTotal=RH_CORES.reduce((s,c)=>s+getPairData(ptgcPairs,c),0);
+                        const ufoTotal=RH_CORES.reduce((s,c)=>s+getPairData(ufoPairs,c),0);
+                        const grandTotal=ptgcTotal+ufoTotal;
+                        return(
+                          <div className="flex items-center gap-4">
+                            <div className="text-white text-xl font-bold">Combined Liquidity with RH Cores →</div>
+                            <div className="text-white font-extrabold text-5xl">{fmtUSD(grandTotal)}</div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    
+                    {(()=>{
+                      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
+                      const currentPairs=data?.pairs||[];
+                      const otherPairs=otherTokenPairs||[];
+                      
+                      const ptgcPairs=token==='PTGC'?currentPairs:otherPairs;
+                      const ufoPairs=token==='UFO'?currentPairs:otherPairs;
+                      
+                      const coreLogos={
+                        WPLS:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xa1077a294dde1b09bb078844df40758a5d0f9a27.png',
+                        PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
+                        INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
+                        HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
+                        EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png'
+                      };
+                      
+                      const getPairData=(pairs,core)=>{
+                        const pair=pairs.find(p=>{
+                          const qSym=(p.quoteToken?.symbol||'').toUpperCase();
+                          const bSym=(p.baseToken?.symbol||'').toUpperCase();
+                          return qSym===core||bSym===core;
+                        });
+                        return pair?.liq||0;
+                      };
+                      
+                      const ptgcTotal=RH_CORES.reduce((s,c)=>s+getPairData(ptgcPairs,c),0);
+                      const ufoTotal=RH_CORES.reduce((s,c)=>s+getPairData(ufoPairs,c),0);
+                      
+                      return(
+                        <div className="flex-1 grid grid-cols-2 gap-6">
+                          {/* PTGC Column */}
+                          <div className="rounded-2xl border border-[#D9CA5D]/30 bg-black/40 p-4 flex flex-col">
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#D9CA5D]/20">
+                              <div className="flex items-center gap-4">
+                                <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-14 h-14" style={{filter:'drop-shadow(0 0 12px rgba(217,202,93,0.8)) drop-shadow(0 0 25px rgba(217,202,93,0.5))'}}/>
+                                <div className="text-[#D9CA5D] font-bold text-2xl">PTGC</div>
+                              </div>
+                              <div className="text-[#D9CA5D] font-bold text-3xl">{fmtUSD(ptgcTotal)}</div>
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              {RH_CORES.map(core=>{
+                                const liq=getPairData(ptgcPairs,core);
+                                return(
+                                  <div key={core} className="flex items-center justify-between px-4 py-3 rounded-xl border border-[#D9CA5D]/20 bg-black/30">
+                                    <div className="flex items-center gap-3">
+                                      <img src={coreLogos[core]} alt={core} className="w-10 h-10 rounded-full"/>
+                                      <span className="text-[#D9CA5D] font-bold text-lg">PTGC/{core}</span>
+                                    </div>
+                                    <span className="text-white font-bold text-xl">{fmtUSD(liq)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          
+                          {/* UFO Column */}
+                          <div className="rounded-2xl border border-[#7CFC00]/30 bg-black/40 p-4 flex flex-col">
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#7CFC00]/20">
+                              <div className="flex items-center gap-4">
+                                <img src={TOKENS.UFO.logo} alt="UFO" className="w-14 h-14" style={{filter:'drop-shadow(0 0 12px rgba(124,252,0,0.8)) drop-shadow(0 0 25px rgba(124,252,0,0.5))'}}/>
+                                <div className="text-[#7CFC00] font-bold text-2xl">UFO</div>
+                              </div>
+                              <div className="text-[#7CFC00] font-bold text-3xl">{fmtUSD(ufoTotal)}</div>
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              {RH_CORES.map(core=>{
+                                const liq=getPairData(ufoPairs,core);
+                                return(
+                                  <div key={core} className="flex items-center justify-between px-4 py-3 rounded-xl border border-[#7CFC00]/20 bg-black/30">
+                                    <div className="flex items-center gap-3">
+                                      <img src={coreLogos[core]} alt={core} className="w-10 h-10 rounded-full"/>
+                                      <span className="text-[#7CFC00] font-bold text-lg">UFO/{core}</span>
+                                    </div>
+                                    <span className="text-white font-bold text-xl">{fmtUSD(liq)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Footer */}
+                    <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
+                      <div className="text-white/30 text-sm">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+                      <div className="text-white/30 text-sm font-medium">ptgc-ufo.com</div>
+                      <div className="text-white/30 text-sm">RH Cores: WPLS • PLSX • INC • HEX • EHEX</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* PTGC Logos Modal */}
+          {showPTGCLogosModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)}>
+              <div className="relative bg-black/95 border border-[#D9CA5D]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                <div className="flex items-center gap-3 mb-6">
+                  <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-12 h-12"/>
+                  <div>
+                    <h2 className="text-2xl font-bold text-[#D9CA5D]">PTGC Logos</h2>
+                    <p className="text-white/50 text-sm">Click any logo to download</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    {file:'06_PTGC_V1_transparent_bg.png',name:'Logo V1'},
+                    {file:'06_PTGC_V2_transparent_bg.png',name:'Logo V2'},
+                    {file:'06_PTGC_Horizontal_V6_transparent_bg.png',name:'Horizontal V6'},
+                    {file:'06_PTGC_Horizontal_V7_transparent_bg.png',name:'Horizontal V7'},
+                    {file:'12_PTGC_V1_transparent_bg_grayscale.png',name:'Grayscale V1'},
+                    {file:'12_PTGC_V3_grayscale_transparent_bg.png',name:'Grayscale V3'},
+                    {file:'18_PTGC_V1_BW_transparent_bg.png',name:'Black & White'},
+                  ].map(logo=>(
+                    <a key={logo.file} href={`logos/ptgc/${logo.file}`} download className="block p-4 rounded-xl border border-[#D9CA5D]/20 bg-black/50 hover:bg-[#D9CA5D]/10 hover:border-[#D9CA5D]/40 transition-all group">
+                      <div className="aspect-square flex items-center justify-center mb-2 bg-black/30 rounded-lg p-2">
+                        <img src={`logos/ptgc/${logo.file}`} alt={logo.name} className="max-w-full max-h-full object-contain"/>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[#D9CA5D] font-medium text-sm">{logo.name}</div>
+                        <div className="text-white/40 text-xs group-hover:text-[#D9CA5D]/60">Click to download</div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* UFO Logos Modal */}
+          {showUFOLogosModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowUFOLogosModal)}>
+              <div className="relative bg-black/95 border border-[#7CFC00]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>closeModalAndReturn(setShowUFOLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                <div className="flex items-center gap-3 mb-6">
+                  <img src={TOKENS.UFO.logo} alt="UFO" className="w-12 h-12"/>
+                  <div>
+                    <h2 className="text-2xl font-bold text-[#7CFC00]">UFO Logos</h2>
+                    <p className="text-white/50 text-sm">Click any logo to download</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    {file:'06_Ufo_New_transparent_bg.png',name:'Logo'},
+                    {file:'06_Ufo_New_V2_transparent_bg.png',name:'Logo V2'},
+                    {file:'06_Ufo_New_V3_transparent_bg.png',name:'Logo V3'},
+                    {file:'06_Ufo_New_V4_transparent_bg.png',name:'Logo V4'},
+                    {file:'12_Ufo_New_transparent_bg_Grayscale.png',name:'Grayscale'},
+                    {file:'18_Ufo_New_transparent_bg_BW.png',name:'Black & White'},
+                  ].map(logo=>(
+                    <a key={logo.file} href={`logos/ufo/${logo.file}`} download className="block p-4 rounded-xl border border-[#7CFC00]/20 bg-black/50 hover:bg-[#7CFC00]/10 hover:border-[#7CFC00]/40 transition-all group">
+                      <div className="aspect-square flex items-center justify-center mb-2 bg-black/30 rounded-lg p-2">
+                        <img src={`logos/ufo/${logo.file}`} alt={logo.name} className="max-w-full max-h-full object-contain"/>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[#7CFC00] font-medium text-sm">{logo.name}</div>
+                        <div className="text-white/40 text-xs group-hover:text-[#7CFC00]/60">Click to download</div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Combined Logos Modal */}
+          {showCombinedLogosModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)}>
+              <div className="relative bg-black/95 border border-white/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                <div className="flex items-center gap-3 mb-6">
+                  <img src={COMBINED_LOGO} alt="Combined" className="h-12" style={{transform:'scale(1.5)'}}/>
+                  <div className="ml-4">
+                    <h2 className="text-2xl font-bold text-white">Combined Logos</h2>
+                    <p className="text-white/50 text-sm">Click any logo to download</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    {file:'07_Combined_PTGC_UFO_Transparent.png',name:'Combined Logo'},
+                    {file:'07_Two_Color_Alien_Transparent.png',name:'Two Color Alien'},
+                    {file:'14_Two_Color__Alien_2_Transparent.png',name:'Two Color Alien V2'},
+                    {file:'04_Two_logos_pattern_bg.jpg',name:'Pattern Background'},
+                  ].map(logo=>(
+                    <a key={logo.file} href={`logos/combined/${logo.file}`} download className="block p-4 rounded-xl border border-white/20 bg-black/50 hover:bg-white/10 hover:border-white/40 transition-all group">
+                      <div className="aspect-square flex items-center justify-center mb-2 bg-black/30 rounded-lg p-2">
+                        <img src={`logos/combined/${logo.file}`} alt={logo.name} className="max-w-full max-h-full object-contain"/>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-white font-medium text-sm">{logo.name}</div>
+                        <div className="text-white/40 text-xs group-hover:text-white/60">Click to download</div>
+                      </div>
+                    </a>
+                  ))}
                 </div>
               </div>
             </div>
