@@ -1,0 +1,45 @@
+name: Fetch Treasury Transactions
+
+on:
+  schedule:
+    # Run every hour at minute 30 (offset from burn fetcher if it runs at :00)
+    - cron: '30 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  fetch-treasury:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Fetch Treasury Transactions
+        env:
+          MORALIS_API_KEY: ${{ secrets.MORALIS_API_KEY }}
+        run: node scripts/fetch-treasury-transactions.js
+      
+      - name: Check for changes
+        id: changes
+        run: |
+          git add data/
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git commit -m "Update treasury data [automated]"
+          git push
