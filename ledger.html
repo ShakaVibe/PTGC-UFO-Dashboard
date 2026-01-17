@@ -420,8 +420,78 @@
             return;
           }
           
-          // 1. BURN
-          if (ptgcBurn) {
+          // 1. LP ADD (by function selector - highest priority)
+          if (isAddLiquidityFn) {
+            type = 'lp_add';
+            icon = '💧';
+            
+            // Get non-LP tokens that were sent out (exclude any that went to dead address as fees)
+            const actualTokensOut = tokensOut.filter(t => t.to?.toLowerCase() !== DEAD_ADDRESS && !isLPToken(t));
+            
+            // Dedupe tokens by contract address and aggregate amounts
+            const tokenMap = new Map();
+            actualTokensOut.forEach(t => {
+              const addr = t.contractAddress.toLowerCase();
+              const sym = t.tokenSymbol || KNOWN_TOKENS[addr]?.symbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || KNOWN_TOKENS[addr]?.decimals || 18;
+              const amt = Number(t.value) / Math.pow(10, dec);
+              
+              if (tokenMap.has(addr)) {
+                tokenMap.get(addr).amt += amt;
+              } else {
+                tokenMap.set(addr, { sym, amt, addr });
+              }
+            });
+            
+            const tokens = Array.from(tokenMap.values());
+            const tokenStr = tokens.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            
+            if (value > 0 && tokens.length > 0) {
+              description = `Added LP: ${fmtAbbr(value)} PLS + ${tokenStr}`;
+              amount = value;
+              amountSymbol = 'PLS';
+            } else if (tokens.length > 0) {
+              description = `Added LP: ${tokenStr}`;
+              amount = tokens[0]?.amt || 0;
+              amountSymbol = tokens[0]?.sym || '';
+            } else if (value > 0) {
+              description = `Added LP: ${fmtAbbr(value)} PLS + tokens`;
+              amount = value;
+              amountSymbol = 'PLS';
+            } else {
+              description = 'Added Liquidity';
+            }
+            
+            details = [];
+            if (value > 0) details.push({ label: 'PLS', value: fmtAbbr(value) });
+            tokens.forEach(t => details.push({ label: t.sym, value: fmtAbbr(t.amt) }));
+            if (lpTokenReceived) details.push({ label: 'LP Token', value: lpTokenReceived.tokenSymbol || 'LP' });
+          }
+          // 2. LP REMOVE (by function selector - high priority)
+          else if (isRemoveLiquidityFn) {
+            type = 'lp_remove';
+            icon = '💧';
+            const received = tokensIn.filter(t => !isLPToken(t)).map(t => {
+              const sym = t.tokenSymbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || 18;
+              const amt = Number(t.value) / Math.pow(10, dec);
+              return { sym, amt };
+            });
+            const receivedStr = received.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            description = `Removed LP → ${receivedStr || 'tokens'}`;
+            if (lpTokenSent) {
+              const lpDec = Number(lpTokenSent.tokenDecimal) || 18;
+              const lpAmt = Number(lpTokenSent.value) / Math.pow(10, lpDec);
+              amount = lpAmt;
+              amountSymbol = lpTokenSent.tokenSymbol || 'LP';
+              details = [{ label: 'LP Burned', value: `${fmtAbbr(lpAmt)} ${lpTokenSent.tokenSymbol || 'LP'}` }];
+            } else {
+              details = [];
+            }
+            received.forEach(t => details.push({ label: 'Received', value: `${fmtAbbr(t.amt)} ${t.sym}` }));
+          }
+          // 3. BURN
+          else if (ptgcBurn) {
             type = 'burn';
             icon = '🔥';
             const dec = 18;
@@ -447,8 +517,8 @@
               { label: 'To', value: '🔥 Dead Address' }
             ];
           } 
-          // 2. LP REMOVE
-          else if ((lpTokenSent && tokensIn.length > 0) || isRemoveLiquidityFn) {
+          // 4. LP REMOVE (backup - by token pattern: sent LP, received other tokens)
+          else if (lpTokenSent && tokensIn.length > 0) {
             type = 'lp_remove';
             icon = '💧';
             const received = tokensIn.filter(t => !isLPToken(t)).map(t => {
@@ -459,18 +529,14 @@
             });
             const receivedStr = received.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
             description = `Removed LP → ${receivedStr || 'tokens'}`;
-            if (lpTokenSent) {
-              const lpDec = Number(lpTokenSent.tokenDecimal) || 18;
-              const lpAmt = Number(lpTokenSent.value) / Math.pow(10, lpDec);
-              amount = lpAmt;
-              amountSymbol = lpTokenSent.tokenSymbol || 'LP';
-              details = [{ label: 'LP Burned', value: `${fmtAbbr(lpAmt)} ${lpTokenSent.tokenSymbol || 'LP'}` }];
-            } else {
-              details = [];
-            }
+            const lpDec = Number(lpTokenSent.tokenDecimal) || 18;
+            const lpAmt = Number(lpTokenSent.value) / Math.pow(10, lpDec);
+            amount = lpAmt;
+            amountSymbol = lpTokenSent.tokenSymbol || 'LP';
+            details = [{ label: 'LP Burned', value: `${fmtAbbr(lpAmt)} ${lpTokenSent.tokenSymbol || 'LP'}` }];
             received.forEach(t => details.push({ label: 'Received', value: `${fmtAbbr(t.amt)} ${t.sym}` }));
           }
-          // 3. PTGC BUY
+          // 5. PTGC BUY
           else if (ptgcReceived && (tokensOut.length > 0 || value > 0)) {
             type = 'ptgc_buy';
             icon = '💰';
@@ -495,17 +561,20 @@
               ];
             }
           } 
-          // 4. LP ADD
-          else if (lpTokenReceived || isAddLiquidityFn || tokensOut.length >= 2) {
+          // 6. LP ADD (backup detection via LP token received or multiple tokens out)
+          else if (lpTokenReceived || tokensOut.length >= 2) {
             type = 'lp_add';
             icon = '💧';
             
+            // Get non-LP tokens that were sent out (exclude any that went to dead address as fees)
+            const actualTokensOut = tokensOut.filter(t => t.to?.toLowerCase() !== DEAD_ADDRESS && !isLPToken(t));
+            
             // Dedupe tokens by contract address and aggregate amounts
             const tokenMap = new Map();
-            tokensOut.forEach(t => {
+            actualTokensOut.forEach(t => {
               const addr = t.contractAddress.toLowerCase();
-              const sym = KNOWN_TOKENS[addr]?.symbol || t.tokenSymbol || 'Unknown';
-              const dec = KNOWN_TOKENS[addr]?.decimals || Number(t.tokenDecimal) || 18;
+              const sym = t.tokenSymbol || KNOWN_TOKENS[addr]?.symbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || KNOWN_TOKENS[addr]?.decimals || 18;
               const amt = Number(t.value) / Math.pow(10, dec);
               
               if (tokenMap.has(addr)) {
@@ -526,8 +595,8 @@
               // addLiquidityETH with PLS - check tokensIn for the other token
               const otherToken = tokensIn.find(t => !isLPToken(t));
               if (otherToken) {
-                const otherSym = KNOWN_TOKENS[otherToken.contractAddress.toLowerCase()]?.symbol || otherToken.tokenSymbol || 'Token';
-                const otherDec = KNOWN_TOKENS[otherToken.contractAddress.toLowerCase()]?.decimals || Number(otherToken.tokenDecimal) || 18;
+                const otherSym = otherToken.tokenSymbol || KNOWN_TOKENS[otherToken.contractAddress?.toLowerCase()]?.symbol || 'Token';
+                const otherDec = Number(otherToken.tokenDecimal) || KNOWN_TOKENS[otherToken.contractAddress?.toLowerCase()]?.decimals || 18;
                 const otherAmt = Number(otherToken.value) / Math.pow(10, otherDec);
                 description = `Added LP: ${fmtAbbr(value)} PLS + ${fmtAbbr(otherAmt)} ${otherSym}`;
               } else {
@@ -548,7 +617,7 @@
             tokens.forEach(t => details.push({ label: t.sym, value: fmtAbbr(t.amt) }));
             if (lpTokenReceived) details.push({ label: 'LP Token', value: lpTokenReceived.tokenSymbol || 'LP' });
           } 
-          // 5. SWAP
+          // 7. SWAP
           else if (tokensOut.length > 0 && tokensIn.length > 0) {
             type = 'swap';
             icon = '🔄';
@@ -568,7 +637,7 @@
               { label: 'Received', value: `${fmtAbbr(inAmt)} ${inSymbol}` }
             ];
           } 
-          // 6. SWAP/BUY PLS
+          // 8. SWAP/BUY PLS
           else if (value > 0 && tokensIn.length > 0) {
             const inToken = tokensIn[0];
             const inSymbol = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.symbol || inToken.tokenSymbol || 'Unknown';
