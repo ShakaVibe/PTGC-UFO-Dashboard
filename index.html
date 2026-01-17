@@ -2115,6 +2115,8 @@
       const[showPTGCLogosModal,setShowPTGCLogosModal]=useState(false);
       const[showUFOLogosModal,setShowUFOLogosModal]=useState(false);
       const[showCombinedLogosModal,setShowCombinedLogosModal]=useState(false);
+      const[showPriceWithCoresModal,setShowPriceWithCoresModal]=useState(false);
+      const[corePrices,setCorePrices]=useState(null);
       const[showCombinedKPI,setShowCombinedKPI]=useState(false);
       const[otherTokenPairs,setOtherTokenPairs]=useState([]);
       
@@ -2152,6 +2154,45 @@
           });
         }
       },[showRHCoresShareModal]);
+      
+      // Load RH Core prices when Price with Cores modal opens
+      const[grayPrices,setGrayPrices]=useState({ptgc:{price:0,change:0},ufo:{price:0,change:0}});
+      useEffect(()=>{
+        if(showPriceWithCoresModal){
+          // Fetch core prices
+          if(!corePrices){
+            const coreAddresses={
+              WPLS:'0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+              PLSX:'0x95b303987a60c71504d99aa1b13b4da07b0790ab',
+              INC:'0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
+              HEX:'0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
+              EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225'
+            };
+            Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
+              try{
+                const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
+                const d=await res.json();
+                const pair=d?.pairs?.find(p=>p.chainId==='pulsechain');
+                return{name,price:pair?.priceUsd||0,change:pair?.priceChange?.h24||0};
+              }catch{return{name,price:0,change:0};}
+            })).then(results=>{
+              const prices={};
+              results.forEach(r=>prices[r.name]={price:parseFloat(r.price),change:parseFloat(r.change)});
+              setCorePrices(prices);
+            });
+          }
+          // Fetch PTGC and UFO prices
+          Promise.all([
+            fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`).then(r=>r.json()),
+            fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`).then(r=>r.json())
+          ]).then(([ptgcData,ufoData])=>{
+            setGrayPrices({
+              ptgc:{price:parseFloat(ptgcData?.pair?.priceUsd||0),change:parseFloat(ptgcData?.pair?.priceChange?.h24||0)},
+              ufo:{price:parseFloat(ufoData?.pair?.priceUsd||0),change:parseFloat(ufoData?.pair?.priceChange?.h24||0)}
+            });
+          });
+        }
+      },[showPriceWithCoresModal]);
       
       useEffect(()=>{
         // Reset all state immediately when token changes
@@ -2838,6 +2879,10 @@
                   <button onClick={()=>{setSocialReturn(true);setShowRHCoresShareModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">💎 RH Core Liquidity</div>
                     <div className="text-xs text-white/50">LP breakdown by RH cores</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);setShowPriceWithCoresModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
+                    <div className="font-bold">💰 The Grays & The Cores</div>
+                    <div className="text-xs text-white/50">24Hr price comparison</div>
                   </button>
                 </div>
               </div>
@@ -3674,6 +3719,131 @@
                       </div>
                     </a>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Price with RH Cores Modal */}
+          {showPriceWithCoresModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                <div 
+                  id="price-cores-capture"
+                  className="relative overflow-hidden border-2 border-white/30"
+                  style={{
+                    width:'1200px',height:'675px',
+                    background:'linear-gradient(180deg, #0a0a0a 0%, #050505 100%)'
+                  }}
+                >
+                  {/* Subtle glows */}
+                  <div className="absolute left-0 top-0 w-1/3 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.08) 0%, transparent 60%)'}}></div>
+                  <div className="absolute right-0 top-0 w-1/3 h-full" style={{background:'radial-gradient(ellipse at 30% 50%, rgba(217,202,93,0.2) 0%, transparent 50%)'}}></div>
+                  <div className="absolute right-0 top-0 w-1/3 h-full" style={{background:'radial-gradient(ellipse at 70% 50%, rgba(124,252,0,0.2) 0%, transparent 50%)'}}></div>
+                  
+                  <div className="relative w-full h-full p-6 flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="text-2xl font-bold text-white">The Grays & The Cores - 24Hr Price</div>
+                        <div className="text-white/50 text-sm mt-1">The Grays — Proudly supporting Richard Heart and the PulseChain ecosystem</div>
+                      </div>
+                    </div>
+                    
+                    {/* Main Content */}
+                    <div className="flex-1 flex gap-6">
+                      {/* Left: RH Core Prices */}
+                      <div className="w-1/3 rounded-2xl border border-white/20 bg-black/40 p-4 flex flex-col">
+                        <div className="text-white/60 text-sm font-medium mb-3 uppercase tracking-wider">RH Core Tokens</div>
+                        <div className="flex-1 flex flex-col justify-between">
+                          {(()=>{
+                            const coreLogos={
+                              WPLS:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xa1077a294dde1b09bb078844df40758a5d0f9a27.png',
+                              PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
+                              INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
+                              HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
+                              EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png'
+                            };
+                            const cores=['WPLS','PLSX','INC','HEX','EHEX'];
+                            return cores.map(core=>{
+                              const p=corePrices?.[core];
+                              const price=p?.price||0;
+                              const change=p?.change||0;
+                              const isUp=change>=0;
+                              return(
+                                <div key={core} className="flex items-center justify-between px-3 py-3 rounded-xl border border-white/10 bg-black/30">
+                                  <div className="flex items-center gap-3">
+                                    <img src={coreLogos[core]} alt={core} className="w-12 h-12 rounded-full"/>
+                                    <span className="text-white font-bold text-2xl">{core}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white font-bold text-2xl">${price<0.01?price.toFixed(6):price<1?price.toFixed(4):price.toFixed(2)}</span>
+                                    <span className={`text-xl font-bold ${isUp?'text-green-400':'text-red-400'}`}>
+                                      {isUp?'▲':'▼'}{Math.abs(change).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                      
+                      {/* Right: PTGC & UFO Prices */}
+                      <div className="flex-1 flex gap-4">
+                        {/* PTGC */}
+                        <div className="flex-1 rounded-2xl border border-[#D9CA5D]/30 bg-black/40 p-6 flex flex-col items-center justify-center">
+                          <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-40 h-40 mb-2" style={{filter:'drop-shadow(0 0 40px rgba(217,202,93,1)) drop-shadow(0 0 80px rgba(217,202,93,0.7))'}}/>
+                          <div className="text-[#D9CA5D] font-bold text-2xl mb-1">PTGC</div>
+                          <div className="text-white font-extrabold text-5xl mb-4">
+                            ${grayPrices.ptgc.price?.toFixed(6)||'0.000000'}
+                          </div>
+                          {(()=>{
+                            const change=grayPrices.ptgc.change||0;
+                            const isUp=change>=0;
+                            return(
+                              <div className={`flex items-center gap-2 text-5xl font-extrabold ${isUp?'text-green-400':'text-red-400'}`}>
+                                {isUp?'▲':'▼'}{Math.abs(change).toFixed(2)}%
+                                <span className="text-white/40 text-lg font-normal ml-1">24h</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        
+                        {/* UFO */}
+                        <div className="flex-1 rounded-2xl border border-[#7CFC00]/30 bg-black/40 p-6 flex flex-col items-center justify-center">
+                          <img src={TOKENS.UFO.logo} alt="UFO" className="w-40 h-40 mb-2" style={{filter:'drop-shadow(0 0 40px rgba(124,252,0,1)) drop-shadow(0 0 80px rgba(124,252,0,0.7))'}}/>
+                          <div className="text-[#7CFC00] font-bold text-2xl mb-1">UFO</div>
+                          <div className="text-white font-extrabold text-5xl mb-4">
+                            ${grayPrices.ufo.price?.toFixed(6)||'0.000000'}
+                          </div>
+                          {(()=>{
+                            const change=grayPrices.ufo.change||0;
+                            const isUp=change>=0;
+                            return(
+                              <div className={`flex items-center gap-2 text-5xl font-extrabold ${isUp?'text-green-400':'text-red-400'}`}>
+                                {isUp?'▲':'▼'}{Math.abs(change).toFixed(2)}%
+                                <span className="text-white/40 text-lg font-normal ml-1">24h</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Footer */}
+                    <div className="flex justify-between items-center mt-4 pt-3 border-t border-white/10">
+                      <div className="text-white/30 text-sm">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+                      <div className="text-white/30 text-sm font-medium">ptgc-ufo.com</div>
+                      <div className="text-white/30 text-sm">RH Cores: WPLS • PLSX • INC • HEX • EHEX</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
                 </div>
               </div>
             </div>
