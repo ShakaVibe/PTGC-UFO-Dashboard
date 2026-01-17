@@ -2159,29 +2159,27 @@
       const[grayPrices,setGrayPrices]=useState({ptgc:{price:0,change:0},ufo:{price:0,change:0}});
       useEffect(()=>{
         if(showPriceWithCoresModal){
-          // Fetch core prices
-          if(!corePrices){
-            const coreAddresses={
-              WPLS:'0xa1077a294dde1b09bb078844df40758a5d0f9a27',
-              PLSX:'0x95b303987a60c71504d99aa1b13b4da07b0790ab',
-              INC:'0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
-              HEX:'0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
-              EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225'
-            };
-            Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
-              try{
-                const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
-                const d=await res.json();
-                const pair=d?.pairs?.find(p=>p.chainId==='pulsechain');
-                return{name,price:pair?.priceUsd||0,change:pair?.priceChange?.h24||0};
-              }catch{return{name,price:0,change:0};}
-            })).then(results=>{
-              const prices={};
-              results.forEach(r=>prices[r.name]={price:parseFloat(r.price),change:parseFloat(r.change)});
-              setCorePrices(prices);
-            });
-          }
-          // Fetch PTGC and UFO prices
+          // Fetch core prices fresh every time
+          const coreAddresses={
+            WPLS:'0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+            PLSX:'0x95b303987a60c71504d99aa1b13b4da07b0790ab',
+            INC:'0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
+            HEX:'0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
+            EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225'
+          };
+          Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
+            try{
+              const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
+              const d=await res.json();
+              const pair=d?.pairs?.find(p=>p.chainId==='pulsechain');
+              return{name,price:pair?.priceUsd||0,change:pair?.priceChange?.h24||0};
+            }catch{return{name,price:0,change:0};}
+          })).then(results=>{
+            const prices={};
+            results.forEach(r=>prices[r.name]={price:parseFloat(r.price),change:parseFloat(r.change)});
+            setCorePrices(prices);
+          });
+          // Fetch PTGC and UFO prices fresh every time
           Promise.all([
             fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`).then(r=>r.json()),
             fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`).then(r=>r.json())
