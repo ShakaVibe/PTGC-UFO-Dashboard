@@ -644,53 +644,102 @@
             tokens.forEach(t => details.push({ label: t.sym, value: fmtAbbr(t.amt) }));
             if (lpTokenReceived) details.push({ label: 'LP Token', value: lpTokenReceived.tokenSymbol || 'LP' });
           } 
-          // 7. SWAP
+          // 7. SWAP (tokens out and tokens in)
           else if (tokensOut.length > 0 && tokensIn.length > 0) {
             type = 'swap';
             icon = '🔄';
-            const outToken = tokensOut[0];
-            const inToken = tokensIn[0];
-            const outSymbol = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.symbol || outToken.tokenSymbol || 'Unknown';
-            const inSymbol = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.symbol || inToken.tokenSymbol || 'Unknown';
-            const outDecimals = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.decimals || Number(outToken.tokenDecimal) || 18;
-            const inDecimals = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.decimals || Number(inToken.tokenDecimal) || 18;
-            const outAmt = Number(outToken.value) / Math.pow(10, outDecimals);
-            const inAmt = Number(inToken.value) / Math.pow(10, inDecimals);
-            amount = outAmt;
-            amountSymbol = outSymbol;
-            description = `Swapped ${fmtAbbr(outAmt)} ${outSymbol} → ${fmtAbbr(inAmt)} ${inSymbol}`;
+            
+            // Sum sent tokens by contract
+            const sentMap = new Map();
+            tokensOut.forEach(t => {
+              const addr = t.contractAddress?.toLowerCase() || '';
+              const sym = t.tokenSymbol || KNOWN_TOKENS[addr]?.symbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || KNOWN_TOKENS[addr]?.decimals || 18;
+              const amt = Number(t.value || 0) / Math.pow(10, dec);
+              if (sentMap.has(addr)) {
+                sentMap.get(addr).amt += amt;
+              } else {
+                sentMap.set(addr, { sym, amt });
+              }
+            });
+            
+            // Sum received tokens by contract
+            const receivedMap = new Map();
+            tokensIn.forEach(t => {
+              const addr = t.contractAddress?.toLowerCase() || '';
+              const sym = t.tokenSymbol || KNOWN_TOKENS[addr]?.symbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || KNOWN_TOKENS[addr]?.decimals || 18;
+              const amt = Number(t.value || 0) / Math.pow(10, dec);
+              if (receivedMap.has(addr)) {
+                receivedMap.get(addr).amt += amt;
+              } else {
+                receivedMap.set(addr, { sym, amt });
+              }
+            });
+            
+            const sentTokens = Array.from(sentMap.values());
+            const receivedTokens = Array.from(receivedMap.values());
+            
+            const sentStr = sentTokens.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            const receivedStr = receivedTokens.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            
+            amount = sentTokens[0]?.amt || 0;
+            amountSymbol = sentTokens[0]?.sym || '';
+            description = `Swapped ${sentStr} → ${receivedStr}`;
             details = [
-              { label: 'Sent', value: `${fmtAbbr(outAmt)} ${outSymbol}` },
-              { label: 'Received', value: `${fmtAbbr(inAmt)} ${inSymbol}` }
+              { label: 'Sent', value: sentStr },
+              { label: 'Received', value: receivedStr }
             ];
           } 
-          // 8. SWAP/BUY PLS
+          // 8. SWAP/BUY PLS (sent PLS, received tokens)
           else if (value > 0 && tokensIn.length > 0) {
-            const inToken = tokensIn[0];
-            const inSymbol = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.symbol || inToken.tokenSymbol || 'Unknown';
-            const inDecimals = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.decimals || Number(inToken.tokenDecimal) || 18;
-            const inAmt = Number(inToken.value) / Math.pow(10, inDecimals);
+            // Sum all received tokens by contract address
+            const receivedMap = new Map();
+            tokensIn.forEach(t => {
+              const addr = t.contractAddress?.toLowerCase() || '';
+              const sym = t.tokenSymbol || KNOWN_TOKENS[addr]?.symbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || KNOWN_TOKENS[addr]?.decimals || 18;
+              const amt = Number(t.value || 0) / Math.pow(10, dec);
+              
+              if (receivedMap.has(addr)) {
+                receivedMap.get(addr).amt += amt;
+              } else {
+                receivedMap.set(addr, { sym, amt, addr, dec });
+              }
+            });
             
-            if (inToken.contractAddress.toLowerCase() === PTGC_ADDRESS) {
+            const receivedTokens = Array.from(receivedMap.values());
+            const mainToken = receivedTokens[0];
+            const totalReceived = receivedTokens.reduce((sum, t) => sum + t.amt, 0);
+            
+            if (mainToken && mainToken.addr === PTGC_ADDRESS) {
               type = 'ptgc_buy';
               icon = '💰';
-              amount = inAmt;
+              amount = mainToken.amt;
               amountSymbol = 'PTGC';
-              description = `Bought ${fmtAbbr(inAmt)} PTGC`;
+              description = `Bought ${fmtAbbr(mainToken.amt)} PTGC`;
               details = [
                 { label: 'Spent', value: `${fmtAbbr(value)} PLS` },
-                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` }
+                { label: 'Received', value: `${fmtAbbr(mainToken.amt)} PTGC` }
+              ];
+            } else if (mainToken) {
+              type = 'swap';
+              icon = '🔄';
+              amount = value;
+              amountSymbol = 'PLS';
+              const receivedStr = receivedTokens.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+              description = `Swapped ${fmtAbbr(value)} PLS → ${receivedStr}`;
+              details = [
+                { label: 'Sent', value: `${fmtAbbr(value)} PLS` },
+                { label: 'Received', value: receivedStr }
               ];
             } else {
               type = 'swap';
               icon = '🔄';
               amount = value;
               amountSymbol = 'PLS';
-              description = `Swapped ${fmtAbbr(value)} PLS → ${fmtAbbr(inAmt)} ${inSymbol}`;
-              details = [
-                { label: 'Sent', value: `${fmtAbbr(value)} PLS` },
-                { label: 'Received', value: `${fmtAbbr(inAmt)} ${inSymbol}` }
-              ];
+              description = `Swapped ${fmtAbbr(value)} PLS`;
+              details = [{ label: 'Sent', value: `${fmtAbbr(value)} PLS` }];
             }
           } else if (tokensOut.length > 0) {
             type = 'transfer';
@@ -881,6 +930,11 @@
       return (
         <div className="min-h-screen bg-[#0a0a0a] text-white p-4 md:p-8">
           <div className="max-w-4xl mx-auto">
+            {/* Logo */}
+            <div className="flex justify-center mb-4">
+              <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="h-20 md:h-24" />
+            </div>
+            
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <a 
