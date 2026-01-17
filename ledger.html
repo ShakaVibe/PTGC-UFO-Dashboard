@@ -398,6 +398,23 @@
             });
           }
           
+          // Specific debug for known LP tx
+          const isTargetTx = hash === '0xf2f20be60c303d784403d08a4f3d922c81d67b867c30d8890d55a7e47d1551be'.toLowerCase();
+          if (isTargetTx) {
+            console.log('=== TARGET TX DEBUG ===');
+            console.log('  ptgcBurn?', !!ptgcBurn);
+            console.log('  anyBurn?', !!anyBurn);
+            console.log('  lpTokenSent?', !!lpTokenSent);
+            console.log('  lpTokenReceived?', !!lpTokenReceived, lpTokenReceived?.tokenSymbol);
+            console.log('  ptgcReceived?', !!ptgcReceived, ptgcReceived?.tokenSymbol);
+            console.log('  isAddLiquidityFn?', isAddLiquidityFn);
+            console.log('  isRemoveLiquidityFn?', isRemoveLiquidityFn);
+            console.log('  tokensOut.length:', tokensOut.length);
+            console.log('  tokensIn.length:', tokensIn.length);
+            console.log('  tokensIn details:', tokensIn.map(t => ({ sym: t.tokenSymbol, addr: t.contractAddress })));
+            console.log('  value:', value);
+          }
+          
           // Skip approve transactions entirely
           if (isApproveFn) {
             return;
@@ -630,6 +647,12 @@
           // For wallet2, only show PTGC buys, burns, LP adds, and LP removes
           if (isWallet2 && !['ptgc_buy', 'burn', 'lp_add', 'lp_remove'].includes(type)) {
             return;
+          }
+          
+          // Debug: Final classification for target tx
+          if (isTargetTx) {
+            console.log('  FINAL TYPE:', type);
+            console.log('  DESCRIPTION:', description);
           }
           
           processed.push({
