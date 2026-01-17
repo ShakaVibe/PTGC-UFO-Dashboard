@@ -671,14 +671,40 @@
     
     // Management wallet tokens with hardcoded prices (same as ProWeb)
     const MANAGEMENT_TOKENS = [
-      { symbol: 'USDC', address: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07', decimals: 6, price: 1 },
-      { symbol: 'USDT', address: '0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f', decimals: 6, price: 1 },
-      { symbol: 'DAI', address: '0xefD766cCb38EaF1dfd701853BFCe31359239F305', decimals: 18, price: 1 },
-      { symbol: 'PLSX', address: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', decimals: 18, priceRatio: 0.00008 },
-      { symbol: 'HEX', address: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', decimals: 8, price: 0.001 },
-      { symbol: 'INC', address: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', decimals: 18, price: 0.20 },
-      { symbol: 'WBTC', address: '0xb17D901469B9208B17d916112988A3FeD19b5cA1', decimals: 8, price: 97000 },
+      { symbol: 'USDC', address: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07', decimals: 6, stablecoin: true },
+      { symbol: 'USDT', address: '0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f', decimals: 6, stablecoin: true },
+      { symbol: 'DAI', address: '0xefD766cCb38EaF1dfd701853BFCe31359239F305', decimals: 18, stablecoin: true },
+      { symbol: 'PLSX', address: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', decimals: 18 },
+      { symbol: 'HEX', address: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', decimals: 8 },
+      { symbol: 'INC', address: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', decimals: 18 },
+      { symbol: 'WBTC', address: '0xb17D901469B9208B17d916112988A3FeD19b5cA1', decimals: 8 },
+      { symbol: 'WETH', address: '0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C', decimals: 18 },
+      { symbol: 'EHEX', address: '0x57fde0a71132198BBeC939B98976993d8D89D225', decimals: 8 },
     ];
+    
+    // Fetch token price from DexScreener
+    const fetchTokenPrice = async (tokenAddress) => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
+        const data = await res.json();
+        if (data.pairs && data.pairs.length > 0) {
+          // Find the pair with highest liquidity for most accurate price
+          const sortedPairs = data.pairs
+            .filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0)
+            .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+          if (sortedPairs.length > 0) {
+            return parseFloat(sortedPairs[0].priceUsd) || 0;
+          }
+        }
+        return 0;
+      } catch (e) {
+        console.error(`Error fetching price for ${tokenAddress}:`, e);
+        return 0;
+      }
+    };
+    
+    // Cache for token prices (refreshed each time fetchDAOData runs)
+    let tokenPriceCache = {};
     
     // Fetch DAO data - matching ProWeb exactly
     const fetchDAOData=async(daoContract,managementWallet,plsPrice)=>{
@@ -735,10 +761,26 @@
         const mgmtPLS=Number(mgmtPLSWei)/1e18;
         console.log('Management wallet PLS:',mgmtPLS);
         
-        // 5. Get management wallet token balances in parallel (same tokens as ProWeb)
+        // 5. Get management wallet token balances in parallel with dynamic prices
         let managementTotalUSD=mgmtPLS*plsPrice;
-        const managementTokens=[{symbol:'PLS',balance:mgmtPLS,usdValue:mgmtPLS*plsPrice}];
+        const managementTokens=[{symbol:'PLS',balance:mgmtPLS,usdValue:mgmtPLS*plsPrice,price:plsPrice}];
         
+        // First, fetch all token prices in parallel from DexScreener
+        console.log('Fetching dynamic token prices from DexScreener...');
+        const pricePromises = MANAGEMENT_TOKENS.filter(t => !t.stablecoin).map(async (token) => {
+          const price = await fetchTokenPrice(token.address);
+          console.log(`${token.symbol} price from DexScreener: $${price}`);
+          return { symbol: token.symbol, address: token.address, price };
+        });
+        const priceResults = await Promise.all(pricePromises);
+        
+        // Build price lookup map
+        const priceMap = {};
+        priceResults.forEach(p => {
+          priceMap[p.address.toLowerCase()] = p.price;
+        });
+        
+        // Now fetch balances and calculate USD values
         const tokenPromises=MANAGEMENT_TOKENS.map(async(token)=>{
           try{
             const data='0x70a08231000000000000000000000000'+managementWallet.slice(2).toLowerCase();
@@ -746,11 +788,12 @@
             if(tokenResult.result&&tokenResult.result!=='0x'&&tokenResult.result!=='0x0'){
               const balanceWei=BigInt(tokenResult.result);
               const balance=Number(balanceWei)/Math.pow(10,token.decimals);
-              if(balance>0.01){
-                const price=token.price!==undefined?token.price:(token.priceRatio?plsPrice*token.priceRatio:0);
+              if(balance>0.0001){
+                // Use stablecoin price of 1, otherwise use dynamic price from DexScreener
+                const price = token.stablecoin ? 1 : (priceMap[token.address.toLowerCase()] || 0);
                 const usdValue=balance*price;
-                console.log(`Management ${token.symbol}: ${balance.toLocaleString()} ($${usdValue.toLocaleString()})`);
-                return{symbol:token.symbol,balance,usdValue};
+                console.log(`Management ${token.symbol}: ${balance.toLocaleString()} @ $${price} = $${usdValue.toLocaleString()}`);
+                return{symbol:token.symbol,balance,usdValue,price};
               }
             }
           }catch(e){console.error(`Error fetching ${token.symbol}:`,e)}
@@ -2658,18 +2701,25 @@
                             </button>
                           </div>
                           {showMgmtTokens&&daoData?.managementTokens&&(
-                            <div className="absolute top-full left-0 mt-2 z-50 bg-[#1a1a1a] border border-white/20 rounded-lg p-3 shadow-xl min-w-[200px]">
+                            <div className="absolute top-full left-0 mt-2 z-50 bg-[#1a1a1a] border border-white/20 rounded-lg p-3 shadow-xl min-w-[280px]">
                               <div className="flex justify-between items-center mb-2">
-                                <span className="text-white/70 text-xs font-bold uppercase">Token Breakdown</span>
+                                <span className="text-white/70 text-xs font-bold uppercase">Token Breakdown (Live Prices)</span>
                                 <button onClick={()=>setShowMgmtTokens(false)} className="text-white/40 hover:text-white text-sm">{'\u2715'}</button>
                               </div>
-                              <div className="space-y-1 text-sm">
+                              <div className="space-y-1.5 text-sm">
                                 {daoData.managementTokens.filter(t=>t.usdValue>=5).map((t,i)=>(
-                                  <div key={i} className="flex justify-between gap-4 text-white/60">
-                                    <span>{t.symbol}</span>
-                                    <span><span className="text-white/50">{fmtAbbr(t.balance)}</span> <span className="text-green-400">{fmtUSD(t.usdValue)}</span></span>
+                                  <div key={i} className="flex justify-between gap-3 text-white/60">
+                                    <span className="font-medium">{t.symbol}</span>
+                                    <div className="text-right">
+                                      <span className="text-white/50">{fmtAbbr(t.balance)}</span>
+                                      {t.price && <span className="text-white/30 text-xs ml-1">@${t.price < 0.01 ? t.price.toFixed(6) : t.price < 1 ? t.price.toFixed(4) : t.price.toFixed(2)}</span>}
+                                      <span className="text-green-400 ml-2">{fmtUSD(t.usdValue)}</span>
+                                    </div>
                                   </div>
                                 ))}
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-white/10 text-white/30 text-xs">
+                                Prices via DexScreener
                               </div>
                             </div>
                           )}
