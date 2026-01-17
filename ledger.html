@@ -32,7 +32,11 @@
       if(num>=1e9)return(num/1e9).toFixed(2)+'B';
       if(num>=1e6)return(num/1e6).toFixed(2)+'M';
       if(num>=1e3)return(num/1e3).toFixed(2)+'K';
-      return Math.floor(num).toLocaleString('en-US');
+      if(num>=1)return num.toFixed(2);
+      if(num>=0.01)return num.toFixed(4);
+      if(num>=0.0001)return num.toFixed(6);
+      if(num>0)return num.toExponential(2);
+      return '0';
     };
     
     const DAO_TREASURY_WALLET = '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1';
@@ -398,8 +402,31 @@
             });
           }
           
-          // Specific debug for known LP tx
+        // Specific debug for known LP tx
           const isTargetTx = hash === '0xf2f20be60c303d784403d08a4f3d922c81d67b867c30d8890d55a7e47d1551be'.toLowerCase();
+          const isWethTx = hash === '0xbc830ea0f08b49c63906e23f4c861d10bae6a03cc22e3bdf5efc6c7d8c62cd18'.toLowerCase();
+          
+          if (isTargetTx || isWethTx) {
+            console.log(`=== ${isWethTx ? 'WETH' : 'TARGET'} TX DEBUG ===`);
+            console.log('  hash:', hash.slice(0,15));
+            console.log('  selector:', selector);
+            console.log('  fnName:', fnName);
+            console.log('  value (PLS):', value);
+            console.log('  tokensOut:', tokensOut.map(t => ({ 
+              sym: t.tokenSymbol, 
+              value: t.value,
+              decimals: t.tokenDecimal,
+              to: t.to?.slice(0,10)
+            })));
+            console.log('  tokensIn:', tokensIn.map(t => ({ 
+              sym: t.tokenSymbol, 
+              value: t.value, 
+              decimals: t.tokenDecimal,
+              from: t.from?.slice(0,10),
+              calculated: Number(t.value) / Math.pow(10, Number(t.tokenDecimal) || 18)
+            })));
+          }
+          
           if (isTargetTx) {
             console.log('=== TARGET TX DEBUG ===');
             console.log('  ptgcBurn?', !!ptgcBurn);
