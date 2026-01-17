@@ -3927,6 +3927,7 @@
       );
     };
     
+    // DAO Ledger Page - Hidden Feature
     // Disclaimer Modal Component
     const DisclaimerModal=({onAccept})=>{
       return(
@@ -3991,8 +3992,27 @@
         return<DisclaimerModal onAccept={handleAcceptDisclaimer}/>;
       }
       
-      if(view==='dashboard'&&token)return<Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)}/>;
-      return<Home onSelect={t=>{setToken(t);setView('dashboard')}}/>;
+      // Hidden dot in top-right corner to access ledger (links to separate page)
+      const HiddenDot = () => (
+        <a
+          href="ledger.html"
+          className="fixed top-3 right-3 w-2 h-2 rounded-full bg-white/[0.03] hover:bg-white/20 cursor-pointer transition-colors z-[200] block"
+          title=""
+        />
+      );
+      
+      if(view==='dashboard'&&token)return(
+        <>
+          <HiddenDot />
+          <Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)}/>
+        </>
+      );
+      return(
+        <>
+          <HiddenDot />
+          <Home onSelect={t=>{setToken(t);setView('dashboard')}}/>
+        </>
+      );
     };
     
     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
