@@ -50,6 +50,7 @@
       '0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b': { symbol: 'USDC', name: 'USD Coin', decimals: 6 },
       '0xefaeee334f0fd1712f9a8cc375f427d9cdd40d73': { symbol: 'USDT', name: 'Tether', decimals: 6 },
       '0x6b175474e89094c44da98b954eedeac495271d0f': { symbol: 'DAI', name: 'DAI', decimals: 18 },
+      '0x39207d2e2feef178fbda8083914554c59d9f8c00': { symbol: 'UNITY', name: 'Unity', decimals: 18 },
     };
     
     // Known DEX routers
@@ -84,11 +85,11 @@
       // Both DAO wallets
       const DAO_WALLETS = [WALLET1, WALLET2];
       
-      // Generate month options (last 24 months for historical data)
+      // Generate month options (current + past 6 months)
       useEffect(() => {
         const months = [];
         const now = new Date();
-        for (let i = 0; i < 24; i++) {
+        for (let i = 0; i < 7; i++) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           months.push({
             value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
@@ -327,6 +328,11 @@
           const isApproveFn = fnName.includes('approve') || selector === '095ea7b3';
           const isSwapFn = fnName.includes('swap') || ['38ed1739', '7ff36ab5', '18cbafe5', '8803dbee', 'fb3bdb41', '4a25d94a', '5c11d795', 'b6f9de95', '791ac947'].includes(selector);
           
+          // Skip approve transactions entirely
+          if (isApproveFn) {
+            return;
+          }
+          
           // 1. BURN
           if (ptgcBurn) {
             type = 'burn';
@@ -406,28 +412,50 @@
           else if (lpTokenReceived || isAddLiquidityFn || tokensOut.length >= 2) {
             type = 'lp_add';
             icon = '💧';
-            const tokens = tokensOut.map(t => {
-              const sym = KNOWN_TOKENS[t.contractAddress.toLowerCase()]?.symbol || t.tokenSymbol || 'Unknown';
-              const dec = KNOWN_TOKENS[t.contractAddress.toLowerCase()]?.decimals || Number(t.tokenDecimal) || 18;
+            
+            // Dedupe tokens by contract address and aggregate amounts
+            const tokenMap = new Map();
+            tokensOut.forEach(t => {
+              const addr = t.contractAddress.toLowerCase();
+              const sym = KNOWN_TOKENS[addr]?.symbol || t.tokenSymbol || 'Unknown';
+              const dec = KNOWN_TOKENS[addr]?.decimals || Number(t.tokenDecimal) || 18;
               const amt = Number(t.value) / Math.pow(10, dec);
-              return { sym, amt };
+              
+              if (tokenMap.has(addr)) {
+                tokenMap.get(addr).amt += amt;
+              } else {
+                tokenMap.set(addr, { sym, amt, addr });
+              }
             });
+            
+            const tokens = Array.from(tokenMap.values());
             const tokenStr = tokens.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            
             if (value > 0 && tokens.length > 0) {
               description = `Added LP: ${fmtAbbr(value)} PLS + ${tokenStr}`;
+              amount = value;
+              amountSymbol = 'PLS';
+            } else if (value > 0 && tokens.length === 0) {
+              // addLiquidityETH with PLS - check tokensIn for the other token
+              const otherToken = tokensIn.find(t => !isLPToken(t));
+              if (otherToken) {
+                const otherSym = KNOWN_TOKENS[otherToken.contractAddress.toLowerCase()]?.symbol || otherToken.tokenSymbol || 'Token';
+                const otherDec = KNOWN_TOKENS[otherToken.contractAddress.toLowerCase()]?.decimals || Number(otherToken.tokenDecimal) || 18;
+                const otherAmt = Number(otherToken.value) / Math.pow(10, otherDec);
+                description = `Added LP: ${fmtAbbr(value)} PLS + ${fmtAbbr(otherAmt)} ${otherSym}`;
+              } else {
+                description = `Added LP: ${fmtAbbr(value)} PLS + tokens`;
+              }
               amount = value;
               amountSymbol = 'PLS';
             } else if (tokens.length > 0) {
               description = `Added LP: ${tokenStr}`;
               amount = tokens[0]?.amt || 0;
               amountSymbol = tokens[0]?.sym || '';
-            } else if (value > 0) {
-              description = `Added LP: ${fmtAbbr(value)} PLS + tokens`;
-              amount = value;
-              amountSymbol = 'PLS';
             } else {
               description = 'Added Liquidity';
             }
+            
             details = [];
             if (value > 0) details.push({ label: 'PLS', value: fmtAbbr(value) });
             tokens.forEach(t => details.push({ label: t.sym, value: fmtAbbr(t.amt) }));
@@ -697,7 +725,7 @@
             
             {/* Month Selector */}
             <div className="flex justify-center gap-2 mb-6 flex-wrap">
-              {availableMonths.slice(0, 12).map(m => (
+              {availableMonths.map(m => (
                 <button
                   key={m.value}
                   onClick={() => { setSelectedMonth(m.value); setFilter('all'); }}
