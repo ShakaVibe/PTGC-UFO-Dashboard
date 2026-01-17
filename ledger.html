@@ -37,7 +37,7 @@
     
     const DAO_TREASURY_WALLET = '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1';
     
-    // Known token addresses for labeling
+    // Known token addresses - used as fallback only when API returns no symbol
     const KNOWN_TOKENS = {
       '0xa1077a294dde1b09bb078844df40758a5d0f9a27': { symbol: 'WPLS', name: 'Wrapped PLS', decimals: 18 },
       '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c': { symbol: 'WETH', name: 'Wrapped ETH', decimals: 18 },
@@ -51,6 +51,23 @@
       '0xefaeee334f0fd1712f9a8cc375f427d9cdd40d73': { symbol: 'USDT', name: 'Tether', decimals: 6 },
       '0x6b175474e89094c44da98b954eedeac495271d0f': { symbol: 'DAI', name: 'DAI', decimals: 18 },
       '0x39207d2e2feef178fbda8083914554c59d9f8c00': { symbol: 'UNITY', name: 'Unity', decimals: 18 },
+    };
+    
+    // Helper to get token symbol - prioritize API data over known tokens
+    const getTokenSymbol = (t) => {
+      if (t.tokenSymbol && t.tokenSymbol !== 'Unknown' && t.tokenSymbol.length > 0) {
+        return t.tokenSymbol;
+      }
+      const known = KNOWN_TOKENS[t.contractAddress?.toLowerCase()];
+      return known?.symbol || 'Unknown';
+    };
+    
+    const getTokenDecimals = (t) => {
+      if (t.tokenDecimal && Number(t.tokenDecimal) > 0) {
+        return Number(t.tokenDecimal);
+      }
+      const known = KNOWN_TOKENS[t.contractAddress?.toLowerCase()];
+      return known?.decimals || 18;
     };
     
     // Known DEX routers
@@ -233,12 +250,50 @@
         
         console.log(`Month ${selectedMonth}: ${outgoingTx.length} outgoing txns`);
         
+        // Debug: Look for specific known LP transaction
+        const targetHash = '0xf2f20be60c303d784403d08a4f3d922c81d67b867c30d8890d55a7e47d1551be'.toLowerCase();
+        const targetInTxns = transactions.find(tx => tx.hash?.toLowerCase() === targetHash);
+        const targetTokenTxns = tokenTxns.filter(tx => tx.hash?.toLowerCase() === targetHash);
+        console.log('DEBUG - Looking for LP tx:', targetHash.slice(0,15));
+        console.log('  Found in transactions?', !!targetInTxns, targetInTxns ? { from: targetInTxns.from?.slice(0,10), to: targetInTxns.to?.slice(0,10), timestamp: targetInTxns.timeStamp } : null);
+        console.log('  Found in token transfers?', targetTokenTxns.length, targetTokenTxns.map(t => ({ sym: t.tokenSymbol, from: t.from?.slice(0,10), to: t.to?.slice(0,10) })));
+        
+        // Debug: Log some sample token transfers
+        const sampleTokens = tokenTxns.slice(0, 5);
+        console.log('Sample token transfers:', sampleTokens.map(t => ({
+          hash: t.hash?.slice(0,10),
+          symbol: t.tokenSymbol,
+          from: t.from?.slice(0,10),
+          to: t.to?.slice(0,10)
+        })));
+        
         const tokenTxMap = new Map();
         tokenTxns.forEach(ttx => {
           const hash = ttx.hash.toLowerCase();
           if (!tokenTxMap.has(hash)) tokenTxMap.set(hash, []);
           tokenTxMap.get(hash).push(ttx);
         });
+        
+        console.log(`Built token map with ${tokenTxMap.size} unique hashes`);
+        
+        // Check if target is in the map
+        console.log('  Target in tokenTxMap?', tokenTxMap.has(targetHash), tokenTxMap.get(targetHash)?.length);
+        
+        // Check if target made it to outgoingTx
+        const targetInOutgoing = outgoingTx.find(tx => tx.hash?.toLowerCase() === targetHash);
+        console.log('  Target in outgoingTx?', !!targetInOutgoing);
+        if (targetInTxns && !targetInOutgoing) {
+          console.log('  WHY FILTERED OUT:', {
+            from: targetInTxns.from?.toLowerCase(),
+            isOurWallet: DAO_WALLETS.includes(targetInTxns.from?.toLowerCase()),
+            timestamp: Number(targetInTxns.timeStamp),
+            startOfMonth,
+            endOfMonth,
+            inRange: Number(targetInTxns.timeStamp) >= startOfMonth && Number(targetInTxns.timeStamp) <= endOfMonth,
+            status: targetInTxns.txreceipt_status,
+            isError: targetInTxns.isError
+          });
+        }
         
         const processed = [];
         const seenHashes = new Set();
@@ -271,7 +326,8 @@
           const isLPToken = (t) => {
             const sym = (t.tokenSymbol || '').toUpperCase();
             const name = (t.tokenName || '').toLowerCase();
-            return sym.includes('LP') || sym === 'PLP' || sym.includes('UNI-V2') || name.includes('liquidity');
+            return sym.includes('LP') || sym.includes('PLP') || sym.includes('UNI-V2') || 
+                   name.includes('liquidity') || name.includes('lp token') || name.includes('pulsex');
           };
           
           // Check for PTGC burn (sent to dead address)
@@ -327,6 +383,20 @@
           const isRemoveLiquidityFn = fnName.includes('removeliquidity') || selector.startsWith('baa2abde') || selector.startsWith('02751cec');
           const isApproveFn = fnName.includes('approve') || selector === '095ea7b3';
           const isSwapFn = fnName.includes('swap') || ['38ed1739', '7ff36ab5', '18cbafe5', '8803dbee', 'fb3bdb41', '4a25d94a', '5c11d795', 'b6f9de95', '791ac947'].includes(selector);
+          
+          // Debug: Log potential LP transactions
+          if (tokensOut.length >= 2 || tokensIn.length >= 2 || isAddLiquidityFn || lpTokenReceived) {
+            console.log('Potential LP tx:', {
+              hash: hash.slice(0,10),
+              selector,
+              fnName: fnName.slice(0,30),
+              isAddLiquidityFn,
+              tokensOut: tokensOut.map(t => ({ sym: t.tokenSymbol, addr: t.contractAddress?.slice(0,10) })),
+              tokensIn: tokensIn.map(t => ({ sym: t.tokenSymbol, addr: t.contractAddress?.slice(0,10) })),
+              lpTokenReceived: lpTokenReceived ? { sym: lpTokenReceived.tokenSymbol } : null,
+              value
+            });
+          }
           
           // Skip approve transactions entirely
           if (isApproveFn) {
@@ -888,17 +958,17 @@
                   return (
                     <div 
                       key={tx.hash}
-                      className={`bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 hover:bg-blue-500/10 transition-colors ${
+                      className={`bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 hover:bg-blue-500/10 transition-colors ${
                         tx.type === 'burn' ? 'border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/10' : 
                         tx.type === 'ptgc_buy' ? 'border-[#D9CA5D]/30 bg-[#D9CA5D]/5 hover:bg-[#D9CA5D]/10' : 
                         tx.type === 'lp_add' ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10' : 
                         tx.type === 'lp_remove' ? 'border-purple-500/30 bg-purple-500/5 hover:bg-purple-500/10' : ''
                       }`}
                     >
-                      <div className="flex items-start gap-4">
-                        <div className="text-2xl">{tx.icon}</div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-xl">{tx.icon}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className={`font-semibold ${
                               tx.type === 'burn' ? 'text-orange-300' : 
                               tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]' : 
@@ -908,39 +978,41 @@
                               {tx.description || 'Transaction'}
                             </span>
                             {tx.isWallet2 && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">W2</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">W2</span>
                             )}
+                            <span className="text-white/20">•</span>
+                            <span className={`text-sm ${
+                              tx.type === 'burn' ? 'text-orange-300/40' : 
+                              tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/40' : 
+                              tx.type === 'lp_add' ? 'text-green-300/40' : 
+                              tx.type === 'lp_remove' ? 'text-purple-300/40' : 'text-blue-300/40'
+                            }`}>
+                              {formatDate(tx.timestamp)}
+                            </span>
+                            {tx.details.length > 0 && tx.details.map((d, j) => {
+                              const isAddress = d.value && (d.value.includes('0x') || d.value.includes('...'));
+                              const fullAddress = isAddress && d.fullValue ? d.fullValue : null;
+                              
+                              return (
+                                <span key={j} className={`text-xs px-2 py-0.5 rounded bg-black/30 inline-flex items-center ${
+                                  tx.type === 'burn' ? 'text-orange-200/60' : 
+                                  tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/60' : 
+                                  tx.type === 'lp_add' ? 'text-green-200/60' : 
+                                  tx.type === 'lp_remove' ? 'text-purple-200/60' : 'text-blue-200/60'
+                                }`}>
+                                  <span className={
+                                    tx.type === 'burn' ? 'text-orange-300/40' : 
+                                    tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/40' : 
+                                    tx.type === 'lp_add' ? 'text-green-300/40' : 
+                                    tx.type === 'lp_remove' ? 'text-purple-300/40' : 'text-blue-300/40'
+                                  }>{d.label}:</span> {d.value}
+                                  {fullAddress && <CopyBtn text={fullAddress} small />}
+                                </span>
+                              );
+                            })}
                           </div>
-                          <div className="text-blue-300/40 text-sm">
-                            {formatDate(tx.timestamp)}
-                          </div>
-                          {tx.details.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {tx.details.map((d, j) => {
-                                const isAddress = d.value && (d.value.includes('0x') || d.value.includes('...'));
-                                const fullAddress = isAddress && d.fullValue ? d.fullValue : null;
-                                
-                                return (
-                                  <span key={j} className={`text-xs px-2 py-1 rounded bg-black/30 inline-flex items-center ${
-                                    tx.type === 'burn' ? 'text-orange-200/60' : 
-                                    tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/60' : 
-                                    tx.type === 'lp_add' ? 'text-green-200/60' : 
-                                    tx.type === 'lp_remove' ? 'text-purple-200/60' : 'text-blue-200/60'
-                                  }`}>
-                                    <span className={
-                                      tx.type === 'burn' ? 'text-orange-300/40' : 
-                                      tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/40' : 
-                                      tx.type === 'lp_add' ? 'text-green-300/40' : 
-                                      tx.type === 'lp_remove' ? 'text-purple-300/40' : 'text-blue-300/40'
-                                    }>{d.label}:</span> {d.value}
-                                    {fullAddress && <CopyBtn text={fullAddress} small />}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
                         </div>
-                        <div className="text-right flex flex-col items-end gap-1">
+                        <div className="flex flex-col items-end gap-1 shrink-0">
                           <a 
                             href={`https://scan.pulsechain.com/tx/${tx.hash}`}
                             target="_blank"
