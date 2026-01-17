@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DAO Treasury Ledger - The Grays</title>
+  <link rel="icon" type="image/png" href="07_Two_Color_Alien_Transparent.png">
+  <link rel="apple-touch-icon" href="07_Two_Color_Alien_Transparent.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
+    .font-orbitron{font-family:'Orbitron',monospace}
+    ::-webkit-scrollbar{width:8px}
+    ::-webkit-scrollbar-track{background:#1a1a1a}
+    ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const {useState,useEffect,useMemo}=React;
+    
+    // Format number with abbreviations
+    const fmtAbbr=n=>{
+      if(n==null||isNaN(n))return'\u2014';
+      const num=Number(n);
+      if(num>=1e12)return(num/1e12).toFixed(2)+'T';
+      if(num>=1e9)return(num/1e9).toFixed(2)+'B';
+      if(num>=1e6)return(num/1e6).toFixed(2)+'M';
+      if(num>=1e3)return(num/1e3).toFixed(2)+'K';
+      return Math.floor(num).toLocaleString('en-US');
+    };
+    
+    const DAO_TREASURY_WALLET = '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1';
+    
+    // Known token addresses for labeling
+    const KNOWN_TOKENS = {
+      '0xa1077a294dde1b09bb078844df40758a5d0f9a27': { symbol: 'WPLS', name: 'Wrapped PLS', decimals: 18 },
+      '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c': { symbol: 'WETH', name: 'Wrapped ETH', decimals: 18 },
+      '0x94534eeee131840b1c0f61847c572228bdfdde93': { symbol: 'PTGC', name: 'PTGC', decimals: 18 },
+      '0x456548a9b56efbbd89ca0309edd17a9e20b04018': { symbol: 'UFO', name: 'UFO', decimals: 18 },
+      '0x95b303987a60c71504d99aa1b13b4da07b0790ab': { symbol: 'PLSX', name: 'PulseX', decimals: 18 },
+      '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d': { symbol: 'INC', name: 'Incentive', decimals: 18 },
+      '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39': { symbol: 'HEX', name: 'HEX', decimals: 8 },
+      '0x57fde0a71132198bbec939b98976993d8d89d225': { symbol: 'EHEX', name: 'eHEX', decimals: 8 },
+      '0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b': { symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+      '0xefaeee334f0fd1712f9a8cc375f427d9cdd40d73': { symbol: 'USDT', name: 'Tether', decimals: 6 },
+      '0x6b175474e89094c44da98b954eedeac495271d0f': { symbol: 'DAI', name: 'DAI', decimals: 18 },
+    };
+    
+    // Known DEX routers
+    const KNOWN_ROUTERS = {
+      '0x165c3410fc91b0e65d87e89d8bcadd85c9e6dbf1': 'PulseX V1 Router',
+      '0x98bf93ebf5c380c0e6ae8e192a7e2ae08edacc3a': 'PulseX V2 Router',
+      '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
+    };
+    
+    // Data file paths
+    const DATA_BASE_URL = 'data/';
+    
+    const DAOLedger = () => {
+      const [transactions, setTransactions] = useState([]);
+      const [tokenTxns, setTokenTxns] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [dataSource, setDataSource] = useState('');
+      const [lastUpdated, setLastUpdated] = useState(null);
+      const [selectedMonth, setSelectedMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      });
+      const [availableMonths, setAvailableMonths] = useState([]);
+      const [filter, setFilter] = useState('all');
+      
+      const DEAD_ADDRESS = '0x0000000000000000000000000000000000000369';
+      const PTGC_ADDRESS = '0x94534eeee131840b1c0f61847c572228bdfdde93';
+      const WALLET1 = DAO_TREASURY_WALLET.toLowerCase();
+      const WALLET2 = '0x440773b5104a102c00ef26979a5c897155336a34'.toLowerCase();
+      
+      // Both DAO wallets
+      const DAO_WALLETS = [WALLET1, WALLET2];
+      
+      // Generate month options (last 24 months for historical data)
+      useEffect(() => {
+        const months = [];
+        const now = new Date();
+        for (let i = 0; i < 24; i++) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          months.push({
+            value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+            label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+            shortLabel: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+          });
+        }
+        setAvailableMonths(months);
+      }, []);
+      
+      // Load transactions from pre-fetched JSON files
+      useEffect(() => {
+        const loadFromFiles = async () => {
+          setLoading(true);
+          setError(null);
+          
+          try {
+            console.log('Loading treasury data from pre-fetched files...');
+            
+            // Try to load from JSON data files
+            const [w1TxnRes, w2TxnRes, w1TokenRes, w2TokenRes, summaryRes] = await Promise.all([
+              fetch(`${DATA_BASE_URL}treasury-wallet1-txns.json`),
+              fetch(`${DATA_BASE_URL}treasury-wallet2-txns.json`),
+              fetch(`${DATA_BASE_URL}treasury-wallet1-tokens.json`),
+              fetch(`${DATA_BASE_URL}treasury-wallet2-tokens.json`),
+              fetch(`${DATA_BASE_URL}treasury-summary.json`)
+            ]);
+            
+            // Check if any failed
+            if (!w1TxnRes.ok || !w2TxnRes.ok || !w1TokenRes.ok || !w2TokenRes.ok) {
+              throw new Error('Data files not found - falling back to API');
+            }
+            
+            const [w1TxnData, w2TxnData, w1TokenData, w2TokenData, summaryData] = await Promise.all([
+              w1TxnRes.json(),
+              w2TxnRes.json(),
+              w1TokenRes.json(),
+              w2TokenRes.json(),
+              summaryRes.ok ? summaryRes.json() : null
+            ]);
+            
+            // Combine transactions from both wallets
+            const allNormalTx = [
+              ...(w1TxnData.transactions || []),
+              ...(w2TxnData.transactions || [])
+            ];
+            
+            const allTokenTx = [
+              ...(w1TokenData.transfers || []),
+              ...(w2TokenData.transfers || [])
+            ];
+            
+            console.log(`Loaded ${allNormalTx.length} normal txns, ${allTokenTx.length} token txns from files`);
+            
+            setTransactions(allNormalTx);
+            setTokenTxns(allTokenTx);
+            setDataSource('Pre-fetched (Moralis)');
+            setLastUpdated(summaryData?.lastUpdated || w1TxnData.lastUpdated);
+            
+          } catch (fileError) {
+            console.log('File load failed, falling back to API:', fileError.message);
+            
+            // Fallback to PulseScan API
+            try {
+              await loadFromAPI();
+            } catch (apiError) {
+              console.error('API load also failed:', apiError);
+              setError('Failed to load transactions. Please try again later.');
+            }
+          } finally {
+            setLoading(false);
+          }
+        };
+        
+        const loadFromAPI = async () => {
+          const wallet1 = DAO_TREASURY_WALLET;
+          const wallet2 = '0x440773B5104a102c00EF26979a5c897155336A34';
+          
+          // Helper to fetch ALL pages of data from V1 API
+          const fetchAllPages = async (url) => {
+            const allResults = [];
+            let page = 1;
+            const pageSize = 10000;
+            
+            while (true) {
+              const pageUrl = `${url}&page=${page}&offset=${pageSize}`;
+              const res = await fetch(pageUrl);
+              const data = await res.json();
+              const results = data.result || [];
+              
+              if (results.length === 0) break;
+              allResults.push(...results);
+              console.log(`Page ${page}: fetched ${results.length} items (total: ${allResults.length})`);
+              if (results.length < pageSize) break;
+              page++;
+            }
+            
+            return allResults;
+          };
+          
+          const baseUrl1Tx = `https://api.scan.pulsechain.com/api?module=account&action=txlist&address=${wallet1}&startblock=0&endblock=99999999&sort=desc`;
+          const baseUrl2Tx = `https://api.scan.pulsechain.com/api?module=account&action=txlist&address=${wallet2}&startblock=0&endblock=99999999&sort=desc`;
+          const baseUrl1Token = `https://api.scan.pulsechain.com/api?module=account&action=tokentx&address=${wallet1}&startblock=0&endblock=99999999&sort=desc`;
+          const baseUrl2Token = `https://api.scan.pulsechain.com/api?module=account&action=tokentx&address=${wallet2}&startblock=0&endblock=99999999&sort=desc`;
+          
+          console.log('Fetching from PulseScan API (fallback)...');
+          
+          const [normalTx1, normalTx2, tokenTx1, tokenTx2] = await Promise.all([
+            fetchAllPages(baseUrl1Tx),
+            fetchAllPages(baseUrl2Tx),
+            fetchAllPages(baseUrl1Token),
+            fetchAllPages(baseUrl2Token)
+          ]);
+          
+          console.log(`Loaded ${normalTx1.length} + ${normalTx2.length} normal txns, ${tokenTx1.length} + ${tokenTx2.length} token txns from API`);
+          
+          setTransactions([...normalTx1, ...normalTx2]);
+          setTokenTxns([...tokenTx1, ...tokenTx2]);
+          setDataSource('Live API (PulseScan)');
+          setLastUpdated(new Date().toISOString());
+        };
+        
+        loadFromFiles();
+      }, []);
+      
+      // Process transactions for the selected month
+      const processedTxns = useMemo(() => {
+        if (!transactions.length && !tokenTxns.length) return [];
+        
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const startOfMonth = new Date(year, month - 1, 1).getTime() / 1000;
+        const endOfMonth = new Date(year, month, 0, 23, 59, 59).getTime() / 1000;
+        
+        // Get outgoing transactions only (where from === one of our wallets) AND successful only
+        const outgoingTx = transactions.filter(tx => 
+          DAO_WALLETS.includes(tx.from?.toLowerCase()) &&
+          Number(tx.timeStamp) >= startOfMonth &&
+          Number(tx.timeStamp) <= endOfMonth &&
+          (tx.txreceipt_status === '1' || tx.isError === '0')
+        );
+        
+        console.log(`Month ${selectedMonth}: ${outgoingTx.length} outgoing txns`);
+        
+        const tokenTxMap = new Map();
+        tokenTxns.forEach(ttx => {
+          const hash = ttx.hash.toLowerCase();
+          if (!tokenTxMap.has(hash)) tokenTxMap.set(hash, []);
+          tokenTxMap.get(hash).push(ttx);
+        });
+        
+        const processed = [];
+        const seenHashes = new Set();
+        
+        // Process outgoing transactions
+        outgoingTx.forEach(tx => {
+          const hash = tx.hash.toLowerCase();
+          if (seenHashes.has(hash)) return;
+          seenHashes.add(hash);
+          
+          const relatedTokenTx = tokenTxMap.get(hash) || [];
+          const timestamp = new Date(Number(tx.timeStamp) * 1000);
+          const toAddr = tx.to?.toLowerCase() || '';
+          const fromAddr = tx.from.toLowerCase();
+          const value = Number(tx.value) / 1e18;
+          const isWallet2 = fromAddr === WALLET2;
+          
+          let type = 'transfer';
+          let description = '';
+          let details = [];
+          let icon = '📤';
+          let amount = 0;
+          let amountSymbol = '';
+          
+          const isRouter = Object.keys(KNOWN_ROUTERS).some(r => r.toLowerCase() === toAddr);
+          const tokensOut = relatedTokenTx.filter(t => DAO_WALLETS.includes(t.from.toLowerCase()));
+          const tokensIn = relatedTokenTx.filter(t => DAO_WALLETS.includes(t.to.toLowerCase()));
+          
+          // Helper to check if token is LP token
+          const isLPToken = (t) => {
+            const sym = (t.tokenSymbol || '').toUpperCase();
+            const name = (t.tokenName || '').toLowerCase();
+            return sym.includes('LP') || sym === 'PLP' || sym.includes('UNI-V2') || name.includes('liquidity');
+          };
+          
+          // Check for PTGC burn (sent to dead address)
+          const ptgcBurn = tokensOut.find(t => 
+            t.contractAddress.toLowerCase() === PTGC_ADDRESS && 
+            t.to.toLowerCase() === DEAD_ADDRESS
+          );
+          
+          // Check for any token burn (sent to dead address)
+          const anyBurn = tokensOut.find(t => t.to.toLowerCase() === DEAD_ADDRESS);
+          
+          // Check if we received PTGC (bought PTGC)
+          const ptgcReceived = tokensIn.find(t => 
+            t.contractAddress.toLowerCase() === PTGC_ADDRESS
+          );
+          
+          // Check for LP token received (indicates LP add)
+          const lpTokenReceived = tokensIn.find(t => isLPToken(t));
+          
+          // Check for LP token SENT (indicates LP remove)
+          const lpTokenSent = tokensOut.find(t => isLPToken(t));
+          
+          // Function name detection
+          const FUNCTION_SELECTORS = {
+            'e8e33700': 'addLiquidity',
+            'f305d719': 'addLiquidityETH',
+            '095ea7b3': 'approve',
+            '38ed1739': 'swapExactTokensForTokens',
+            '7ff36ab5': 'swapExactETHForTokens',
+            '18cbafe5': 'swapExactTokensForETH',
+            '8803dbee': 'swapTokensForExactTokens',
+            'fb3bdb41': 'swapETHForExactTokens',
+            '4a25d94a': 'swapTokensForExactETH',
+            '5c11d795': 'swapExactTokensForTokensSupportingFeeOnTransferTokens',
+            'b6f9de95': 'swapExactETHForTokensSupportingFeeOnTransferTokens',
+            '791ac947': 'swapExactTokensForETHSupportingFeeOnTransferTokens',
+            'baa2abde': 'removeLiquidity',
+            '02751cec': 'removeLiquidityETH',
+            'af2979eb': 'removeLiquidityETHSupportingFeeOnTransferTokens',
+            'ded9382a': 'removeLiquidityETHWithPermit',
+            '5b0d5984': 'removeLiquidityETHWithPermitSupportingFeeOnTransferTokens',
+            '2195995c': 'removeLiquidityWithPermit',
+            'a9059cbb': 'transfer',
+            '23b872dd': 'transferFrom'
+          };
+          
+          const inputData = (tx.input || '').toLowerCase();
+          const selector = inputData.startsWith('0x') ? inputData.slice(2, 10) : inputData.slice(0, 8);
+          const decodedFnName = FUNCTION_SELECTORS[selector] || '';
+          const fnName = (tx.functionName || tx.method_label || decodedFnName || '').toLowerCase();
+          
+          const isAddLiquidityFn = fnName.includes('addliquidity') || selector === 'e8e33700' || selector === 'f305d719';
+          const isRemoveLiquidityFn = fnName.includes('removeliquidity') || selector.startsWith('baa2abde') || selector.startsWith('02751cec');
+          const isApproveFn = fnName.includes('approve') || selector === '095ea7b3';
+          const isSwapFn = fnName.includes('swap') || ['38ed1739', '7ff36ab5', '18cbafe5', '8803dbee', 'fb3bdb41', '4a25d94a', '5c11d795', 'b6f9de95', '791ac947'].includes(selector);
+          
+          // 1. BURN
+          if (ptgcBurn) {
+            type = 'burn';
+            icon = '🔥';
+            const dec = 18;
+            const amt = Number(ptgcBurn.value) / Math.pow(10, dec);
+            amount = amt;
+            amountSymbol = 'PTGC';
+            description = `Burned ${fmtAbbr(amt)} PTGC`;
+            details = [
+              { label: 'Amount', value: `${fmtAbbr(amt)} PTGC` },
+              { label: 'To', value: '🔥 Dead Address' }
+            ];
+          } else if (anyBurn && !ptgcBurn) {
+            type = 'burn';
+            icon = '🔥';
+            const sym = KNOWN_TOKENS[anyBurn.contractAddress.toLowerCase()]?.symbol || anyBurn.tokenSymbol || 'Token';
+            const dec = KNOWN_TOKENS[anyBurn.contractAddress.toLowerCase()]?.decimals || Number(anyBurn.tokenDecimal) || 18;
+            const amt = Number(anyBurn.value) / Math.pow(10, dec);
+            amount = amt;
+            amountSymbol = sym;
+            description = `Burned ${fmtAbbr(amt)} ${sym}`;
+            details = [
+              { label: 'Amount', value: `${fmtAbbr(amt)} ${sym}` },
+              { label: 'To', value: '🔥 Dead Address' }
+            ];
+          } 
+          // 2. LP REMOVE
+          else if ((lpTokenSent && tokensIn.length > 0) || isRemoveLiquidityFn) {
+            type = 'lp_remove';
+            icon = '💧';
+            const received = tokensIn.filter(t => !isLPToken(t)).map(t => {
+              const sym = t.tokenSymbol || 'Unknown';
+              const dec = Number(t.tokenDecimal) || 18;
+              const amt = Number(t.value) / Math.pow(10, dec);
+              return { sym, amt };
+            });
+            const receivedStr = received.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            description = `Removed LP → ${receivedStr || 'tokens'}`;
+            if (lpTokenSent) {
+              const lpDec = Number(lpTokenSent.tokenDecimal) || 18;
+              const lpAmt = Number(lpTokenSent.value) / Math.pow(10, lpDec);
+              amount = lpAmt;
+              amountSymbol = lpTokenSent.tokenSymbol || 'LP';
+              details = [{ label: 'LP Burned', value: `${fmtAbbr(lpAmt)} ${lpTokenSent.tokenSymbol || 'LP'}` }];
+            } else {
+              details = [];
+            }
+            received.forEach(t => details.push({ label: 'Received', value: `${fmtAbbr(t.amt)} ${t.sym}` }));
+          }
+          // 3. PTGC BUY
+          else if (ptgcReceived && (tokensOut.length > 0 || value > 0)) {
+            type = 'ptgc_buy';
+            icon = '💰';
+            const inAmt = Number(ptgcReceived.value) / Math.pow(10, 18);
+            amount = inAmt;
+            amountSymbol = 'PTGC';
+            if (tokensOut.length > 0) {
+              const outToken = tokensOut[0];
+              const outSymbol = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.symbol || outToken.tokenSymbol || 'Unknown';
+              const outDecimals = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.decimals || Number(outToken.tokenDecimal) || 18;
+              const outAmt = Number(outToken.value) / Math.pow(10, outDecimals);
+              description = `Bought ${fmtAbbr(inAmt)} PTGC`;
+              details = [
+                { label: 'Spent', value: `${fmtAbbr(outAmt)} ${outSymbol}` },
+                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` }
+              ];
+            } else {
+              description = `Bought ${fmtAbbr(inAmt)} PTGC`;
+              details = [
+                { label: 'Spent', value: `${fmtAbbr(value)} PLS` },
+                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` }
+              ];
+            }
+          } 
+          // 4. LP ADD
+          else if (lpTokenReceived || isAddLiquidityFn || tokensOut.length >= 2) {
+            type = 'lp_add';
+            icon = '💧';
+            const tokens = tokensOut.map(t => {
+              const sym = KNOWN_TOKENS[t.contractAddress.toLowerCase()]?.symbol || t.tokenSymbol || 'Unknown';
+              const dec = KNOWN_TOKENS[t.contractAddress.toLowerCase()]?.decimals || Number(t.tokenDecimal) || 18;
+              const amt = Number(t.value) / Math.pow(10, dec);
+              return { sym, amt };
+            });
+            const tokenStr = tokens.map(t => `${fmtAbbr(t.amt)} ${t.sym}`).join(' + ');
+            if (value > 0 && tokens.length > 0) {
+              description = `Added LP: ${fmtAbbr(value)} PLS + ${tokenStr}`;
+              amount = value;
+              amountSymbol = 'PLS';
+            } else if (tokens.length > 0) {
+              description = `Added LP: ${tokenStr}`;
+              amount = tokens[0]?.amt || 0;
+              amountSymbol = tokens[0]?.sym || '';
+            } else if (value > 0) {
+              description = `Added LP: ${fmtAbbr(value)} PLS + tokens`;
+              amount = value;
+              amountSymbol = 'PLS';
+            } else {
+              description = 'Added Liquidity';
+            }
+            details = [];
+            if (value > 0) details.push({ label: 'PLS', value: fmtAbbr(value) });
+            tokens.forEach(t => details.push({ label: t.sym, value: fmtAbbr(t.amt) }));
+            if (lpTokenReceived) details.push({ label: 'LP Token', value: lpTokenReceived.tokenSymbol || 'LP' });
+          } 
+          // 5. SWAP
+          else if (tokensOut.length > 0 && tokensIn.length > 0) {
+            type = 'swap';
+            icon = '🔄';
+            const outToken = tokensOut[0];
+            const inToken = tokensIn[0];
+            const outSymbol = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.symbol || outToken.tokenSymbol || 'Unknown';
+            const inSymbol = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.symbol || inToken.tokenSymbol || 'Unknown';
+            const outDecimals = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.decimals || Number(outToken.tokenDecimal) || 18;
+            const inDecimals = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.decimals || Number(inToken.tokenDecimal) || 18;
+            const outAmt = Number(outToken.value) / Math.pow(10, outDecimals);
+            const inAmt = Number(inToken.value) / Math.pow(10, inDecimals);
+            amount = outAmt;
+            amountSymbol = outSymbol;
+            description = `Swapped ${fmtAbbr(outAmt)} ${outSymbol} → ${fmtAbbr(inAmt)} ${inSymbol}`;
+            details = [
+              { label: 'Sent', value: `${fmtAbbr(outAmt)} ${outSymbol}` },
+              { label: 'Received', value: `${fmtAbbr(inAmt)} ${inSymbol}` }
+            ];
+          } 
+          // 6. SWAP/BUY PLS
+          else if (value > 0 && tokensIn.length > 0) {
+            const inToken = tokensIn[0];
+            const inSymbol = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.symbol || inToken.tokenSymbol || 'Unknown';
+            const inDecimals = KNOWN_TOKENS[inToken.contractAddress.toLowerCase()]?.decimals || Number(inToken.tokenDecimal) || 18;
+            const inAmt = Number(inToken.value) / Math.pow(10, inDecimals);
+            
+            if (inToken.contractAddress.toLowerCase() === PTGC_ADDRESS) {
+              type = 'ptgc_buy';
+              icon = '💰';
+              amount = inAmt;
+              amountSymbol = 'PTGC';
+              description = `Bought ${fmtAbbr(inAmt)} PTGC`;
+              details = [
+                { label: 'Spent', value: `${fmtAbbr(value)} PLS` },
+                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` }
+              ];
+            } else {
+              type = 'swap';
+              icon = '🔄';
+              amount = value;
+              amountSymbol = 'PLS';
+              description = `Swapped ${fmtAbbr(value)} PLS → ${fmtAbbr(inAmt)} ${inSymbol}`;
+              details = [
+                { label: 'Sent', value: `${fmtAbbr(value)} PLS` },
+                { label: 'Received', value: `${fmtAbbr(inAmt)} ${inSymbol}` }
+              ];
+            }
+          } else if (tokensOut.length > 0) {
+            type = 'transfer';
+            icon = '📤';
+            const token = tokensOut[0];
+            const sym = KNOWN_TOKENS[token.contractAddress.toLowerCase()]?.symbol || token.tokenSymbol || 'Unknown';
+            const dec = KNOWN_TOKENS[token.contractAddress.toLowerCase()]?.decimals || Number(token.tokenDecimal) || 18;
+            const amt = Number(token.value) / Math.pow(10, dec);
+            amount = amt;
+            amountSymbol = sym;
+            description = `Sent ${fmtAbbr(amt)} ${sym}`;
+            details = [
+              { label: 'Amount', value: `${fmtAbbr(amt)} ${sym}` },
+              { label: 'To', value: `${token.to.slice(0, 6)}...${token.to.slice(-4)}`, fullValue: token.to }
+            ];
+          } else if (value > 0) {
+            type = 'transfer';
+            icon = '📤';
+            amount = value;
+            amountSymbol = 'PLS';
+            description = `Sent ${fmtAbbr(value)} PLS`;
+            details = [
+              { label: 'Amount', value: `${fmtAbbr(value)} PLS` },
+              { label: 'To', value: `${toAddr.slice(0, 6)}...${toAddr.slice(-4)}`, fullValue: toAddr }
+            ];
+          } else {
+            if (isAddLiquidityFn) {
+              type = 'lp_add';
+              icon = '💧';
+              description = 'Added Liquidity';
+            } else if (isRemoveLiquidityFn) {
+              type = 'lp_remove';
+              icon = '💧';
+              description = 'Removed Liquidity';
+            } else if (isSwapFn) {
+              type = 'swap';
+              icon = '🔄';
+              description = 'Swap';
+            } else {
+              const fnDisplay = fnName || decodedFnName || 'Contract Interaction';
+              type = 'transfer';
+              icon = '📝';
+              description = fnDisplay;
+            }
+            details = [
+              { label: 'Contract', value: `${toAddr.slice(0, 6)}...${toAddr.slice(-4)}`, fullValue: toAddr }
+            ];
+          }
+          
+          // For wallet2, only show PTGC buys, burns, LP adds, and LP removes
+          if (isWallet2 && !['ptgc_buy', 'burn', 'lp_add', 'lp_remove'].includes(type)) {
+            return;
+          }
+          
+          processed.push({
+            hash: tx.hash,
+            timestamp,
+            type,
+            icon,
+            description,
+            details,
+            value,
+            amount,
+            amountSymbol,
+            gasUsed: Number(tx.gasUsed || 0) * Number(tx.gasPrice || 0) / 1e18,
+            status: 'success',
+            to: toAddr,
+            from: fromAddr,
+            isWallet2
+          });
+        });
+        
+        // Also check for PTGC received that might not have outgoing tx
+        tokenTxns.forEach(ttx => {
+          const hash = ttx.hash.toLowerCase();
+          if (seenHashes.has(hash)) return;
+          
+          const timestamp = Number(ttx.timeStamp);
+          if (timestamp < startOfMonth || timestamp > endOfMonth) return;
+          
+          const toAddr = ttx.to.toLowerCase();
+          const fromAddr = ttx.from.toLowerCase();
+          const contractAddr = ttx.contractAddress.toLowerCase();
+          
+          if (DAO_WALLETS.includes(toAddr) && contractAddr === PTGC_ADDRESS) {
+            const isWallet2 = toAddr === WALLET2;
+            const dec = 18;
+            const amt = Number(ttx.value) / Math.pow(10, dec);
+            
+            const isFromRouter = Object.keys(KNOWN_ROUTERS).some(r => r.toLowerCase() === fromAddr);
+            
+            if (isFromRouter || !DAO_WALLETS.includes(fromAddr)) {
+              seenHashes.add(hash);
+              processed.push({
+                hash: ttx.hash,
+                timestamp: new Date(timestamp * 1000),
+                type: 'ptgc_buy',
+                icon: '💰',
+                description: `Received ${fmtAbbr(amt)} PTGC`,
+                details: [
+                  { label: 'Amount', value: `${fmtAbbr(amt)} PTGC` },
+                  { label: 'From', value: `${fromAddr.slice(0, 6)}...${fromAddr.slice(-4)}`, fullValue: fromAddr }
+                ],
+                value: 0,
+                amount: amt,
+                amountSymbol: 'PTGC',
+                gasUsed: 0,
+                status: 'success',
+                to: toAddr,
+                from: fromAddr,
+                isWallet2
+              });
+            }
+          }
+        });
+        
+        return processed.sort((a, b) => b.timestamp - a.timestamp);
+      }, [transactions, tokenTxns, selectedMonth]);
+      
+      // Calculate summary stats
+      const summary = useMemo(() => {
+        const stats = {
+          total: processedTxns.length,
+          swaps: { count: 0 },
+          lpAdds: { count: 0 },
+          lpRemoves: { count: 0 },
+          transfers: { count: 0 },
+          burns: { count: 0, ptgcTotal: 0 },
+          ptgcBuys: { count: 0, ptgcTotal: 0 }
+        };
+        
+        processedTxns.forEach(tx => {
+          if (tx.type === 'swap') {
+            stats.swaps.count++;
+          } else if (tx.type === 'lp_add') {
+            stats.lpAdds.count++;
+          } else if (tx.type === 'lp_remove') {
+            stats.lpRemoves.count++;
+          } else if (tx.type === 'transfer') {
+            stats.transfers.count++;
+          } else if (tx.type === 'burn') {
+            stats.burns.count++;
+            if (tx.amountSymbol === 'PTGC') {
+              stats.burns.ptgcTotal += tx.amount;
+            }
+          } else if (tx.type === 'ptgc_buy') {
+            stats.ptgcBuys.count++;
+            stats.ptgcBuys.ptgcTotal += tx.amount;
+          } else {
+            stats.transfers.count++;
+          }
+        });
+        
+        return stats;
+      }, [processedTxns]);
+      
+      const filteredTxns = useMemo(() => {
+        if (filter === 'all') return processedTxns;
+        return processedTxns.filter(tx => tx.type === filter);
+      }, [processedTxns, filter]);
+      
+      const formatDate = (date) => {
+        return date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+      
+      const formatLastUpdated = (isoString) => {
+        if (!isoString) return 'Unknown';
+        const date = new Date(isoString);
+        return date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+      
+      return (
+        <div className="min-h-screen bg-[#0a0a0a] text-white p-4 md:p-8">
+          <div className="max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <a 
+                href="index.html"
+                className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+              >
+                <span>←</span>
+                <span>Back to Dashboard</span>
+              </a>
+              <div className="text-right">
+                <div className="text-white/30 text-xs font-mono">
+                  2 Wallets Active
+                </div>
+                {dataSource && (
+                  <div className="text-white/20 text-xs">
+                    {dataSource} • Updated {formatLastUpdated(lastUpdated)}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Title */}
+            <div className="text-center mb-8">
+              <h1 className="text-3xl md:text-4xl font-bold font-orbitron text-[#D9CA5D] mb-2">
+                DAO Treasury Ledger
+              </h1>
+              <p className="text-white/40">
+                Transaction history for PTGC DAO wallets
+              </p>
+            </div>
+            
+            {/* Month Selector */}
+            <div className="flex justify-center gap-2 mb-6 flex-wrap">
+              {availableMonths.slice(0, 12).map(m => (
+                <button
+                  key={m.value}
+                  onClick={() => { setSelectedMonth(m.value); setFilter('all'); }}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    selectedMonth === m.value
+                      ? 'bg-[#D9CA5D] text-black'
+                      : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {m.shortLabel}
+                </button>
+              ))}
+            </div>
+            
+            {/* Summary Box */}
+            <div className="bg-gradient-to-r from-blue-500/10 via-blue-600/5 to-blue-500/10 border border-blue-500/30 rounded-2xl p-5 mb-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-blue-400">
+                  {availableMonths.find(m => m.value === selectedMonth)?.label} Summary
+                </h2>
+                <div className="text-blue-300/60 text-sm">
+                  <span className="text-blue-300 font-bold">{summary.total}</span> total transactions
+                </div>
+              </div>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                <div 
+                  onClick={() => setFilter(filter === 'ptgc_buy' ? 'all' : 'ptgc_buy')}
+                  className={`cursor-pointer transition-all rounded-xl px-3 py-3 text-center ${
+                    filter === 'ptgc_buy' 
+                      ? 'bg-[#D9CA5D]/20 border-2 border-[#D9CA5D] ring-2 ring-[#D9CA5D]/30' 
+                      : filter === 'all' ? 'bg-black/20 border border-[#D9CA5D]/20 hover:bg-[#D9CA5D]/10' : 'bg-black/10 border border-white/5 opacity-40'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">💰</div>
+                  <div className="text-2xl font-bold text-[#D9CA5D]">{summary.ptgcBuys.count}</div>
+                  <div className="text-[#D9CA5D]/50 text-sm uppercase font-semibold">PTGC Buys</div>
+                  {summary.ptgcBuys.ptgcTotal > 0 && (
+                    <div className="text-[#D9CA5D]/70 text-sm mt-1 font-bold">{fmtAbbr(summary.ptgcBuys.ptgcTotal)}</div>
+                  )}
+                </div>
+                <div 
+                  onClick={() => setFilter(filter === 'burn' ? 'all' : 'burn')}
+                  className={`cursor-pointer transition-all rounded-xl px-3 py-3 text-center ${
+                    filter === 'burn' 
+                      ? 'bg-orange-500/20 border-2 border-orange-500 ring-2 ring-orange-500/30' 
+                      : filter === 'all' ? 'bg-black/20 border border-orange-500/20 hover:bg-orange-500/10' : 'bg-black/10 border border-white/5 opacity-40'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">🔥</div>
+                  <div className="text-2xl font-bold text-orange-400">{summary.burns.count}</div>
+                  <div className="text-orange-400/50 text-sm uppercase font-semibold">Burns</div>
+                  {summary.burns.ptgcTotal > 0 && (
+                    <div className="text-orange-400/70 text-sm mt-1 font-bold">{fmtAbbr(summary.burns.ptgcTotal)}</div>
+                  )}
+                </div>
+                <div 
+                  onClick={() => setFilter(filter === 'swap' ? 'all' : 'swap')}
+                  className={`cursor-pointer transition-all rounded-xl px-3 py-3 text-center ${
+                    filter === 'swap' 
+                      ? 'bg-blue-500/20 border-2 border-blue-500 ring-2 ring-blue-500/30' 
+                      : filter === 'all' ? 'bg-black/20 border border-blue-500/20 hover:bg-blue-500/10' : 'bg-black/10 border border-white/5 opacity-40'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">🔄</div>
+                  <div className="text-2xl font-bold text-blue-300">{summary.swaps.count}</div>
+                  <div className="text-blue-300/50 text-sm uppercase font-semibold">Swaps</div>
+                </div>
+                <div 
+                  onClick={() => setFilter(filter === 'lp_add' ? 'all' : 'lp_add')}
+                  className={`cursor-pointer transition-all rounded-xl px-3 py-3 text-center ${
+                    filter === 'lp_add' 
+                      ? 'bg-green-500/20 border-2 border-green-500 ring-2 ring-green-500/30' 
+                      : filter === 'all' ? 'bg-black/20 border border-green-500/20 hover:bg-green-500/10' : 'bg-black/10 border border-white/5 opacity-40'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">💧</div>
+                  <div className="text-2xl font-bold text-green-300">{summary.lpAdds.count}</div>
+                  <div className="text-green-300/50 text-sm uppercase font-semibold">LP Adds</div>
+                </div>
+                <div 
+                  onClick={() => setFilter(filter === 'lp_remove' ? 'all' : 'lp_remove')}
+                  className={`cursor-pointer transition-all rounded-xl px-3 py-3 text-center ${
+                    filter === 'lp_remove' 
+                      ? 'bg-purple-500/20 border-2 border-purple-500 ring-2 ring-purple-500/30' 
+                      : filter === 'all' ? 'bg-black/20 border border-purple-500/20 hover:bg-purple-500/10' : 'bg-black/10 border border-white/5 opacity-40'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">💧</div>
+                  <div className="text-2xl font-bold text-purple-300">{summary.lpRemoves.count}</div>
+                  <div className="text-purple-300/50 text-sm uppercase font-semibold">LP Removes</div>
+                </div>
+                <div 
+                  onClick={() => setFilter(filter === 'transfer' ? 'all' : 'transfer')}
+                  className={`cursor-pointer transition-all rounded-xl px-3 py-3 text-center ${
+                    filter === 'transfer' 
+                      ? 'bg-blue-400/20 border-2 border-blue-400 ring-2 ring-blue-400/30' 
+                      : filter === 'all' ? 'bg-black/20 border border-blue-500/20 hover:bg-blue-500/10' : 'bg-black/10 border border-white/5 opacity-40'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">📤</div>
+                  <div className="text-2xl font-bold text-blue-300">{summary.transfers.count}</div>
+                  <div className="text-blue-300/50 text-sm uppercase font-semibold">Transfers</div>
+                </div>
+              </div>
+              {filter !== 'all' && (
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <span className="text-white/40 text-sm">Showing {filteredTxns.length} {filter.replace('_', ' ')} transactions</span>
+                  <button onClick={() => setFilter('all')} className="text-xs px-2 py-1 rounded bg-white/10 text-white/60 hover:bg-white/20">Show All</button>
+                </div>
+              )}
+            </div>
+            
+            {/* Content */}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <div className="w-10 h-10 border-2 border-[#D9CA5D] border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-white/50">Loading treasury data...</p>
+                <p className="text-white/30 text-sm mt-2">This may take a moment</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-20">
+                <div className="text-red-400 text-xl mb-2">⚠️</div>
+                <p className="text-red-400">{error}</p>
+              </div>
+            ) : processedTxns.length === 0 ? (
+              <div className="text-center py-12 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+                <div className="text-4xl mb-4">📭</div>
+                <p className="text-white/50">No outgoing transactions found for this month.</p>
+              </div>
+            ) : filteredTxns.length === 0 ? (
+              <div className="text-center py-12 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+                <div className="text-4xl mb-4">🔍</div>
+                <p className="text-white/50">No {filter.replace('_', ' ')} transactions this month.</p>
+                <button onClick={() => setFilter('all')} className="mt-3 text-sm px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 hover:bg-blue-500/30">Show All</button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredTxns.map((tx) => {
+                  const CopyBtn = ({ text, small }) => {
+                    const [copied, setCopied] = useState(false);
+                    return (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          navigator.clipboard.writeText(text);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 1500);
+                        }}
+                        className={`${small ? 'text-[10px] px-1' : 'text-xs px-1.5'} py-0.5 rounded ${
+                          copied 
+                            ? 'bg-green-500/30 text-green-300' 
+                            : 'bg-white/10 text-white/40 hover:bg-white/20 hover:text-white/60'
+                        } transition-all ml-1`}
+                      >
+                        {copied ? '✓' : '⧉'}
+                      </button>
+                    );
+                  };
+                  
+                  return (
+                    <div 
+                      key={tx.hash}
+                      className={`bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 hover:bg-blue-500/10 transition-colors ${
+                        tx.type === 'burn' ? 'border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/10' : 
+                        tx.type === 'ptgc_buy' ? 'border-[#D9CA5D]/30 bg-[#D9CA5D]/5 hover:bg-[#D9CA5D]/10' : 
+                        tx.type === 'lp_add' ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10' : 
+                        tx.type === 'lp_remove' ? 'border-purple-500/30 bg-purple-500/5 hover:bg-purple-500/10' : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="text-2xl">{tx.icon}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`font-semibold ${
+                              tx.type === 'burn' ? 'text-orange-300' : 
+                              tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]' : 
+                              tx.type === 'lp_add' ? 'text-green-300' : 
+                              tx.type === 'lp_remove' ? 'text-purple-300' : 'text-white'
+                            }`}>
+                              {tx.description || 'Transaction'}
+                            </span>
+                            {tx.isWallet2 && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">W2</span>
+                            )}
+                          </div>
+                          <div className="text-blue-300/40 text-sm">
+                            {formatDate(tx.timestamp)}
+                          </div>
+                          {tx.details.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {tx.details.map((d, j) => {
+                                const isAddress = d.value && (d.value.includes('0x') || d.value.includes('...'));
+                                const fullAddress = isAddress && d.fullValue ? d.fullValue : null;
+                                
+                                return (
+                                  <span key={j} className={`text-xs px-2 py-1 rounded bg-black/30 inline-flex items-center ${
+                                    tx.type === 'burn' ? 'text-orange-200/60' : 
+                                    tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/60' : 
+                                    tx.type === 'lp_add' ? 'text-green-200/60' : 
+                                    tx.type === 'lp_remove' ? 'text-purple-200/60' : 'text-blue-200/60'
+                                  }`}>
+                                    <span className={
+                                      tx.type === 'burn' ? 'text-orange-300/40' : 
+                                      tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/40' : 
+                                      tx.type === 'lp_add' ? 'text-green-300/40' : 
+                                      tx.type === 'lp_remove' ? 'text-purple-300/40' : 'text-blue-300/40'
+                                    }>{d.label}:</span> {d.value}
+                                    {fullAddress && <CopyBtn text={fullAddress} small />}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1">
+                          <a 
+                            href={`https://scan.pulsechain.com/tx/${tx.hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`${
+                              tx.type === 'burn' ? 'text-orange-400/60 hover:text-orange-400' : 
+                              tx.type === 'ptgc_buy' ? 'text-[#D9CA5D]/60 hover:text-[#D9CA5D]' : 
+                              tx.type === 'lp_add' ? 'text-green-400/60 hover:text-green-400' : 
+                              tx.type === 'lp_remove' ? 'text-purple-400/60 hover:text-purple-400' : 'text-blue-400/60 hover:text-blue-400'
+                            } text-xs transition-colors`}
+                          >
+                            View ↗
+                          </a>
+                          <div className="flex items-center gap-1">
+                            <span className="text-white/20 text-[10px] font-mono">
+                              {tx.hash.slice(0, 6)}...{tx.hash.slice(-4)}
+                            </span>
+                            <CopyBtn text={tx.hash} small />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            <div className="mt-8 text-center text-white/30 text-xs">
+              <p>Data sourced from {dataSource || 'Moralis'} • {lastUpdated ? `Last updated ${formatLastUpdated(lastUpdated)}` : 'Updates periodically'}</p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const App = () => <DAOLedger />;
+    
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
