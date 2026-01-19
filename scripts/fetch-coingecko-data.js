@@ -1,7 +1,8 @@
 /**
  * CoinGecko Pro API Data Fetcher
  * 
- * Fetches volume, liquidity, transaction data, and holder counts for PTGC and UFO tokens.
+ * Fetches volume, liquidity, transaction data, holder counts, and PRICE CHANGES for PTGC and UFO tokens.
+ * Also fetches price changes for RH Core tokens (WPLS, PLSX, INC, HEX, EHEX).
  * Runs every 30 minutes via GitHub Actions.
  * Stores timestamped snapshots for rolling window calculations.
  */
@@ -29,6 +30,15 @@ const CONFIG = {
       decimals: 18,
       totalSupply: 999999999051
     }
+  },
+  
+  // RH Core tokens for price change tracking
+  rhCores: {
+    WPLS: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+    PLSX: '0x95b303987a60c71504d99aa1b13b4da07b0790ab',
+    INC: '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
+    HEX: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
+    EHEX: '0x57fde0a71132198bbec939b98976993d8d89d225'
   }
 };
 
@@ -64,6 +74,33 @@ async function fetchAPI(endpoint, retries = 3) {
       if (attempt === retries) throw error;
       await sleep(2000 * attempt);
     }
+  }
+}
+
+// Fetch price changes for a token by contract address
+async function fetchPriceChanges(tokenAddress, tokenName) {
+  console.log(`  Fetching price changes for ${tokenName} (${tokenAddress.slice(0, 10)}...)`);
+  try {
+    // Use the contract endpoint which returns market_data with price changes
+    const data = await fetchAPI(`/coins/pulsechain/contract/${tokenAddress}`);
+    
+    if (data && data.market_data) {
+      const priceChanges = {
+        h24: data.market_data.price_change_percentage_24h || null,
+        d7: data.market_data.price_change_percentage_7d || null,
+        d30: data.market_data.price_change_percentage_30d || null,
+        d60: data.market_data.price_change_percentage_60d || null,
+        d90: data.market_data.price_change_percentage_200d || null, // CoinGecko doesn't have 90d, using 200d
+        d200: data.market_data.price_change_percentage_200d || null,
+        d1y: data.market_data.price_change_percentage_1y || null
+      };
+      console.log(`    ${tokenName}: 7d=${priceChanges.d7?.toFixed(2)}%, 30d=${priceChanges.d30?.toFixed(2)}%`);
+      return priceChanges;
+    }
+    return null;
+  } catch (error) {
+    console.error(`  Error fetching price changes for ${tokenName}:`, error.message);
+    return null;
   }
 }
 
@@ -249,11 +286,16 @@ async function fetchTokenData(tokenName, tokenConfig) {
     holders: null,
     tokensInLP: null,
     poolCount: 0,
+    priceChanges: null,
     errors: []
   };
   
   try {
-    // Fetch holder count first (from PulseScan - free)
+    // Fetch price changes first (from CoinGecko Pro)
+    result.priceChanges = await fetchPriceChanges(tokenConfig.address, tokenName);
+    await sleep(500);
+    
+    // Fetch holder count (from PulseScan - free)
     result.holders = await fetchHolderCount(tokenConfig.address);
     await sleep(500);
     
@@ -319,6 +361,7 @@ async function fetchTokenData(tokenName, tokenConfig) {
   }
   
   console.log(`\n${tokenName} TOTALS:`);
+  console.log(`  Price Changes: 7d=${result.priceChanges?.d7?.toFixed(2) || 'N/A'}%, 30d=${result.priceChanges?.d30?.toFixed(2) || 'N/A'}%`);
   console.log(`  Holders: ${result.holders || 'N/A'}`);
   console.log(`  Tokens in LP: ${result.tokensInLP?.toLocaleString() || 'N/A'}`);
   console.log(`  Liquidity: $${result.liquidity.toLocaleString()}`);
@@ -327,6 +370,24 @@ async function fetchTokenData(tokenName, tokenConfig) {
   console.log(`  Transactions: ${result.transactions.total}`);
   
   return result;
+}
+
+// Fetch price changes for all RH Core tokens
+async function fetchRHCorePriceChanges() {
+  console.log('\n========== Fetching RH Core Price Changes ==========');
+  
+  const coreData = {};
+  
+  for (const [name, address] of Object.entries(CONFIG.rhCores)) {
+    const priceChanges = await fetchPriceChanges(address, name);
+    coreData[name] = {
+      address,
+      priceChanges
+    };
+    await sleep(500); // Rate limit protection
+  }
+  
+  return coreData;
 }
 
 // Main execution
@@ -356,6 +417,9 @@ async function main() {
     tokenData[tokenName] = await fetchTokenData(tokenName, tokenConfig);
     await sleep(2000); // Pause between tokens
   }
+  
+  // Fetch RH Core price changes
+  const rhCoreData = await fetchRHCorePriceChanges();
   
   // Append to histories
   liquidityHistory.snapshots.push({
@@ -399,7 +463,7 @@ async function main() {
   saveData('holder-history.json', holderHistory);
   saveData('tokensinlp-history.json', tokensInLPHistory);
   
-  // Save current aggregates (volume periods + current snapshot)
+  // Save current aggregates (volume periods + current snapshot + PRICE CHANGES)
   const coingeckoData = {
     lastUpdated: timestamp,
     PTGC: {
@@ -408,7 +472,8 @@ async function main() {
       transactions: tokenData.PTGC.transactions,
       holders: tokenData.PTGC.holders,
       tokensInLP: tokenData.PTGC.tokensInLP,
-      poolCount: tokenData.PTGC.poolCount
+      poolCount: tokenData.PTGC.poolCount,
+      priceChanges: tokenData.PTGC.priceChanges
     },
     UFO: {
       volume: tokenData.UFO.volume,
@@ -416,8 +481,11 @@ async function main() {
       transactions: tokenData.UFO.transactions,
       holders: tokenData.UFO.holders,
       tokensInLP: tokenData.UFO.tokensInLP,
-      poolCount: tokenData.UFO.poolCount
-    }
+      poolCount: tokenData.UFO.poolCount,
+      priceChanges: tokenData.UFO.priceChanges
+    },
+    // NEW: RH Core price changes for the Grays & Cores image
+    rhCores: rhCoreData
   };
   
   saveData('coingecko-data.json', coingeckoData);
