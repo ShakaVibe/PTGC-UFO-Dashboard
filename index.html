@@ -2160,6 +2160,7 @@
       const[showCombinedLogosModal,setShowCombinedLogosModal]=useState(false);
       const[showPriceWithCoresModal,setShowPriceWithCoresModal]=useState(false);
       const[priceModalMobileMode,setPriceModalMobileMode]=useState(false);
+      const[priceModalPeriod,setPriceModalPeriod]=useState('24h');
       const[corePrices,setCorePrices]=useState(null);
       const[showCombinedKPI,setShowCombinedKPI]=useState(false);
       const[otherTokenPairs,setOtherTokenPairs]=useState([]);
@@ -2200,10 +2201,13 @@
       },[showRHCoresShareModal]);
       
       // Load RH Core prices when Price with Cores modal opens
-      const[grayPrices,setGrayPrices]=useState({ptgc:{price:0,change:0},ufo:{price:0,change:0}});
+      const[grayPrices,setGrayPrices]=useState({
+        ptgc:{price:0,changes:{h24:0,d7:null,d30:null,d90:null}},
+        ufo:{price:0,changes:{h24:0,d7:null,d30:null,d90:null}}
+      });
       useEffect(()=>{
         if(showPriceWithCoresModal){
-          // Fetch core prices fresh every time
+          // Contract addresses for DexScreener (current prices + 24h)
           const coreAddresses={
             WPLS:'0xa1077a294dde1b09bb078844df40758a5d0f9a27',
             PLSX:'0x95b303987a60c71504d99aa1b13b4da07b0790ab',
@@ -2211,26 +2215,80 @@
             HEX:'0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
             EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225'
           };
+          
+          // Fetch DexScreener data for current prices and 24h change
+          // Then use cached coingeckoDataCache for 7d, 30d, 90d changes
           Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
             try{
-              const res=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
-              const d=await res.json();
-              const pair=d?.pairs?.find(p=>p.chainId==='pulsechain');
-              return{name,price:pair?.priceUsd||0,change:pair?.priceChange?.h24||0};
-            }catch{return{name,price:0,change:0};}
-          })).then(results=>{
+              const dexRes=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
+              const dexData=await dexRes.json();
+              const pair=dexData?.pairs?.find(p=>p.chainId==='pulsechain');
+              return{
+                name,
+                price:parseFloat(pair?.priceUsd||0),
+                h24:parseFloat(pair?.priceChange?.h24||0)
+              };
+            }catch(e){
+              return{name,price:0,h24:0};
+            }
+          })).then(dexResults=>{
+            // Use cached data for 7d, 30d, 90d changes
+            const cachedCores=coingeckoDataCache?.rhCores||{};
+            
             const prices={};
-            results.forEach(r=>prices[r.name]={price:parseFloat(r.price),change:parseFloat(r.change)});
+            dexResults.forEach(r=>{
+              const cached=cachedCores[r.name]?.priceChanges;
+              prices[r.name]={
+                price:r.price,
+                changes:{
+                  h24:r.h24,
+                  d7:cached?.d7??null,
+                  d30:cached?.d30??null,
+                  d90:cached?.d90??null
+                }
+              };
+            });
+            
+            console.log('Core prices (DexScreener + cached):', prices);
             setCorePrices(prices);
           });
-          // Fetch PTGC and UFO prices fresh every time
+          
+          // Fetch PTGC and UFO prices from DexScreener, use cache for 7d/30d/90d
           Promise.all([
             fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`).then(r=>r.json()),
             fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`).then(r=>r.json())
-          ]).then(([ptgcData,ufoData])=>{
+          ]).then(([ptgcDex,ufoDex])=>{
+            const ptgcPrice=parseFloat(ptgcDex?.pair?.priceUsd||0);
+            const ufoPrice=parseFloat(ufoDex?.pair?.priceUsd||0);
+            const ptgc24h=parseFloat(ptgcDex?.pair?.priceChange?.h24||0);
+            const ufo24h=parseFloat(ufoDex?.pair?.priceChange?.h24||0);
+            
+            // Use cached price changes from coingeckoDataCache
+            const ptgcCached=coingeckoDataCache?.PTGC?.priceChanges;
+            const ufoCached=coingeckoDataCache?.UFO?.priceChanges;
+            
+            console.log('PTGC cached priceChanges:', ptgcCached);
+            console.log('UFO cached priceChanges:', ufoCached);
+            
             setGrayPrices({
-              ptgc:{price:parseFloat(ptgcData?.pair?.priceUsd||0),change:parseFloat(ptgcData?.pair?.priceChange?.h24||0)},
-              ufo:{price:parseFloat(ufoData?.pair?.priceUsd||0),change:parseFloat(ufoData?.pair?.priceChange?.h24||0)}
+              ptgc:{
+                price:ptgcPrice,
+                changes:{
+                  h24:ptgc24h,
+                  d7:ptgcCached?.d7??null,
+                  d30:ptgcCached?.d30??null,
+                  d90:ptgcCached?.d90??null
+                }
+              },
+              ufo:{
+                price:ufoPrice,
+                changes:{
+                  h24:ufo24h,
+                  d7:ufoCached?.d7??null,
+                  d30:ufoCached?.d30??null,
+                  d90:ufoCached?.d90??null
+                }
+              }
             });
           });
         }
@@ -3795,6 +3853,33 @@
                     </button>
                     <button onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)} className="text-white/60 hover:text-white text-xl ml-4">✕</button>
                   </div>
+                  {/* Time Period Selector */}
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={()=>setPriceModalPeriod('24h')}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '24h' ? 'bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    >
+                      24 Hr
+                    </button>
+                    <button 
+                      onClick={()=>setPriceModalPeriod('7d')}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '7d' ? 'bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    >
+                      7 Day
+                    </button>
+                    <button 
+                      onClick={()=>setPriceModalPeriod('30d')}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '30d' ? 'bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    >
+                      30 Day
+                    </button>
+                    <button 
+                      onClick={()=>setPriceModalPeriod('90d')}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '90d' ? 'bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
+                    >
+                      90 Day
+                    </button>
+                  </div>
                 </div>
                 
                 <div 
@@ -3824,7 +3909,7 @@
                     {/* Header */}
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <div className="text-xl font-bold text-white">The Grays & The Cores - 24Hr Price</div>
+                        <div className="text-xl font-bold text-white">The Grays & The Cores - {priceModalPeriod==='24h'?'24Hr':priceModalPeriod==='7d'?'7 Day':priceModalPeriod==='30d'?'30 Day':'90 Day'} Price</div>
                         <div className="text-white/50 text-xs mt-1">The Grays — Proudly supporting Richard Heart and the PulseChain ecosystem</div>
                       </div>
                     </div>
@@ -3843,12 +3928,14 @@
                               HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
                               EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png'
                             };
+                            const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
                             const cores=['WPLS','PLSX','INC','HEX','EHEX'];
                             return cores.map(core=>{
                               const p=corePrices?.[core];
                               const price=p?.price||0;
-                              const change=p?.change||0;
-                              const isUp=change>=0;
+                              const change=p?.changes?.[periodKey];
+                              const hasChange=change!==null&&change!==undefined;
+                              const isUp=hasChange&&change>=0;
                               return(
                                 <div key={core} className="flex items-center justify-between px-2 py-2 rounded-lg border border-white/10 bg-black/30">
                                   <div className="flex items-center gap-2">
@@ -3857,9 +3944,13 @@
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <span className="text-white font-bold text-xl">${price<0.01?price.toFixed(6):price<1?price.toFixed(4):price.toFixed(2)}</span>
-                                    <span className={`text-lg font-bold ${isUp?'text-green-400':'text-red-400'}`}>
-                                      {isUp?'▲':'▼'}{Math.abs(change).toFixed(1)}%
-                                    </span>
+                                    {hasChange?(
+                                      <span className={`text-lg font-bold ${isUp?'text-green-400':'text-red-400'}`}>
+                                        {isUp?'▲':'▼'}{Math.abs(change).toFixed(1)}%
+                                      </span>
+                                    ):(
+                                      <span className="text-lg font-bold text-white/30">—</span>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -3878,12 +3969,19 @@
                             ${grayPrices.ptgc.price?.toFixed(6)||'0.000000'}
                           </div>
                           {(()=>{
-                            const change=grayPrices.ptgc.change||0;
-                            const isUp=change>=0;
-                            return(
+                            const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
+                            const periodLabel=priceModalPeriod==='24h'?'24h':priceModalPeriod==='7d'?'7d':priceModalPeriod==='30d'?'30d':'90d';
+                            const change=grayPrices.ptgc.changes?.[periodKey];
+                            const hasChange=change!==null&&change!==undefined;
+                            const isUp=hasChange&&change>=0;
+                            return hasChange?(
                               <div className={`flex items-center gap-2 text-4xl font-extrabold ${isUp?'text-green-400':'text-red-400'}`}>
                                 {isUp?'▲':'▼'}{Math.abs(change).toFixed(2)}%
-                                <span className="text-white/40 text-base font-normal ml-1">24h</span>
+                                <span className="text-white/40 text-base font-normal ml-1">{periodLabel}</span>
+                              </div>
+                            ):(
+                              <div className="flex items-center gap-2 text-2xl font-medium text-white/30">
+                                — <span className="text-base font-normal ml-1">{periodLabel} N/A</span>
                               </div>
                             );
                           })()}
@@ -3897,12 +3995,19 @@
                             ${grayPrices.ufo.price?.toFixed(6)||'0.000000'}
                           </div>
                           {(()=>{
-                            const change=grayPrices.ufo.change||0;
-                            const isUp=change>=0;
-                            return(
+                            const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
+                            const periodLabel=priceModalPeriod==='24h'?'24h':priceModalPeriod==='7d'?'7d':priceModalPeriod==='30d'?'30d':'90d';
+                            const change=grayPrices.ufo.changes?.[periodKey];
+                            const hasChange=change!==null&&change!==undefined;
+                            const isUp=hasChange&&change>=0;
+                            return hasChange?(
                               <div className={`flex items-center gap-2 text-4xl font-extrabold ${isUp?'text-green-400':'text-red-400'}`}>
                                 {isUp?'▲':'▼'}{Math.abs(change).toFixed(2)}%
-                                <span className="text-white/40 text-base font-normal ml-1">24h</span>
+                                <span className="text-white/40 text-base font-normal ml-1">{periodLabel}</span>
+                              </div>
+                            ):(
+                              <div className="flex items-center gap-2 text-2xl font-medium text-white/30">
+                                — <span className="text-base font-normal ml-1">{periodLabel} N/A</span>
                               </div>
                             );
                           })()}
