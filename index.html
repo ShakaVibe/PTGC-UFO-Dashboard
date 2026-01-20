@@ -2189,6 +2189,8 @@
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
+      const[showHolderModal,setShowHolderModal]=useState(false);
+      const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null});
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
       const[showValueGenShareModal,setShowValueGenShareModal]=useState(false);
       const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
@@ -2322,6 +2324,7 @@
         setValueGenPeriod('7d');
         setShowRHCores(false);
         setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+        setHoldersByPeriod({current:null,d7Ago:null,d30Ago:null,d90Ago:null});
         setLiquidityChange24h(null);
         setTxnChange24h(null);
         
@@ -2403,6 +2406,45 @@
           } else {
             // Fallback - only show 24h
             setVolumeByPeriod({ vol24h: d?.vol || 0, vol7d: null, vol30d: null, vol90d: null });
+          }
+          
+          // Calculate holder history from snapshots
+          if (holderHistoryCacheNew?.snapshots?.length > 0) {
+            const snapshots = holderHistoryCacheNew.snapshots;
+            const now = Date.now();
+            const newest = snapshots[snapshots.length - 1];
+            const newestTime = new Date(newest.timestamp).getTime();
+            const currentHolders = newest[token] || h;
+            
+            // Find snapshots closest to 7d, 30d, 90d ago
+            const findClosestSnapshot = (daysAgo) => {
+              const targetTime = newestTime - (daysAgo * 24 * 60 * 60 * 1000);
+              let closest = null;
+              let closestDiff = Infinity;
+              for (const snap of snapshots) {
+                const snapTime = new Date(snap.timestamp).getTime();
+                if (snapTime > newestTime) continue;
+                const diff = Math.abs(snapTime - targetTime);
+                if (diff < closestDiff && snap[token] > 0) {
+                  closestDiff = diff;
+                  closest = snap;
+                }
+              }
+              // Only return if we found something within reasonable range (within 2 days of target)
+              if (closest && closestDiff < 2 * 24 * 60 * 60 * 1000) {
+                return closest[token];
+              }
+              return null;
+            };
+            
+            setHoldersByPeriod({
+              current: currentHolders,
+              d7Ago: findClosestSnapshot(7),
+              d30Ago: findClosestSnapshot(30),
+              d90Ago: findClosestSnapshot(90)
+            });
+          } else {
+            setHoldersByPeriod({ current: h, d7Ago: null, d30Ago: null, d90Ago: null });
           }
         };
         load();
@@ -2558,7 +2600,7 @@
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowVolumeModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><div className="text-white text-xs uppercase mb-1">Volume 24H</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.vol)}</div>{(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-sm font-semibold ${change>=0?'text-green-400':'text-red-400'}`}>{change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}% vs 7d avg</div>}return null})()}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowRHModal(true)} className={`absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button><div className="text-white text-xs uppercase mb-1">Liquidity</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtUSD(data?.liq)}</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">LIQ/MCAP Ratio</div><div className={`text-2xl font-bold ${theme.text}`}>{liqMcapRatio}%</div></div>
-                <div className={`${theme.card} border ${theme.border} rounded-lg p-3`}><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&(holderChange===0?<div className="text-sm font-semibold text-gray-500">— 0</div>:<div className={`text-sm font-semibold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>)}</div>
+                <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><button onClick={()=>setShowHolderModal(true)} className={`absolute top-1 right-1 text-xs font-bold ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button><div className="text-white text-xs uppercase mb-1">Holders</div><div className={`text-2xl font-bold ${theme.text}`}>{fmt(holders)}</div>{holderChange!==null&&(holderChange===0?<div className="text-sm font-semibold text-gray-500">— 0</div>:<div className={`text-sm font-semibold ${holderChange>=0?'text-green-400':'text-red-400'}`}>{holderChange>=0?'\u25B2':'\u25BC'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>)}</div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><span className={`absolute top-1 right-1 text-xs font-bold ${theme.text}`}>{tokensInLPPct}%</span><div className="text-white text-xs uppercase mb-1">Tokens in LP</div><div className={`text-2xl font-bold ${theme.text}`}>{fmtAbbr(tokensInLP)}</div></div>
                 <div className={`${theme.card} border ${theme.border} rounded-lg p-3 relative`}><div className="text-white text-xs uppercase mb-1">Txns 24H</div><div className="flex items-baseline gap-2"><span className={`text-2xl font-bold ${theme.text}`}>{(data?.buys||0)+(data?.sells||0)}</span><span className="text-sm"><span className="text-green-400">{data?.buys||0}</span><span className="text-white/50">/</span><span className="text-red-400">{data?.sells||0}</span></span></div>{txnChange24h!==null?<div className={`text-sm font-semibold ${txnChange24h>=0?'text-green-400':'text-red-400'}`}>{txnChange24h>=0?'\u25B2':'\u25BC'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-sm font-semibold ${tc>=0?'text-green-400':'text-red-400'}`}>{tc>=0?'\u25B2':'\u25BC'} {Math.abs(tc).toFixed(1)}%</div>:null})()}</div>
               </div>
@@ -3199,6 +3241,96 @@
                         }
                         const vol24h=data?.vol||0;
                         const change=avg>0?((vol24h-avg)/avg)*100:0;
+                        return(
+                          <div key={label} className="flex justify-between items-center">
+                            <span className="text-white/60 text-lg">{label}</span>
+                            <span className={`text-xl font-bold ${change>=0?'text-green-400':'text-red-400'}`}>
+                              {change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Holder Analytics Modal */}
+          {showHolderModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowHolderModal(false)}>
+              <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e=>e.stopPropagation()}>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <img src={cfg.logo} alt={token} className="w-14 h-14 rounded-full"/>
+                      <div>
+                        <span className={`font-orbitron text-2xl font-bold ${theme.text}`}>{token}</span>
+                        <div className="text-white/50 text-base">Holder Analytics</div>
+                      </div>
+                    </div>
+                    <button onClick={()=>setShowHolderModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
+                  </div>
+                  
+                  {/* Holder Counts by Period */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {[
+                      {label:'Current',value:holdersByPeriod.current},
+                      {label:'7D Ago',value:holdersByPeriod.d7Ago},
+                      {label:'30D Ago',value:holdersByPeriod.d30Ago},
+                      {label:'90D Ago',value:holdersByPeriod.d90Ago}
+                    ].map(({label,value})=>(
+                      <div key={label} className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
+                        <div className="text-white/50 text-base uppercase">{label}</div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{value!==null&&value!==undefined?fmt(value):<span className="text-lg text-white/30">Gathering data...</span>}</div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Growth Stats */}
+                  <div className={`${theme.card} border ${theme.border} rounded-lg p-4 mb-4`}>
+                    <div className="text-white/50 text-base uppercase mb-3">Holder Growth</div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      {[
+                        {label:'7D Growth',current:holdersByPeriod.current,past:holdersByPeriod.d7Ago},
+                        {label:'30D Growth',current:holdersByPeriod.current,past:holdersByPeriod.d30Ago},
+                        {label:'90D Growth',current:holdersByPeriod.current,past:holdersByPeriod.d90Ago}
+                      ].map(({label,current,past})=>{
+                        const hasData=current!==null&&past!==null&&current!==undefined&&past!==undefined;
+                        const growth=hasData?current-past:null;
+                        return(
+                          <div key={label}>
+                            <div className="text-white/40 text-base">{label}</div>
+                            <div className={`text-2xl font-bold ${hasData?(growth>=0?'text-green-400':'text-red-400'):'text-white/30'}`}>
+                              {hasData?(growth>=0?'+':'')+fmt(growth):<span className="text-lg">Gathering...</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Comparisons */}
+                  <div className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
+                    <div className="text-white/50 text-base uppercase mb-3">Current vs Past</div>
+                    <div className="space-y-3">
+                      {[
+                        {label:'vs 7D Ago',past:holdersByPeriod.d7Ago},
+                        {label:'vs 30D Ago',past:holdersByPeriod.d30Ago},
+                        {label:'vs 90D Ago',past:holdersByPeriod.d90Ago}
+                      ].map(({label,past})=>{
+                        const current=holdersByPeriod.current;
+                        const hasData=current!==null&&past!==null&&current!==undefined&&past!==undefined;
+                        if(!hasData){
+                          return(
+                            <div key={label} className="flex justify-between items-center">
+                              <span className="text-white/60 text-lg">{label}</span>
+                              <span className="text-base text-white/30">Gathering data...</span>
+                            </div>
+                          );
+                        }
+                        const change=past>0?((current-past)/past)*100:0;
                         return(
                           <div key={label} className="flex justify-between items-center">
                             <span className="text-white/60 text-lg">{label}</span>
