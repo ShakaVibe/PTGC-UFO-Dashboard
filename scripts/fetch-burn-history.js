@@ -3,6 +3,8 @@
  * 
  * Splits burn data into multiple files to stay under GitHub's 100MB limit
  * 
+ * UPDATED: Holder count now fetched from PulseScan (not Moralis) for consistency
+ * 
  * Files created:
  * - burn-summary.json (totals, prices, periods, snapshots)
  * - ptgc-burns-2023-h2.json (May-Dec 2023)
@@ -41,6 +43,7 @@ const UFO_DECIMALS = 18;
 
 const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
 const DEXSCREENER_BASE = 'https://api.dexscreener.com/latest/dex';
+const PULSESCAN_BASE = 'https://api.scan.pulsechain.com/api/v2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -461,23 +464,25 @@ async function fetchTokenPairs(tokenAddress, tokenSymbol) {
 }
 
 /**
- * Fetch holder count from Moralis
+ * Fetch holder count from PulseScan (NOT Moralis - for consistency with dashboard)
  */
 async function fetchHolderCount(tokenAddress, tokenSymbol) {
-  console.log(`\nFetching ${tokenSymbol} holder stats...`);
+  console.log(`\nFetching ${tokenSymbol} holder count from PulseScan...`);
   
-  const data = await moralisRequest(`/erc20/${tokenAddress}/owners`, {
-    chain: CHAIN,
-    limit: 1
-  });
-  
-  if (data && data.totalHolders !== undefined) {
-    console.log(`  ${tokenSymbol} holders: ${data.totalHolders}`);
-    return data.totalHolders;
+  try {
+    const response = await fetch(`${PULSESCAN_BASE}/tokens/${tokenAddress}/counters`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const holders = parseInt(data.token_holders_count) || 0;
+    console.log(`  ${tokenSymbol} holders: ${holders}`);
+    return holders;
+  } catch (error) {
+    console.log(`  PulseScan Error: ${error.message}`);
+    return 0;
   }
-  
-  console.log(`  ${tokenSymbol} holders: 0`);
-  return 0;
 }
 
 /**
@@ -486,6 +491,7 @@ async function fetchHolderCount(tokenAddress, tokenSymbol) {
 async function main() {
   console.log('\n' + '='.repeat(60));
   console.log('BURN HISTORY FETCHER - MORALIS VERSION (SPLIT FILES)');
+  console.log('Holder counts: PulseScan (for consistency with dashboard)');
   console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
   
@@ -586,6 +592,7 @@ async function main() {
   const ufoPairs = await fetchTokenPairs(UFO_ADDRESS, 'UFO');
   await delay(300);
   
+  // Fetch holder counts from PulseScan (NOT Moralis)
   const ptgcHolders = await fetchHolderCount(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
@@ -720,7 +727,7 @@ async function main() {
   
   const summaryData = {
     lastUpdated: new Date().toISOString(),
-    dataSource: 'Moralis',
+    dataSource: 'Moralis (burns), PulseScan (holders)',
     
     PTGC: {
       totalBurned: ptgcTotal,
@@ -782,6 +789,44 @@ async function main() {
   console.log(`  Written: ${summaryPath} (${summarySizeMB} MB)`);
   
   // ============================================
+  // UPDATE HOLDER HISTORY FILE
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Updating holder history file...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const holderHistoryPath = path.join(dataDir, 'holder-history.json');
+  let holderHistory = { source: 'PulseScan', lastUpdated: '', snapshots: [] };
+  
+  try {
+    if (fs.existsSync(holderHistoryPath)) {
+      holderHistory = JSON.parse(fs.readFileSync(holderHistoryPath, 'utf8'));
+    }
+  } catch (e) {
+    console.log('Creating new holder history file...');
+  }
+  
+  const now = new Date().toISOString();
+  const newHolderSnapshot = {
+    timestamp: now,
+    PTGC: ptgcHolders,
+    UFO: ufoHolders
+  };
+  
+  holderHistory.snapshots.push(newHolderSnapshot);
+  holderHistory.lastUpdated = now;
+  holderHistory.source = 'PulseScan';
+  
+  // Keep last 90 days of data
+  if (holderHistory.snapshots.length > 90) {
+    holderHistory.snapshots = holderHistory.snapshots.slice(-90);
+  }
+  
+  fs.writeFileSync(holderHistoryPath, JSON.stringify(holderHistory, null, 2));
+  console.log(`  Written: ${holderHistoryPath} (${holderHistory.snapshots.length} snapshots)`);
+  
+  // ============================================
   // PRINT SUMMARY
   // ============================================
   
@@ -820,7 +865,7 @@ async function main() {
   console.log(`  PTGC: $${ptgcPrice.usd}`);
   console.log(`  UFO: $${ufoPrice.usd}`);
   
-  console.log(`\nHOLDERS:`);
+  console.log(`\nHOLDERS (from PulseScan):`);
   console.log(`  PTGC: ${ptgcHolders.toLocaleString()}`);
   console.log(`  UFO: ${ufoHolders.toLocaleString()}`);
   
@@ -846,6 +891,7 @@ async function main() {
   }
   console.log('  - ufo-burns.json');
   console.log('  - burn-summary.json');
+  console.log('  - holder-history.json');
   console.log('Completed:', new Date().toISOString());
   console.log('='.repeat(60));
 }
