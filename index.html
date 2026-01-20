@@ -327,12 +327,29 @@
       }
     };
     const fetchHolders=async addr=>{
-      // Always use PulseScan for consistency with historical snapshots
+      const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
+      const key=token.toLowerCase();
+      
+      // Try PulseScan first
       try{
         const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);
         const data=await r.json();
-        return parseInt(data.token_holders_count)||0;
-      }catch{return 0}
+        const count=parseInt(data.token_holders_count)||0;
+        if(count>0)return count;
+      }catch{}
+      
+      // Fallback to burn history cache (Moralis data)
+      if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
+        return burnHistoryCache[token].holders;
+      }
+      
+      // Fallback to holder history cache
+      if(holderHistoryCache&&holderHistoryCache.data?.length>0){
+        const lastEntry=holderHistoryCache.data[holderHistoryCache.data.length-1];
+        if(lastEntry[key]>0)return lastEntry[key];
+      }
+      
+      return 0;
     };
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
     
