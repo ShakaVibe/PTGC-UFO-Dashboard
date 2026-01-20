@@ -2190,7 +2190,7 @@
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
-      const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null});
+      const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
       const[showValueGenShareModal,setShowValueGenShareModal]=useState(false);
       const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
@@ -2324,7 +2324,7 @@
         setValueGenPeriod('7d');
         setShowRHCores(false);
         setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
-        setHoldersByPeriod({current:null,d7Ago:null,d30Ago:null,d90Ago:null});
+        setHoldersByPeriod({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
         setLiquidityChange24h(null);
         setTxnChange24h(null);
         
@@ -2437,14 +2437,29 @@
               return null;
             };
             
+            // Calculate average holder count over a period
+            const calcAverage = (daysAgo) => {
+              const cutoffTime = newestTime - (daysAgo * 24 * 60 * 60 * 1000);
+              const relevantSnapshots = snapshots.filter(snap => {
+                const snapTime = new Date(snap.timestamp).getTime();
+                return snapTime >= cutoffTime && snapTime <= newestTime && snap[token] > 0;
+              });
+              if (relevantSnapshots.length === 0) return null;
+              const sum = relevantSnapshots.reduce((acc, snap) => acc + snap[token], 0);
+              return sum / relevantSnapshots.length;
+            };
+            
             setHoldersByPeriod({
               current: currentHolders,
               d7Ago: findClosestSnapshot(7),
               d30Ago: findClosestSnapshot(30),
-              d90Ago: findClosestSnapshot(90)
+              d90Ago: findClosestSnapshot(90),
+              avg7d: calcAverage(7),
+              avg30d: calcAverage(30),
+              avg90d: calcAverage(90)
             });
           } else {
-            setHoldersByPeriod({ current: h, d7Ago: null, d30Ago: null, d90Ago: null });
+            setHoldersByPeriod({ current: h, d7Ago: null, d30Ago: null, d90Ago: null, avg7d: null, avg30d: null, avg90d: null });
           }
         };
         load();
@@ -3313,15 +3328,15 @@
                   
                   {/* Comparisons */}
                   <div className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
-                    <div className="text-white/50 text-base uppercase mb-3">Current vs Past</div>
+                    <div className="text-white/50 text-base uppercase mb-3">Today vs Averages</div>
                     <div className="space-y-3">
                       {[
-                        {label:'vs 7D Ago',past:holdersByPeriod.d7Ago},
-                        {label:'vs 30D Ago',past:holdersByPeriod.d30Ago},
-                        {label:'vs 90D Ago',past:holdersByPeriod.d90Ago}
-                      ].map(({label,past})=>{
+                        {label:'vs 7D Avg',avg:holdersByPeriod.avg7d},
+                        {label:'vs 30D Avg',avg:holdersByPeriod.avg30d},
+                        {label:'vs 90D Avg',avg:holdersByPeriod.avg90d}
+                      ].map(({label,avg})=>{
                         const current=holdersByPeriod.current;
-                        const hasData=current!==null&&past!==null&&current!==undefined&&past!==undefined;
+                        const hasData=current!==null&&avg!==null&&current!==undefined&&avg!==undefined;
                         if(!hasData){
                           return(
                             <div key={label} className="flex justify-between items-center">
@@ -3330,7 +3345,7 @@
                             </div>
                           );
                         }
-                        const change=past>0?((current-past)/past)*100:0;
+                        const change=avg>0?((current-avg)/avg)*100:0;
                         return(
                           <div key={label} className="flex justify-between items-center">
                             <span className="text-white/60 text-lg">{label}</span>
