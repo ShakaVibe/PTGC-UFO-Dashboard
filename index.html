@@ -1739,14 +1739,24 @@
       
       // Twitter mode view
       if(twitterMode){
+        // Calculate scale based on viewport
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 675;
+        const scaleX = vw / 1250;
+        const scaleY = vh / 720;
+        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
+        
         return(
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black" onClick={()=>setTwitterMode(false)}>
-            <div className="text-white text-sm absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 px-4 py-2 rounded-lg">Click anywhere to close • Right-click image to save</div>
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black overflow-hidden" onClick={()=>setTwitterMode(false)}>
+            <div className="text-white text-sm absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 px-4 py-2 rounded-lg z-10 whitespace-nowrap">Click anywhere to close • Screenshot to save</div>
             <div 
               id="twitter-capture"
-              className="relative" 
+              className="relative flex-shrink-0" 
               style={{
-                width:'1200px',height:'675px',
+                width:'1200px',
+                height:'675px',
+                transform: scale < 1 ? `scale(${scale})` : 'none',
+                transformOrigin: 'center center',
                 background:'radial-gradient(ellipse at 25% 0%, rgba(217,202,93,0.3) 0%, transparent 40%), radial-gradient(ellipse at 75% 0%, rgba(124,252,0,0.3) 0%, transparent 40%), radial-gradient(ellipse at 50% 100%, rgba(180,80,20,0.25) 0%, transparent 50%), linear-gradient(180deg, #0d0d0d 0%, #080808 50%, #0a0805 100%)'
               }}
               onClick={e=>e.stopPropagation()}
