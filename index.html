@@ -328,28 +328,41 @@
     };
     const fetchHolders=async addr=>{
       const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
-      const key=token.toLowerCase();
       
-      // Try PulseScan first
+      // Return cached data immediately if available (for fast initial load)
+      // Then fetch live data in background
+      if(holderHistoryCacheNew&&holderHistoryCacheNew.snapshots?.length>0){
+        const lastSnap=holderHistoryCacheNew.snapshots[holderHistoryCacheNew.snapshots.length-1];
+        if(lastSnap[token]>0)return lastSnap[token];
+      }
+      if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
+        return burnHistoryCache[token].holders;
+      }
+      
+      // No cache - must fetch from PulseScan (with timeout)
       try{
-        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);
+        const controller=new AbortController();
+        const timeoutId=setTimeout(()=>controller.abort(),5000);
+        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`,{signal:controller.signal});
+        clearTimeout(timeoutId);
         const data=await r.json();
         const count=parseInt(data.token_holders_count)||0;
         if(count>0)return count;
       }catch{}
       
-      // Fallback to burn history cache (Moralis data)
-      if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
-        return burnHistoryCache[token].holders;
-      }
-      
-      // Fallback to holder history cache
-      if(holderHistoryCache&&holderHistoryCache.data?.length>0){
-        const lastEntry=holderHistoryCache.data[holderHistoryCache.data.length-1];
-        if(lastEntry[key]>0)return lastEntry[key];
-      }
-      
       return 0;
+    };
+    
+    // Fetch live holder count from PulseScan (for background update)
+    const fetchHoldersLive=async addr=>{
+      try{
+        const controller=new AbortController();
+        const timeoutId=setTimeout(()=>controller.abort(),8000);
+        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`,{signal:controller.signal});
+        clearTimeout(timeoutId);
+        const data=await r.json();
+        return parseInt(data.token_holders_count)||0;
+      }catch{return 0}
     };
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
     
@@ -1408,7 +1421,22 @@
       const[data,setData]=useState({PTGC:null,UFO:null});
       const[pls,setPls]=useState(0);
       const[loading,setLoading]=useState(true);
-      useEffect(()=>{const load=async()=>{const[p,u,plsPrice]=await Promise.all([fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair),fetchPLS()]);setData({PTGC:p,UFO:u});setPls(plsPrice);setLoading(false)};load()},[]);
+      useEffect(()=>{const load=async()=>{
+        // Load token data and preload caches in parallel
+        const[p,u,plsPrice]=await Promise.all([
+          fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),
+          fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair),
+          fetchPLS(),
+          // Preload caches so Dashboard loads faster
+          fetchBurnHistory(),
+          fetchHolderHistory(),
+          fetchCoingeckoData(),
+          fetchLiquidityHistory(),
+          fetchTransactionHistory(),
+          fetchHolderHistoryNew(),
+          fetchTokensInLPHistory()
+        ]);
+        setData({PTGC:p,UFO:u});setPls(plsPrice);setLoading(false)};load()},[]);
       const Card=({token,d})=>{
         const cfg=TOKENS[token],isGold=cfg.color==='gold';
         const border=isGold?'border-[#D9CA5D]/50':'border-[#7CFC00]/50',text=isGold?'text-[#D9CA5D]':'text-[#7CFC00]';
@@ -2332,16 +2360,16 @@
         setTxnChange24h(null);
         
         const load=async()=>{
-          // Load burn history cache first (needed for holders from Moralis)
-          await fetchBurnHistory();
-          // Load holder history cache (for holder chart and change indicator)
-          await fetchHolderHistory();
-          // Load CoinGecko pre-fetched data
-          await fetchCoingeckoData();
-          await fetchLiquidityHistory();
-          await fetchTransactionHistory();
-          await fetchHolderHistoryNew();
-          await fetchTokensInLPHistory();
+          // Load all caches in PARALLEL (not sequential)
+          await Promise.all([
+            fetchBurnHistory(),
+            fetchHolderHistory(),
+            fetchCoingeckoData(),
+            fetchLiquidityHistory(),
+            fetchTransactionHistory(),
+            fetchHolderHistoryNew(),
+            fetchTokensInLPHistory()
+          ]);
           
           // Load burn periods from cache
           const periods=getBurnPeriods(token);
