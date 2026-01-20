@@ -327,21 +327,7 @@
       }
     };
     const fetchHolders=async addr=>{
-      const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
-      const key=token.toLowerCase();
-      
-      // First try burn history cache (Moralis data)
-      if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
-        return burnHistoryCache[token].holders;
-      }
-      
-      // Then try holder history cache (most recent month)
-      if(holderHistoryCache&&holderHistoryCache.data?.length>0){
-        const lastEntry=holderHistoryCache.data[holderHistoryCache.data.length-1];
-        if(lastEntry[key]>0)return lastEntry[key];
-      }
-      
-      // Fallback to PulseScan
+      // Always use PulseScan for consistency with historical snapshots
       try{
         const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`);
         const data=await r.json();
