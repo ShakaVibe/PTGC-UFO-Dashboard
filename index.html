@@ -1844,6 +1844,164 @@
       );
     };
     
+    // Combined PTGC & UFO Leagues Modal - Fetches prices directly from DexScreener
+    const CombinedLeaguesModal=({open,close})=>{
+      const[prices,setPrices]=useState({ptgc:0,ufo:0});
+      const[loading,setLoading]=useState(true);
+      
+      useEffect(()=>{
+        if(!open)return;
+        setLoading(true);
+        const fetchPrices=async()=>{
+          try{
+            const[ptgcRes,ufoRes]=await Promise.all([
+              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11'),
+              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5')
+            ]);
+            const ptgcData=await ptgcRes.json();
+            const ufoData=await ufoRes.json();
+            setPrices({
+              ptgc:parseFloat(ptgcData?.pair?.priceUsd)||0,
+              ufo:parseFloat(ufoData?.pair?.priceUsd)||0
+            });
+          }catch(e){
+            console.error('Error fetching prices:',e);
+          }
+          setLoading(false);
+        };
+        fetchPrices();
+      },[open]);
+      
+      if(!open)return null;
+      
+      const fmtUsdTier=(v)=>{
+        if(!v||v===0)return'—';
+        if(v>=1000000)return'$'+(v/1000000).toFixed(2)+'M';
+        if(v>=1000)return'$'+(v/1000).toFixed(1)+'K';
+        if(v>=1)return'$'+Math.floor(v).toLocaleString();
+        if(v>=0.01)return'$'+v.toFixed(2);
+        return'<$0.01';
+      };
+      
+      const formatPtgcPrice=(p)=>{
+        if(!p||p===0)return'Loading...';
+        if(p>=1)return'$'+p.toFixed(2);
+        return'$'+p.toFixed(6);
+      };
+      
+      const formatUfoPrice=(p)=>{
+        if(!p||p===0)return'Loading...';
+        if(p>=1)return'$'+p.toFixed(2);
+        if(p>=0.0001)return'$'+p.toFixed(8);
+        const s=p.toExponential(4);
+        const[m,e]=s.split('e');
+        const exp=Math.abs(parseInt(e));
+        return<span>$0.0<sub style={{fontSize:'0.6em'}}>{exp-1}</sub>{parseFloat(m).toFixed(4).replace('.','').slice(0,4)}</span>;
+      };
+      
+      const tiers=[
+        {name:'Poseidon',emoji:'🔱',pct:0.10},
+        {name:'Whale',emoji:'🐋',pct:0.01},
+        {name:'Shark',emoji:'🦈',pct:0.001},
+        {name:'Dolphin',emoji:'🐬',pct:0.0001},
+        {name:'Squid',emoji:'🦑',pct:0.00001},
+        {name:'Turtle',emoji:'🐢',pct:0.000001},
+        {name:'Shrimp',emoji:'🦐',pct:0.0000001},
+        {name:'Shell',emoji:'🐚',pct:0.00000001},
+      ];
+      
+      return(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={close}>
+          <div className="relative flex flex-col items-center" onClick={e=>e.stopPropagation()}>
+            {/* X button moved way out of screenshot area */}
+            <button onClick={close} className="absolute -top-14 -right-14 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600">✕</button>
+            
+            {/* Vertical container 800x1000 */}
+            <div className="border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
+              <div className="w-[800px] h-[1000px] bg-[#0a0a0a] p-6 flex flex-col" style={{background:'linear-gradient(180deg, #0a0a0a 0%, #151515 50%, #0a0a0a 100%)'}}>
+                {/* Header - Title Only */}
+                <div className="text-center mb-4">
+                  <h1 className="font-orbitron text-5xl font-bold mb-2 text-white">THE GRAYS LEAGUES</h1>
+                  <p className="text-white/60 text-2xl">Sea Creature Current Pricing</p>
+                </div>
+                
+                {/* Token Logos with Prices - Centered over columns */}
+                <div className="grid grid-cols-5 gap-2 mb-4">
+                  {/* PTGC Logo centered over first 2 columns */}
+                  <div className="col-span-2 flex flex-col items-center">
+                    <div className="relative mb-2">
+                      <div className="absolute inset-0 rounded-full" style={{background:'radial-gradient(circle, rgba(217,202,93,1) 0%, rgba(217,202,93,0.7) 40%, transparent 70%)',filter:'blur(25px)',transform:'scale(2.5)'}}></div>
+                      <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-36 h-36 relative z-10"/>
+                    </div>
+                    <div className="text-white text-2xl font-bold">{formatPtgcPrice(prices.ptgc)}</div>
+                  </div>
+                  
+                  {/* Center spacer */}
+                  <div></div>
+                  
+                  {/* UFO Logo centered over last 2 columns */}
+                  <div className="col-span-2 flex flex-col items-center">
+                    <div className="relative mb-2">
+                      <div className="absolute inset-0 rounded-full" style={{background:'radial-gradient(circle, rgba(124,252,0,1) 0%, rgba(124,252,0,0.7) 40%, transparent 70%)',filter:'blur(25px)',transform:'scale(2.5)'}}></div>
+                      <img src={TOKENS.UFO.logo} alt="UFO" className="w-36 h-36 relative z-10"/>
+                    </div>
+                    <div className="text-white text-2xl font-bold">{formatUfoPrice(prices.ufo)}</div>
+                  </div>
+                </div>
+                
+                {/* Column Headers */}
+                <div className="grid grid-cols-5 gap-2 mb-1 px-2">
+                  <div className="text-[#D9CA5D] text-lg font-bold uppercase text-center">Tokens</div>
+                  <div className="text-[#D9CA5D] text-lg font-bold uppercase text-center">USD</div>
+                  <div className="text-center"></div>
+                  <div className="text-[#7CFC00] text-lg font-bold uppercase text-center">Tokens</div>
+                  <div className="text-[#7CFC00] text-lg font-bold uppercase text-center">USD</div>
+                </div>
+                
+                {/* Main Data Grid - Compact rows */}
+                <div className="flex-1 flex flex-col justify-between">
+                  {tiers.map((tier,i)=>{
+                    const ptgcTokens=TOKENS.PTGC.totalSupply*tier.pct;
+                    const ufoTokens=TOKENS.UFO.totalSupply*tier.pct;
+                    const ptgcUsd=ptgcTokens*prices.ptgc;
+                    const ufoUsd=ufoTokens*prices.ufo;
+                    return(
+                      <div key={i} className="grid grid-cols-5 gap-2 items-center py-1 border-b border-white/10">
+                        {/* PTGC Data - Token count in gold */}
+                        <div className="text-[#D9CA5D] text-2xl font-semibold text-center">{fmtAbbr(ptgcTokens)}</div>
+                        <div className="text-white text-2xl font-bold text-center">{fmtUsdTier(ptgcUsd)}</div>
+                        
+                        {/* Sea Creature Center - Single emoji */}
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-4xl">{tier.emoji}</span>
+                          <span className="text-gray-400 text-2xl font-bold">{tier.name}</span>
+                        </div>
+                        
+                        {/* UFO Data - Token count in green */}
+                        <div className="text-[#7CFC00] text-2xl font-semibold text-center">{fmtAbbr(ufoTokens)}</div>
+                        <div className="text-white text-2xl font-bold text-center">{fmtUsdTier(ufoUsd)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Footer */}
+                <div className="flex justify-between items-center pt-3 border-t border-white/20 mt-2">
+                  <div className="text-white/40 text-lg">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+                  <div className="text-white/40 text-lg font-medium font-orbitron">ptgc-ufo.com</div>
+                  <div className="text-white/40 text-lg">Based on starting supply</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center mt-4 text-white/50 text-sm">
+              Screenshot inside the border (800×1000)
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
     // Tier Info Modal - Shows token supply and holder tier thresholds
     const TierInfoModal=({open,close,token,cfg,price,holders,burn,holderTiers,theme})=>{
       if(!open)return null;
@@ -2206,6 +2364,7 @@
       const[priceModalPeriod,setPriceModalPeriod]=useState('24h');
       const[corePrices,setCorePrices]=useState(null);
       const[showCombinedKPI,setShowCombinedKPI]=useState(false);
+      const[showCombinedLeaguesModal,setShowCombinedLeaguesModal]=useState(false);
       const[otherTokenPairs,setOtherTokenPairs]=useState([]);
       
       const closeModalAndReturn=(setModalFn)=>{
@@ -3086,6 +3245,10 @@
                   <button onClick={()=>{setSocialReturn(true);setShowRHCoresShareModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">💎 RH Core Liquidity</div>
                     <div className="text-xs text-white/50">LP breakdown by RH cores</div>
+                  </button>
+                  <button onClick={()=>{setSocialReturn(true);setShowCombinedLeaguesModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-500/20 to-purple-600/20 border border-purple-400/30 text-purple-300 hover:from-purple-500/30 hover:to-purple-600/30 transition-all text-left">
+                    <div className="font-bold">🏆 PTGC & UFO Leagues</div>
+                    <div className="text-xs text-white/50">Combined tier price table</div>
                   </button>
                   <button onClick={()=>{setSocialReturn(true);setShowPriceWithCoresModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">💰 The Grays & The Cores</div>
@@ -4004,6 +4167,14 @@
                 </div>
               </div>
             </div>
+          )}
+          
+          {/* Combined PTGC & UFO Leagues Modal */}
+          {showCombinedLeaguesModal&&(
+            <CombinedLeaguesModal 
+              open={showCombinedLeaguesModal} 
+              close={()=>closeModalAndReturn(setShowCombinedLeaguesModal)}
+            />
           )}
           
           {/* Price with RH Cores Modal */}
