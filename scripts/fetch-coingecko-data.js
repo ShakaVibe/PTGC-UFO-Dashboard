@@ -5,6 +5,9 @@
  * Also fetches price changes for RH Core tokens (WPLS, PLSX, INC, HEX, EHEX).
  * Runs every 30 minutes via GitHub Actions.
  * Stores timestamped snapshots for rolling window calculations.
+ * 
+ * NOTE: This script does NOT update holder-history.json
+ *       Holder history is managed exclusively by fetch-burn-history.js
  */
 
 const fs = require('fs');
@@ -81,7 +84,6 @@ async function fetchAPI(endpoint, retries = 3) {
 async function fetchPriceChanges(tokenAddress, tokenName) {
   console.log(`  Fetching price changes for ${tokenName} (${tokenAddress.slice(0, 10)}...)`);
   try {
-    // Use the contract endpoint which returns market_data with price changes
     const data = await fetchAPI(`/coins/pulsechain/contract/${tokenAddress}`);
     
     if (data && data.market_data) {
@@ -90,7 +92,7 @@ async function fetchPriceChanges(tokenAddress, tokenName) {
         d7: data.market_data.price_change_percentage_7d || null,
         d30: data.market_data.price_change_percentage_30d || null,
         d60: data.market_data.price_change_percentage_60d || null,
-        d90: data.market_data.price_change_percentage_200d || null, // CoinGecko doesn't have 90d, using 200d
+        d90: data.market_data.price_change_percentage_200d || null,
         d200: data.market_data.price_change_percentage_200d || null,
         d1y: data.market_data.price_change_percentage_1y || null
       };
@@ -223,7 +225,6 @@ function processTrades(trades) {
   
   let buys = 0, sells = 0, buyVolume = 0, sellVolume = 0;
   
-  // Recent trades from last 24 hours
   const now = Date.now();
   const h24 = now - 24 * 60 * 60 * 1000;
   
@@ -291,25 +292,20 @@ async function fetchTokenData(tokenName, tokenConfig) {
   };
   
   try {
-    // Fetch price changes first (from CoinGecko Pro)
     result.priceChanges = await fetchPriceChanges(tokenConfig.address, tokenName);
     await sleep(500);
     
-    // Fetch holder count (from PulseScan - free)
     result.holders = await fetchHolderCount(tokenConfig.address);
     await sleep(500);
     
-    // Fetch tokensInLP from DexScreener (free)
     result.tokensInLP = await fetchTokensInLP(tokenConfig.address);
     await sleep(500);
     
-    // Get all pools
     const pools = await fetchTokenPools(tokenConfig.address);
     result.poolCount = pools.length;
     console.log(`Found ${pools.length} pools`);
     await sleep(300);
     
-    // Process each pool (limit to top 15 by liquidity)
     const poolsToProcess = pools.slice(0, 15);
     
     for (const poolData of poolsToProcess) {
@@ -320,7 +316,6 @@ async function fetchTokenData(tokenName, tokenConfig) {
       console.log(`  Processing: ${poolName} (${poolAddress.slice(0, 10)}...)`);
       
       try {
-        // Get pool liquidity
         const poolInfo = await fetchPoolInfo(poolAddress);
         if (poolInfo) {
           const liq = parseFloat(poolInfo.reserve_in_usd) || 0;
@@ -329,7 +324,6 @@ async function fetchTokenData(tokenName, tokenConfig) {
         }
         await sleep(300);
         
-        // Get OHLCV for volume
         const ohlcv = await fetchOHLCV(poolAddress, 90);
         const vol = processVolume(ohlcv);
         result.volume.vol7d += vol.vol7d;
@@ -338,7 +332,6 @@ async function fetchTokenData(tokenName, tokenConfig) {
         console.log(`    7D Vol: $${vol.vol7d.toLocaleString()}`);
         await sleep(300);
         
-        // Get trades for transaction counts
         const trades = await fetchTrades(poolAddress);
         const txns = processTrades(trades);
         result.transactions.buys += txns.buys;
@@ -384,7 +377,7 @@ async function fetchRHCorePriceChanges() {
       address,
       priceChanges
     };
-    await sleep(500); // Rate limit protection
+    await sleep(500);
   }
   
   return coreData;
@@ -404,10 +397,9 @@ async function main() {
   
   const timestamp = new Date().toISOString();
   
-  // Load existing histories
+  // Load existing histories (NOT holder-history - that's managed by fetch-burn-history.js)
   const liquidityHistory = loadHistory('liquidity-history.json');
   const transactionHistory = loadHistory('transaction-history.json');
-  const holderHistory = loadHistory('holder-history.json');
   const tokensInLPHistory = loadHistory('tokensinlp-history.json');
   
   // Fetch data for each token
@@ -415,13 +407,13 @@ async function main() {
   
   for (const [tokenName, tokenConfig] of Object.entries(CONFIG.tokens)) {
     tokenData[tokenName] = await fetchTokenData(tokenName, tokenConfig);
-    await sleep(2000); // Pause between tokens
+    await sleep(2000);
   }
   
   // Fetch RH Core price changes
   const rhCoreData = await fetchRHCorePriceChanges();
   
-  // Append to histories
+  // Append to histories (NOT holder-history)
   liquidityHistory.snapshots.push({
     timestamp,
     PTGC: tokenData.PTGC.liquidity,
@@ -434,16 +426,6 @@ async function main() {
     UFO: tokenData.UFO.transactions
   });
   
-  // Only add holder snapshot if we got valid data
-  if (tokenData.PTGC.holders !== null || tokenData.UFO.holders !== null) {
-    holderHistory.snapshots.push({
-      timestamp,
-      PTGC: tokenData.PTGC.holders,
-      UFO: tokenData.UFO.holders
-    });
-  }
-  
-  // Only add tokensInLP snapshot if we got valid data
   if (tokenData.PTGC.tokensInLP !== null || tokenData.UFO.tokensInLP !== null) {
     tokensInLPHistory.snapshots.push({
       timestamp,
@@ -452,18 +434,27 @@ async function main() {
     });
   }
   
-  // Save history files
+  // Trim histories to last 500 snapshots
+  if (liquidityHistory.snapshots.length > 500) {
+    liquidityHistory.snapshots = liquidityHistory.snapshots.slice(-500);
+  }
+  if (transactionHistory.snapshots.length > 500) {
+    transactionHistory.snapshots = transactionHistory.snapshots.slice(-500);
+  }
+  if (tokensInLPHistory.snapshots.length > 500) {
+    tokensInLPHistory.snapshots = tokensInLPHistory.snapshots.slice(-500);
+  }
+  
+  // Save history files (NOT holder-history)
   liquidityHistory.lastUpdated = timestamp;
   transactionHistory.lastUpdated = timestamp;
-  holderHistory.lastUpdated = timestamp;
   tokensInLPHistory.lastUpdated = timestamp;
   
   saveData('liquidity-history.json', liquidityHistory);
   saveData('transaction-history.json', transactionHistory);
-  saveData('holder-history.json', holderHistory);
   saveData('tokensinlp-history.json', tokensInLPHistory);
   
-  // Save current aggregates (volume periods + current snapshot + PRICE CHANGES)
+  // Save current aggregates
   const coingeckoData = {
     lastUpdated: timestamp,
     PTGC: {
@@ -484,7 +475,6 @@ async function main() {
       poolCount: tokenData.UFO.poolCount,
       priceChanges: tokenData.UFO.priceChanges
     },
-    // NEW: RH Core price changes for the Grays & Cores image
     rhCores: rhCoreData
   };
   
@@ -492,6 +482,7 @@ async function main() {
   
   console.log('\n' + '='.repeat(60));
   console.log('Fetch Complete!');
+  console.log('NOTE: holder-history.json is managed by fetch-burn-history.js only');
   console.log('='.repeat(60));
 }
 
