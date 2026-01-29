@@ -1,489 +1,943 @@
 /**
- * CoinGecko Pro API Data Fetcher
+ * Fetch Burn History Script - MORALIS VERSION (SPLIT FILES)
  * 
- * Fetches volume, liquidity, transaction data, holder counts, and PRICE CHANGES for PTGC and UFO tokens.
- * Also fetches price changes for RH Core tokens (WPLS, PLSX, INC, HEX, EHEX).
- * Runs every 30 minutes via GitHub Actions.
- * Stores timestamped snapshots for rolling window calculations.
+ * Splits burn data into multiple files to stay under GitHub's 100MB limit
  * 
- * NOTE: This script does NOT update holder-history.json
- *       Holder history is managed exclusively by fetch-burn-history.js
+ * UPDATED: Holder count now fetched from PulseScan (not Moralis) for consistency
+ * UPDATED: Holder history now stores ONE snapshot per day
+ * 
+ * Files created:
+ * - burn-summary.json (totals, prices, periods, snapshots)
+ * - ptgc-burns-2023-h2.json (May-Dec 2023)
+ * - ptgc-burns-2024-h1.json (Jan-Jun 2024)
+ * - ptgc-burns-2024-h2.json (Jul-Dec 2024)
+ * - ptgc-burns-2025-h1.json (Jan-Jun 2025)
+ * - ptgc-burns-2025-h2.json (Jul-Dec 2025)
+ * - ptgc-burns-2026.json (2026+, current file for updates)
+ * - ufo-burns.json (all UFO burns - small file)
+ * - holder-history.json (daily holder snapshots - THIS SCRIPT IS THE ONLY SOURCE)
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Configuration
-const CONFIG = {
-  apiKey: process.env.COINGECKO_API_KEY,
-  baseUrl: 'https://pro-api.coingecko.com/api/v3',
-  network: 'pulsechain',
-  outputDir: './data',
-  
-  tokens: {
-    PTGC: {
-      address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93',
-      mainPool: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
-      decimals: 18,
-      totalSupply: 333333333333
-    },
-    UFO: {
-      address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
-      mainPool: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',
-      decimals: 18,
-      totalSupply: 999999999051
-    }
-  },
-  
-  // RH Core tokens for price change tracking
-  rhCores: {
-    WPLS: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
-    PLSX: '0x95b303987a60c71504d99aa1b13b4da07b0790ab',
-    INC: '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
-    HEX: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
-    EHEX: '0x57fde0a71132198bbec939b98976993d8d89d225'
-  }
+// Moralis API Key - set via environment variable
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
+if (!MORALIS_API_KEY) {
+  console.error('ERROR: MORALIS_API_KEY environment variable not set');
+  process.exit(1);
+}
+
+// PulseChain chain identifier for Moralis
+const CHAIN = '0x171'; // PulseChain mainnet (369 in hex)
+
+// Addresses
+const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
+const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
+const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
+
+// LP Pairs (for identifying automated buyback burns)
+const PTGC_LP_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11';
+const UFO_LP_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';
+
+const PTGC_DECIMALS = 18;
+const UFO_DECIMALS = 18;
+
+const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
+const DEXSCREENER_BASE = 'https://api.dexscreener.com/latest/dex';
+const PULSESCAN_BASE = 'https://api.scan.pulsechain.com/api/v2';
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Time period boundaries (timestamps)
+const PERIODS = {
+  '2023-h2': { start: new Date('2023-05-01').getTime(), end: new Date('2024-01-01').getTime() },
+  '2024-h1': { start: new Date('2024-01-01').getTime(), end: new Date('2024-07-01').getTime() },
+  '2024-h2': { start: new Date('2024-07-01').getTime(), end: new Date('2025-01-01').getTime() },
+  '2025-h1': { start: new Date('2025-01-01').getTime(), end: new Date('2025-07-01').getTime() },
+  '2025-h2': { start: new Date('2025-07-01').getTime(), end: new Date('2026-01-01').getTime() },
+  '2026': { start: new Date('2026-01-01').getTime(), end: new Date('2030-01-01').getTime() }
 };
 
-// Rate limiting helper
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// API fetch with error handling and retry
-async function fetchAPI(endpoint, retries = 3) {
-  const url = `${CONFIG.baseUrl}${endpoint}`;
-  
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'x-cg-pro-api-key': CONFIG.apiKey,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.status === 429) {
-        console.log(`Rate limited, waiting 60 seconds (attempt ${attempt}/${retries})`);
-        await sleep(60000);
-        continue;
-      }
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error(`Attempt ${attempt}/${retries} failed for ${endpoint}:`, error.message);
-      if (attempt === retries) throw error;
-      await sleep(2000 * attempt);
+/**
+ * Get period key for a timestamp
+ */
+function getPeriodKey(timestamp) {
+  for (const [key, range] of Object.entries(PERIODS)) {
+    if (timestamp >= range.start && timestamp < range.end) {
+      return key;
     }
   }
+  return '2026'; // Default to current
 }
 
-// Fetch price changes for a token by contract address
-async function fetchPriceChanges(tokenAddress, tokenName) {
-  console.log(`  Fetching price changes for ${tokenName} (${tokenAddress.slice(0, 10)}...)`);
-  try {
-    const data = await fetchAPI(`/coins/pulsechain/contract/${tokenAddress}`);
-    
-    if (data && data.market_data) {
-      const priceChanges = {
-        h24: data.market_data.price_change_percentage_24h || null,
-        d7: data.market_data.price_change_percentage_7d || null,
-        d30: data.market_data.price_change_percentage_30d || null,
-        d60: data.market_data.price_change_percentage_60d || null,
-        d90: data.market_data.price_change_percentage_200d || null,
-        d200: data.market_data.price_change_percentage_200d || null,
-        d1y: data.market_data.price_change_percentage_1y || null
-      };
-      console.log(`    ${tokenName}: 7d=${priceChanges.d7?.toFixed(2)}%, 30d=${priceChanges.d30?.toFixed(2)}%`);
-      return priceChanges;
-    }
-    return null;
-  } catch (error) {
-    console.error(`  Error fetching price changes for ${tokenName}:`, error.message);
-    return null;
-  }
-}
-
-// Fetch holder count from PulseScan (free, no API key needed)
-async function fetchHolderCount(tokenAddress) {
-  try {
-    const url = `https://api.scan.pulsechain.com/api/v2/tokens/${tokenAddress}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    const holders = data.holders ? parseInt(data.holders) : null;
-    console.log(`  Holders for ${tokenAddress.slice(0, 10)}...: ${holders}`);
-    return holders;
-  } catch (error) {
-    console.error(`PulseScan holder error for ${tokenAddress}:`, error.message);
-    return null;
-  }
-}
-
-// Fetch tokensInLP from DexScreener (free, no API key needed)
-async function fetchTokensInLP(tokenAddress) {
-  try {
-    const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    if (!data.pairs || data.pairs.length === 0) {
-      return 0;
-    }
-    
-    let totalTokensInLP = 0;
-    for (const pair of data.pairs) {
-      const isBase = pair.baseToken?.address?.toLowerCase() === tokenAddress.toLowerCase();
-      if (isBase && pair.liquidity?.base) {
-        totalTokensInLP += pair.liquidity.base;
-      } else if (!isBase && pair.liquidity?.quote) {
-        totalTokensInLP += pair.liquidity.quote;
-      }
-    }
-    console.log(`  Tokens in LP for ${tokenAddress.slice(0, 10)}...: ${totalTokensInLP.toLocaleString()}`);
-    return totalTokensInLP;
-  } catch (error) {
-    console.error(`DexScreener tokensInLP error for ${tokenAddress}:`, error.message);
-    return null;
-  }
-}
-
-// Fetch all pools for a token
-async function fetchTokenPools(address) {
-  console.log(`Fetching pools for ${address.slice(0, 10)}...`);
-  try {
-    const data = await fetchAPI(`/onchain/networks/${CONFIG.network}/tokens/${address}/pools?page=1`);
-    return data?.data || [];
-  } catch (e) {
-    console.error('Error fetching pools:', e.message);
-    return [];
-  }
-}
-
-// Fetch pool info with liquidity
-async function fetchPoolInfo(poolAddress) {
-  try {
-    const data = await fetchAPI(`/onchain/networks/${CONFIG.network}/pools/${poolAddress}`);
-    return data?.data?.attributes || null;
-  } catch (e) {
-    console.error(`Error fetching pool ${poolAddress}:`, e.message);
-    return null;
-  }
-}
-
-// Fetch OHLCV data for volume
-async function fetchOHLCV(poolAddress, days = 90) {
-  try {
-    const data = await fetchAPI(
-      `/onchain/networks/${CONFIG.network}/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=${days}`
-    );
-    return data?.data?.attributes?.ohlcv_list || [];
-  } catch (e) {
-    console.error(`Error fetching OHLCV for ${poolAddress}:`, e.message);
-    return [];
-  }
-}
-
-// Fetch recent trades
-async function fetchTrades(poolAddress) {
-  try {
-    const data = await fetchAPI(
-      `/onchain/networks/${CONFIG.network}/pools/${poolAddress}/trades`
-    );
-    return data?.data || [];
-  } catch (e) {
-    console.error(`Error fetching trades for ${poolAddress}:`, e.message);
-    return [];
-  }
-}
-
-// Process OHLCV into volume periods
-function processVolume(ohlcvList) {
-  if (!ohlcvList || ohlcvList.length === 0) return { vol7d: 0, vol30d: 0, vol90d: 0 };
-  
-  let vol7d = 0, vol30d = 0, vol90d = 0;
-  
-  ohlcvList.forEach((candle, i) => {
-    const vol = candle[5] || 0;
-    if (i < 7) vol7d += vol;
-    if (i < 30) vol30d += vol;
-    if (i < 90) vol90d += vol;
+/**
+ * Make Moralis API request
+ */
+async function moralisRequest(endpoint, params = {}) {
+  const url = new URL(`${MORALIS_BASE}${endpoint}`);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
   });
   
-  return { vol7d, vol30d, vol90d };
-}
-
-// Process trades into transaction counts
-function processTrades(trades) {
-  if (!trades || trades.length === 0) return { buys: 0, sells: 0, total: 0, buyVolume: 0, sellVolume: 0 };
-  
-  let buys = 0, sells = 0, buyVolume = 0, sellVolume = 0;
-  
-  const now = Date.now();
-  const h24 = now - 24 * 60 * 60 * 1000;
-  
-  for (const trade of trades) {
-    const attrs = trade.attributes;
-    if (!attrs) continue;
-    
-    const timestamp = new Date(attrs.block_timestamp).getTime();
-    if (timestamp < h24) continue;
-    
-    const isBuy = attrs.kind === 'buy';
-    const volumeUsd = parseFloat(attrs.volume_in_usd) || 0;
-    
-    if (isBuy) {
-      buys++;
-      buyVolume += volumeUsd;
-    } else {
-      sells++;
-      sellVolume += volumeUsd;
-    }
-  }
-  
-  return { buys, sells, total: buys + sells, buyVolume, sellVolume };
-}
-
-// Load existing history file
-function loadHistory(filename) {
-  const filepath = path.join(CONFIG.outputDir, filename);
   try {
-    if (fs.existsSync(filepath)) {
-      const data = fs.readFileSync(filepath, 'utf8');
-      return JSON.parse(data);
+    const response = await fetch(url.toString(), {
+      headers: {
+        'X-API-Key': MORALIS_API_KEY,
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status}: ${text}`);
     }
-  } catch (e) {
-    console.error(`Error loading ${filename}:`, e.message);
+    
+    return await response.json();
+  } catch (error) {
+    console.log(`  API Error: ${error.message}`);
+    return null;
   }
-  return { snapshots: [] };
 }
 
-// Save data to file
-function saveData(filename, data) {
-  const outputPath = path.join(CONFIG.outputDir, filename);
-  
-  if (!fs.existsSync(CONFIG.outputDir)) {
-    fs.mkdirSync(CONFIG.outputDir, { recursive: true });
-  }
-  
-  fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));
-  console.log(`Saved: ${outputPath}`);
-}
-
-// Fetch all data for a token
-async function fetchTokenData(tokenName, tokenConfig) {
-  console.log(`\n========== Fetching ${tokenName} ==========`);
-  
-  const result = {
-    liquidity: 0,
-    volume: { vol7d: 0, vol30d: 0, vol90d: 0 },
-    transactions: { buys: 0, sells: 0, total: 0, buyVolume: 0, sellVolume: 0 },
-    holders: null,
-    tokensInLP: null,
-    poolCount: 0,
-    priceChanges: null,
-    errors: []
-  };
+/**
+ * Fetch transaction count from DexScreener
+ */
+async function fetchTransactionCount(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} transaction count from DexScreener...`);
   
   try {
-    result.priceChanges = await fetchPriceChanges(tokenConfig.address, tokenName);
-    await sleep(500);
+    const response = await fetch(`${DEXSCREENER_BASE}/tokens/${tokenAddress}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     
-    result.holders = await fetchHolderCount(tokenConfig.address);
-    await sleep(500);
+    const data = await response.json();
     
-    result.tokensInLP = await fetchTokensInLP(tokenConfig.address);
-    await sleep(500);
-    
-    const pools = await fetchTokenPools(tokenConfig.address);
-    result.poolCount = pools.length;
-    console.log(`Found ${pools.length} pools`);
-    await sleep(300);
-    
-    const poolsToProcess = pools.slice(0, 15);
-    
-    for (const poolData of poolsToProcess) {
-      const poolAddress = poolData.id?.split('_')[1];
-      if (!poolAddress) continue;
+    if (data.pairs && data.pairs.length > 0) {
+      // Sum up all transactions across all pairs
+      let totalBuys = 0;
+      let totalSells = 0;
       
-      const poolName = poolData.attributes?.name || 'Unknown';
-      console.log(`  Processing: ${poolName} (${poolAddress.slice(0, 10)}...)`);
+      for (const pair of data.pairs) {
+        totalBuys += pair.txns?.h24?.buys || 0;
+        totalSells += pair.txns?.h24?.sells || 0;
+      }
       
+      const totalTxns = totalBuys + totalSells;
+      console.log(`  ${tokenSymbol} 24h transactions: ${totalTxns} (${totalBuys} buys, ${totalSells} sells)`);
+      
+      return totalTxns;
+    }
+    
+    return 0;
+  } catch (error) {
+    console.log(`  DexScreener Error: ${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Load existing burn files for a token
+ */
+function loadExistingBurns(dataDir, token) {
+  let allBurns = [];
+  console.log(`\nLoading existing ${token} burns...`);
+  console.log(`  Data directory: ${dataDir}`);
+  
+  if (token === 'PTGC') {
+    // Load all PTGC period files
+    for (const period of Object.keys(PERIODS)) {
+      const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
+      console.log(`  Checking: ${filePath}`);
       try {
-        const poolInfo = await fetchPoolInfo(poolAddress);
-        if (poolInfo) {
-          const liq = parseFloat(poolInfo.reserve_in_usd) || 0;
-          result.liquidity += liq;
-          console.log(`    Liquidity: $${liq.toLocaleString()}`);
+        if (fs.existsSync(filePath)) {
+          const stats = fs.statSync(filePath);
+          console.log(`    File exists, size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          console.log(`    Read ${fileContent.length} characters`);
+          const data = JSON.parse(fileContent);
+          console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
+          if (data.burns && data.burns.length > 0) {
+            // Use concat instead of spread to avoid stack overflow
+            allBurns = allBurns.concat(data.burns);
+            console.log(`    Added ${data.burns.length} burns, total now: ${allBurns.length}`);
+          }
+        } else {
+          console.log(`    File does not exist`);
         }
-        await sleep(300);
-        
-        const ohlcv = await fetchOHLCV(poolAddress, 90);
-        const vol = processVolume(ohlcv);
-        result.volume.vol7d += vol.vol7d;
-        result.volume.vol30d += vol.vol30d;
-        result.volume.vol90d += vol.vol90d;
-        console.log(`    7D Vol: $${vol.vol7d.toLocaleString()}`);
-        await sleep(300);
-        
-        const trades = await fetchTrades(poolAddress);
-        const txns = processTrades(trades);
-        result.transactions.buys += txns.buys;
-        result.transactions.sells += txns.sells;
-        result.transactions.total += txns.total;
-        result.transactions.buyVolume += txns.buyVolume;
-        result.transactions.sellVolume += txns.sellVolume;
-        console.log(`    24H Txns: ${txns.total} (${txns.buys} buys / ${txns.sells} sells)`);
-        await sleep(300);
-        
       } catch (e) {
-        console.error(`    Error: ${e.message}`);
-        result.errors.push({ pool: poolAddress, error: e.message });
+        console.log(`    ERROR loading ${filePath}: ${e.message}`);
+        console.log(`    Stack: ${e.stack}`);
       }
     }
-    
-  } catch (e) {
-    console.error(`Fatal error for ${tokenName}:`, e.message);
-    result.errors.push({ type: 'fatal', error: e.message });
+  } else {
+    // Load UFO file
+    const filePath = path.join(dataDir, 'ufo-burns.json');
+    console.log(`  Checking: ${filePath}`);
+    try {
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        console.log(`    File exists, size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        console.log(`    Read ${fileContent.length} characters`);
+        const data = JSON.parse(fileContent);
+        console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
+        if (data.burns && data.burns.length > 0) {
+          // Use concat instead of spread to avoid stack overflow
+          allBurns = allBurns.concat(data.burns);
+          console.log(`    Added ${data.burns.length} burns, total now: ${allBurns.length}`);
+        }
+      } else {
+        console.log(`    File does not exist`);
+      }
+    } catch (e) {
+      console.log(`    ERROR loading ${filePath}: ${e.message}`);
+      console.log(`    Stack: ${e.stack}`);
+    }
   }
   
-  console.log(`\n${tokenName} TOTALS:`);
-  console.log(`  Price Changes: 7d=${result.priceChanges?.d7?.toFixed(2) || 'N/A'}%, 30d=${result.priceChanges?.d30?.toFixed(2) || 'N/A'}%`);
-  console.log(`  Holders: ${result.holders || 'N/A'}`);
-  console.log(`  Tokens in LP: ${result.tokensInLP?.toLocaleString() || 'N/A'}`);
-  console.log(`  Liquidity: $${result.liquidity.toLocaleString()}`);
-  console.log(`  Volume 7D: $${result.volume.vol7d.toLocaleString()}`);
-  console.log(`  Volume 30D: $${result.volume.vol30d.toLocaleString()}`);
-  console.log(`  Transactions: ${result.transactions.total}`);
+  console.log(`  Total ${token} burns loaded from files: ${allBurns.length}`);
+  
+  // Sort by timestamp descending
+  allBurns.sort((a, b) => b.t - a.t);
+  
+  // Log timestamp range
+  if (allBurns.length > 0) {
+    console.log(`  Oldest burn: ${new Date(allBurns[allBurns.length - 1].t).toISOString()}`);
+    console.log(`  Newest burn: ${new Date(allBurns[0].t).toISOString()}`);
+  }
+  
+  return allBurns;
+}
+
+/**
+ * Load existing summary
+ */
+function loadExistingSummary(dataDir) {
+  const filePath = path.join(dataDir, 'burn-summary.json');
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      console.log('Loaded existing summary from:', data.lastUpdated);
+      return data;
+    }
+  } catch (e) {
+    console.log('Could not load summary:', e.message);
+  }
+  return null;
+}
+
+/**
+ * Fetch ALL token transfers to burn address using Moralis
+ */
+async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns = []) {
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`Fetching ${tokenSymbol} burns via Moralis...`);
+  console.log(`${'='.repeat(50)}`);
+  
+  // Get the most recent timestamp we have (for incremental updates)
+  const lastTimestamp = existingBurns.length > 0 ? existingBurns[0].t : 0;
+  if (lastTimestamp) {
+    console.log(`Incremental mode: fetching after ${new Date(lastTimestamp).toISOString()}`);
+  } else {
+    console.log('Full fetch mode: getting all historical burns');
+  }
+  
+  const newBurns = [];
+  let cursor = null;
+  let page = 0;
+  let reachedOldData = false;
+  
+  while (!reachedOldData) {
+    // Moralis endpoint for wallet token transfers (burn address is the wallet receiving)
+    const data = await moralisRequest(`/${BURN_ADDRESS}/erc20/transfers`, {
+      chain: CHAIN,
+      contract_addresses: [tokenAddress],
+      cursor: cursor,
+      limit: 100
+    });
+    
+    if (!data) {
+      console.log(`  Page ${page + 1}: API error, retrying in 5s...`);
+      await delay(5000);
+      continue;
+    }
+    
+    if (!data.result || data.result.length === 0) {
+      console.log(`  No more data after page ${page + 1}`);
+      break;
+    }
+    
+    for (const tx of data.result) {
+      const timestamp = new Date(tx.block_timestamp).getTime();
+      
+      // Stop if we've reached data we already have
+      if (lastTimestamp && timestamp <= lastTimestamp) {
+        console.log(`  Reached existing data at ${new Date(timestamp).toISOString()}`);
+        reachedOldData = true;
+        break;
+      }
+      
+      const amount = Number(BigInt(tx.value || '0')) / Math.pow(10, decimals);
+      const fromAddr = (tx.from_address || '').toLowerCase();
+      
+      newBurns.push({
+        t: timestamp,
+        a: amount,
+        f: fromAddr
+      });
+    }
+    
+    // Log progress
+    if (page % 10 === 0 || page < 5) {
+      console.log(`  Page ${page + 1}: ${newBurns.length} new burns collected`);
+    }
+    
+    // Check for next page
+    cursor = data.cursor;
+    if (!cursor || reachedOldData) {
+      break;
+    }
+    
+    page++;
+    await delay(200); // Gentle rate limiting
+  }
+  
+  console.log(`Fetched ${newBurns.length} new ${tokenSymbol} burns`);
+  console.log(`Existing ${tokenSymbol} burns: ${existingBurns.length}`);
+  
+  // Merge with existing burns
+  const allBurns = [...newBurns, ...existingBurns];
+  
+  // Sort by timestamp descending (newest first)
+  allBurns.sort((a, b) => b.t - a.t);
+  
+  console.log(`Total ${tokenSymbol} burns after merge: ${allBurns.length}`);
+  
+  // Log timestamp range
+  if (allBurns.length > 0) {
+    console.log(`  Oldest: ${new Date(allBurns[allBurns.length - 1].t).toISOString()}`);
+    console.log(`  Newest: ${new Date(allBurns[0].t).toISOString()}`);
+  }
+  
+  return allBurns;
+}
+
+/**
+ * Split burns into period files
+ */
+function splitBurnsByPeriod(burns) {
+  const byPeriod = {};
+  
+  for (const period of Object.keys(PERIODS)) {
+    byPeriod[period] = [];
+  }
+  
+  for (const burn of burns) {
+    const period = getPeriodKey(burn.t);
+    byPeriod[period].push(burn);
+  }
+  
+  return byPeriod;
+}
+
+/**
+ * Filter burns that came from LP pair (these are buyback burns from swaps)
+ */
+function filterBuybackBurns(burns, lpPairAddress) {
+  const lpAddr = lpPairAddress.toLowerCase();
+  return burns.filter(b => b.f === lpAddr);
+}
+
+/**
+ * Calculate period totals (12H, 24H, 7D, 30D)
+ */
+function calculatePeriods(burns) {
+  const now = Date.now();
+  const h12 = 12 * 60 * 60 * 1000;
+  const h24 = 24 * 60 * 60 * 1000;
+  const d7 = 7 * 24 * 60 * 60 * 1000;
+  const d30 = 30 * 24 * 60 * 60 * 1000;
+  const d90 = 90 * 24 * 60 * 60 * 1000;
+  
+  const result = {
+    h12: { count: 0, amount: 0 },
+    h24: { count: 0, amount: 0 },
+    d7: { count: 0, amount: 0 },
+    d30: { count: 0, amount: 0 },
+    d90: { count: 0, amount: 0 }
+  };
+  
+  for (const burn of burns) {
+    const age = now - burn.t;
+    if (age <= h12) { result.h12.count++; result.h12.amount += burn.a; }
+    if (age <= h24) { result.h24.count++; result.h24.amount += burn.a; }
+    if (age <= d7) { result.d7.count++; result.d7.amount += burn.a; }
+    if (age <= d30) { result.d30.count++; result.d30.amount += burn.a; }
+    if (age <= d90) { result.d90.count++; result.d90.amount += burn.a; }
+  }
   
   return result;
 }
 
-// Fetch price changes for all RH Core tokens
-async function fetchRHCorePriceChanges() {
-  console.log('\n========== Fetching RH Core Price Changes ==========');
+/**
+ * Fetch token price from Moralis
+ */
+async function fetchTokenPrice(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} price...`);
   
-  const coreData = {};
+  const data = await moralisRequest(`/erc20/${tokenAddress}/price`, {
+    chain: CHAIN,
+    include: 'percent_change'
+  });
   
-  for (const [name, address] of Object.entries(CONFIG.rhCores)) {
-    const priceChanges = await fetchPriceChanges(address, name);
-    coreData[name] = {
-      address,
-      priceChanges
+  if (data) {
+    const price = data.usdPrice || 0;
+    console.log(`  ${tokenSymbol} price: $${price}`);
+    return {
+      usd: price,
+      change24h: data['24hrPercentChange'] || 0
     };
-    await sleep(500);
   }
   
-  return coreData;
+  return { usd: 0, change24h: 0 };
 }
 
-// Main execution
+/**
+ * Fetch volume stats from Moralis
+ */
+async function fetchVolumeStats(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} volume...`);
+  
+  const data = await moralisRequest(`/erc20/${tokenAddress}/analytics`, {
+    chain: CHAIN
+  });
+  
+  if (data) {
+    console.log(`  ${tokenSymbol} 24h volume: $${data.totalVolume24h || 0}`);
+    return {
+      volume24h: data.totalVolume24h || 0,
+      change24h: data.volumeChange24h || 0
+    };
+  }
+  
+  return { volume24h: 0, change24h: 0 };
+}
+
+/**
+ * Fetch token pairs and liquidity from Moralis
+ */
+async function fetchTokenPairs(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} LP pairs...`);
+  
+  const data = await moralisRequest(`/erc20/${tokenAddress}/pairs`, {
+    chain: CHAIN,
+    limit: 50
+  });
+  
+  if (data && data.pairs) {
+    console.log(`  Found ${data.pairs.length} pairs`);
+    
+    let totalLiquidity = 0;
+    let totalTokensInLP = 0;
+    
+    for (const pair of data.pairs) {
+      totalLiquidity += pair.usdValueCombined || 0;
+      
+      // Find this token's reserve in the pair
+      if (pair.token0 && pair.token0.address.toLowerCase() === tokenAddress.toLowerCase()) {
+        totalTokensInLP += Number(pair.reserve0 || 0);
+      } else if (pair.token1 && pair.token1.address.toLowerCase() === tokenAddress.toLowerCase()) {
+        totalTokensInLP += Number(pair.reserve1 || 0);
+      }
+    }
+    
+    console.log(`  Total liquidity: $${totalLiquidity.toLocaleString()}`);
+    
+    return {
+      pairs: data.pairs,
+      totalLiquidity,
+      totalTokensInLP
+    };
+  }
+  
+  return { pairs: [], totalLiquidity: 0, totalTokensInLP: 0 };
+}
+
+/**
+ * Fetch holder count from PulseScan (NOT Moralis - for consistency with dashboard)
+ */
+async function fetchHolderCount(tokenAddress, tokenSymbol) {
+  console.log(`\nFetching ${tokenSymbol} holder count from PulseScan...`);
+  
+  try {
+    const response = await fetch(`${PULSESCAN_BASE}/tokens/${tokenAddress}/counters`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const holders = parseInt(data.token_holders_count) || 0;
+    console.log(`  ${tokenSymbol} holders: ${holders}`);
+    return holders;
+  } catch (error) {
+    console.log(`  PulseScan Error: ${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Main function
+ */
 async function main() {
+  console.log('\n' + '='.repeat(60));
+  console.log('BURN HISTORY FETCHER - MORALIS VERSION (SPLIT FILES)');
+  console.log('Holder counts: PulseScan (for consistency with dashboard)');
+  console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
-  console.log('CoinGecko Data Fetch Started');
-  console.log(`Time: ${new Date().toISOString()}`);
-  console.log('='.repeat(60));
   
-  if (!CONFIG.apiKey) {
-    console.error('ERROR: COINGECKO_API_KEY environment variable not set!');
-    process.exit(1);
+  const dataDir = path.join(__dirname, '..', 'data');
+  console.log(`\nData directory: ${dataDir}`);
+  console.log(`Script directory: ${__dirname}`);
+  
+  // Ensure data directory exists
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log('Created data directory');
   }
   
-  const timestamp = new Date().toISOString();
-  
-  // Load existing histories (NOT holder-history - that's managed by fetch-burn-history.js)
-  const liquidityHistory = loadHistory('liquidity-history.json');
-  const transactionHistory = loadHistory('transaction-history.json');
-  const tokensInLPHistory = loadHistory('tokensinlp-history.json');
-  
-  // Fetch data for each token
-  const tokenData = {};
-  
-  for (const [tokenName, tokenConfig] of Object.entries(CONFIG.tokens)) {
-    tokenData[tokenName] = await fetchTokenData(tokenName, tokenConfig);
-    await sleep(2000);
+  // List files in data directory
+  console.log('\nFiles in data directory:');
+  try {
+    const files = fs.readdirSync(dataDir);
+    for (const file of files) {
+      const filePath = path.join(dataDir, file);
+      const stats = fs.statSync(filePath);
+      console.log(`  ${file} - ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+    }
+  } catch (e) {
+    console.log(`  ERROR listing directory: ${e.message}`);
   }
   
-  // Fetch RH Core price changes
-  const rhCoreData = await fetchRHCorePriceChanges();
+  // Load existing data
+  const existingSummary = loadExistingSummary(dataDir);
+  const existingPTGCBurns = loadExistingBurns(dataDir, 'PTGC');
+  const existingUFOBurns = loadExistingBurns(dataDir, 'UFO');
   
-  // Append to histories (NOT holder-history)
-  liquidityHistory.snapshots.push({
-    timestamp,
-    PTGC: tokenData.PTGC.liquidity,
-    UFO: tokenData.UFO.liquidity
-  });
+  // ============================================
+  // FETCH ALL BURNS
+  // ============================================
   
-  transactionHistory.snapshots.push({
-    timestamp,
-    PTGC: tokenData.PTGC.transactions,
-    UFO: tokenData.UFO.transactions
-  });
+  const ptgcBurns = await fetchAllBurns(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, existingPTGCBurns);
+  await delay(500);
   
-  if (tokenData.PTGC.tokensInLP !== null || tokenData.UFO.tokensInLP !== null) {
-    tokensInLPHistory.snapshots.push({
-      timestamp,
-      PTGC: tokenData.PTGC.tokensInLP,
-      UFO: tokenData.UFO.tokensInLP
-    });
-  }
+  const ufoBurns = await fetchAllBurns(UFO_ADDRESS, 'UFO', UFO_DECIMALS, existingUFOBurns);
+  await delay(500);
   
-  // Trim histories to last 500 snapshots
-  if (liquidityHistory.snapshots.length > 500) {
-    liquidityHistory.snapshots = liquidityHistory.snapshots.slice(-500);
-  }
-  if (transactionHistory.snapshots.length > 500) {
-    transactionHistory.snapshots = transactionHistory.snapshots.slice(-500);
-  }
-  if (tokensInLPHistory.snapshots.length > 500) {
-    tokensInLPHistory.snapshots = tokensInLPHistory.snapshots.slice(-500);
-  }
+  // ============================================
+  // IDENTIFY BUYBACK BURNS (from LP pairs)
+  // ============================================
   
-  // Save history files (NOT holder-history)
-  liquidityHistory.lastUpdated = timestamp;
-  transactionHistory.lastUpdated = timestamp;
-  tokensInLPHistory.lastUpdated = timestamp;
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Identifying Buyback Burns...');
+  console.log(`${'='.repeat(50)}`);
   
-  saveData('liquidity-history.json', liquidityHistory);
-  saveData('transaction-history.json', transactionHistory);
-  saveData('tokensinlp-history.json', tokensInLPHistory);
+  const ptgcBuybackBurns = filterBuybackBurns(ptgcBurns, PTGC_LP_PAIR);
+  console.log(`PTGC Buyback Burns (from LP): ${ptgcBuybackBurns.length} transactions`);
   
-  // Save current aggregates
-  const coingeckoData = {
-    lastUpdated: timestamp,
-    PTGC: {
-      volume: tokenData.PTGC.volume,
-      liquidity: tokenData.PTGC.liquidity,
-      transactions: tokenData.PTGC.transactions,
-      holders: tokenData.PTGC.holders,
-      tokensInLP: tokenData.PTGC.tokensInLP,
-      poolCount: tokenData.PTGC.poolCount,
-      priceChanges: tokenData.PTGC.priceChanges
-    },
-    UFO: {
-      volume: tokenData.UFO.volume,
-      liquidity: tokenData.UFO.liquidity,
-      transactions: tokenData.UFO.transactions,
-      holders: tokenData.UFO.holders,
-      tokensInLP: tokenData.UFO.tokensInLP,
-      poolCount: tokenData.UFO.poolCount,
-      priceChanges: tokenData.UFO.priceChanges
-    },
-    rhCores: rhCoreData
+  const ufoBuybackBurns = filterBuybackBurns(ufoBurns, UFO_LP_PAIR);
+  console.log(`UFO Buyback Burns (from LP): ${ufoBuybackBurns.length} transactions`);
+  
+  // ============================================
+  // CALCULATE TOTALS AND PERIODS
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('CALCULATING PERIODS');
+  console.log(`${'='.repeat(50)}`);
+  console.log(`PTGC burns to process: ${ptgcBurns.length}`);
+  console.log(`UFO burns to process: ${ufoBurns.length}`);
+  
+  const ptgcTotal = ptgcBurns.reduce((s, b) => s + b.a, 0);
+  const ufoTotal = ufoBurns.reduce((s, b) => s + b.a, 0);
+  const ptgcBuybackTotal = ptgcBuybackBurns.reduce((s, b) => s + b.a, 0);
+  const ufoBuybackTotal = ufoBuybackBurns.reduce((s, b) => s + b.a, 0);
+  
+  console.log(`PTGC total tokens: ${ptgcTotal.toLocaleString()}`);
+  console.log(`UFO total tokens: ${ufoTotal.toLocaleString()}`);
+  
+  const ptgcPeriods = calculatePeriods(ptgcBurns);
+  const ufoPeriods = calculatePeriods(ufoBurns);
+  const ptgcBuybackPeriods = calculatePeriods(ptgcBuybackBurns);
+  const ufoBuybackPeriods = calculatePeriods(ufoBuybackBurns);
+  
+  // ============================================
+  // FETCH ADDITIONAL DATA
+  // ============================================
+  
+  const ptgcPrice = await fetchTokenPrice(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoPrice = await fetchTokenPrice(UFO_ADDRESS, 'UFO');
+  await delay(300);
+  
+  const ptgcVolume = await fetchVolumeStats(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoVolume = await fetchVolumeStats(UFO_ADDRESS, 'UFO');
+  await delay(300);
+  
+  const ptgcPairs = await fetchTokenPairs(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoPairs = await fetchTokenPairs(UFO_ADDRESS, 'UFO');
+  await delay(300);
+  
+  // Fetch holder counts from PulseScan (NOT Moralis)
+  const ptgcHolders = await fetchHolderCount(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
+  await delay(300);
+  
+  // Fetch transaction counts from DexScreener
+  const ptgcTxns = await fetchTransactionCount(PTGC_ADDRESS, 'PTGC');
+  await delay(300);
+  
+  const ufoTxns = await fetchTransactionCount(UFO_ADDRESS, 'UFO');
+  
+  // Get tokens in LP from pairs data
+  const ptgcTokensInLP = ptgcPairs.totalTokensInLP || 0;
+  const ufoTokensInLP = ufoPairs.totalTokensInLP || 0;
+
+  // ============================================
+  // BUILD SNAPSHOTS (for daily changes)
+  // ============================================
+  
+  const today = new Date().toISOString().split('T')[0];
+  const existingPTGCSnapshots = existingSummary?.PTGC?.snapshots || [];
+  const existingUFOSnapshots = existingSummary?.UFO?.snapshots || [];
+  
+  const ptgcSnapshot = {
+    date: today,
+    holders: ptgcHolders,
+    liquidity: ptgcPairs.totalLiquidity,
+    price: ptgcPrice.usd,
+    volume: ptgcVolume.volume24h,
+    tokensInLP: ptgcTokensInLP,
+    txns: ptgcTxns
   };
   
-  saveData('coingecko-data.json', coingeckoData);
+  const ufoSnapshot = {
+    date: today,
+    holders: ufoHolders,
+    liquidity: ufoPairs.totalLiquidity,
+    price: ufoPrice.usd,
+    volume: ufoVolume.volume24h,
+    tokensInLP: ufoTokensInLP,
+    txns: ufoTxns
+  };
+  
+  const ptgcSnapshots = [ptgcSnapshot, ...existingPTGCSnapshots.filter(s => s.date !== today)].slice(0, 30);
+  const ufoSnapshots = [ufoSnapshot, ...existingUFOSnapshots.filter(s => s.date !== today)].slice(0, 30);
+  
+  // Calculate changes vs yesterday
+  const ptgcYesterday = ptgcSnapshots[1];
+  const ufoYesterday = ufoSnapshots[1];
+  
+  const ptgcChanges = ptgcYesterday ? {
+    holders: ptgcYesterday.holders ? ((ptgcHolders - ptgcYesterday.holders) / ptgcYesterday.holders * 100) : 0,
+    liquidity: ptgcYesterday.liquidity ? ((ptgcSnapshot.liquidity - ptgcYesterday.liquidity) / ptgcYesterday.liquidity * 100) : 0,
+    tokensInLP: ptgcYesterday.tokensInLP ? ((ptgcTokensInLP - ptgcYesterday.tokensInLP) / ptgcYesterday.tokensInLP * 100) : 0,
+    txns: ptgcYesterday.txns ? ((ptgcTxns - ptgcYesterday.txns) / ptgcYesterday.txns * 100) : 0
+  } : null;
+  
+  const ufoChanges = ufoYesterday ? {
+    holders: ufoYesterday.holders ? ((ufoHolders - ufoYesterday.holders) / ufoYesterday.holders * 100) : 0,
+    liquidity: ufoYesterday.liquidity ? ((ufoSnapshot.liquidity - ufoYesterday.liquidity) / ufoYesterday.liquidity * 100) : 0,
+    tokensInLP: ufoYesterday.tokensInLP ? ((ufoTokensInLP - ufoYesterday.tokensInLP) / ufoYesterday.tokensInLP * 100) : 0,
+    txns: ufoYesterday.txns ? ((ufoTxns - ufoYesterday.txns) / ufoYesterday.txns * 100) : 0
+  } : null;
+  
+  // ============================================
+  // SPLIT PTGC BURNS BY PERIOD
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Splitting burns by time period...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const ptgcBurnsByPeriod = splitBurnsByPeriod(ptgcBurns);
+  
+  for (const [period, burns] of Object.entries(ptgcBurnsByPeriod)) {
+    console.log(`  ${period}: ${burns.length} burns`);
+  }
+  
+  // ============================================
+  // WRITE PTGC BURN FILES (by period)
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Writing PTGC burn files...');
+  console.log(`${'='.repeat(50)}`);
+  
+  for (const [period, burns] of Object.entries(ptgcBurnsByPeriod)) {
+    if (burns.length === 0) continue;
+    
+    const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
+    const periodTotal = burns.reduce((s, b) => s + b.a, 0);
+    
+    const fileData = {
+      period,
+      burnCount: burns.length,
+      totalBurned: periodTotal,
+      burns: burns.map(b => ({ t: b.t, a: b.a, f: b.f }))
+    };
+    
+    fs.writeFileSync(filePath, JSON.stringify(fileData));
+    const fileSizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(2);
+    console.log(`  Written: ${filePath} (${fileSizeMB} MB, ${burns.length} burns)`);
+  }
+  
+  // ============================================
+  // WRITE UFO BURNS FILE
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Writing UFO burns file...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const ufoFilePath = path.join(dataDir, 'ufo-burns.json');
+  const ufoFileData = {
+    burnCount: ufoBurns.length,
+    totalBurned: ufoTotal,
+    burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f }))
+  };
+  
+  fs.writeFileSync(ufoFilePath, JSON.stringify(ufoFileData));
+  const ufoFileSizeMB = (fs.statSync(ufoFilePath).size / (1024 * 1024)).toFixed(2);
+  console.log(`  Written: ${ufoFilePath} (${ufoFileSizeMB} MB, ${ufoBurns.length} burns)`);
+  
+  // ============================================
+  // WRITE SUMMARY FILE
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Writing summary file...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const summaryData = {
+    lastUpdated: new Date().toISOString(),
+    dataSource: 'Moralis (burns), PulseScan (holders)',
+    
+    PTGC: {
+      totalBurned: ptgcTotal,
+      burnCount: ptgcBurns.length,
+      periods: ptgcPeriods,
+      price: ptgcPrice,
+      volume: {
+        usd24h: ptgcVolume.volume24h,
+        change24h: ptgcVolume.change24h
+      },
+      pairs: ptgcPairs,
+      holders: ptgcHolders,
+      tokensInLP: ptgcTokensInLP,
+      txns: ptgcTxns,
+      snapshots: ptgcSnapshots,
+      changes: ptgcChanges,
+      // File references for loading burns
+      burnFiles: Object.keys(PERIODS).map(p => `ptgc-burns-${p}.json`).filter(f => 
+        fs.existsSync(path.join(dataDir, f))
+      )
+    },
+    
+    UFO: {
+      totalBurned: ufoTotal,
+      burnCount: ufoBurns.length,
+      periods: ufoPeriods,
+      price: ufoPrice,
+      volume: {
+        usd24h: ufoVolume.volume24h,
+        change24h: ufoVolume.change24h
+      },
+      pairs: ufoPairs,
+      holders: ufoHolders,
+      tokensInLP: ufoTokensInLP,
+      txns: ufoTxns,
+      snapshots: ufoSnapshots,
+      changes: ufoChanges,
+      burnFile: 'ufo-burns.json'
+    },
+    
+    // PTGC burned via automated buybacks (from LP swaps)
+    PTGCbyUFO: {
+      totalBurned: ptgcBuybackTotal,
+      burnCount: ptgcBuybackBurns.length,
+      periods: ptgcBuybackPeriods
+    },
+    
+    // UFO burned via automated buybacks (from LP swaps)
+    UFOBuybacks: {
+      totalBurned: ufoBuybackTotal,
+      burnCount: ufoBuybackBurns.length,
+      periods: ufoBuybackPeriods
+    }
+  };
+  
+  const summaryPath = path.join(dataDir, 'burn-summary.json');
+  fs.writeFileSync(summaryPath, JSON.stringify(summaryData, null, 2));
+  const summarySizeMB = (fs.statSync(summaryPath).size / (1024 * 1024)).toFixed(2);
+  console.log(`  Written: ${summaryPath} (${summarySizeMB} MB)`);
+  
+  // ============================================
+  // UPDATE HOLDER HISTORY FILE
+  // ============================================
+  // This is the ONLY script that should write to holder-history.json
+  // Stores ONE snapshot per day for historical comparisons
+  // ============================================
+  
+  console.log(`\n${'='.repeat(50)}`);
+  console.log('Updating holder history file...');
+  console.log(`${'='.repeat(50)}`);
+  
+  const holderHistoryPath = path.join(dataDir, 'holder-history.json');
+  let holderHistory = { source: 'PulseScan', lastUpdated: '', snapshots: [] };
+  
+  try {
+    if (fs.existsSync(holderHistoryPath)) {
+      holderHistory = JSON.parse(fs.readFileSync(holderHistoryPath, 'utf8'));
+      console.log(`  Loaded existing history with ${holderHistory.snapshots?.length || 0} snapshots`);
+    }
+  } catch (e) {
+    console.log('Creating new holder history file...');
+  }
+  
+  // Ensure snapshots array exists
+  if (!holderHistory.snapshots) {
+    holderHistory.snapshots = [];
+  }
+  
+  const now = new Date();
+  const todayDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  // Check if we already have a snapshot for today
+  const existingTodayIndex = holderHistory.snapshots.findIndex(s => {
+    if (!s.timestamp) return false;
+    return s.timestamp.startsWith(todayDate);
+  });
+  
+  const newHolderSnapshot = {
+    timestamp: now.toISOString(),
+    PTGC: ptgcHolders,
+    UFO: ufoHolders
+  };
+  
+  if (existingTodayIndex >= 0) {
+    // Update today's snapshot with latest data
+    holderHistory.snapshots[existingTodayIndex] = newHolderSnapshot;
+    console.log(`  Updated existing snapshot for ${todayDate}`);
+  } else {
+    // Add new snapshot for today
+    holderHistory.snapshots.push(newHolderSnapshot);
+    console.log(`  Added new snapshot for ${todayDate}`);
+  }
+  
+  // Sort snapshots by timestamp (oldest first)
+  holderHistory.snapshots.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  
+  // Keep last 365 days of data (1 year)
+  const maxSnapshots = 365;
+  if (holderHistory.snapshots.length > maxSnapshots) {
+    const removed = holderHistory.snapshots.length - maxSnapshots;
+    holderHistory.snapshots = holderHistory.snapshots.slice(-maxSnapshots);
+    console.log(`  Trimmed ${removed} old snapshots, keeping last ${maxSnapshots}`);
+  }
+  
+  holderHistory.lastUpdated = now.toISOString();
+  holderHistory.source = 'PulseScan';
+  
+  fs.writeFileSync(holderHistoryPath, JSON.stringify(holderHistory, null, 2));
+  console.log(`  Written: ${holderHistoryPath} (${holderHistory.snapshots.length} daily snapshots)`);
+  
+  // Log date range
+  if (holderHistory.snapshots.length > 0) {
+    const oldest = holderHistory.snapshots[0].timestamp.split('T')[0];
+    const newest = holderHistory.snapshots[holderHistory.snapshots.length - 1].timestamp.split('T')[0];
+    console.log(`  Date range: ${oldest} to ${newest}`);
+  }
+  
+  // ============================================
+  // PRINT SUMMARY
+  // ============================================
   
   console.log('\n' + '='.repeat(60));
-  console.log('Fetch Complete!');
-  console.log('NOTE: holder-history.json is managed by fetch-burn-history.js only');
+  console.log('SUMMARY');
+  console.log('='.repeat(60));
+  
+  console.log(`\nPTGC BURNS (all):`);
+  console.log(`  Total: ${ptgcTotal.toLocaleString()} tokens (${ptgcBurns.length} txs)`);
+  console.log(`  12H: ${ptgcPeriods.h12.amount.toLocaleString()}`);
+  console.log(`  24H: ${ptgcPeriods.h24.amount.toLocaleString()}`);
+  console.log(`  7D:  ${ptgcPeriods.d7.amount.toLocaleString()}`);
+  console.log(`  30D: ${ptgcPeriods.d30.amount.toLocaleString()}`);
+  console.log(`  90D: ${ptgcPeriods.d90.amount.toLocaleString()}`);
+  
+  console.log(`\nUFO BURNS (all):`);
+  console.log(`  Total: ${ufoTotal.toLocaleString()} tokens (${ufoBurns.length} txs)`);
+  console.log(`  12H: ${ufoPeriods.h12.amount.toLocaleString()}`);
+  console.log(`  24H: ${ufoPeriods.h24.amount.toLocaleString()}`);
+  console.log(`  7D:  ${ufoPeriods.d7.amount.toLocaleString()}`);
+  console.log(`  30D: ${ufoPeriods.d30.amount.toLocaleString()}`);
+  console.log(`  90D: ${ufoPeriods.d90.amount.toLocaleString()}`);
+  
+  console.log(`\nPTGC BURNED BY UFO (buybacks from LP):`);
+  console.log(`  Total: ${ptgcBuybackTotal.toLocaleString()} tokens (${ptgcBuybackBurns.length} txs)`);
+  console.log(`  12H: ${ptgcBuybackPeriods.h12.amount.toLocaleString()}`);
+  console.log(`  24H: ${ptgcBuybackPeriods.h24.amount.toLocaleString()}`);
+  console.log(`  7D:  ${ptgcBuybackPeriods.d7.amount.toLocaleString()}`);
+  console.log(`  30D: ${ptgcBuybackPeriods.d30.amount.toLocaleString()}`);
+  console.log(`  90D: ${ptgcBuybackPeriods.d90.amount.toLocaleString()}`);
+  
+  console.log(`\nUFO BUYBACK BURNS (from LP):`);
+  console.log(`  Total: ${ufoBuybackTotal.toLocaleString()} tokens (${ufoBuybackBurns.length} txs)`);
+  
+  console.log(`\nPRICES:`);
+  console.log(`  PTGC: $${ptgcPrice.usd}`);
+  console.log(`  UFO: $${ufoPrice.usd}`);
+  
+  console.log(`\nHOLDERS (from PulseScan):`);
+  console.log(`  PTGC: ${ptgcHolders.toLocaleString()}`);
+  console.log(`  UFO: ${ufoHolders.toLocaleString()}`);
+  
+  console.log(`\nTRANSACTIONS (24H):`);
+  console.log(`  PTGC: ${ptgcTxns}`);
+  console.log(`  UFO: ${ufoTxns}`);
+  
+  if (ptgcChanges) {
+    console.log(`\nPTGC CHANGES vs YESTERDAY:`);
+    console.log(`  Txns: ${ptgcChanges.txns.toFixed(1)}%`);
+  }
+  
+  if (ufoChanges) {
+    console.log(`\nUFO CHANGES vs YESTERDAY:`);
+    console.log(`  Txns: ${ufoChanges.txns.toFixed(1)}%`);
+  }
+  
+  console.log('\n' + '='.repeat(60));
+  console.log('FILES WRITTEN:');
+  for (const period of Object.keys(PERIODS)) {
+    const f = path.join(dataDir, `ptgc-burns-${period}.json`);
+    if (fs.existsSync(f)) console.log(`  - ptgc-burns-${period}.json`);
+  }
+  console.log('  - ufo-burns.json');
+  console.log('  - burn-summary.json');
+  console.log('  - holder-history.json');
+  console.log('Completed:', new Date().toISOString());
   console.log('='.repeat(60));
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('FATAL ERROR:', err);
+  process.exit(1);
+});
