@@ -4785,6 +4785,71 @@
                     </div>
                   </div>
                   
+                  {/* Current Month Progress Bar */}
+                  {(()=>{
+                    // Find current month's unpaid transactions for this referrer
+                    const currentMonthLog=data.monthlyLogs?.[currentMonth];
+                    const currentEntry=currentMonthLog?.entries?.find(e=>e.username===selectedReferrer);
+                    const threshold=currentMonthLog?.settings?.threshold||10;
+                    const thresholdType=currentMonthLog?.settings?.thresholdType||'usd';
+                    const rate=currentMonthLog?.settings?.commissionRate||2;
+                    
+                    // Get unpaid transactions for current month
+                    const currentMonthTx=allTx.filter(tx=>tx.month===currentMonth&&!tx.paid&&tx.meetsThreshold!==false);
+                    const unpaidPtgc=currentMonthTx.reduce((s,tx)=>s+(tx.ptgcAmount||0),0);
+                    const unpaidUsd=currentMonthTx.reduce((s,tx)=>s+(tx.usdAmount||0),0);
+                    const unpaidComm=unpaidPtgc*(rate/100);
+                    
+                    // Progress calculation based on threshold type
+                    const progressValue=thresholdType==='usd'?unpaidUsd:unpaidPtgc;
+                    const progressPct=Math.min((progressValue/threshold)*100,100);
+                    const hasMetThreshold=progressValue>=threshold;
+                    const remaining=Math.max(threshold-progressValue,0);
+                    
+                    return(
+                      <div className="mx-4 mb-4 bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🎯</span>
+                            <span className="text-white font-semibold">Current Month Progress</span>
+                            <span className="text-gray-500 text-sm">({new Date(currentMonth+'-01T12:00:00').toLocaleDateString('en-US',{month:'long'})} '{currentMonth.slice(2,4)})</span>
+                          </div>
+                          <div className="text-sm">
+                            {hasMetThreshold?(
+                              <span className="text-green-400 font-bold flex items-center gap-1">✓ Threshold Met!</span>
+                            ):(
+                              <span className="text-purple-300">
+                                <span className="text-white font-bold">{thresholdType==='usd'?'$'+remaining.toFixed(2):fmtAbbr(remaining)+' PTGC'}</span> to go
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="relative h-6 bg-black/50 rounded-full overflow-hidden border border-white/10">
+                          <div 
+                            className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${hasMetThreshold?'bg-gradient-to-r from-green-500 to-green-400':'bg-gradient-to-r from-purple-600 to-purple-400'}`}
+                            style={{width:`${progressPct}%`}}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white drop-shadow-lg">
+                            {thresholdType==='usd'?`$${unpaidUsd.toFixed(2)}`:`${fmtAbbr(unpaidPtgc)} PTGC`} / {thresholdType==='usd'?`$${threshold}`:`${fmtAbbr(threshold)} PTGC`}
+                          </div>
+                        </div>
+                        
+                        {/* Stats Row */}
+                        <div className="flex items-center justify-between mt-3 text-sm">
+                          <div className="flex items-center gap-4">
+                            <span className="text-gray-400">Unpaid Txns: <span className="text-white font-bold">{currentMonthTx.length}</span></span>
+                            <span className="text-gray-400">Pending Commission: <span className="text-purple-400 font-bold">{unpaidComm.toFixed(2)} PTGC</span></span>
+                          </div>
+                          <div className="text-gray-500 text-xs">
+                            Min: {thresholdType==='usd'?`$${threshold}`:`${threshold} PTGC`} per txn @ {rate}% rate
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
                   {/* Transaction History - Grouped by Month */}
                   <div className="p-4 border-t border-white/10">
                     <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>📊</span> Transaction History ({allTx.length})</h3>
