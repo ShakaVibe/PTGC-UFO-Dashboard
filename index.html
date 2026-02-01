@@ -2790,6 +2790,7 @@
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
+                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Affiliates</button>
                 </div>
               </div>
             </div>
@@ -4408,6 +4409,831 @@
       );
     };
     
+    // Affiliates Dashboard Page
+    const AffiliatesPage=({onBack})=>{
+      const[data,setData]=useState(null);
+      const[loading,setLoading]=useState(true);
+      const[error,setError]=useState(null);
+      const[searchTerm,setSearchTerm]=useState('');
+      const[selectedReferrer,setSelectedReferrer]=useState(null);
+      const[activeTab,setActiveTab]=useState('payments');
+      const[viewingMonth,setViewingMonth]=useState(null);
+      const[expandedReceipts,setExpandedReceipts]=useState(new Set());
+      const[expandedMonthTx,setExpandedMonthTx]=useState(null);
+      const[sortCol,setSortCol]=useState('name');
+      const[sortDir,setSortDir]=useState('asc');
+      const[showRegistry,setShowRegistry]=useState(false);
+      const[commLogMonth,setCommLogMonth]=useState(null);
+      const[expandedEntries,setExpandedEntries]=useState(new Set());
+      const[showLeaderboard,setShowLeaderboard]=useState(false);
+      const[showPayments,setShowPayments]=useState(false);
+      const[registrySearch,setRegistrySearch]=useState('');
+      
+      // Current month key - USE UTC TIME
+      const currentMonth=new Date().toISOString().slice(0,7);
+      
+      useEffect(()=>{
+        const fetchData=async()=>{
+          try{
+            const res=await fetch('https://ptgcapi.ptgctools.workers.dev/public/commissions');
+            if(!res.ok)throw new Error('Failed to fetch');
+            const json=await res.json();
+            setData(json);
+            // Set to current UTC month
+            const utcMonth=new Date().toISOString().slice(0,7);
+            setCommLogMonth(utcMonth);
+            setViewingMonth(utcMonth);
+          }catch(e){
+            setError(e.message);
+          }finally{
+            setLoading(false);
+          }
+        };
+        fetchData();
+      },[]);
+      
+      // Get all months from data - include current month even if no data exists yet
+      const allMonths=useMemo(()=>{
+        if(!data?.monthlyLogs)return[currentMonth];
+        const months=Object.keys(data.monthlyLogs);
+        if(!months.includes(currentMonth)){
+          months.push(currentMonth);
+        }
+        return months.sort().reverse();
+      },[data,currentMonth]);
+      
+      // Get current month settings
+      const currentMonthSettings=useMemo(()=>{
+        if(!data?.monthlyLogs?.[currentMonth])return{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
+        return data.monthlyLogs[currentMonth].settings||{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
+      },[data,currentMonth]);
+      
+      // Calculate stats from data based on viewing period
+      const stats=useMemo(()=>{
+        if(!data)return null;
+        const referrers=Object.entries(data.referrers||{});
+        
+        // All-time totals from referrers
+        const totalReferrers=referrers.length;
+        const allTimeBuys=referrers.reduce((sum,[,r])=>sum+(r.totalBuys||0),0);
+        const allTimeUsd=referrers.reduce((sum,[,r])=>sum+(r.totalUsd||0),0);
+        const allTimePtgc=referrers.reduce((sum,[,r])=>sum+(r.totalPtgc||0),0);
+        const totalPaid=(data.receipts||[]).reduce((sum,r)=>sum+(r.amount||0),0);
+        const totalPaidUsd=(data.receipts||[]).reduce((sum,r)=>sum+(r.usdValue||0),0);
+        
+        // Viewing period stats - use viewingMonth or fallback to currentMonth
+        const selectedMonth=viewingMonth||currentMonth;
+        let periodBuys=0,periodUsd=0,periodPtgc=0,periodReferrers=0,periodPaid=0;
+        
+        if(selectedMonth){
+          const monthLog=data.monthlyLogs?.[selectedMonth];
+          const entries=monthLog?.entries||[];
+          periodBuys=entries.reduce((sum,e)=>sum+(e.buysCount||0),0);
+          periodPtgc=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
+          periodUsd=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
+          periodReferrers=entries.length;
+          periodPaid=(data.receipts||[]).filter(r=>r.month===selectedMonth).reduce((sum,r)=>sum+(r.amount||0),0);
+        }
+        
+        // Current month stats
+        const currentMonthLog=data.monthlyLogs?.[currentMonth];
+        const activeThisMonth=(currentMonthLog?.entries||[]).length;
+        
+        // Leaderboard sorted by total PTGC (always all-time for leaderboard)
+        const leaderboard=referrers.map(([username,r])=>({username,...r})).sort((a,b)=>(b.totalPtgc||0)-(a.totalPtgc||0));
+        
+        return{totalReferrers,allTimeBuys,allTimeUsd,allTimePtgc,totalPaid,totalPaidUsd,periodBuys,periodUsd,periodPtgc,periodReferrers,periodPaid,activeThisMonth,leaderboard,currentMonth};
+      },[data,viewingMonth,currentMonth]);
+      
+      const truncateWallet=(w)=>w?`${w.slice(0,6)}...${w.slice(-4)}`:'—';
+      const formatDate=(d)=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
+      const formatDateTime=(d)=>d?new Date(d).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';
+      const formatMonthYear=(m)=>m?new Date(m+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
+      
+      // Filter leaderboard by search
+      const filteredLeaderboard=useMemo(()=>{
+        if(!stats?.leaderboard)return[];
+        if(!searchTerm)return stats.leaderboard;
+        const term=searchTerm.toLowerCase();
+        return stats.leaderboard.filter(r=>r.username.toLowerCase().includes(term)||r.wallet?.toLowerCase().includes(term));
+      },[stats?.leaderboard,searchTerm]);
+      
+      // Get referrer details with their monthly breakdown and transaction details
+      const getReferrerDetails=(username)=>{
+        if(!data)return null;
+        const referrer=data.referrers?.[username];
+        if(!referrer)return null;
+        
+        const monthlyEntries=[];
+        Object.entries(data.monthlyLogs||{}).forEach(([month,log])=>{
+          const entry=(log.entries||[]).find(e=>e.username===username);
+          if(entry)monthlyEntries.push({month,settings:log.settings,...entry});
+        });
+        monthlyEntries.sort((a,b)=>b.month.localeCompare(a.month));
+        
+        const receipts=(data.receipts||[]).filter(r=>r.username===username).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        
+        // Calculate total commissions paid
+        const totalCommPaid=receipts.reduce((sum,r)=>sum+(r.amount||0),0);
+        
+        return{...referrer,username,monthlyEntries,receipts,totalCommPaid};
+      };
+      
+      // Group receipts by date
+      const receiptsByDate=useMemo(()=>{
+        if(!data?.receipts)return{};
+        const grouped={};
+        data.receipts.forEach(r=>{
+          const dateKey=r.date?r.date.split('T')[0]:'unknown';
+          if(!grouped[dateKey])grouped[dateKey]=[];
+          grouped[dateKey].push(r);
+        });
+        return grouped;
+      },[data?.receipts]);
+      
+      const sortedReceiptDates=useMemo(()=>Object.keys(receiptsByDate).sort().reverse(),[receiptsByDate]);
+      
+      // Referrer stats for registry
+      const referrerStats=useMemo(()=>{
+        if(!data)return[];
+        const referrers=Object.entries(data.referrers||{});
+        return referrers.map(([username,r])=>{
+          const userReceipts=(data.receipts||[]).filter(rec=>rec.username===username);
+          const commPaid=userReceipts.reduce((sum,rec)=>sum+(rec.amount||0),0);
+          const commPaidUsd=userReceipts.reduce((sum,rec)=>sum+(rec.usdValue||0),0);
+          let pending=0;
+          Object.values(data.monthlyLogs||{}).forEach(log=>{
+            const entry=(log.entries||[]).find(e=>e.username===username);
+            if(entry?.buys){
+              const rate=entry.commissionRate||log.settings?.commissionRate||2;
+              entry.buys.forEach(b=>{if(!b.paid&&b.meetsThreshold!==false)pending+=(b.ptgcAmount||0)*(rate/100);});
+            }
+          });
+          return{name:username,wallet:r.wallet,buys:r.totalBuys||0,ptgc:r.totalPtgc||0,usd:r.totalUsd||0,commPaid,commPaidUsd,pending};
+        });
+      },[data]);
+      
+      const sortedRegistry=useMemo(()=>{
+        if(!referrerStats.length)return[];
+        return[...referrerStats].sort((a,b)=>{
+          let av,bv;
+          switch(sortCol){
+            case'name':av=a.name.toLowerCase();bv=b.name.toLowerCase();break;
+            case'buys':av=a.buys;bv=b.buys;break;
+            case'ptgc':av=a.ptgc;bv=b.ptgc;break;
+            case'usd':av=a.usd;bv=b.usd;break;
+            case'commPaid':av=a.commPaid;bv=b.commPaid;break;
+            case'commPaidUsd':av=a.commPaidUsd;bv=b.commPaidUsd;break;
+            case'pending':av=a.pending;bv=b.pending;break;
+            default:av=a.name;bv=b.name;
+          }
+          if(sortDir==='asc')return av>bv?1:av<bv?-1:0;
+          return av<bv?1:av>bv?-1:0;
+        });
+      },[referrerStats,sortCol,sortDir]);
+      
+      // Get commission log settings for selected month
+      const commLogSettings=useMemo(()=>{
+        const cm=commLogMonth||currentMonth;
+        if(!cm||!data?.monthlyLogs?.[cm])return{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
+        return data.monthlyLogs[cm].settings||{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
+      },[data,commLogMonth,currentMonth]);
+      
+      const commLogEntries=useMemo(()=>{
+        const cm=commLogMonth||currentMonth;
+        if(!cm||!data?.monthlyLogs?.[cm])return[];
+        return data.monthlyLogs[cm].entries||[];
+      },[data,commLogMonth,currentMonth]);
+      
+      // Helper functions
+      const toggleSort=(col)=>{
+        if(sortCol===col)setSortDir(sortDir==='asc'?'desc':'asc');
+        else{setSortCol(col);setSortDir(col==='name'?'asc':'desc');}
+      };
+      
+      const SortIcon=({col})=>sortCol!==col?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D9CA5D] ml-1">{sortDir==='asc'?'↑':'↓'}</span>;
+      
+      const getEntryStatus=(e)=>{
+        if(!e.buys?.length){if(e.meetsThreshold===false)return'below';return e.status||'unpaid';}
+        const valid=e.buys.filter(b=>b.ptgcAmount>0);
+        const qualify=valid.filter(b=>b.meetsThreshold!==false);
+        if(!qualify.length)return'below';
+        const paid=qualify.filter(b=>b.paid).length;
+        if(paid===qualify.length)return'paid';
+        if(paid>0)return'partial';
+        return'unpaid';
+      };
+      
+      if(loading){
+        return(
+          <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-16 h-16 border-4 border-[#D9CA5D]/30 border-t-[#D9CA5D] rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-[#D9CA5D] font-orbitron">Loading Affiliate Data...</p>
+            </div>
+          </div>
+        );
+      }
+      
+      if(error){
+        return(
+          <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-6xl mb-4">⚠️</div>
+              <p className="text-red-400 font-orbitron mb-4">Error Loading Data</p>
+              <p className="text-white/50 mb-6">{error}</p>
+              <button onClick={onBack} className="px-6 py-2 bg-[#D9CA5D] text-black font-bold rounded-lg">Go Back</button>
+            </div>
+          </div>
+        );
+      }
+      
+      return(
+        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0a0a0a] to-gray-900">
+          {/* Referrer Detail Modal */}
+          {selectedReferrer&&(()=>{
+            const details=getReferrerDetails(selectedReferrer);
+            if(!details)return null;
+            
+            // Get all transactions for this referrer across all months
+            const allTx=[];
+            Object.entries(data.monthlyLogs||{}).forEach(([month,log])=>{
+              const entry=(log.entries||[]).find(e=>e.username===selectedReferrer);
+              if(entry?.buys){
+                entry.buys.forEach(b=>{
+                  allTx.push({...b,month,rate:entry.commissionRate||log.settings?.commissionRate||2});
+                });
+              }
+            });
+            allTx.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+            
+            // Calculate pending
+            let pending=0,pendingUsd=0;
+            allTx.forEach(tx=>{
+              if(!tx.paid&&tx.meetsThreshold!==false){
+                const comm=(tx.ptgcAmount||0)*(tx.rate/100);
+                pending+=comm;
+                pendingUsd+=(tx.usdAmount||0)*(tx.rate/100);
+              }
+            });
+            
+            // Monthly breakdown
+            const monthlyBreakdown=details.monthlyEntries.map(me=>{
+              const paidTx=me.buys?.filter(b=>b.paid).length||0;
+              const totalTx=me.buys?.length||0;
+              const paidComm=me.buys?.filter(b=>b.paid).reduce((s,b)=>(s+(b.ptgcAmount||0)*((me.commissionRate||me.settings?.commissionRate||2)/100)),0)||0;
+              return{...me,paidTx,totalTx,paidComm};
+            });
+            
+            return(
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>setSelectedReferrer(null)}>
+                <div className="bg-[#111] border border-[#D9CA5D]/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <div className="flex items-center gap-4">
+                      <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-14 h-14"/>
+                      <div>
+                        <h2 className="text-xl font-bold text-white">{details.username}</h2>
+                        <code className="text-gray-400 text-xs">{details.wallet}</code>
+                      </div>
+                    </div>
+                    <button onClick={()=>setSelectedReferrer(null)} className="text-gray-400 hover:text-white text-2xl">×</button>
+                  </div>
+                  
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
+                    <div className="bg-black/40 border border-white/10 rounded-lg p-3">
+                      <div className="text-gray-400 text-xs uppercase mb-1">Total Buys</div>
+                      <div className="text-2xl font-bold text-blue-400">{details.totalBuys||0}</div>
+                    </div>
+                    <div className="bg-black/40 border border-white/10 rounded-lg p-3">
+                      <div className="text-gray-400 text-xs uppercase mb-1">PTGC Bought</div>
+                      <div className="text-2xl font-bold text-[#D9CA5D]">{fmtAbbr(details.totalPtgc)}</div>
+                      <div className="text-gray-500 text-xs">${(details.totalUsd||0).toFixed(2)}</div>
+                    </div>
+                    <div className="bg-black/40 border border-white/10 rounded-lg p-3">
+                      <div className="text-gray-400 text-xs uppercase mb-1">Commission Paid</div>
+                      <div className="text-2xl font-bold text-green-400">{fmtAbbr(details.totalCommPaid)}</div>
+                      <div className="text-gray-500 text-xs">${details.receipts.reduce((s,r)=>s+(r.usdValue||0),0).toFixed(2)}</div>
+                    </div>
+                    <div className="bg-black/40 border border-white/10 rounded-lg p-3">
+                      <div className="text-gray-400 text-xs uppercase mb-1">Owed (Pending)</div>
+                      <div className="text-2xl font-bold text-orange-400">{pending.toFixed(4)}</div>
+                      <div className="text-gray-500 text-xs">${pendingUsd.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Transaction History */}
+                  <div className="p-4 border-t border-white/10">
+                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>📊</span> Transaction History ({allTx.length})</h3>
+                    {allTx.length>0?(
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-gray-400 border-b border-white/10">
+                              <th className="text-left py-2 px-2">Date</th>
+                              <th className="text-left py-2 px-2">Month</th>
+                              <th className="text-right py-2 px-2">PTGC</th>
+                              <th className="text-right py-2 px-2">USD</th>
+                              <th className="text-center py-2 px-2">Rate</th>
+                              <th className="text-right py-2 px-2">Commission</th>
+                              <th className="text-center py-2 px-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {allTx.slice(0,5).map((tx,i)=>(
+                              <tr key={i} className="border-b border-white/5">
+                                <td className="py-2 px-2 text-white/70">{tx.date||'—'}</td>
+                                <td className="py-2 px-2 text-white/50">{formatMonthYear(tx.month).split(' ')[0]} {tx.month?.slice(0,4)}</td>
+                                <td className="py-2 px-2 text-right text-[#D9CA5D]">{fmtAbbr(tx.ptgcAmount)}</td>
+                                <td className="py-2 px-2 text-right text-white">${(tx.usdAmount||0).toFixed(2)}</td>
+                                <td className="py-2 px-2 text-center text-white/50">{tx.rate}%</td>
+                                <td className="py-2 px-2 text-right text-purple-400">{((tx.ptgcAmount||0)*(tx.rate/100)).toFixed(4)}</td>
+                                <td className="py-2 px-2 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${tx.paid?'bg-green-500/20 text-green-400':tx.meetsThreshold===false?'bg-red-500/20 text-red-400':'bg-yellow-500/20 text-yellow-400'}`}>{tx.paid?'Paid':tx.meetsThreshold===false?'Below':'Unpaid'}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {allTx.length>5&&<div className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300">Show All {allTx.length} Transactions ↓</div>}
+                      </div>
+                    ):<div className="text-white/50 text-center py-4">No transactions yet</div>}
+                  </div>
+                  
+                  {/* Payment Receipts */}
+                  <div className="p-4 border-t border-white/10">
+                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>🧾</span> Payment Receipts ({details.receipts.length})</h3>
+                    {details.receipts.length>0?(
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-gray-400 border-b border-white/10">
+                              <th className="text-left py-2 px-2">Date</th>
+                              <th className="text-right py-2 px-2">Amount</th>
+                              <th className="text-center py-2 px-2">Tx Count</th>
+                              <th className="text-right py-2 px-2">Tx Hash</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {details.receipts.map((r,i)=>(
+                              <tr key={i} className="border-b border-white/5">
+                                <td className="py-2 px-2 text-white/70">{formatDateTime(r.date)}</td>
+                                <td className="py-2 px-2 text-right text-[#D9CA5D]">{fmtAbbr(r.amount)} PTGC</td>
+                                <td className="py-2 px-2 text-center text-white/50">{r.txCount||'—'}</td>
+                                <td className="py-2 px-2 text-right">{r.txHash?<a href={`https://scan.pulsechain.com/tx/${r.txHash}`} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 text-xs">{truncateWallet(r.txHash)}</a>:'—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ):<div className="text-white/50 text-center py-4">No payments received yet</div>}
+                  </div>
+                  
+                  {/* Monthly Breakdown */}
+                  <div className="p-4 border-t border-white/10">
+                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>📅</span> Monthly Breakdown</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {monthlyBreakdown.map(mb=>(
+                        <div key={mb.month} className="bg-black/40 border border-white/10 rounded-lg p-3">
+                          <div className="text-gray-400 text-xs mb-1">{formatMonthYear(mb.month)}</div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-blue-400 font-bold">{mb.buysCount||0} buys</span>
+                            <span className="text-[#D9CA5D]">{fmtAbbr(mb.ptgcAmount)}</span>
+                          </div>
+                          {mb.paidComm>0&&<div className="text-green-400 text-xs mt-1">{fmtAbbr(mb.paidComm)} paid</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Footer */}
+                  <div className="flex items-center justify-between p-4 border-t border-white/10">
+                    <div className="text-green-400 text-sm">Member since: {formatDate(details.addedDate)}</div>
+                    <button onClick={()=>setSelectedReferrer(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* Leaderboard Modal */}
+          {showLeaderboard&&(()=>{
+            const medal=(i)=>i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+            const selectedMonth=viewingMonth||(allMonths.length>0?allMonths[0]:currentMonth);
+            
+            // All-time leaderboards
+            const allTimeBuysLB=[...referrerStats].sort((a,b)=>b.buys-a.buys).slice(0,5);
+            const allTimePtgcLB=[...referrerStats].sort((a,b)=>b.ptgc-a.ptgc).slice(0,5);
+            
+            // Monthly leaderboards
+            const monthLog=data?.monthlyLogs?.[selectedMonth];
+            const monthEntries=monthLog?.entries||[];
+            const monthBuysLB=[...monthEntries].sort((a,b)=>(b.buysCount||0)-(a.buysCount||0)).slice(0,5);
+            const monthPtgcLB=[...monthEntries].sort((a,b)=>(b.ptgcAmount||0)-(a.ptgcAmount||0)).slice(0,5);
+            
+            return(
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>setShowLeaderboard(false)}>
+                <div className="bg-[#111] border border-[#D9CA5D]/30 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+                  <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <h2 className="text-xl font-bold text-[#D9CA5D] flex items-center gap-2">🏆 Leaderboards</h2>
+                    <button onClick={()=>setShowLeaderboard(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
+                  </div>
+                  
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* All-Time Most Buys */}
+                    <div className="bg-black/40 border border-[#D9CA5D]/20 rounded-xl p-4">
+                      <h3 className="text-[#D9CA5D] font-bold mb-3 flex items-center gap-2">📊 Most Buys (All-Time)</h3>
+                      <div className="space-y-2">
+                        {allTimeBuysLB.map((r,i)=>(
+                          <div key={r.name} className="flex items-center justify-between p-2 bg-black/30 rounded-lg cursor-pointer hover:bg-white/5" onClick={()=>{setShowLeaderboard(false);setSelectedReferrer(r.name);}}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 text-center">{medal(i)||`${i+1}.`}</span>
+                              <span className="text-[#D9CA5D] font-medium hover:underline">{r.name}</span>
+                            </div>
+                            <span className="text-blue-400 font-bold">{r.buys}</span>
+                          </div>
+                        ))}
+                        {allTimeBuysLB.length===0&&<div className="text-white/50 text-center py-2">No data</div>}
+                      </div>
+                    </div>
+                    
+                    {/* Monthly Most Buys */}
+                    <div className="bg-black/40 border border-green-500/20 rounded-xl p-4">
+                      <h3 className="text-green-400 font-bold mb-3 flex items-center gap-2">📊 Most Buys ({formatMonthYear(selectedMonth)})</h3>
+                      <div className="space-y-2">
+                        {monthBuysLB.map((e,i)=>(
+                          <div key={e.username} className="flex items-center justify-between p-2 bg-black/30 rounded-lg cursor-pointer hover:bg-white/5" onClick={()=>{setShowLeaderboard(false);setSelectedReferrer(e.username);}}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 text-center">{medal(i)||`${i+1}.`}</span>
+                              <span className="text-green-400 font-medium hover:underline">{e.username}</span>
+                            </div>
+                            <span className="text-blue-400 font-bold">{e.buysCount||0}</span>
+                          </div>
+                        ))}
+                        {monthBuysLB.length===0&&<div className="text-white/50 text-center py-2">No data</div>}
+                      </div>
+                    </div>
+                    
+                    {/* All-Time Most PTGC */}
+                    <div className="bg-black/40 border border-[#D9CA5D]/20 rounded-xl p-4">
+                      <h3 className="text-[#D9CA5D] font-bold mb-3 flex items-center gap-2">💰 Most PTGC Bought (All-Time)</h3>
+                      <div className="space-y-2">
+                        {allTimePtgcLB.map((r,i)=>(
+                          <div key={r.name} className="flex items-center justify-between p-2 bg-black/30 rounded-lg cursor-pointer hover:bg-white/5" onClick={()=>{setShowLeaderboard(false);setSelectedReferrer(r.name);}}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 text-center">{medal(i)||`${i+1}.`}</span>
+                              <span className="text-[#D9CA5D] font-medium hover:underline">{r.name}</span>
+                            </div>
+                            <span className="text-[#D9CA5D] font-bold">{fmtAbbr(r.ptgc)}</span>
+                          </div>
+                        ))}
+                        {allTimePtgcLB.length===0&&<div className="text-white/50 text-center py-2">No data</div>}
+                      </div>
+                    </div>
+                    
+                    {/* Monthly Most PTGC */}
+                    <div className="bg-black/40 border border-green-500/20 rounded-xl p-4">
+                      <h3 className="text-green-400 font-bold mb-3 flex items-center gap-2">💰 Most PTGC Bought ({formatMonthYear(selectedMonth)})</h3>
+                      <div className="space-y-2">
+                        {monthPtgcLB.map((e,i)=>(
+                          <div key={e.username} className="flex items-center justify-between p-2 bg-black/30 rounded-lg cursor-pointer hover:bg-white/5" onClick={()=>{setShowLeaderboard(false);setSelectedReferrer(e.username);}}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 text-center">{medal(i)||`${i+1}.`}</span>
+                              <span className="text-green-400 font-medium hover:underline">{e.username}</span>
+                            </div>
+                            <span className="text-[#D9CA5D] font-bold">{fmtAbbr(e.ptgcAmount)}</span>
+                          </div>
+                        ))}
+                        {monthPtgcLB.length===0&&<div className="text-white/50 text-center py-2">No data</div>}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end p-4 border-t border-white/10">
+                    <button onClick={()=>setShowLeaderboard(false)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* Payment Receipts Modal */}
+          {showPayments&&(
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>setShowPayments(false)}>
+              <div className="bg-[#111] border border-purple-500/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                  <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">💰 Payment Receipts ({data?.receipts?.length||0})</h2>
+                  <button onClick={()=>setShowPayments(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
+                </div>
+                
+                {(data?.receipts?.length||0)===0?(
+                  <div className="p-12 text-center">
+                    <div className="text-4xl mb-3">📭</div>
+                    <p className="text-white/50">No payment receipts yet</p>
+                    <p className="text-white/30 text-sm mt-1">Receipts will appear here after commissions are paid</p>
+                  </div>
+                ):(
+                  <div className="p-4 space-y-3">
+                    {sortedReceiptDates.map(dateKey=>{
+                      const dateReceipts=receiptsByDate[dateKey]||[];
+                      const isExpanded=expandedReceipts.has(dateKey);
+                      const dateTotal=dateReceipts.reduce((sum,r)=>sum+(r.amount||0),0);
+                      const formattedDate=new Date(dateKey+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+                      
+                      return(
+                        <div key={dateKey} className="border border-purple-500/20 rounded-xl overflow-hidden">
+                          <div onClick={()=>{const newSet=new Set(expandedReceipts);if(newSet.has(dateKey))newSet.delete(dateKey);else newSet.add(dateKey);setExpandedReceipts(newSet);}} className="flex items-center justify-between p-3 bg-purple-500/10 cursor-pointer hover:bg-purple-500/20 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{isExpanded?'▼':'▶'}</span>
+                              <span className="text-purple-400 font-semibold">{formattedDate}</span>
+                              <span className="text-gray-500 text-sm">({dateReceipts.length} payment{dateReceipts.length!==1?'s':''})</span>
+                            </div>
+                            <div className="text-[#D9CA5D] font-bold">{fmtAbbr(dateTotal)} PTGC</div>
+                          </div>
+                          
+                          {isExpanded&&(
+                            <div className="p-3 space-y-2 bg-black/20">
+                              {dateReceipts.sort((a,b)=>new Date(b.date)-new Date(a.date)).map((receipt,idx)=>(
+                                <div key={receipt.id||idx} className="bg-black/40 border border-purple-500/10 rounded-lg p-3">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-purple-400 font-bold cursor-pointer hover:underline" onClick={()=>{setShowPayments(false);setSelectedReferrer(receipt.username);}}>{receipt.username}</span>
+                                      <span className="text-gray-600 text-xs">{new Date(receipt.date).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                      <span className="text-[#D9CA5D] font-bold">{fmtAbbr(receipt.amount)} PTGC</span>
+                                      {receipt.txHash&&<a href={`https://scan.pulsechain.com/tx/${receipt.txHash}`} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 font-mono text-xs">{truncateWallet(receipt.txHash)} ↗</a>}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                <div className="flex justify-end p-4 border-t border-white/10">
+                  <button onClick={()=>setShowPayments(false)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Header */}
+          <header className="border-b border-[#D9CA5D]/20 bg-[#0a0a0a]/90 backdrop-blur sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4">
+                  <button onClick={onBack} className="text-[#D9CA5D] hover:text-[#D9CA5D]/80 transition">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+                  </button>
+                  <div className="flex items-center gap-4">
+                    <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-24 h-24"/>
+                    <div>
+                      <h1 className="font-orbitron text-xl sm:text-2xl font-bold text-[#D9CA5D]">PTGC Affiliate Program</h1>
+                      <p className="text-white/40 text-xs">Public Commission Dashboard</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 items-end">
+                  <div className="flex items-stretch gap-3 flex-wrap justify-end">
+                    {/* Current Month Badge - same height as settings box */}
+                    <div className="flex items-center px-6 bg-[#D9CA5D]/20 border border-[#D9CA5D]/50 rounded-lg">
+                      <span className="text-[#D9CA5D] font-bold text-xl">{formatMonthYear(currentMonth)}</span>
+                    </div>
+                    {/* Current Month Settings with labels */}
+                    <div className="flex items-center gap-3 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-sm">
+                      <div className="flex flex-col items-center">
+                        <span className="text-gray-500 text-xs">Rate</span>
+                        <span className="px-2 py-0.5 bg-[#D9CA5D]/20 rounded text-[#D9CA5D] font-bold">{currentMonthSettings.commissionRate}%</span>
+                      </div>
+                      <span className="text-white/20">|</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-gray-500 text-xs">Min Threshold</span>
+                        <span className="px-2 py-0.5 bg-green-500/20 rounded text-green-400 font-bold">{currentMonthSettings.thresholdType==='usd'?'$':''}{currentMonthSettings.threshold}{currentMonthSettings.thresholdType!=='usd'?' PTGC':''}</span>
+                      </div>
+                      <span className="text-white/20">|</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-gray-500 text-xs">5% Fee</span>
+                        <span className={`px-2 py-0.5 rounded font-bold ${currentMonthSettings.coverFee!==false?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}>{currentMonthSettings.coverFee!==false?'Covered':'Not Covered'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Buttons row */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={()=>setShowLeaderboard(true)} className="px-4 py-1.5 bg-[#D9CA5D]/20 border border-[#D9CA5D]/30 rounded-lg text-[#D9CA5D] font-medium hover:bg-[#D9CA5D]/30 transition text-sm flex items-center gap-2">
+                      🏆 Leaderboard
+                    </button>
+                    <button onClick={()=>setShowPayments(true)} className="px-4 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded-lg text-purple-400 font-medium hover:bg-purple-500/30 transition text-sm flex items-center gap-2">
+                      💰 Payment Receipts
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+          
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            
+            {/* ALL-TIME Stats Bar - Gold */}
+            <div className="bg-gradient-to-r from-[#D9CA5D]/20 via-[#D9CA5D]/10 to-[#D9CA5D]/20 border border-[#D9CA5D]/50 rounded-xl px-4 sm:px-6 py-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📊</span>
+                  <span className="text-sm font-bold text-[#D9CA5D]">ALL-TIME</span>
+                </div>
+                <div className="text-center">
+                  <div className="text-[#D9CA5D]/60 text-xs uppercase">Referrers</div>
+                  <div className="text-lg font-bold text-[#D9CA5D]">{stats?.totalReferrers||0}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[#D9CA5D]/60 text-xs uppercase">Total Buys</div>
+                  <div className="text-lg font-bold text-[#D9CA5D]">{fmt(stats?.allTimeBuys)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[#D9CA5D]/60 text-xs uppercase">PTGC Referred</div>
+                  <div className="text-lg font-bold text-[#D9CA5D]">{fmtAbbr(stats?.allTimePtgc)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[#D9CA5D]/60 text-xs uppercase">USD Volume</div>
+                  <div className="text-lg font-bold text-[#D9CA5D]">{fmtUSD(stats?.allTimeUsd)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[#D9CA5D]/60 text-xs uppercase">Commissions Paid</div>
+                  <div className="text-lg font-bold text-[#D9CA5D]">{fmtAbbr(stats?.totalPaid)} PTGC</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Monthly Stats Bar - Green with Dropdown */}
+            <div className="bg-gradient-to-r from-green-500/20 via-green-500/10 to-green-500/20 border border-green-500/50 rounded-xl px-4 sm:px-6 py-4 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📅</span>
+                  <select value={viewingMonth||currentMonth} onChange={e=>setViewingMonth(e.target.value)} className="bg-transparent border-none text-sm font-bold text-green-400 focus:outline-none cursor-pointer hover:text-green-300">
+                    {allMonths.map(month=>(
+                      <option key={month} value={month} className="bg-gray-900">{formatMonthYear(month)}{month===currentMonth?' (Current)':''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="text-center">
+                  <div className="text-green-400/60 text-xs uppercase">Referrers</div>
+                  <div className="text-lg font-bold text-green-400">{stats?.periodReferrers||0}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-green-400/60 text-xs uppercase">Buys</div>
+                  <div className="text-lg font-bold text-green-400">{fmt(stats?.periodBuys)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-green-400/60 text-xs uppercase">PTGC Referred</div>
+                  <div className="text-lg font-bold text-green-400">{fmtAbbr(stats?.periodPtgc)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-green-400/60 text-xs uppercase">USD Volume</div>
+                  <div className="text-lg font-bold text-green-400">{fmtUSD(stats?.periodUsd)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-green-400/60 text-xs uppercase">Commissions Paid</div>
+                  <div className="text-lg font-bold text-green-400">{fmtAbbr(stats?.periodPaid)} PTGC</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Referrers Registry Box */}
+            <div className="bg-black/30 border border-white/10 rounded-xl mb-6 overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-white/10 flex-wrap gap-3">
+                <div className="flex items-center gap-2 cursor-pointer hover:bg-white/5 px-2 py-1 rounded" onClick={()=>setShowRegistry(!showRegistry)}>
+                  <span>👥</span>
+                  <h2 className="font-semibold text-white">Referrers Registry</h2>
+                  <span className="text-gray-500">({sortedRegistry.filter(s=>!registrySearch||s.name.toLowerCase().includes(registrySearch.toLowerCase())).length})</span>
+                  <span className="text-gray-400 text-xl ml-2">{showRegistry?'∧':'∨'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="text" placeholder="🔍 Search referrer..." value={registrySearch} onChange={e=>setRegistrySearch(e.target.value)} onClick={e=>e.stopPropagation()} className="px-3 py-1.5 bg-black/50 border border-[#D9CA5D]/20 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#D9CA5D]/50 w-48"/>
+                </div>
+              </div>
+              
+              {showRegistry&&(
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-white/10 bg-black/20">
+                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('name')}>Name<SortIcon col="name"/></th>
+                        <th className="text-left py-3 px-4">Wallet</th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('buys')}>Buys<SortIcon col="buys"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('ptgc')}>PTGC Bought<SortIcon col="ptgc"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('usd')}>Value (USD)<SortIcon col="usd"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaid')}>Comm. Paid<SortIcon col="commPaid"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaidUsd')}>Paid (USD)<SortIcon col="commPaidUsd"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('pending')}>Pending<SortIcon col="pending"/></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedRegistry.filter(s=>!registrySearch||s.name.toLowerCase().includes(registrySearch.toLowerCase())).map(s=>(
+                        <tr key={s.name} className="border-b border-white/5 hover:bg-white/5 cursor-pointer" onClick={()=>setSelectedReferrer(s.name)}>
+                          <td className="py-3 px-4 text-[#D9CA5D] font-medium hover:underline">{s.name}</td>
+                          <td className="py-3 px-4"><code className="text-gray-400 text-xs">{truncateWallet(s.wallet)}</code></td>
+                          <td className="py-3 px-4 text-center">{s.buys>0?<span className="text-blue-400 font-semibold">{s.buys}</span>:<span className="text-gray-600">0</span>}</td>
+                          <td className="py-3 px-4 text-right">{s.ptgc>0?<span className="text-[#D9CA5D] font-semibold">{fmtAbbr(s.ptgc)}</span>:<span className="text-gray-600">0</span>}</td>
+                          <td className="py-3 px-4 text-right">{s.usd>0?<span className="text-white">${s.usd.toFixed(2)}</span>:<span className="text-gray-600">$0.00</span>}</td>
+                          <td className="py-3 px-4 text-right">{s.commPaid>0?<span className="text-green-400 font-semibold">{fmtAbbr(s.commPaid)}</span>:<span className="text-gray-600">0</span>}</td>
+                          <td className="py-3 px-4 text-right">{s.commPaidUsd>0?<span className="text-green-400">${s.commPaidUsd.toFixed(2)}</span>:<span className="text-gray-600">$0.00</span>}</td>
+                          <td className="py-3 px-4 text-right">{s.pending>0?<span className="text-orange-400 font-semibold">{fmtAbbr(s.pending)}</span>:<span className="text-gray-600">0</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {sortedRegistry.length===0&&<div className="p-8 text-center text-white/50">No referrers yet</div>}
+                </div>
+              )}
+            </div>
+            
+            {/* Commission Log Section */}
+            <div className="bg-black/30 border border-white/10 rounded-xl mb-6 overflow-hidden">
+              {/* Header with Month Dropdown */}
+              <div className="flex items-center justify-between p-4 border-b border-white/10 flex-wrap gap-4">
+                <h2 className="font-semibold text-white flex items-center gap-2">
+                  <span>📋</span> Commission Log
+                  <select value={commLogMonth||currentMonth} onChange={e=>setCommLogMonth(e.target.value)} className="ml-2 bg-[#D9CA5D]/20 border border-[#D9CA5D]/30 rounded-lg px-3 py-1 text-sm text-[#D9CA5D] font-bold focus:outline-none cursor-pointer">
+                    {allMonths.map(m=><option key={m} value={m} className="bg-gray-900">{formatMonthYear(m)}{m===currentMonth?' (Current)':''}</option>)}
+                  </select>
+                </h2>
+              </div>
+              
+              {/* Commission Log Entries Table */}
+              {commLogEntries.length>0?(
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-white/10 bg-black/20">
+                        <th className="text-left py-3 px-4">User</th>
+                        <th className="text-left py-3 px-4">Wallet</th>
+                        <th className="text-center py-3 px-4">Buys</th>
+                        <th className="text-right py-3 px-4">PTGC Bought</th>
+                        <th className="text-right py-3 px-4">USD Value</th>
+                        <th className="text-right py-3 px-4">Commission</th>
+                        <th className="text-center py-3 px-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commLogEntries.map(e=>{
+                        const st=getEntryStatus(e);
+                        const expanded=expandedEntries.has(e.id);
+                        const rate=e.commissionRate||commLogSettings.commissionRate||2;
+                        return(
+                          <React.Fragment key={e.id}>
+                            <tr className={`border-b border-white/5 hover:bg-white/5 ${st==='below'?'opacity-50':''}`}>
+                              <td className="py-3 px-4"><span className="text-[#D9CA5D] font-medium cursor-pointer hover:underline" onClick={()=>setSelectedReferrer(e.username)}>{e.username}</span></td>
+                              <td className="py-3 px-4"><code className="text-gray-400 text-xs">{truncateWallet(e.wallet)}</code></td>
+                              <td className="py-3 px-4 text-center cursor-pointer" onClick={()=>{const ns=new Set(expandedEntries);if(ns.has(e.id))ns.delete(e.id);else ns.add(e.id);setExpandedEntries(ns);}}><div className="flex items-center justify-center gap-1"><span className="text-gray-500 text-xs">{expanded?'▼':'▶'}</span><span className="text-blue-400 font-semibold">{e.buysCount||0}</span></div></td>
+                              <td className="py-3 px-4 text-right text-[#D9CA5D] font-semibold">{fmtAbbr(e.ptgcAmount)}</td>
+                              <td className="py-3 px-4 text-right text-white">${(e.usdAmount||0).toFixed(2)}</td>
+                              <td className="py-3 px-4 text-right text-purple-400 font-semibold">{fmtAbbr(e.commissionPtgc)}</td>
+                              <td className="py-3 px-4 text-center">
+                                <span className={`px-2 py-1 rounded text-xs font-bold ${st==='paid'?'bg-green-500/20 text-green-400':st==='partial'?'bg-orange-500/20 text-orange-400':st==='below'?'bg-red-500/20 text-red-400':'bg-yellow-500/20 text-yellow-400'}`}>{st==='below'?'BELOW MIN':st.toUpperCase()}</span>
+                              </td>
+                            </tr>
+                            {expanded&&e.buys?.length>0&&(
+                              <tr><td colSpan={7} className="bg-black/20 p-4">
+                                <div className="text-xs text-gray-400 mb-2 uppercase font-bold">Transactions ({e.buys.length})</div>
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                  {e.buys.map((tx,i)=>(
+                                    <div key={i} className="flex items-center justify-between p-3 bg-black/30 rounded-lg text-sm flex-wrap gap-2">
+                                      <div className="flex items-center gap-3">
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${tx.paid?'bg-green-500/20 text-green-400':tx.meetsThreshold===false?'bg-red-500/20 text-red-400':'bg-yellow-500/20 text-yellow-400'}`}>{tx.paid?'✓':tx.meetsThreshold===false?'✗':'○'}</span>
+                                        <div><div className="text-white/70">{tx.date||'—'}</div>{tx.txHash&&<a href={`https://scan.pulsechain.com/tx/${tx.txHash}`} target="_blank" rel="noopener noreferrer" onClick={ev=>ev.stopPropagation()} className="text-[#D9CA5D]/50 hover:text-[#D9CA5D] font-mono text-xs">{truncateWallet(tx.txHash)}</a>}</div>
+                                      </div>
+                                      <div className="flex items-center gap-4">
+                                        <div className="text-right"><div className="text-[#D9CA5D] font-medium">{fmtAbbr(tx.ptgcAmount)} PTGC</div><div className="text-green-400 text-xs">${(tx.usdAmount||0).toFixed(2)}</div></div>
+                                        <div className="text-right min-w-[60px]"><div className="text-purple-400 font-medium">{((tx.ptgcAmount||0)*(rate/100)).toFixed(2)}</div><div className="text-gray-500 text-xs">comm.</div></div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td></tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ):<div className="p-8 text-center text-white/50">No commission entries for {formatMonthYear(commLogMonth||currentMonth)}</div>}
+            </div>
+          </div>
+            
+          <footer className="text-center py-6 border-t border-white/10 mt-8">
+            <p className="text-white/30 text-xs mb-2">PTGC Affiliate Program • Public Dashboard</p>
+            <p className="text-white/20 text-xs">Get your referral link at <a href="https://goptgc.com/#/ptgc-onboarding" target="_blank" rel="noopener noreferrer" className="text-purple-400/70 hover:text-purple-400">goptgc.com</a></p>
+          </footer>
+        </div>
+      );
+    };
+    
     // DAO Ledger Page - Hidden Feature
     // Disclaimer Modal Component
     const DisclaimerModal=({onAccept})=>{
@@ -4473,13 +5299,25 @@
         return<DisclaimerModal onAccept={handleAcceptDisclaimer}/>;
       }
       
+      if(view==='affiliates')return(
+        <>
+          {/* Secret dev dot - always visible for navigation */}
+          <div onClick={()=>setView('home')} className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/5 hover:bg-[#D9CA5D]/50 cursor-pointer z-[9999] transition-colors" title="Back to home"/>
+          <AffiliatesPage onBack={()=>setView('home')}/>
+        </>
+      );
+      
       if(view==='dashboard'&&token)return(
         <>
+          {/* Secret dev dot */}
+          <div onClick={()=>setView('affiliates')} className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/5 hover:bg-[#D9CA5D]/50 cursor-pointer z-[9999] transition-colors" title="Affiliates (Dev)"/>
           <Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)}/>
         </>
       );
       return(
         <>
+          {/* Secret dev dot */}
+          <div onClick={()=>setView('affiliates')} className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/5 hover:bg-[#D9CA5D]/50 cursor-pointer z-[9999] transition-colors" title="Affiliates (Dev)"/>
           <Home onSelect={t=>{setToken(t);setView('dashboard')}}/>
         </>
       );
