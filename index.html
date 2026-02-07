@@ -5148,9 +5148,20 @@
               return{emoji:'🐚',name:'Shell',count:1};
             };
             
-            // All-time leaderboards
-            const allTimeBuysLB=[...referrerStats].sort((a,b)=>b.buys-a.buys).slice(0,5);
-            const allTimePtgcLB=[...referrerStats].sort((a,b)=>b.ptgc-a.ptgc).slice(0,5);
+            // All-time leaderboards - aggregate from ALL monthly logs for true lifetime totals
+            const allTimeAggregated={};
+            Object.values(data?.monthlyLogs||{}).forEach(log=>{
+              (log.entries||[]).forEach(entry=>{
+                const name=entry.username;
+                if(!allTimeAggregated[name])allTimeAggregated[name]={name,buys:0,ptgc:0,usd:0};
+                allTimeAggregated[name].buys+=(entry.buysCount||0);
+                allTimeAggregated[name].ptgc+=(entry.ptgcAmount||0);
+                allTimeAggregated[name].usd+=(entry.usdAmount||0);
+              });
+            });
+            const allTimeList=Object.values(allTimeAggregated);
+            const allTimeBuysLB=[...allTimeList].sort((a,b)=>b.buys-a.buys).slice(0,5);
+            const allTimePtgcLB=[...allTimeList].sort((a,b)=>b.ptgc-a.ptgc).slice(0,5);
             
             // Monthly leaderboards based on selected month
             const monthLog=data?.monthlyLogs?.[lbMonth];
