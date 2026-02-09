@@ -2332,7 +2332,7 @@
       );
     };
 
-    const Dashboard=({token,onBack,onSwitch})=>{
+    const Dashboard=({token,onBack,onSwitch,onAffiliates})=>{
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#D9CA5D]':'text-[#7CFC00]',border:isGold?'border-[#D9CA5D]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D9CA5D]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
       const[data,setData]=useState(null);
@@ -2795,7 +2795,7 @@
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
-                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Affiliates</button>
+                  <button onClick={onAffiliates} className={`px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20`}>Affiliates</button>
                 </div>
               </div>
             </div>
@@ -5723,26 +5723,14 @@
       }
       
       if(view==='affiliates')return(
-        <>
-          {/* Secret dev dot - always visible for navigation */}
-          <div onClick={()=>setView('home')} className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/5 hover:bg-[#D9CA5D]/50 cursor-pointer z-[9999] transition-colors" title="Back to home"/>
-          <AffiliatesPage onBack={()=>setView('home')}/>
-        </>
+        <AffiliatesPage onBack={()=>setView('home')}/>
       );
       
       if(view==='dashboard'&&token)return(
-        <>
-          {/* Secret dev dot */}
-          <div onClick={()=>setView('affiliates')} className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/5 hover:bg-[#D9CA5D]/50 cursor-pointer z-[9999] transition-colors" title="Affiliates (Dev)"/>
-          <Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)}/>
-        </>
+          <Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)} onAffiliates={()=>setView('affiliates')}/>
       );
       return(
-        <>
-          {/* Secret dev dot */}
-          <div onClick={()=>setView('affiliates')} className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/5 hover:bg-[#D9CA5D]/50 cursor-pointer z-[9999] transition-colors" title="Affiliates (Dev)"/>
           <Home onSelect={t=>{setToken(t);setView('dashboard')}}/>
-        </>
       );
     };
     
