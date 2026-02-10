@@ -4542,13 +4542,27 @@
         if(!data)return null;
         const referrers=Object.entries(data.referrers||{});
         
-        // All-time totals from referrers
+        // All-time totals - sum across ALL months in monthlyLogs for accuracy
         const totalReferrers=referrers.length;
-        const allTimeBuys=referrers.reduce((sum,[,r])=>sum+(r.totalBuys||0),0);
-        const allTimeUsd=referrers.reduce((sum,[,r])=>sum+(r.totalUsd||0),0);
-        const allTimePtgc=referrers.reduce((sum,[,r])=>sum+(r.totalPtgc||0),0);
         const totalPaid=(data.receipts||[]).reduce((sum,r)=>sum+(r.amount||0),0);
         const totalPaidUsd=(data.receipts||[]).reduce((sum,r)=>sum+(r.usdValue||0),0);
+        
+        // Calculate all-time from monthlyLogs (more accurate than referrers object)
+        let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0;
+        if(data.monthlyLogs){
+          Object.values(data.monthlyLogs).forEach(month=>{
+            const entries=month.entries||[];
+            allTimeBuys+=entries.reduce((sum,e)=>sum+(e.buysCount||0),0);
+            allTimeUsd+=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
+            allTimePtgc+=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
+          });
+        }
+        // Fallback to referrers totals if no monthlyLogs
+        if(allTimeBuys===0&&allTimeUsd===0){
+          allTimeBuys=referrers.reduce((sum,[,r])=>sum+(r.totalBuys||0),0);
+          allTimeUsd=referrers.reduce((sum,[,r])=>sum+(r.totalUsd||0),0);
+          allTimePtgc=referrers.reduce((sum,[,r])=>sum+(r.totalPtgc||0),0);
+        }
         
         // Viewing period stats - use viewingMonth or fallback to currentMonth
         const selectedMonth=viewingMonth||currentMonth;
