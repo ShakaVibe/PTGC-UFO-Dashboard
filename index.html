@@ -4497,6 +4497,8 @@
       const[expandedTxMonths,setExpandedTxMonths]=useState(new Set());
       const[showAllReceipts,setShowAllReceipts]=useState(false);
       const[showAllCurrentMonthTx,setShowAllCurrentMonthTx]=useState(false);
+      const[commSortCol,setCommSortCol]=useState('ptgc');
+      const[commSortDir,setCommSortDir]=useState('desc');
       
       // Current month key - USE UTC TIME
       const currentMonth=new Date().toISOString().slice(0,7);
@@ -4762,6 +4764,13 @@
       
       const SortIcon=({col})=>sortCol!==col?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D9CA5D] ml-1">{sortDir==='asc'?'↑':'↓'}</span>;
       
+      const toggleCommSort=(col)=>{
+        if(commSortCol===col)setCommSortDir(commSortDir==='asc'?'desc':'asc');
+        else{setCommSortCol(col);setCommSortDir(col==='username'?'asc':'desc');}
+      };
+      
+      const CommSortIcon=({col})=>commSortCol!==col?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D9CA5D] ml-1">{commSortDir==='asc'?'↑':'↓'}</span>;
+      
       const getEntryStatus=(e)=>{
         if(!e.buys?.length){if(e.meetsThreshold===false)return'below';return e.status||'unpaid';}
         const valid=e.buys.filter(b=>b.ptgcAmount>0);
@@ -4772,6 +4781,25 @@
         if(paid>0)return'partial';
         return'unpaid';
       };
+      
+      const sortedCommLogEntries=useMemo(()=>{
+        if(!commLogEntries.length)return[];
+        const statusOrder={paid:0,partial:1,unpaid:2,below:3};
+        return[...commLogEntries].sort((a,b)=>{
+          let av,bv;
+          switch(commSortCol){
+            case'username':av=a.username?.toLowerCase()||'';bv=b.username?.toLowerCase()||'';break;
+            case'buys':av=a.buysCount||0;bv=b.buysCount||0;break;
+            case'ptgc':av=a.ptgcAmount||0;bv=b.ptgcAmount||0;break;
+            case'usd':av=a.usdAmount||0;bv=b.usdAmount||0;break;
+            case'commission':av=a.commissionPtgc||0;bv=b.commissionPtgc||0;break;
+            case'status':av=statusOrder[getEntryStatus(a)]??9;bv=statusOrder[getEntryStatus(b)]??9;break;
+            default:av=a.ptgcAmount||0;bv=b.ptgcAmount||0;
+          }
+          if(commSortDir==='asc')return av>bv?1:av<bv?-1:0;
+          return av<bv?1:av>bv?-1:0;
+        });
+      },[commLogEntries,commSortCol,commSortDir]);
       
       if(loading){
         return(
@@ -5636,17 +5664,17 @@
                   <table className="w-full text-sm table-fixed">
                     <thead>
                       <tr className="text-gray-400 border-b border-white/10 bg-black/20">
-                        <th className="text-left py-3 px-4" style={{width:'15%'}}>User</th>
+                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" style={{width:'15%'}} onClick={()=>toggleCommSort('username')}>User<CommSortIcon col="username"/></th>
                         <th className="text-left py-3 px-4" style={{width:'15%'}}>Wallet</th>
-                        <th className="text-center py-3 px-4" style={{width:'10%'}}>Buys</th>
-                        <th className="text-right py-3 px-4" style={{width:'15%'}}>PTGC Bought</th>
-                        <th className="text-right py-3 px-4" style={{width:'15%'}}>USD Value</th>
-                        <th className="text-right py-3 px-4" style={{width:'15%'}}>Commission</th>
-                        <th className="text-center py-3 px-4" style={{width:'15%'}}>Status</th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'10%'}} onClick={()=>toggleCommSort('buys')}>Buys<CommSortIcon col="buys"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'15%'}} onClick={()=>toggleCommSort('ptgc')}>PTGC Bought<CommSortIcon col="ptgc"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'15%'}} onClick={()=>toggleCommSort('usd')}>USD Value<CommSortIcon col="usd"/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'15%'}} onClick={()=>toggleCommSort('commission')}>Commission<CommSortIcon col="commission"/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'15%'}} onClick={()=>toggleCommSort('status')}>Status<CommSortIcon col="status"/></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {commLogEntries.map(e=>{
+                      {sortedCommLogEntries.map(e=>{
                         const st=getEntryStatus(e);
                         const expanded=expandedEntries.has(e.id);
                         const rate=e.commissionRate||commLogSettings.commissionRate||2;
