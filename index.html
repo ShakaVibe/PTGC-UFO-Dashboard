@@ -6351,10 +6351,74 @@
                 </div>
               )}
               
+              {/* Total Portfolio Summary Bar */}
+              {(()=>{
+                const totalPtgcUSD=agg.ptgc.totalHolding*dp.ptgc;
+                const totalUfoTokens=agg.ufo.balance+agg.ufo.totalStakedUFO;
+                const totalUfoUSD=totalUfoTokens*dp.ufo;
+                const grandTotal=totalPtgcUSD+totalUfoUSD;
+                const ptgcPct=grandTotal>0?(totalPtgcUSD/grandTotal*100):0;
+                const ufoPct=grandTotal>0?(totalUfoUSD/grandTotal*100):0;
+                return(
+                <div className="mb-6 bg-[#111]/80 border-2 border-white/20 rounded-2xl px-6 py-4">
+                  <div className="flex items-center gap-8">
+                    {/* Mini Donut */}
+                    <div className="flex-shrink-0">
+                      <canvas ref={el=>{
+                        if(!el)return;
+                        const ctx=el.getContext('2d');
+                        const s=80,c=s/2,r=30,lw=14;
+                        el.width=s;el.height=s;
+                        ctx.clearRect(0,0,s,s);
+                        const segs=[{pct:ptgcPct,color:'#D9CA5D'},{pct:ufoPct,color:'#7CFC00'}];
+                        let start=-Math.PI/2;
+                        segs.forEach(seg=>{
+                          if(seg.pct<=0)return;
+                          const angle=(seg.pct/100)*Math.PI*2;
+                          ctx.beginPath();ctx.arc(c,c,r,start,start+angle);
+                          ctx.strokeStyle=seg.color;ctx.lineWidth=lw;ctx.lineCap='butt';ctx.stroke();
+                          start+=angle;
+                        });
+                        if(grandTotal===0){ctx.beginPath();ctx.arc(c,c,r,0,Math.PI*2);ctx.strokeStyle='#333';ctx.lineWidth=lw;ctx.stroke();}
+                      }} className="w-20 h-20"/>
+                    </div>
+                    
+                    {/* Total Value */}
+                    <div className="flex-shrink-0">
+                      <div className="text-white/40 text-sm uppercase font-bold mb-1">Total Portfolio Value of the Grays</div>
+                      <div className="text-white text-4xl font-bold">{fmtDollar(grandTotal)}</div>
+                    </div>
+                    
+                    {/* Spacer */}
+                    <div className="flex-1"/>
+                    
+                    {/* PTGC Summary */}
+                    <div className="flex items-center gap-3">
+                      <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-10 h-10 flex-shrink-0"/>
+                      <div className="text-[#D9CA5D] text-2xl font-bold">{fmtAbbr(agg.ptgc.totalHolding)}</div>
+                      <div className="text-white text-xl font-bold">{fmtDollar(totalPtgcUSD)}</div>
+                      <div className="text-[#D9CA5D] text-xl font-bold">{ptgcPct.toFixed(1)}%</div>
+                    </div>
+                    
+                    {/* Divider */}
+                    <div className="w-px h-12 bg-white/10"></div>
+                    
+                    {/* UFO Summary */}
+                    <div className="flex items-center gap-3">
+                      <img src={TOKENS.UFO.logo} alt="UFO" className="w-10 h-10 flex-shrink-0"/>
+                      <div className="text-[#7CFC00] text-2xl font-bold">{fmtAbbr(totalUfoTokens)}</div>
+                      <div className="text-white text-xl font-bold">{fmtDollar(totalUfoUSD)}</div>
+                      <div className="text-[#7CFC00] text-xl font-bold">{ufoPct.toFixed(1)}%</div>
+                    </div>
+                  </div>
+                </div>
+                );
+              })()}
+              
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
                 {/* ===== PTGC SECTION ===== */}
-                <div className="bg-gradient-to-b from-[#D9CA5D]/10 via-[#111]/80 to-[#111]/80 border border-[#D9CA5D]/20 rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-b from-[#D9CA5D]/10 via-[#111]/80 to-[#111]/80 border-[3px] border-[#D9CA5D]/40 rounded-2xl overflow-hidden">
                   {/* PTGC Header */}
                   <div className="p-5 border-b border-[#D9CA5D]/10">
                     <div className="flex items-center gap-4 mb-4">
@@ -6496,7 +6560,7 @@
                 </div>
                 
                 {/* ===== UFO SECTION ===== */}
-                <div className="bg-gradient-to-b from-[#7CFC00]/10 via-[#111]/80 to-[#111]/80 border border-[#7CFC00]/20 rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-b from-[#7CFC00]/10 via-[#111]/80 to-[#111]/80 border-[3px] border-[#7CFC00]/40 rounded-2xl overflow-hidden">
                   {/* UFO Header */}
                   <div className="p-5 border-b border-[#7CFC00]/10">
                     <div className="flex items-center gap-4 mb-4">
@@ -6507,8 +6571,8 @@
                         <div className="text-[#7CFC00]/60 text-sm font-medium mt-0.5">Live Price: {prices.ufo?'$'+prices.ufo.toFixed(prices.ufo<0.01?6:prices.ufo<1?4:2):'—'}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar(agg.ufo.balance*dp.ufo)}</div>
+                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance+agg.ufo.totalStakedUFO)}</div>
+                        <div className="text-green-400 text-lg font-bold">{fmtDollar((agg.ufo.balance+agg.ufo.totalStakedUFO)*dp.ufo)}</div>
                       </div>
                     </div>
                     {/* Lifetime Earned - Two Boxes */}
