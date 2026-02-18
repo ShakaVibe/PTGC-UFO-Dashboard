@@ -5953,6 +5953,17 @@
       const[editingWallet,setEditingWallet]=useState(null);
       const[editWalletName,setEditWalletName]=useState('');
       const[showWalletBreakdown,setShowWalletBreakdown]=useState(false);
+      const[moonMathActive,setMoonMathActive]=useState(false);
+      const[customPrices,setCustomPrices]=useState({ptgc:'',ufo:'',pls:''});
+      
+      const ATH_PRICES={ptgc:0.00133,ufo:0.000113,pls:0.00029};
+      
+      // Display prices: use custom when moonMath active and field has value, else live
+      const dp={
+        ptgc:moonMathActive&&customPrices.ptgc!==''?parseFloat(customPrices.ptgc)||0:prices.ptgc,
+        ufo:moonMathActive&&customPrices.ufo!==''?parseFloat(customPrices.ufo)||0:prices.ufo,
+        pls:moonMathActive&&customPrices.pls!==''?parseFloat(customPrices.pls)||0:prices.pls
+      };
       
       // Save to localStorage whenever wallets change
       useEffect(()=>{
@@ -6213,57 +6224,100 @@
             </div>
           </header>
           
-          {/* Address Input */}
+          {/* Address Input + Moon Math side by side */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-            <div className="bg-[#111]/80 border border-white/10 rounded-xl p-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
-                  <input value={inputAddr} onChange={e=>setInputAddr(e.target.value)} placeholder="Paste wallet address (0x...)" className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-white font-mono text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none transition-all" onKeyDown={e=>e.key==='Enter'&&addWallet()}/>
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Left: Address Input + Wallet Tags */}
+              <div className="flex-1">
+                <div className="bg-[#111]/80 border border-white/10 rounded-xl p-4">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <input value={inputAddr} onChange={e=>setInputAddr(e.target.value)} placeholder="Paste wallet address (0x...)" className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-white font-mono text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none transition-all" onKeyDown={e=>e.key==='Enter'&&addWallet()}/>
+                    </div>
+                    <input value={inputName} onChange={e=>setInputName(e.target.value)} placeholder="Label (optional)" className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none"/>
+                    <select value={inputGroup} onChange={e=>setInputGroup(e.target.value)} className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm focus:border-[#D9CA5D]/50 focus:outline-none">
+                      <option value="Default">Default Group</option>
+                      {Object.keys(groups).filter(g=>g!=='Default').map(g=><option key={g} value={g}>{g}</option>)}
+                      <option value="__new">+ New Group</option>
+                    </select>
+                    <button onClick={addWallet} className="px-6 py-2.5 rounded-lg font-bold text-sm transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">+ Add</button>
+                  </div>
+                  {inputGroup==='__new'&&(
+                    <div className="mt-3 flex gap-2">
+                      <input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="New group name..." className="flex-1 bg-black/50 border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none"/>
+                      <button onClick={()=>{if(newGroupName.trim()){setInputGroup(newGroupName.trim());setNewGroupName('')}}} className="px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20">Create</button>
+                    </div>
+                  )}
                 </div>
-                <input value={inputName} onChange={e=>setInputName(e.target.value)} placeholder="Label (optional)" className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none"/>
-                <select value={inputGroup} onChange={e=>setInputGroup(e.target.value)} className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm focus:border-[#D9CA5D]/50 focus:outline-none">
-                  <option value="Default">Default Group</option>
-                  {Object.keys(groups).filter(g=>g!=='Default').map(g=><option key={g} value={g}>{g}</option>)}
-                  <option value="__new">+ New Group</option>
-                </select>
-                <button onClick={addWallet} className="px-6 py-2.5 rounded-lg font-bold text-sm transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">+ Add</button>
+                
+                {/* Wallet Tags */}
+                {wallets.length>0&&(
+                  <div className="mt-3">
+                    {Object.entries(groups).map(([groupName,groupWallets])=>(
+                      <div key={groupName} className="mb-3">
+                        <div className="text-white/50 text-sm uppercase mb-2 font-bold">{groupName} ({groupWallets.length})</div>
+                        <div className="flex flex-wrap gap-2">
+                          {groupWallets.map(w=>{
+                            const addr=w.address.toLowerCase();
+                            const isLoading=loadingAddr===addr;
+                            const hasData=!!portfolioData[addr];
+                            const checked=isWalletChecked(addr);
+                            return(
+                              <div key={addr} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${!checked?'border-white/5 bg-white/[0.02] opacity-50':hasData?'border-[#D9CA5D]/30 bg-[#D9CA5D]/5':'border-white/10 bg-white/5'} ${isLoading?'animate-pulse-slow':''}`}>
+                                <input type="checkbox" checked={checked} onChange={()=>toggleWallet(addr)} className="w-4 h-4 rounded accent-[#D9CA5D] cursor-pointer"/>
+                                <span className={`w-2 h-2 rounded-full ${hasData?'bg-green-400':isLoading?'bg-yellow-400':'bg-white/30'}`}></span>
+                                <span className="text-white/80 font-mono text-sm">{w.name||truncAddr(w.address)}</span>
+                                <button onClick={()=>{setEditingWallet(addr);setEditWalletName(w.name||'')}} className="text-white/30 hover:text-[#D9CA5D] text-sm transition-colors">{'\u270F'}</button>
+                                <button onClick={()=>removeWallet(w.address)} className="text-white/30 hover:text-red-400 text-sm ml-0">{'\u2715'}</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {inputGroup==='__new'&&(
-                <div className="mt-3 flex gap-2">
-                  <input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="New group name..." className="flex-1 bg-black/50 border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none"/>
-                  <button onClick={()=>{if(newGroupName.trim()){setInputGroup(newGroupName.trim());setNewGroupName('')}}} className="px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20">Create</button>
-                </div>
-              )}
+              
+              {/* Right: Moon Math Box */}
+              <div className={`lg:w-80 flex-shrink-0 self-start rounded-xl border overflow-hidden transition-all ${moonMathActive?'border-purple-500/30 bg-gradient-to-b from-purple-500/10 via-[#111]/90 to-[#111]/90':'border-white/10 bg-[#111]/80'}`}>
+                <button onClick={()=>setMoonMathActive(!moonMathActive)} className={`w-full flex items-center justify-between px-4 group ${moonMathActive?'py-3':'py-[22px]'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{'\u{1F319}'}</span>
+                    <span className="font-orbitron text-base font-bold" style={{background:'linear-gradient(90deg,#a855f7,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MOON MATH</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${moonMathActive?'bg-green-500/20 text-green-400':'bg-white/5 text-white/30'}`}>{moonMathActive?'ON':'OFF'}</span>
+                  </div>
+                  <span className={`text-white/40 text-base transition-transform ${moonMathActive?'rotate-180':''}`}>{'\u25BC'}</span>
+                </button>
+                {moonMathActive&&(
+                  <div className="px-4 pb-4">
+                    <div className="text-white/40 text-xs mb-3">Enter custom prices — all USD values below will update.</div>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-[#D9CA5D] text-xs font-bold uppercase mb-1">PTGC Price</div>
+                        <input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(p=>({...p,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#D9CA5D]/30 rounded-lg px-3 py-2 text-[#D9CA5D] text-sm font-mono placeholder-white/20 focus:border-[#D9CA5D]/60 focus:outline-none"/>
+                      </div>
+                      <div>
+                        <div className="text-[#7CFC00] text-xs font-bold uppercase mb-1">UFO Price</div>
+                        <input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(p=>({...p,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#7CFC00]/30 rounded-lg px-3 py-2 text-[#7CFC00] text-sm font-mono placeholder-white/20 focus:border-[#7CFC00]/60 focus:outline-none"/>
+                      </div>
+                      <div>
+                        <div className="text-blue-400 text-xs font-bold uppercase mb-1">PLS Price</div>
+                        <input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(p=>({...p,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(6):'0.00'} className="w-full bg-black/50 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-400 text-sm font-mono placeholder-white/20 focus:border-blue-500/60 focus:outline-none"/>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={()=>setCustomPrices({ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)})} className="flex-1 px-3 py-2 rounded-lg font-bold text-xs bg-purple-500/20 border border-purple-500/30 text-purple-300 hover:bg-purple-500/30 transition-all">{'\u{1F680}'} All Time Highs</button>
+                      <button onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})} className="flex-1 px-3 py-2 rounded-lg font-bold text-xs bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition-all">Reset to Live</button>
+                    </div>
+                    {(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='')&&(
+                      <div className="mt-2 text-purple-400/60 text-xs">{'\u26A0'} Simulated prices active</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          
-          {/* Wallet Tags */}
-          {wallets.length>0&&(
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-4">
-              {Object.entries(groups).map(([groupName,groupWallets])=>(
-                <div key={groupName} className="mb-3">
-                  <div className="text-white/50 text-sm uppercase mb-2 font-bold">{groupName} ({groupWallets.length})</div>
-                  <div className="flex flex-wrap gap-2">
-                    {groupWallets.map(w=>{
-                      const addr=w.address.toLowerCase();
-                      const isLoading=loadingAddr===addr;
-                      const hasData=!!portfolioData[addr];
-                      const checked=isWalletChecked(addr);
-                      return(
-                        <div key={addr} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${!checked?'border-white/5 bg-white/[0.02] opacity-50':hasData?'border-[#D9CA5D]/30 bg-[#D9CA5D]/5':'border-white/10 bg-white/5'} ${isLoading?'animate-pulse-slow':''}`}>
-                          <input type="checkbox" checked={checked} onChange={()=>toggleWallet(addr)} className="w-4 h-4 rounded accent-[#D9CA5D] cursor-pointer"/>
-                          <span className={`w-2 h-2 rounded-full ${hasData?'bg-green-400':isLoading?'bg-yellow-400':'bg-white/30'}`}></span>
-                          <span className="text-white/80 font-mono text-sm">{w.name||truncAddr(w.address)}</span>
-                          <button onClick={()=>{setEditingWallet(addr);setEditWalletName(w.name||'')}} className="text-white/30 hover:text-[#D9CA5D] text-sm transition-colors">{'\u270F'}</button>
-                          <button onClick={()=>removeWallet(w.address)} className="text-white/30 hover:text-red-400 text-sm ml-0">{'\u2715'}</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
           
           {/* Empty State */}
           {wallets.length===0&&!initialLoad&&(
@@ -6289,6 +6343,14 @@
           {/* Portfolio Data */}
           {dataLoaded&&(
             <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8">
+              
+              {moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='')&&(
+                <div className="mb-4 px-4 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center gap-2 text-purple-300 text-sm font-medium">
+                  <span>{'\u{1F319}'}</span>
+                  <span>Moon Math Active — USD values below reflect custom prices</span>
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
                 {/* ===== PTGC SECTION ===== */}
@@ -6304,7 +6366,7 @@
                       </div>
                       <div className="text-right">
                         <div className="text-[#D9CA5D] text-3xl font-bold">{fmtAbbr(agg.ptgc.totalHolding)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar(agg.ptgc.totalHolding*prices.ptgc)}</div>
+                        <div className="text-green-400 text-lg font-bold">{fmtDollar(agg.ptgc.totalHolding*dp.ptgc)}</div>
                       </div>
                     </div>
                     {/* Lifetime Earned - Three Boxes */}
@@ -6313,17 +6375,17 @@
                       <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-center">
                         <div className="text-purple-400/70 text-base uppercase mb-1">Staking</div>
                         <div className="text-purple-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.claimed)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.claimed*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.claimed*dp.ptgc)}</div>
                       </div>
                       <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-3 text-center">
                         <div className="text-pink-400/70 text-base uppercase mb-1">Locking</div>
                         <div className="text-pink-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.lockClaimed)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.lockClaimed*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.lockClaimed*dp.ptgc)}</div>
                       </div>
                       <div className="bg-[#D9CA5D]/10 border border-[#D9CA5D]/20 rounded-lg p-3 text-center">
                         <div className="text-[#D9CA5D]/70 text-base uppercase mb-1">Reflections</div>
                         <div className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(agg.ptgc.reflections)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.reflections*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.reflections*dp.ptgc)}</div>
                       </div>
                     </div>
                     <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
@@ -6331,7 +6393,7 @@
                       <div className="flex items-center gap-3">
                         <span className="text-white font-bold text-2xl">{fmtComma(Math.floor(agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections))} <span className="text-white/40 text-lg font-normal">PTGC</span></span>
                         <span className="text-white/30">•</span>
-                        <span className="text-green-400 font-bold text-xl">{fmtDollar((agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections)*prices.ptgc)}</span>
+                        <span className="text-green-400 font-bold text-xl">{fmtDollar((agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections)*dp.ptgc)}</span>
                       </div>
                     </div>
                   </div>
@@ -6365,22 +6427,22 @@
                       <div className="bg-black/30 border border-[#D9CA5D]/15 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Liquid</div>
                         <div className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(agg.ptgc.walletFree)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.walletFree*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.walletFree*dp.ptgc)}</div>
                       </div>
                       <div className="bg-black/30 border border-purple-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Staked</div>
                         <div className="text-purple-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.staked)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.staked*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.staked*dp.ptgc)}</div>
                       </div>
                       <div className="bg-black/30 border border-pink-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Locked & Staked</div>
                         <div className="text-pink-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.locked)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.locked*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.locked*dp.ptgc)}</div>
                       </div>
                       <div className="bg-black/30 border border-green-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Pending Rewards</div>
                         <div className="text-green-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.totalPending)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.totalPending*prices.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.totalPending*dp.ptgc)}</div>
                       </div>
                     </div>
                     
@@ -6390,11 +6452,11 @@
                         <div className="text-[#D9CA5D] text-base uppercase mb-3 font-bold">Claimable Rewards Breakdown</div>
                         <div className="flex justify-between text-lg mb-2">
                           <span className="text-white/60">Staking Rewards</span>
-                          <span className="text-purple-400 font-bold">{fmtAbbr(agg.ptgc.pendingStake)} <span className="text-white/40 text-base">({fmtDollar(agg.ptgc.pendingStake*prices.ptgc)})</span></span>
+                          <span className="text-purple-400 font-bold">{fmtAbbr(agg.ptgc.pendingStake)} <span className="text-white/40 text-base">({fmtDollar(agg.ptgc.pendingStake*dp.ptgc)})</span></span>
                         </div>
                         <div className="flex justify-between text-lg">
                           <span className="text-white/60">Lock Rewards</span>
-                          <span className="text-pink-400 font-bold">{fmtAbbr(agg.ptgc.pendingLocks)} <span className="text-white/40 text-base">({fmtDollar(agg.ptgc.pendingLocks*prices.ptgc)})</span></span>
+                          <span className="text-pink-400 font-bold">{fmtAbbr(agg.ptgc.pendingLocks)} <span className="text-white/40 text-base">({fmtDollar(agg.ptgc.pendingLocks*dp.ptgc)})</span></span>
                         </div>
                       </div>
                     )}
@@ -6413,7 +6475,7 @@
                               <div key={i} className={`grid grid-cols-3 items-center px-4 py-3 rounded-lg border ${isUnlockable?'border-green-500/20 bg-green-500/5':'border-pink-500/10 bg-black/30'}`}>
                                 <div>
                                   <div className="text-white font-bold text-lg">{fmtAbbr(lock.amount)} PTGC</div>
-                                  <div className="text-white/40 text-base">{fmtDollar(lock.amount*prices.ptgc)}</div>
+                                  <div className="text-white/40 text-base">{fmtDollar(lock.amount*dp.ptgc)}</div>
                                 </div>
                                 <div className="text-center">
                                   <div className={`text-lg font-bold ${isUnlockable?'text-green-400':'text-pink-400'}`}>{formatLockTime(lock.endTime)}</div>
@@ -6446,7 +6508,7 @@
                       </div>
                       <div className="text-right">
                         <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar(agg.ufo.balance*prices.ufo)}</div>
+                        <div className="text-green-400 text-lg font-bold">{fmtDollar(agg.ufo.balance*dp.ufo)}</div>
                       </div>
                     </div>
                     {/* Lifetime Earned - Two Boxes */}
@@ -6455,18 +6517,18 @@
                       <div className="bg-[#7CFC00]/10 border border-[#7CFC00]/20 rounded-lg p-3 text-center">
                         <div className="text-[#7CFC00]/70 text-base uppercase mb-1">Reflections</div>
                         <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.reflections)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.reflections*prices.ufo)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.reflections*dp.ufo)}</div>
                       </div>
                       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-center">
                         <div className="text-blue-400/70 text-base uppercase mb-1">PLS from LP</div>
                         <div className="text-blue-400 font-bold text-2xl">{fmtAbbr(agg.ufo.lifetimePLS)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.lifetimePLS*prices.pls)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.lifetimePLS*dp.pls)}</div>
                       </div>
                     </div>
                     <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
                       <div className="text-white/50 text-base uppercase font-bold">Total Lifetime Earned</div>
                       <div className="flex items-center gap-3">
-                        <span className="text-green-400 font-bold text-xl">{fmtDollar(agg.ufo.reflections*prices.ufo+agg.ufo.lifetimePLS*prices.pls)}</span>
+                        <span className="text-green-400 font-bold text-xl">{fmtDollar(agg.ufo.reflections*dp.ufo+agg.ufo.lifetimePLS*dp.pls)}</span>
                       </div>
                     </div>
                   </div>
@@ -6502,12 +6564,12 @@
                       <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Liquid</div>
                         <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.balance)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.balance*prices.ufo)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.balance*dp.ufo)}</div>
                       </div>
                       <div className="bg-black/30 border border-blue-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">UFO in LP</div>
                         <div className="text-blue-400 font-bold text-2xl">{fmtAbbr(agg.ufo.totalStakedUFO)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.totalStakedUFO*prices.ufo)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.totalStakedUFO*dp.ufo)}</div>
                       </div>
                     </div>
                     
@@ -6516,7 +6578,7 @@
                       <div className="bg-black/30 border border-blue-500/20 rounded-lg p-4 mb-4">
                         <div className="text-white/50 text-base uppercase">Pending PLS to Claim</div>
                         <div className="text-blue-400 font-bold text-2xl">{fmtComma(agg.ufo.totalPendingPLS)} PLS</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.totalPendingPLS*prices.pls)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.totalPendingPLS*dp.pls)}</div>
                       </div>
                     )}
                     
@@ -6570,7 +6632,7 @@
                                   </div>
                                   <div className="flex items-center gap-3">
                                     <span className={`font-bold text-base ${hasPosition?(lp.pendingPLS>0?'text-blue-400':'text-white/20'):'text-white/20'}`}>+{hasPosition?fmtComma(lp.pendingPLS):'0.00'} PLS</span>
-                                    <span className={`text-sm ${hasPosition?(lp.pendingPLS>0?'text-white/40':'text-white/15'):'text-white/15'}`}>{hasPosition?fmtDollar(lp.pendingPLS*prices.pls):'$0.00'}</span>
+                                    <span className={`text-sm ${hasPosition?(lp.pendingPLS>0?'text-white/40':'text-white/15'):'text-white/15'}`}>{hasPosition?fmtDollar(lp.pendingPLS*dp.pls):'$0.00'}</span>
                                   </div>
                                   {hasPosition&&(()=>{
                                     const pool=lpPoolData[sym];
@@ -6628,22 +6690,22 @@
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#D9CA5D]/60 text-base">PTGC Total</div>
                               <div className="text-[#D9CA5D] font-bold text-xl">{fmtAbbr(d.ptgc.totalHolding)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ptgc.totalHolding*prices.ptgc)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(d.ptgc.totalHolding*dp.ptgc)}</div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#D9CA5D]/60 text-base">PTGC Pending</div>
                               <div className="text-green-400 font-bold text-xl">{fmtAbbr(d.ptgc.totalPending)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ptgc.totalPending*prices.ptgc)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(d.ptgc.totalPending*dp.ptgc)}</div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#7CFC00]/60 text-base">UFO Balance</div>
                               <div className="text-[#7CFC00] font-bold text-xl">{fmtAbbr(d.ufo.balance)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ufo.balance*prices.ufo)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(d.ufo.balance*dp.ufo)}</div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-blue-400/60 text-base">PLS Pending</div>
                               <div className="text-blue-400 font-bold text-xl">{fmtComma(d.ufo.totalPendingPLS)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ufo.totalPendingPLS*prices.pls)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(d.ufo.totalPendingPLS*dp.pls)}</div>
                             </div>
                           </div>
                         </div>
