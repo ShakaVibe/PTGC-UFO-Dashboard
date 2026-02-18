@@ -5952,6 +5952,7 @@
       const[checkedWallets,setCheckedWallets]=useState({});
       const[editingWallet,setEditingWallet]=useState(null);
       const[editWalletName,setEditWalletName]=useState('');
+      const[showWalletBreakdown,setShowWalletBreakdown]=useState(false);
       
       // Save to localStorage whenever wallets change
       useEffect(()=>{
@@ -6485,6 +6486,7 @@
                                 </div>
                                 <div className="text-right">
                                   <span className="text-white font-bold text-lg">{fmtAbbr(d.value)}</span>
+                                  <span className="text-white/40 text-base ml-2">{(agg.ufo.balance+agg.ufo.totalStakedUFO)>0?((d.value/(agg.ufo.balance+agg.ufo.totalStakedUFO))*100).toFixed(1):'0'}%</span>
                                 </div>
                               </div>
                             ))}
@@ -6564,12 +6566,11 @@
                                       <div className="w-6 h-6 rounded-full -ml-1.5 bg-gray-700 items-center justify-center text-[10px] font-bold text-white/60" style={{display:'none'}}>{pairDisplayNames[sym][0]}</div>
                                     </div>
                                     <span className={`font-bold text-base ${hasPosition?'text-[#7CFC00]':'text-white/30'}`}>UFO/{pairDisplayNames[sym]}</span>
-                                    {hasPosition&&<span className="text-white/30 text-sm">{fmtAbbr(lp.stakedUFO)} UFO</span>}
                                     {!hasPosition&&<span className="text-white/20 text-sm">—</span>}
                                   </div>
                                   <div className="flex items-center gap-3">
-                                    <span className={`font-bold text-base ${lp.pendingPLS>0?'text-blue-400':'text-white/20'}`}>+{fmtComma(lp.pendingPLS)} PLS</span>
-                                    <span className={`text-sm ${lp.pendingPLS>0?'text-white/40':'text-white/15'}`}>{fmtDollar(lp.pendingPLS*prices.pls)}</span>
+                                    <span className={`font-bold text-base ${hasPosition?(lp.pendingPLS>0?'text-blue-400':'text-white/20'):'text-white/20'}`}>+{hasPosition?fmtComma(lp.pendingPLS):'0.00'} PLS</span>
+                                    <span className={`text-sm ${hasPosition?(lp.pendingPLS>0?'text-white/40':'text-white/15'):'text-white/15'}`}>{hasPosition?fmtDollar(lp.pendingPLS*prices.pls):'$0.00'}</span>
                                   </div>
                                   {hasPosition&&(()=>{
                                     const pool=lpPoolData[sym];
@@ -6580,8 +6581,8 @@
                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-4 py-3 bg-[#1a1a1a] border border-[#7CFC00]/20 rounded-lg shadow-xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                                       <div className="text-[#7CFC00] font-bold text-sm mb-2">UFO/{pairDisplayNames[sym]} LP Details</div>
                                       <div className="space-y-1">
-                                        <div className="text-white/60 text-sm">UFO Share Rate: <span className="text-white font-medium">{fmtAbbr(lp.stakedUFO)} UFO</span></div>
-                                        {userUFO>0&&<div className="text-white/60 text-sm">Your UFO in LP: <span className="text-[#7CFC00] font-medium">{fmtAbbr(userUFO)} UFO</span></div>}
+                                        <div className="text-white/60 text-sm">UFO Share Rate: <span className="text-[#7CFC00] font-medium">{fmtAbbr(lp.stakedUFO)} UFO</span></div>
+                                        {userUFO>0&&<div className="text-white/60 text-sm">Your UFO in LP: <span className="text-white font-medium">{fmtAbbr(userUFO)} UFO</span></div>}
                                         {userQuote>0&&<div className="text-white/60 text-sm">Your {pairDisplayNames[sym]} in LP: <span className="text-white font-medium">{fmtAbbr(userQuote)} {pairDisplayNames[sym]}</span></div>}
                                       </div>
                                       <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-[#7CFC00]/20"></div>
@@ -6603,7 +6604,12 @@
               {/* Per-Wallet Breakdown (when multiple wallets) */}
               {wallets.length>1&&(
                 <div className="mt-6">
-                  <h3 className="text-white/50 text-lg uppercase font-bold mb-3">Per-Wallet Breakdown</h3>
+                  <button onClick={()=>setShowWalletBreakdown(!showWalletBreakdown)} className="flex items-center gap-3 w-full text-left mb-3 group">
+                    <h3 className="text-white/50 text-lg uppercase font-bold group-hover:text-white/70 transition-colors">Per-Wallet Breakdown</h3>
+                    <span className="text-white/30 text-sm">({wallets.filter(w=>isWalletChecked(w.address)).length} wallets)</span>
+                    <span className={`text-white/40 text-lg transition-transform ${showWalletBreakdown?'rotate-180':''}`}>{'\u25BC'}</span>
+                  </button>
+                  {showWalletBreakdown&&(
                   <div className="space-y-3">
                     {wallets.filter(w=>isWalletChecked(w.address)).map(w=>{
                       const addr=w.address.toLowerCase();
@@ -6644,6 +6650,7 @@
                       );
                     })}
                   </div>
+                  )}
                 </div>
               )}
             </div>
