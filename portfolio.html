@@ -540,10 +540,33 @@
       ].filter(d=>d.value>0);
       const ptgcDonutColors=['#D9CA5D','#a855f7','#ec4899'];
       
-      // UFO Donut data
+      // Compute real UFO in LP using pool share ratios (matches hover tooltip math)
+      const realUfoInLP=useMemo(()=>{
+        if(Object.keys(lpPoolData).length===0)return agg.ufo.totalStakedUFO; // fallback
+        let total=0;
+        const pairOrder=['WPLS','PTGC','INC','PLSX','HEX','EHEX','DAI'];
+        // Aggregate stakedLP per symbol across checked wallets
+        const aggLP={};
+        pairOrder.forEach(sym=>{aggLP[sym]={stakedLP:0}});
+        Object.entries(portfolioData).forEach(([addr,data])=>{
+          if(!data||!isWalletChecked(addr))return;
+          data.ufo.lpPositions.forEach(lp=>{
+            if(aggLP[lp.symbol])aggLP[lp.symbol].stakedLP+=lp.stakedLP||0;
+          });
+        });
+        pairOrder.forEach(sym=>{
+          const pool=lpPoolData[sym];
+          if(!pool||pool.totalLPSupply<=0||!aggLP[sym])return;
+          const shareRatio=aggLP[sym].stakedLP/pool.totalLPSupply;
+          total+=shareRatio*pool.ufoInPool;
+        });
+        return total>0?total:agg.ufo.totalStakedUFO;
+      },[portfolioData,lpPoolData,checkedWallets]);
+      
+      // UFO Donut data (uses real LP calculation)
       const ufoDonut=[
         {label:'Liquid',value:agg.ufo.balance},
-        {label:'In LP (UFO)',value:agg.ufo.totalStakedUFO},
+        {label:'In LP (UFO)',value:realUfoInLP},
       ].filter(d=>d.value>0);
       const ufoDonutColors=['#7CFC00','#3b82f6'];
       
@@ -750,7 +773,7 @@
               {/* Total Portfolio Summary Bar */}
               {(()=>{
                 const totalPtgcUSD=agg.ptgc.totalHolding*dp.ptgc;
-                const totalUfoTokens=agg.ufo.balance+agg.ufo.totalStakedUFO;
+                const totalUfoTokens=agg.ufo.balance+realUfoInLP;
                 const totalUfoUSD=totalUfoTokens*dp.ufo;
                 const grandTotal=totalPtgcUSD+totalUfoUSD;
                 const ptgcPct=grandTotal>0?(totalPtgcUSD/grandTotal*100):0;
@@ -981,10 +1004,10 @@
                         <div className="text-[#7CFC00]/60 text-sm font-medium mt-0.5">Live Price: {prices.ufo?'$'+prices.ufo.toFixed(prices.ufo<0.01?6:prices.ufo<1?4:2):'—'}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance+agg.ufo.totalStakedUFO)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar((agg.ufo.balance+agg.ufo.totalStakedUFO)*dp.ufo)}</div>
+                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance+realUfoInLP)}</div>
+                        <div className="text-green-400 text-lg font-bold">{fmtDollar((agg.ufo.balance+realUfoInLP)*dp.ufo)}</div>
                         {(()=>{
-                          const creatures=getHoldingCreatures(agg.ufo.balance+agg.ufo.totalStakedUFO,'UFO');
+                          const creatures=getHoldingCreatures(agg.ufo.balance+realUfoInLP,'UFO');
                           if(creatures.length===0)return null;
                           return(
                             <div className="flex items-center gap-1.5 justify-end mt-1.5">
@@ -1036,7 +1059,7 @@
                                 </div>
                                 <div className="text-right">
                                   <span className="text-white font-bold text-lg">{fmtAbbr(d.value)}</span>
-                                  <span className="text-white/40 text-base ml-2">{(agg.ufo.balance+agg.ufo.totalStakedUFO)>0?((d.value/(agg.ufo.balance+agg.ufo.totalStakedUFO))*100).toFixed(1):'0'}%</span>
+                                  <span className="text-white/40 text-base ml-2">{(agg.ufo.balance+realUfoInLP)>0?((d.value/(agg.ufo.balance+realUfoInLP))*100).toFixed(1):'0'}%</span>
                                 </div>
                               </div>
                             ))}
@@ -1056,8 +1079,8 @@
                       </div>
                       <div className="bg-black/30 border border-blue-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">UFO in LP</div>
-                        <div className="text-blue-400 font-bold text-2xl">{fmtAbbr(agg.ufo.totalStakedUFO)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.totalStakedUFO*dp.ufo)}</div>
+                        <div className="text-blue-400 font-bold text-2xl">{fmtAbbr(realUfoInLP)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(realUfoInLP*dp.ufo)}</div>
                       </div>
                     </div>
                     
