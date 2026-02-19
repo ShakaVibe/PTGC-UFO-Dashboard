@@ -1327,8 +1327,26 @@
     
     // ===== Standalone App =====
     const App=()=>{
-      const fromToken=new URLSearchParams(window.location.search).get('from');
+      // Read from URL param first, fall back to sessionStorage
+      const urlFrom=new URLSearchParams(window.location.search).get('from');
+      const fromToken=urlFrom||(()=>{try{return sessionStorage.getItem('portfolio_from_token')}catch{return null}})();
+      
+      // Persist to sessionStorage so browser back & refreshes remember
+      if(fromToken){try{sessionStorage.setItem('portfolio_from_token',fromToken)}catch{}}
+      
       const backUrl=fromToken?`index.html?token=${fromToken}`:'index.html';
+      
+      // Intercept browser back button to go to correct dashboard
+      React.useEffect(()=>{
+        // Push a dummy state so we can catch the popstate
+        window.history.pushState({portfolio:true},'',window.location.href);
+        const handlePop=()=>{
+          window.location.href=backUrl;
+        };
+        window.addEventListener('popstate',handlePop);
+        return()=>window.removeEventListener('popstate',handlePop);
+      },[]);
+      
       return <PortfolioPage onBack={()=>{window.location.href=backUrl}}/>;
     };
     
