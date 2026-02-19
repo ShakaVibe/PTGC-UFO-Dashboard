@@ -425,12 +425,27 @@
       
       const toggleWallet=(addr)=>{
         const key=addr.toLowerCase();
-        setCheckedWallets(prev=>({...prev,[key]:!prev[key]}));
+        setCheckedWallets(prev=>{
+          const currentlyChecked=prev[key]!==false;
+          return{...prev,[key]:!currentlyChecked};
+        });
       };
       
       const isWalletChecked=(addr)=>{
         const key=addr.toLowerCase();
         return checkedWallets[key]!==false; // default to true
+      };
+      
+      const selectAllWallets=()=>{
+        const updated={};
+        wallets.forEach(w=>{updated[w.address.toLowerCase()]=true});
+        setCheckedWallets(updated);
+      };
+      
+      const deselectAllWallets=()=>{
+        const updated={};
+        wallets.forEach(w=>{updated[w.address.toLowerCase()]=false});
+        setCheckedWallets(updated);
       };
       
       const removeWallet=(addr)=>{
@@ -622,6 +637,19 @@
                 {/* Wallet Tags */}
                 {wallets.length>0&&(
                   <div className="mt-3">
+                    {(()=>{
+                      const allChecked=wallets.every(w=>isWalletChecked(w.address));
+                      const noneChecked=wallets.every(w=>!isWalletChecked(w.address));
+                      return(
+                        <div className="flex items-center justify-between mb-2">
+                          <div></div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={selectAllWallets} className={`px-3 py-1 rounded text-xs font-bold transition-all ${allChecked?'bg-[#D9CA5D]/20 text-[#D9CA5D]/50 cursor-default':'bg-[#D9CA5D]/10 border border-[#D9CA5D]/20 text-[#D9CA5D] hover:bg-[#D9CA5D]/20'}`} disabled={allChecked}>Select All</button>
+                            <button onClick={deselectAllWallets} className={`px-3 py-1 rounded text-xs font-bold transition-all ${noneChecked?'bg-white/5 text-white/20 cursor-default':'bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'}`} disabled={noneChecked}>Deselect All</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {Object.entries(groups).map(([groupName,groupWallets])=>(
                       <div key={groupName} className="mb-3">
                         <div className="text-white/50 text-sm uppercase mb-2 font-bold">{groupName} ({groupWallets.length})</div>
