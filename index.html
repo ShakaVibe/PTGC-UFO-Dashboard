@@ -2758,8 +2758,7 @@
       
       return(
         <div className="min-h-screen">
-          {/* Secret portfolio access dot */}
-          <a href="portfolio.html" className="fixed top-2 right-2 w-2 h-2 rounded-full bg-white/[0.06] hover:bg-white/20 cursor-pointer z-[999] transition-all" title=""/>
+          
           <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -2799,7 +2798,7 @@
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
-                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Portfolio</button>
+                  <a href={`portfolio.html?from=${token}`} className="px-3 py-1 text-sm rounded font-bold transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">Portfolio</a>
                   <button onClick={onAffiliates} className={`px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20`}>Affiliates</button>
                 </div>
               </div>
@@ -5800,8 +5799,15 @@
     };
     
     const App=()=>{
-      const[view,setView]=useState('home');
-      const[token,setToken]=useState(null);
+      const[view,setView]=useState(()=>{
+        const p=new URLSearchParams(window.location.search).get('token');
+        if(p==='PTGC'||p==='UFO'){window.history.replaceState({},'',window.location.pathname);return'dashboard'}
+        return'home';
+      });
+      const[token,setToken]=useState(()=>{
+        const p=new URLSearchParams(window.location.search).get('token');
+        return(p==='PTGC'||p==='UFO')?p:null;
+      });
       const[disclaimerAccepted,setDisclaimerAccepted]=useState(()=>{
         try{return localStorage.getItem('ptgc_ufo_disclaimer_accepted')==='true';}catch(e){return false;}
       });
