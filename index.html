@@ -2798,7 +2798,7 @@
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
-                  <a href={`portfolio.html?from=${token}`} className="px-3 py-1 text-sm rounded font-bold transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">Portfolio</a>
+                  <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3 py-1 text-sm rounded font-bold transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">Portfolio</a>
                   <button onClick={onAffiliates} className={`px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20`}>Affiliates</button>
                 </div>
               </div>
@@ -5810,11 +5810,15 @@
       const[view,setView]=useState(()=>{
         const p=new URLSearchParams(window.location.search).get('token');
         if(p==='PTGC'||p==='UFO'){window.history.replaceState({},'',window.location.pathname);return'dashboard'}
+        // Check if returning from portfolio or other external page
+        try{const saved=localStorage.getItem('ptgc_last_token');if(saved==='PTGC'||saved==='UFO')return'dashboard';}catch(e){}
         return'home';
       });
       const[token,setToken]=useState(()=>{
         const p=new URLSearchParams(window.location.search).get('token');
-        return(p==='PTGC'||p==='UFO')?p:null;
+        if(p==='PTGC'||p==='UFO')return p;
+        try{const saved=localStorage.getItem('ptgc_last_token');if(saved==='PTGC'||saved==='UFO')return saved;}catch(e){}
+        return null;
       });
       const[lastToken,setLastToken]=useState(null);
       const[disclaimerAccepted,setDisclaimerAccepted]=useState(()=>{
@@ -5831,14 +5835,14 @@
       }
       
       if(view==='affiliates')return(
-        <AffiliatesPage onBack={()=>{const t=token||lastToken;if(t){setToken(t);setView('dashboard')}else{setView('home')}}}/>
+        <AffiliatesPage onBack={()=>{const t=token||lastToken;if(t){setToken(t);setView('dashboard');try{localStorage.setItem('ptgc_last_token',t)}catch(e){}}else{setView('home')}}}/>
       );
       
       if(view==='dashboard'&&token)return(
-          <Dashboard token={token} onBack={()=>{setView('home');setToken(null)}} onSwitch={(t)=>setToken(t)} onAffiliates={()=>{setLastToken(token);setView('affiliates')}}/>
+          <Dashboard token={token} onBack={()=>{setView('home');setToken(null);try{localStorage.removeItem('ptgc_last_token')}catch(e){}}} onSwitch={(t)=>{setToken(t);try{localStorage.setItem('ptgc_last_token',t)}catch(e){}}} onAffiliates={()=>{setLastToken(token);setView('affiliates')}}/>
       );
       return(
-          <Home onSelect={t=>{setToken(t);setView('dashboard')}}/>
+          <Home onSelect={t=>{setToken(t);setView('dashboard');try{localStorage.setItem('ptgc_last_token',t)}catch(e){}}}/>
       );
     };
     
