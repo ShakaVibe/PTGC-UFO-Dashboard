@@ -2390,6 +2390,9 @@
       const[showValueGenShareModal,setShowValueGenShareModal]=useState(false);
       const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
       const[showDAOShareModal,setShowDAOShareModal]=useState(false);
+      const[showAffiliateShareModal,setShowAffiliateShareModal]=useState(false);
+      const[affiliateShareData,setAffiliateShareData]=useState(null);
+      const[affiliateShareLoading,setAffiliateShareLoading]=useState(false);
       const[showLiquidityModal,setShowLiquidityModal]=useState(false);
       const[showTransactionModal,setShowTransactionModal]=useState(false);
       const[liquidityChange24h,setLiquidityChange24h]=useState(null);
@@ -3231,6 +3234,20 @@
                     <div className="font-bold">📋 KPI Report</div>
                     <div className="text-xs text-white/50">Full stats card</div>
                   </button>
+                  <button onClick={()=>{
+                    setSocialReturn(true);
+                    setShowAffiliateShareModal(true);
+                    if(!affiliateShareData&&!affiliateShareLoading){
+                      setAffiliateShareLoading(true);
+                      fetch('https://ptgcapi.ptgctools.workers.dev/public/commissions')
+                        .then(r=>r.json())
+                        .then(d=>{setAffiliateShareData(d);setAffiliateShareLoading(false);})
+                        .catch(()=>setAffiliateShareLoading(false));
+                    }
+                  }} className="w-full px-4 py-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-all text-left">
+                    <div className="font-bold">🤝 Affiliates Report</div>
+                    <div className="text-xs text-white/50">Monthly & all-time totals</div>
+                  </button>
                 </div>
                 
                 {/* UFO Column */}
@@ -3955,6 +3972,162 @@
                     </div>
                   </div>
                 </div>
+                
+                <div className="text-center mt-4 text-white/50 text-sm">
+                  Right-click the image and "Save Image As" or take a screenshot
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Affiliate Program Share Modal - Twitter optimized */}
+          {showAffiliateShareModal&&(
+            <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] bg-black" onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)}>
+              <div className="relative" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                
+                {affiliateShareLoading||!affiliateShareData?(
+                  <div className="w-[900px] h-[471px] rounded-xl bg-[#111] border-2 border-[#D9CA5D]/30 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-14 h-14 border-4 border-[#D9CA5D]/30 border-t-[#D9CA5D] rounded-full animate-spin mx-auto mb-3"></div>
+                      <p className="text-[#D9CA5D] font-orbitron text-base">Loading Affiliate Data...</p>
+                    </div>
+                  </div>
+                ):(()=>{
+                  const ad=affiliateShareData;
+                  const cm=new Date().toISOString().slice(0,7);
+                  const referrers=Object.entries(ad.referrers||{});
+                  const totalReferrers=referrers.length;
+                  const totalPaid=(ad.receipts||[]).reduce((s,r)=>s+(r.amount||0),0);
+                  const totalPaidUsd=(ad.receipts||[]).reduce((s,r)=>s+(r.usdValue||0),0);
+                  let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0;
+                  if(ad.monthlyLogs){
+                    Object.values(ad.monthlyLogs).forEach(month=>{
+                      const entries=month.entries||[];
+                      allTimeBuys+=entries.reduce((s,e)=>s+(e.buysCount||0),0);
+                      allTimeUsd+=entries.reduce((s,e)=>s+(e.usdAmount||0),0);
+                      allTimePtgc+=entries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
+                    });
+                  }
+                  const currentMonthLog=ad.monthlyLogs?.[cm];
+                  const currentEntries=currentMonthLog?.entries||[];
+                  const moBuys=currentEntries.reduce((s,e)=>s+(e.buysCount||0),0);
+                  const moUsd=currentEntries.reduce((s,e)=>s+(e.usdAmount||0),0);
+                  const moPtgc=currentEntries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
+                  const moReferrers=currentEntries.length;
+                  const moPaid=(ad.receipts||[]).filter(r=>r.month===cm).reduce((s,r)=>s+(r.amount||0),0);
+                  const moLabel=new Date(cm+'-01T12:00:00').toLocaleDateString('en-US',{month:'short'})+" '"+cm.slice(2,4);
+                  
+                  return(
+                    <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
+                      {(()=>{
+                        const PSUPPLY=333333333333;
+                        const moPct=PSUPPLY>0?((moPtgc||0)/PSUPPLY)*100:0;
+                        const moCreatures=getBurnC(moPct).slice(0,3);
+                        const atPct=PSUPPLY>0?((allTimePtgc||0)/PSUPPLY)*100:0;
+                        const atCreatures=getBurnC(atPct).slice(0,3);
+                        return(
+                      <div className="h-full border-2 border-purple-500/50 rounded-xl p-6 flex flex-col">
+                        
+                        {/* Header row */}
+                        <div className="flex items-center gap-4 mb-4">
+                          <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-20 h-20 rounded-full"/>
+                          <div className="flex-1">
+                            <div className="font-orbitron text-3xl font-bold text-[#D9CA5D]">PTGC</div>
+                            <div className="text-purple-400 text-xl font-bold">🤝 Affiliate Program</div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-white/50 text-base">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                            <div className="text-purple-400/80 text-base font-bold mt-0.5">{totalReferrers} referrers</div>
+                          </div>
+                        </div>
+                        
+                        {/* Two rows: Monthly + All-Time */}
+                        <div className="flex-1 flex flex-col gap-3">
+                          
+                          {/* Monthly Row */}
+                          <div className="flex-1 bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/40 rounded-lg px-4 flex flex-col justify-center py-2">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-lg">📅</span>
+                              <span className="text-green-400 font-bold text-lg font-orbitron tracking-wide">{moLabel}</span>
+                              <span className="text-green-400/50 text-base ml-1">MONTHLY</span>
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.6fr 2.2fr 1.4fr 1.3fr',gap:'8px'}}>
+                              <div className="text-center">
+                                <div className="text-green-400/50 text-base uppercase">Referrers</div>
+                                <div className="text-3xl font-bold text-green-400">{moReferrers}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-green-400/50 text-base uppercase">Buys</div>
+                                <div className="text-3xl font-bold text-green-400">{fmt(moBuys)}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-green-400/50 text-base uppercase">PTGC Referred</div>
+                                <div className="text-3xl font-bold text-green-400">{fmtAbbr(moPtgc)}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-green-400/50 text-base uppercase">Sea Creatures</div>
+                                <div className="text-3xl font-bold flex items-center justify-center gap-1.5">{moCreatures.length>0?moCreatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span className="text-2xl">{c.e}</span><span className="text-base font-bold text-green-400/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-green-400/50 text-base uppercase">USD Value</div>
+                                <div className="text-3xl font-bold text-green-400">{fmtUSD(moUsd)}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-green-400/50 text-base uppercase">Comm. Paid</div>
+                                <div className="text-3xl font-bold text-green-400">{fmtAbbr(moPaid)}</div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* All-Time Row */}
+                          <div className="flex-1 bg-gradient-to-r from-[#D9CA5D]/10 to-[#D9CA5D]/5 border border-[#D9CA5D]/40 rounded-lg px-4 flex flex-col justify-center py-2">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-lg">📊</span>
+                              <span className="text-[#D9CA5D] font-bold text-lg font-orbitron tracking-wide">ALL-TIME</span>
+                              <span className="text-[#D9CA5D]/50 text-base ml-1">GRAND TOTALS</span>
+                            </div>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.6fr 2.2fr 1.4fr 1.3fr',gap:'8px'}}>
+                              <div className="text-center">
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">Referrers</div>
+                                <div className="text-3xl font-bold text-[#D9CA5D]">{totalReferrers}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">Buys</div>
+                                <div className="text-3xl font-bold text-[#D9CA5D]">{fmt(allTimeBuys)}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">PTGC Referred</div>
+                                <div className="text-3xl font-bold text-[#D9CA5D]">{fmtAbbr(allTimePtgc)}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">Sea Creatures</div>
+                                <div className="text-3xl font-bold flex items-center justify-center gap-1.5">{atCreatures.length>0?atCreatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span className="text-2xl">{c.e}</span><span className="text-base font-bold text-[#D9CA5D]/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">USD Value</div>
+                                <div className="text-3xl font-bold text-[#D9CA5D]">{fmtUSD(allTimeUsd)}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">Comm. Paid</div>
+                                <div className="text-3xl font-bold text-[#D9CA5D]">{fmtAbbr(totalPaid)}</div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                        </div>
+                        
+                        {/* Footer */}
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-purple-300/70 text-sm">goptgc.com/#/ptgc-onboarding</span>
+                          <span className="text-white/50 text-sm">ptgc-ufo.com</span>
+                        </div>
+                      </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })()}
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Right-click the image and "Save Image As" or take a screenshot
@@ -5810,14 +5983,11 @@
       const[view,setView]=useState(()=>{
         const p=new URLSearchParams(window.location.search).get('token');
         if(p==='PTGC'||p==='UFO'){window.history.replaceState({},'',window.location.pathname);return'dashboard'}
-        // Check if returning from portfolio or other external page
-        try{const saved=localStorage.getItem('ptgc_last_token');if(saved==='PTGC'||saved==='UFO')return'dashboard';}catch(e){}
         return'home';
       });
       const[token,setToken]=useState(()=>{
         const p=new URLSearchParams(window.location.search).get('token');
         if(p==='PTGC'||p==='UFO')return p;
-        try{const saved=localStorage.getItem('ptgc_last_token');if(saved==='PTGC'||saved==='UFO')return saved;}catch(e){}
         return null;
       });
       const[lastToken,setLastToken]=useState(null);
