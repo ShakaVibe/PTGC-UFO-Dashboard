@@ -30,6 +30,10 @@
     .token-card-green:hover{box-shadow:0 0 50px rgba(124,252,0,0.5)}
     .modal-overlay{backdrop-filter:blur(8px)}
     .clickable:hover{transform:scale(1.02);cursor:pointer}
+    @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+    .buy-btn{position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease}
+    .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
+    .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
   </style>
 </head>
 <body>
@@ -47,6 +51,14 @@
       UFO:{name:'UFO',address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',pulseScanUrl:'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
         taxBreakdown:[{name:'LP Providers',pct:3,emoji:'\u{1F4A7}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Burn UFO',pct:1,emoji:'\u{1F525}'},{name:'Burn PTGC',pct:1,emoji:'\u{1F525}'}]
       }
+    };
+    
+    // ===== ALL-TIME HIGH PRICES =====
+    // Update these values from the Moon Math calculator in Portfolio
+    // These are fallbacks; coingeckoDataCache ATH will be used if available
+    const ATH_PRICES = {
+      PTGC: 0.00133,    // from Moon Math calculator in portfolio.html
+      UFO: 0.000113     // from Moon Math calculator in portfolio.html
     };
     
     const LP_ADDRESSES=[
@@ -2804,6 +2816,14 @@
       const creatures=getBurnC(burn?.pct||0,'Squid');
       const plsRatio=data?.price&&pls?(data.price/pls).toFixed(2):'\u2014';
       const priceUp=(data?.change||0)>=0;
+      
+      // X's to ATH: try coingecko cache first, then hardcoded fallback
+      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      const xToATH=data?.price>0&&athPrice>data.price?(athPrice/data.price).toFixed(1):'\u2014';
+      // X's to a Penny
+      const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';
+      // Format large X values with abbreviations
+      const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};
       const liqMcapRatio=data?.mcap>0?((data.liq/data.mcap)*100).toFixed(2):'\u2014';
       const whaleProgress=getWhaleProgress(burn?.pct||0);
       const tokensInLP=data?.tokensInLP||0;
@@ -2848,7 +2868,7 @@
             <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-4 sm:gap-6">
-                  <button onClick={onBack} className="text-white/60 hover:text-white text-lg">{'\u2190'} Home</button>
+                  <button onClick={onBack} className="text-white/40 hover:text-white/70 flex flex-col items-center leading-none transition-colors"><span className="text-xl">{'\u2190'}</span><span className="text-[9px] uppercase">Home</span></button>
                   <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24"/>
                   <div>
                     <span className={`font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold ${theme.text}`}>{token}</span>
@@ -2861,18 +2881,23 @@
                     <Price p={data?.price} c={`text-3xl sm:text-4xl font-bold ${theme.text}`}/>
                     <span className={`text-3xl font-bold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'}{Math.abs(data?.change||0).toFixed(2)}%</span>
                   </div>
-                  <div className={`${theme.card} border ${theme.border} rounded-xl px-5 py-3 flex items-center gap-2`}>
-                    <div className="text-white/60 text-xs leading-tight">PLS<br/>Ratio</div>
-                    <span className={`text-3xl sm:text-4xl font-bold ${theme.text}`}>{plsRatio}</span>
+                  <div className={`${theme.card} border ${theme.border} rounded-xl px-4 py-2 flex items-center gap-3`}>
+                    <div className="text-center"><div className="text-white text-xs uppercase leading-tight">PLS Ratio</div><div className={`text-2xl sm:text-3xl font-bold ${theme.text}`}>{plsRatio}</div></div>
+                    <div className="w-px self-stretch bg-white/15"></div>
+                    <div className="text-center"><div className="text-white text-xs uppercase leading-tight">X's to ATH</div><div className={`text-2xl sm:text-3xl font-bold ${theme.text}`}>{fmtX(xToATH)}</div></div>
+                    <div className="w-px self-stretch bg-white/15"></div>
+                    <div className="text-center"><div className="text-white text-xs uppercase leading-tight">X's to a Penny</div><div className={`text-2xl sm:text-3xl font-bold ${theme.text}`}>{fmtX(xToPenny)}</div></div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-2 px-5 py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(217,202,93,0.35), rgba(217,202,93,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(217,202,93,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(217,202,93,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
+                    <img src={cfg.logo} alt={token} className="w-10 h-10"/>
+                    <span className={`font-orbitron font-bold text-base ${theme.text}`}>BUY</span>
+                  </a>
                   <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className={`flex items-center gap-2 px-4 py-2 rounded-xl border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all`}>
-                    <span className="text-white/50">{'\u21C4'}</span>
                     <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-8 h-8"/>
                     <span className="text-white/70 text-sm font-medium">Switch</span>
                   </button>
-                  <a href={cfg.pulseScanUrl} target="_blank" className={`px-4 py-2 rounded-lg border ${theme.border} ${theme.text} font-medium hover:bg-white/5`}>Explorer</a>
                 </div>
               </div>
               {/* Page Navigation */}
@@ -2881,9 +2906,8 @@
                   <button onClick={()=>setActiveTab('dashboard')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='dashboard'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Dashboard</button>
                   <button onClick={()=>setActiveTab('kpi')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='kpi'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>KPI Report</button>
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
-                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
-                  <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3 py-1 text-sm rounded font-bold transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">Portfolio</a>
+                  <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10"><span style={{background:'linear-gradient(to right,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
                   <button onClick={onAffiliates} className={`px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20`}>Affiliates</button>
                 </div>
               </div>
