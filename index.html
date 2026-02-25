@@ -2349,6 +2349,347 @@
       );
     };
 
+    // ===== CALCULATORS TAB =====
+    // ===== CALCULATORS TAB =====
+    const RH_CORE_TOKENS=[
+      {symbol:'WPLS',name:'Wrapped PLS',address:'0xA1077a294dDE1B09bB078844df40758a5D0f9a27'},
+      {symbol:'PLSX',name:'PulseX',address:'0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'},
+      {symbol:'INC',name:'Incentive',address:'0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'},
+      {symbol:'HEX',name:'HEX',address:'0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'},
+      {symbol:'EHEX',name:'HEX from Ethereum',address:'0x57fde0a71132198BBeC939B98976993d8D89D225'}
+    ];
+    
+    const CalculatorsTab=({token,cfg,data,burn,pls,theme,onBack})=>{
+      const[calcTab,setCalcTab]=useState('xmult');
+      const isGold=cfg.color==='gold';
+      const price=data?.price||0;
+      const totalSupply=cfg.totalSupply;
+      const circulatingSupply=totalSupply-(burn?.total||0);
+      const mcap=data?.mcap||0;
+      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      
+      const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'Mx';if(n>=1e4)return(n/1e3).toFixed(0)+'Kx';if(n>=1e3)return(n/1e3).toFixed(1)+'Kx';return n>=100?Math.round(n).toLocaleString()+'x':n.toFixed(1)+'x';};
+      const fmtMcap=v=>{if(!v||isNaN(v))return'\u2014';if(v>=1e12)return'$'+(v/1e12).toFixed(2)+'T';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(2)+'K';return fmtDollar(v);};
+      
+      const[xFactor,setXFactor]=useState('2');
+      const[targetPairedPrice,setTargetPairedPrice]=useState('0.0001');
+      const[selectedPairSymbol,setSelectedPairSymbol]=useState('WPLS');
+      const[tokenAmount,setTokenAmount]=useState('');
+      const[portfolioLoading,setPortfolioLoading]=useState(false);
+      
+      const loadFromPortfolio=async()=>{
+        setPortfolioLoading(true);
+        try{
+          const stored=localStorage.getItem('ptgc_ufo_portfolio');
+          if(!stored){setPortfolioLoading(false);return}
+          const wallets=JSON.parse(stored);
+          if(!wallets||!wallets.length){setPortfolioLoading(false);return}
+          let total=0;
+          for(const w of wallets){
+            const bal=await fetchTokenBalance(cfg.address,w.address,cfg.decimals);
+            total+=bal;
+          }
+          if(total>0)setTokenAmount(String(Math.floor(total)));
+        }catch(e){console.error('Portfolio load error:',e)}
+        setPortfolioLoading(false);
+      };
+      
+      // Format number with commas for display
+      const displayTokenAmount=tokenAmount?(parseFloat(tokenAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
+      
+      const pairedPrices=useMemo(()=>{
+        const prices={};
+        if(!data?.pairs?.length)return prices;
+        const tokenAddr=cfg.address.toLowerCase();
+        data.pairs.forEach(p=>{
+          if(!p.baseToken||!p.quoteToken)return;
+          const isBase=p.baseToken.address?.toLowerCase()===tokenAddr;
+          const pairedToken=isBase?p.quoteToken:p.baseToken;
+          const sym=(pairedToken.symbol||'').toUpperCase();
+          if(!RH_CORE_TOKENS.find(t=>t.symbol===sym))return;
+          if(prices[sym])return;
+          const tokenPriceUSD=parseFloat(p.priceUsd)||0;
+          const priceNative=parseFloat(p.priceNative)||0;
+          let pairedPriceUSD=0;
+          if(isBase&&priceNative>0&&tokenPriceUSD>0)pairedPriceUSD=tokenPriceUSD/priceNative;
+          else if(!isBase&&priceNative>0)pairedPriceUSD=tokenPriceUSD*priceNative;
+          if(sym==='WPLS'&&pairedPriceUSD===0)pairedPriceUSD=pls;
+          const ratio=pairedPriceUSD>0?tokenPriceUSD/pairedPriceUSD:0;
+          if(ratio>0)prices[sym]={pairedPriceUSD,ratio,logo:getLogo(pairedToken.address)};
+        });
+        // Force WPLS to use same pls prop as dashboard for consistent ratio
+        if(pls>0&&price>0){
+          prices['WPLS']={pairedPriceUSD:pls,ratio:price/pls,logo:getLogo('0xA1077a294dDE1B09bB078844df40758a5D0f9a27')};
+        }
+        return prices;
+      },[data,cfg,pls,price]);
+      
+      const pairData=pairedPrices[selectedPairSymbol]||null;
+      const ratio=pairData?.ratio||0;
+      const pairedCurrentPrice=pairData?.pairedPriceUSD||0;
+      const xNum=parseFloat(xFactor)||0;
+      const targetPaired=parseFloat(targetPairedPrice)||0;
+      const basePrice=ratio*targetPaired;
+      const finalPrice=basePrice*xNum;
+      const basePotential=price>0?basePrice/price:0;
+      const finalPotential=price>0?finalPrice/price:0;
+      const baseMcap=basePrice*circulatingSupply;
+      const finalMcap=finalPrice*circulatingSupply;
+      const pairedXNeeded=pairedCurrentPrice>0?targetPaired/pairedCurrentPrice:0;
+      const bagAmount=parseFloat(tokenAmount)||0;
+      const bagCurrentValue=bagAmount*price;
+      const bagBaseValue=bagAmount*basePrice;
+      const bagFinalValue=bagAmount*finalPrice;
+      
+      const glowColor=isGold?'rgba(217,202,93,':'rgba(124,252,0,';
+      const solidColor=isGold?'#D9CA5D':'#7CFC00';
+      
+      return(
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 py-8">
+          
+          {/* ===== HEADER ===== */}
+          <div className="text-center mb-8">
+            <h2 className="text-3xl sm:text-4xl font-bold text-white font-orbitron tracking-widest">CALCULATOR</h2>
+            <div className="w-24 sm:w-32 h-0.5 mx-auto mt-1.5 rounded-full" style={{background:`linear-gradient(90deg,transparent,${glowColor}0.8),transparent)`}}></div>
+            <p className="text-white/25 text-xs mt-3 max-w-xl mx-auto">For entertainment & educational purposes only — not financial advice. Always DYOR.</p>
+          </div>
+          
+          {/* Calculator Nav - glass/glow style like Buy button */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex gap-2">
+              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'}].map(b=>{
+                const active=calcTab===b.id;
+                return(
+                  <button key={b.id} onClick={()=>setCalcTab(b.id)} className="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110" style={{
+                    padding:'10px 24px',
+                    background:active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:'rgba(255,255,255,0.03)',
+                    border:active?`1px solid ${glowColor}0.6)`:'1px solid rgba(255,255,255,0.08)',
+                    boxShadow:active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:'none',
+                    color:active?'white':'rgba(255,255,255,0.35)'
+                  }}>
+                    {b.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* ====== X MULTIPLIER ====== */}
+          {calcTab==='xmult'&&(
+            <div className="space-y-6">
+              
+              {/* Current Market Prices - with logos */}
+              <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+                <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
+                  <span className="text-white/60 text-xs font-bold uppercase tracking-widest">Current Market Prices</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                    <span className="text-green-400/70 text-xs font-bold uppercase">Live</span>
+                  </div>
+                </div>
+                <div className="px-6 py-3">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="flex items-center gap-3">
+                      <img src={cfg.logo} alt={cfg.name} className="w-9 h-9" style={{filter:`drop-shadow(0 0 6px ${glowColor}0.3))`}}/>
+                      <div>
+                        <div className="text-white/40 text-xs uppercase tracking-wide">{cfg.name} Price</div>
+                        <div className={`text-3xl font-bold ${theme.text}`}><Price p={price} c={theme.text}/></div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <img src={getLogo(RH_CORE_TOKENS.find(t=>t.symbol===selectedPairSymbol)?.address)} alt={selectedPairSymbol} className="w-9 h-9 rounded-full" onError={e=>{e.target.style.display='none'}}/>
+                      <div>
+                        <div className="text-white/40 text-xs uppercase tracking-wide">{selectedPairSymbol} Price</div>
+                        <div className="text-3xl font-bold text-white"><Price p={pairedCurrentPrice}/></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-white/40 text-xs uppercase tracking-wide">Ratio ({cfg.name} / {selectedPairSymbol})</div>
+                      <div className={`text-3xl font-bold ${theme.text}`}>{ratio>0?(ratio>=1?fmtComma(ratio,2):ratio>=0.01?fmtComma(ratio,4):ratio.toFixed(6)):'\u2014'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Calculator Card - BOLD border */}
+              <div className="rounded-2xl overflow-hidden" style={{border:`4px solid ${glowColor}0.85)`,boxShadow:`0 0 25px ${glowColor}0.15), inset 0 0 25px ${glowColor}0.05)`,background:`linear-gradient(180deg, ${glowColor}0.08) 0%, rgba(17,17,17,0.9) 40%, rgba(17,17,17,0.95) 100%)`}}>
+                <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between">
+                  <span className="text-white/60 text-sm font-bold uppercase tracking-widest">X Multiplier Calculator</span>
+                  <span className="text-white/40 text-xs hidden sm:block"><span className="text-white/20">{'\u25B8'}</span> Choose a pair <span className="text-white/20">{'\u25B8'}</span> Set the target price <span className="text-white/20">{'\u25B8'}</span> Set {cfg.name}'s X factor</span>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
+                    <div>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">Paired Token</div>
+                      <div className="flex flex-wrap gap-2">
+                        {RH_CORE_TOKENS.map(t=>{
+                          const hasPair=!!pairedPrices[t.symbol];
+                          const isActive=selectedPairSymbol===t.symbol;
+                          return(
+                            <button key={t.symbol} onClick={()=>{if(hasPair){setSelectedPairSymbol(t.symbol);setTargetPairedPrice('0.0001')}}} disabled={!hasPair} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-base font-bold transition-all ${!hasPair?'opacity-25 cursor-not-allowed border border-white/5':'cursor-pointer'} ${isActive&&hasPair?'text-black shadow-lg':'border border-white/10 text-white/60 hover:bg-white/10'}`} style={isActive&&hasPair?{background:solidColor}:{}}>
+                              <img src={getLogo(t.address)} alt={t.symbol} className="w-5 h-5 rounded-full" onError={e=>{e.target.style.display='none'}}/>
+                              {t.symbol}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{cfg.name} Token Amount</div>
+                      <div className="relative">
+                        <img src={cfg.logo} alt={cfg.name} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-6 h-6" style={{filter:`drop-shadow(0 0 4px ${glowColor}0.4))`}}/>
+                        <input type="text" inputMode="numeric" value={displayTokenAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setTokenAmount(raw)}} placeholder="Enter any amount" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 ml-1">
+                        {bagAmount>0&&price>0?<span className="text-white/40 text-sm font-semibold">Current value: <span className={theme.text}>{fmtDollar(bagCurrentValue)}</span></span>:<span/>}
+                        <button onClick={loadFromPortfolio} disabled={portfolioLoading} className={`text-sm font-semibold transition flex items-center gap-1 ${portfolioLoading?'opacity-40 cursor-not-allowed':''} ${theme.text}`} style={{opacity:portfolioLoading?0.4:0.7}}>
+                          {portfolioLoading?<><span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span> Loading...</>:<>📂 Load from Portfolio →</>}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{selectedPairSymbol} Target Price</div>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
+                        <input type="number" step="any" min="0" value={targetPairedPrice} onChange={e=>setTargetPairedPrice(e.target.value)} placeholder="Enter target price" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                      </div>
+                      {pairedXNeeded>0&&<div className="text-[#7CFC00] text-sm mt-2 ml-1 font-semibold">{fmtX(pairedXNeeded.toFixed(1))} from current {selectedPairSymbol} price</div>}
+                    </div>
+                    <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{cfg.name} X Factor</div>
+                      <div className="relative">
+                        <input type="number" step="any" min="0" value={xFactor} onChange={e=>setXFactor(e.target.value)} placeholder="Enter X factor" className="w-full px-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 text-xl font-bold">X</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {[1,2,3,5,10,25,50,100].map(x=>(
+                          <button key={x} onClick={()=>setXFactor(String(x))} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${parseFloat(xFactor)===x?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={parseFloat(xFactor)===x?{background:solidColor}:{background:'rgba(255,255,255,0.05)'}}>{x}x</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Results */}
+              {targetPaired>0&&ratio>0&&xNum>0&&(
+                <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+                  <div className="px-6 py-3 border-b border-white/[0.06]">
+                    <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Results</span>
+                  </div>
+                  <div className="p-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <div className="rounded-xl p-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
+                        <div className={`text-base uppercase tracking-wide mb-0.5 font-bold ${theme.text}`}>{cfg.name} at {selectedPairSymbol} Target</div>
+                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and ratio holds</div>
+                        <div className={`text-4xl font-bold ${theme.text} mb-2`}><Price p={basePrice} c={theme.text}/></div>
+                        <div className="flex items-center gap-3 text-base">
+                          <span className="text-green-400 font-bold">{fmtX(basePotential.toFixed(1))} Potential</span>
+                          <span className="text-white/15">|</span>
+                          <span className="text-white/40">MCap: {fmtMcap(baseMcap)}</span>
+                        </div>
+                      </div>
+                      <div className="rounded-xl p-4 relative overflow-hidden" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
+                        <div className={`text-base uppercase tracking-wide mb-0.5 font-bold ${theme.text}`}>{cfg.name} at {selectedPairSymbol} Target + X Factor</div>
+                        <div className="text-white/40 text-sm mb-2">{selectedPairSymbol} target met <span className="text-white/40">+</span> {cfg.name} <span className="text-white/60 font-semibold">{xNum}x</span> factor applied</div>
+                        <div className={`text-4xl font-bold ${theme.text} mb-2`} style={{textShadow:`0 0 25px ${glowColor}0.4)`}}><Price p={finalPrice} c={theme.text}/></div>
+                        <div className="flex items-center gap-3 text-base">
+                          <span className="text-green-400 font-bold">{fmtX(finalPotential.toFixed(1))} Potential</span>
+                          <span className="text-white/15">|</span>
+                          <span className="text-white/40">MCap: {fmtMcap(finalMcap)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {bagAmount>0&&(
+                      <div className="rounded-xl p-5 mb-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
+                        <div className="flex items-center gap-2.5 mb-4">
+                          <img src={cfg.logo} alt={cfg.name} className="w-7 h-7" style={{filter:`drop-shadow(0 0 5px ${glowColor}0.5))`}}/>
+                          <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Your Bag — {fmtComma(bagAmount,0)} {cfg.name}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">Current Value</div>
+                            <div className="text-white/60 text-2xl font-bold">{fmtMcap(bagCurrentValue)}</div>
+                          </div>
+                          <div>
+                            <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">At {selectedPairSymbol} Target</div>
+                            <div className={`text-2xl font-bold ${theme.text}`}>{fmtMcap(bagBaseValue)}</div>
+                          </div>
+                          <div>
+                            <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">With {xNum}x Factor</div>
+                            <div className="text-green-400 text-2xl font-bold" style={{textShadow:`0 0 15px rgba(74,222,128,0.3)`}}>{fmtMcap(bagFinalValue)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="rounded-xl p-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                        <div>
+                          <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">{selectedPairSymbol} Move</div>
+                          <div className="text-white text-xl font-bold">{fmtX(pairedXNeeded.toFixed(1))}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">{cfg.name} Move</div>
+                          <div className={`text-xl font-bold ${theme.text}`}>{xNum}x</div>
+                        </div>
+                        <div>
+                          <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">Combined Move</div>
+                          <div className="text-green-400 text-xl font-bold">{fmtX(finalPotential.toFixed(1))}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">vs ATH</div>
+                          <div className={`text-xl font-bold ${athPrice>0&&finalPrice>athPrice?'text-green-400':'text-orange-400'}`}>
+                            {athPrice>0?(finalPrice>athPrice?fmtX((finalPrice/athPrice).toFixed(1))+' above':'at '+(finalPrice/athPrice*100).toFixed(0)+'%'):'\u2014'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Disclaimer */}
+              <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-5">
+                <div className="flex items-start gap-3">
+                  <span className="text-yellow-500/60 text-lg mt-0.5">{'\u26A0\uFE0F'}</span>
+                  <div className="text-white/25 text-xs leading-relaxed">
+                    <span className="text-yellow-500/50 font-bold uppercase text-[11px]">Disclaimer — Not Financial Advice</span>
+                    <p className="mt-1.5">This calculator is provided <strong className="text-white/35">strictly for entertainment and educational purposes only</strong>. The results shown are highly simplified, hypothetical projections based on static price ratios and user-defined inputs. They do <strong className="text-white/35">not</strong> constitute financial, investment, tax, or legal advice of any kind.</p>
+                    <p className="mt-1.5">Real-world token prices are influenced by <strong className="text-white/35">countless factors</strong> not reflected here, including but not limited to: market sentiment, liquidity depth, trading volume, macroeconomic conditions, regulatory changes, smart contract risks, impermanent loss, token burns, inflation/deflation mechanics, whale activity, exchange listings, and overall crypto market cycles. Price ratios between tokens <strong className="text-white/35">do not remain constant</strong> and can shift dramatically.</p>
+                    <p className="mt-1.5">These projections are <strong className="text-white/35">extremely rough estimates meant for fun</strong> and should never be used as the basis for any financial decision. Past performance does not guarantee future results. You could lose some or all of your investment. <strong className="text-white/35">Always do your own research (DYOR)</strong> and consult with a qualified financial advisor before making any investment decisions. The creators of this tool accept no responsibility or liability for any losses incurred.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {calcTab==='moon'&&(
+            <div className="text-center py-20">
+              <div className="text-5xl mb-4">{'\uD83C\uDF19'}</div>
+              <div className="text-white/30 text-xl font-orbitron">Moon Math</div>
+              <div className="text-white/15 text-base mt-2">Coming soon</div>
+            </div>
+          )}
+          
+          {calcTab==='rewards'&&(
+            <div className="text-center py-20">
+              <div className="text-5xl mb-4">{'\uD83D\uDC8E'}</div>
+              <div className="text-white/30 text-xl font-orbitron">Rewards Calculator</div>
+              <div className="text-white/15 text-base mt-2">Coming soon</div>
+            </div>
+          )}
+          
+          <div className="mt-10 text-center">
+            <button onClick={onBack} className="px-6 py-2.5 rounded-lg border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all text-base">
+              {'\u2190'} Back to Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    };
+
     const Dashboard=({token,onBack,onSwitch,onAffiliates})=>{
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#D9CA5D]':'text-[#7CFC00]',border:isGold?'border-[#D9CA5D]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D9CA5D]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
@@ -2907,6 +3248,7 @@
                   <button onClick={()=>setActiveTab('kpi')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='kpi'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>KPI Report</button>
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
                   <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
+                  <button onClick={()=>setActiveTab('calculators')} className="fixed top-1 right-1 w-1.5 h-1.5 rounded-full bg-white/[0.03] hover:bg-white/20 transition-all z-50" title=""/>
                   <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10"><span style={{background:'linear-gradient(to right,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
                   <button onClick={onAffiliates} className={`px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20`}>Affiliates</button>
                 </div>
@@ -3427,6 +3769,11 @@
                 </button>
               </div>
             </div>
+          )}
+          
+          {/* Calculators Tab Content */}
+          {activeTab==='calculators'&&(
+            <CalculatorsTab token={token} cfg={cfg} data={data} burn={burn} pls={pls} theme={theme} onBack={()=>setActiveTab('dashboard')}/>
           )}
           
           {/* KPI Report Modal (legacy - kept for direct link) */}
