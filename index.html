@@ -371,6 +371,8 @@
     
     // Burn history cache - loaded from pre-generated JSON file
     let burnHistoryCache=null;
+    let burnHistoryCacheTime=0;
+    const BURN_CACHE_TTL=10*60*1000; // 10 minutes
     const BURN_HISTORY_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/burn-summary.json';
     const HOLDER_HISTORY_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/holder-history.json';
     
@@ -433,15 +435,16 @@
     };
     
     const fetchBurnHistory=async()=>{
-      if(burnHistoryCache)return burnHistoryCache;
+      if(burnHistoryCache&&(Date.now()-burnHistoryCacheTime)<BURN_CACHE_TTL)return burnHistoryCache;
       try{
-        const r=await fetch(BURN_HISTORY_URL);
+        const r=await fetch(BURN_HISTORY_URL+'?t='+Date.now());
         burnHistoryCache=await r.json();
+        burnHistoryCacheTime=Date.now();
         console.log('Burn history loaded, last updated:',burnHistoryCache.lastUpdated);
         return burnHistoryCache;
       }catch(e){
         console.error('Failed to load burn history:',e);
-        return null;
+        return burnHistoryCache||null;
       }
     };
     
