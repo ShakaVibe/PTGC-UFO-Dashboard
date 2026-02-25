@@ -6,300 +6,206 @@
 <title>The Grays — Charts</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  :root{
-    --bg:#08080d;
-    --surface:#0e0e16;
-    --surface2:#131320;
-    --border:#1a1a2a;
-    --border-light:#252538;
-    --text:#e8e8f0;
-    --text-dim:#6b6b80;
-    --text-muted:#3a3a4a;
-  }
-  body{
-    background:var(--bg);
-    color:var(--text);
-    font-family:'Outfit',sans-serif;
-    min-height:100vh;
-    overflow-x:hidden;
-  }
-  body::before{
-    content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.008) 1px,transparent 1px),
-      linear-gradient(90deg,rgba(255,255,255,0.008) 1px,transparent 1px);
-    background-size:50px 50px;
-  }
-  .app{position:relative;z-index:1;max-width:1440px;margin:0 auto;padding:20px 24px 40px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0a;color:#e8e8f0;font-family:'Outfit',sans-serif;min-height:100vh}
+.page{max-width:1200px;margin:0 auto;padding:16px 16px 40px}
 
-  /* ── SITE NAV BAR ── */
-  .site-nav{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:14px 20px;margin-bottom:24px;
-    background:var(--surface);border:1px solid var(--border);border-radius:14px;
-    flex-wrap:wrap;gap:12px;
-  }
-  .site-nav-left{display:flex;align-items:center;gap:12px}
-  .site-nav-logo{
-    width:42px;height:42px;border-radius:12px;
-    background:linear-gradient(135deg,#D9CA5D 0%,#b8a940 100%);
-    display:flex;align-items:center;justify-content:center;
-    font-weight:800;font-size:18px;color:#000;
-    font-family:'JetBrains Mono',monospace;
-    box-shadow:0 0 20px rgba(217,202,93,0.15);
-  }
-  .site-nav-title{font-size:18px;font-weight:700;letter-spacing:-0.3px}
-  .site-nav-sub{
-    font-size:11px;letter-spacing:1.2px;text-transform:uppercase;
-    font-family:'JetBrains Mono',monospace;
-    background:linear-gradient(to right,#D9CA5D,#7CFC00);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-    font-weight:600;
-  }
-  .site-nav-btns{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .nav-btn{
-    padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;
-    border:1px solid var(--border);color:var(--text-dim);
-    background:none;cursor:pointer;transition:all .2s;
-    text-decoration:none;display:inline-block;
-  }
-  .nav-btn:hover{color:var(--text);background:rgba(255,255,255,0.04);border-color:var(--border-light)}
-  .nav-btn.active{
-    background:rgba(255,255,255,0.06);color:#fff;
-    border-color:rgba(217,202,93,0.4);
-  }
-  .nav-btn.portfolio{border-color:rgba(217,202,93,0.4)}
-  .nav-btn.portfolio span{
-    background:linear-gradient(to right,#D9CA5D,#7CFC00);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  }
+/* ── HEADER — matches calculator ── */
+.page-header{text-align:center;margin-bottom:32px;padding-top:12px}
+.page-header h2{
+  font-family:'Orbitron',sans-serif;font-size:clamp(24px,4vw,36px);
+  font-weight:700;color:#fff;letter-spacing:6px;
+}
+.page-header .underline{
+  width:120px;height:2px;margin:6px auto 0;border-radius:2px;
+  background:linear-gradient(90deg,transparent,rgba(217,202,93,0.8),transparent);
+}
+.page-header .disclaimer{
+  color:rgba(255,255,255,0.35);font-size:13px;margin-top:12px;
+  max-width:540px;margin-left:auto;margin-right:auto;
+}
 
-  /* ── CHART TABS ── */
-  .chart-tabs{
-    display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;
-  }
-  .chart-tab{
-    padding:10px 22px;border-radius:10px;font-size:14px;font-weight:600;
-    border:1.5px solid var(--border);color:var(--text-dim);
-    background:var(--surface);cursor:pointer;transition:all .25s;
-    display:flex;align-items:center;gap:8px;
-  }
-  .chart-tab:hover{color:var(--text);border-color:var(--border-light);background:rgba(255,255,255,0.03)}
-  .chart-tab.active{
-    border-color:rgba(217,202,93,0.5);color:#fff;
-    background:rgba(217,202,93,0.06);
-    box-shadow:0 0 16px rgba(217,202,93,0.08);
-  }
-  .chart-tab .tab-dot{width:8px;height:8px;border-radius:50%;background:#D9CA5D;opacity:0;transition:opacity .2s}
-  .chart-tab.active .tab-dot{opacity:1}
-  .chart-tab.disabled{color:var(--text-muted);cursor:not-allowed;opacity:0.5}
+/* ── SUB-TABS — matches calculator glow style ── */
+.sub-tabs{display:flex;justify-content:center;gap:8px;margin-bottom:28px;flex-wrap:wrap}
+.sub-tab{
+  padding:10px 24px;border-radius:12px;
+  font-family:'Orbitron',sans-serif;font-weight:700;font-size:clamp(12px,1.5vw,15px);
+  cursor:pointer;border:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.35);
+  transition:all .25s;
+}
+.sub-tab:hover{color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.15)}
+.sub-tab.active{
+  background:linear-gradient(135deg,rgba(217,202,93,0.45),rgba(217,202,93,0.2));
+  border:1px solid rgba(217,202,93,0.6);
+  box-shadow:0 0 20px rgba(217,202,93,0.25),inset 0 1px 0 rgba(255,255,255,0.15);
+  color:#fff;
+}
+.sub-tab.disabled{opacity:0.35;cursor:not-allowed}
 
-  /* ── HEADER (range/period) ── */
-  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:14px}
+/* ── CARD WRAPPER — matches calculator outer card ── */
+.chart-card{
+  border:4px solid rgba(217,202,93,0.3);
+  border-radius:20px;padding:24px 20px;
+  background:rgba(0,0,0,0.3);
+  box-shadow:0 0 40px rgba(217,202,93,0.06);
+  margin-bottom:24px;
+}
 
-  /* ── DATE RANGE ── */
-  .range-bar{display:flex;gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:3px}
-  .range-btn{
-    padding:7px 15px;border-radius:8px;font-size:12px;font-weight:700;
-    color:var(--text-dim);cursor:pointer;transition:all .2s;border:none;background:none;
-    font-family:'JetBrains Mono',monospace;letter-spacing:0.8px;
-  }
-  .range-btn:hover{color:var(--text);background:rgba(255,255,255,0.04)}
-  .range-btn.active{background:rgba(255,255,255,0.08);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
-  .range-custom{display:flex;align-items:center;gap:6px;margin-left:4px;padding-left:8px;border-left:1px solid var(--border)}
-  .range-custom label{font-size:10px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;font-weight:600}
-  .date-input{
-    background:var(--surface2);border:1px solid var(--border);border-radius:6px;
-    color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;
-    padding:5px 8px;outline:none;width:120px;cursor:pointer;
-  }
-  .date-input:focus{border-color:rgba(217,202,93,0.5)}
-  .date-input::-webkit-calendar-picker-indicator{filter:invert(0.6);cursor:pointer}
-  .range-go{
-    padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;
-    color:#000;background:#D9CA5D;border:none;cursor:pointer;
-    font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;
-    transition:all .2s;
-  }
-  .range-go:hover{background:#e8d96a;transform:translateY(-1px)}
+/* ── RANGE TABS ── */
+.range-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.range-bar{display:flex;gap:3px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:3px}
+.range-btn{
+  padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;
+  color:rgba(255,255,255,0.4);cursor:pointer;transition:all .2s;border:none;background:none;
+  font-family:'JetBrains Mono',monospace;letter-spacing:0.8px;
+}
+.range-btn:hover{color:#fff;background:rgba(255,255,255,0.04)}
+.range-btn.active{background:rgba(255,255,255,0.08);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+.range-custom{display:flex;align-items:center;gap:6px}
+.range-custom label{font-size:10px;color:rgba(255,255,255,0.25);font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;font-weight:600}
+.date-input{
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;
+  color:#e8e8f0;font-family:'JetBrains Mono',monospace;font-size:11px;
+  padding:5px 8px;outline:none;width:120px;cursor:pointer;
+}
+.date-input:focus{border-color:rgba(217,202,93,0.5)}
+.date-input::-webkit-calendar-picker-indicator{filter:invert(0.6);cursor:pointer}
+.range-go{
+  padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;
+  color:#000;background:#D9CA5D;border:none;cursor:pointer;
+  font-family:'JetBrains Mono',monospace;transition:all .2s;
+}
+.range-go:hover{background:#e8d96a}
 
-  /* ── TOKEN SELECTOR ── */
-  .token-bar{
-    display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;
-    padding:14px 18px;background:var(--surface);
-    border:1px solid var(--border);border-radius:14px;
-    align-items:center;
-  }
-  .token-bar-label{
-    font-size:10px;text-transform:uppercase;letter-spacing:1.8px;
-    color:var(--text-muted);font-weight:700;margin-right:10px;
-    font-family:'JetBrains Mono',monospace;
-  }
-  .token-btn{
-    display:flex;align-items:center;gap:7px;
-    padding:7px 14px 7px 9px;border-radius:10px;
-    border:1.5px solid transparent;
-    background:rgba(255,255,255,0.02);
-    cursor:pointer;transition:all .25s ease;
-    position:relative;
-  }
-  .token-btn:hover{background:rgba(255,255,255,0.05);transform:translateY(-1px)}
-  .token-btn.selected{
-    border-color:color-mix(in srgb,var(--tc) 60%,transparent);
-    background:color-mix(in srgb,var(--tc) 6%,transparent);
-  }
-  .token-btn .t-logo{width:22px;height:22px;border-radius:50%;background:#1a1a2a;object-fit:cover}
-  .token-btn .t-logo-fallback{
-    width:22px;height:22px;border-radius:50%;
-    display:none;align-items:center;justify-content:center;
-    font-size:9px;font-weight:800;color:#000;font-family:'JetBrains Mono',monospace;
-  }
-  .token-btn .t-name{font-size:13px;font-weight:600;color:var(--text-dim);transition:color .2s}
-  .token-btn.selected .t-name{color:var(--text)}
-  .token-btn .t-dot{
-    width:7px;height:7px;border-radius:50%;
-    background:var(--tc);opacity:0;transition:all .2s;
-    box-shadow:0 0 6px var(--tc);
-  }
-  .token-btn.selected .t-dot{opacity:1}
+/* ── TOKEN BUTTONS ── */
+.token-bar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;align-items:center}
+.token-bar-label{
+  font-size:10px;text-transform:uppercase;letter-spacing:1.8px;
+  color:rgba(255,255,255,0.2);font-weight:700;margin-right:8px;
+  font-family:'JetBrains Mono',monospace;
+}
+.token-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px 6px 8px;border-radius:10px;
+  border:1.5px solid transparent;
+  background:rgba(255,255,255,0.02);
+  cursor:pointer;transition:all .25s;
+}
+.token-btn:hover{background:rgba(255,255,255,0.05);transform:translateY(-1px)}
+.token-btn.selected{
+  border-color:color-mix(in srgb,var(--tc) 60%,transparent);
+  background:color-mix(in srgb,var(--tc) 6%,transparent);
+}
+.token-btn .t-logo{width:20px;height:20px;border-radius:50%;background:#1a1a2a;object-fit:cover}
+.token-btn .t-fallback{
+  width:20px;height:20px;border-radius:50%;
+  display:none;align-items:center;justify-content:center;
+  font-size:8px;font-weight:800;color:#000;font-family:'JetBrains Mono',monospace;
+}
+.token-btn .t-name{font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);transition:color .2s}
+.token-btn.selected .t-name{color:#fff}
+.token-btn .t-dot{width:6px;height:6px;border-radius:50%;background:var(--tc);opacity:0;transition:all .2s;box-shadow:0 0 6px var(--tc)}
+.token-btn.selected .t-dot{opacity:1}
 
-  /* ── STATUS ── */
-  .status-row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:8px 14px;margin-bottom:12px;
-    font-size:11px;color:var(--text-muted);
-    font-family:'JetBrains Mono',monospace;letter-spacing:0.3px;
-  }
-  .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:5px}
-  .dot.live{background:#22c55e;box-shadow:0 0 8px #22c55e}
-  .dot.spin{background:#eab308;animation:pdot 1s infinite}
-  .dot.err{background:#ef4444}
-  @keyframes pdot{0%,100%{opacity:1}50%{opacity:0.3}}
+/* ── STATUS ── */
+.status-row{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;margin-bottom:10px;font-size:11px;color:rgba(255,255,255,0.25);font-family:'JetBrains Mono',monospace}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot.live{background:#22c55e;box-shadow:0 0 8px #22c55e}
+.dot.spin{background:#eab308;animation:pdot 1s infinite}
+.dot.err{background:#ef4444}
+@keyframes pdot{0%,100%{opacity:1}50%{opacity:0.3}}
 
-  /* ── CHART ── */
-  .chart-wrap{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:16px;
-    padding:22px 18px 14px;
-    position:relative;
-    margin-bottom:16px;
-  }
-  .chart-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding:0 4px}
-  .chart-label{font-size:13px;font-weight:600;color:var(--text-dim);letter-spacing:0.2px}
-  .chart-period{font-size:22px;font-weight:700;letter-spacing:-0.5px;margin-top:2px}
-  .chart-area{position:relative;height:440px}
-  .chart-area canvas{width:100%!important;height:100%!important}
+/* ── CHART ── */
+.chart-inner{
+  background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px;padding:18px 14px 10px;position:relative;margin-bottom:14px;
+}
+.chart-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;padding:0 4px}
+.chart-label{font-size:12px;font-weight:600;color:rgba(255,255,255,0.4)}
+.chart-period{font-size:20px;font-weight:700;letter-spacing:-0.5px;margin-top:2px;color:#fff}
+.chart-area{position:relative;height:440px}
+.chart-area canvas{width:100%!important;height:100%!important}
+.chart-legend{display:flex;flex-wrap:wrap;gap:12px;padding:10px 4px 0}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:rgba(255,255,255,0.4);font-family:'JetBrains Mono',monospace}
+.legend-line{width:16px;height:3px;border-radius:2px}
 
-  /* ── LEGEND ── */
-  .chart-legend{display:flex;flex-wrap:wrap;gap:14px;padding:12px 4px 0}
-  .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
-  .legend-line{width:18px;height:3px;border-radius:2px}
+/* ── LOADING ── */
+.loading{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,10,10,0.75);border-radius:14px;z-index:10;backdrop-filter:blur(6px);
+}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,0.08);border-top-color:#D9CA5D;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ── LOADING ── */
-  .loading{
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    background:rgba(8,8,13,0.75);border-radius:16px;z-index:10;
-    backdrop-filter:blur(6px);
-  }
-  .spinner{
-    width:38px;height:38px;border:3px solid var(--border);
-    border-top-color:#D9CA5D;border-radius:50%;animation:spin .7s linear infinite;
-  }
-  @keyframes spin{to{transform:rotate(360deg)}}
+/* ── SUMMARY CARDS ── */
+.cards{display:flex;flex-wrap:wrap;gap:10px}
+.card{
+  flex:1;min-width:140px;
+  background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px;padding:16px 16px;
+  display:flex;flex-direction:column;gap:6px;
+  position:relative;overflow:hidden;transition:transform .2s;
+}
+.card:hover{transform:translateY(-2px)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--cc);opacity:0.7}
+.card-top{display:flex;align-items:center;gap:10px}
+.card-top img{width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,0.1)}
+.card-sym{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.card-chg{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;line-height:1.1}
+.card-chg.up{color:#22c55e}
+.card-chg.dn{color:#ef4444}
+.card-price{font-size:14px;color:rgba(255,255,255,0.85);font-family:'JetBrains Mono',monospace;font-weight:500}
 
-  /* ── SUMMARY CARDS ── */
-  .cards{display:flex;flex-wrap:wrap;gap:10px}
-  .card{
-    flex:1;min-width:155px;
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:14px;
-    padding:18px 20px;
-    display:flex;flex-direction:column;gap:8px;
-    position:relative;overflow:hidden;
-    transition:transform .2s,border-color .2s;
-  }
-  .card:hover{transform:translateY(-2px);border-color:var(--border-light)}
-  .card::before{
-    content:'';position:absolute;top:0;left:0;right:0;height:2.5px;
-    background:var(--cc);opacity:0.8;
-  }
-  .card-top{display:flex;align-items:center;gap:12px}
-  .card-top img{width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,0.1)}
-  .card-sym{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}
-  .card-chg{
-    font-size:28px;font-weight:800;
-    font-family:'JetBrains Mono',monospace;
-    letter-spacing:-1px;line-height:1.1;
-  }
-  .card-chg.up{color:#22c55e}
-  .card-chg.dn{color:#ef4444}
-  .card-price{font-size:14px;color:rgba(255,255,255,0.85);font-family:'JetBrains Mono',monospace;font-weight:500}
-  .no-data{
-    color:var(--text-muted);font-size:13px;text-align:center;padding:60px 20px;
-    font-family:'JetBrains Mono',monospace;
-  }
+/* ── BACK BUTTON ── */
+.back-row{text-align:center;margin-top:28px}
+.back-btn{
+  padding:10px 24px;border-radius:10px;
+  border:1px solid rgba(255,255,255,0.1);
+  background:none;color:rgba(255,255,255,0.4);
+  font-size:15px;cursor:pointer;transition:all .2s;
+}
+.back-btn:hover{color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.2)}
 
-  /* ── RESPONSIVE ── */
-  @media(max-width:768px){
-    .app{padding:14px 12px 32px}
-    .site-nav{flex-direction:column;align-items:flex-start;padding:12px 14px}
-    .site-nav-btns{gap:4px}
-    .nav-btn{padding:5px 10px;font-size:11px}
-    .chart-tabs{gap:6px}
-    .chart-tab{padding:8px 14px;font-size:13px}
-    .header{flex-direction:column;align-items:flex-start}
-    .range-custom{margin-left:0;padding-left:0;border-left:none;margin-top:8px;flex-wrap:wrap}
-    .chart-area{height:320px}
-    .card{min-width:calc(50% - 6px)}
-    .card-chg{font-size:22px}
-    .token-btn{padding:6px 10px 6px 7px}
-    .token-btn .t-name{font-size:12px}
-  }
-  @media(max-width:480px){.card{min-width:100%}}
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .page{padding:12px 10px 32px}
+  .chart-area{height:300px}
+  .card{min-width:calc(50% - 6px)}
+  .card-chg{font-size:20px}
+  .card-top img{width:34px;height:34px}
+  .card-sym{font-size:15px}
+  .range-row{flex-direction:column;align-items:flex-start}
+  .range-custom{flex-wrap:wrap}
+  .sub-tab{padding:8px 16px}
+}
+@media(max-width:480px){.card{min-width:100%}}
 </style>
 </head>
 <body>
-<div class="app">
-  <!-- SITE NAVIGATION -->
-  <nav class="site-nav">
-    <div class="site-nav-left">
-      <div class="site-nav-logo">G</div>
-      <div>
-        <div class="site-nav-title">THE GRAYS</div>
-        <div class="site-nav-sub">Charts</div>
-      </div>
-    </div>
-    <div class="site-nav-btns">
-      <a href="./index.html" class="nav-btn">Dashboard</a>
-      <a href="./index.html" class="nav-btn">KPI Report</a>
-      <a href="./index.html" class="nav-btn">Social</a>
-      <span class="nav-btn active">Charts</span>
-      <a href="./portfolio.html" class="nav-btn portfolio"><span>Portfolio</span></a>
-    </div>
-  </nav>
+<div class="page">
 
-  <!-- CHART TYPE TABS -->
-  <div class="chart-tabs">
-    <button class="chart-tab active" onclick="this.classList.add('active')">
-      <span>The Grays vs Others</span>
-      <span class="tab-dot"></span>
-    </button>
-    <button class="chart-tab disabled" title="Coming soon">
-      <span>Price History</span>
-    </button>
-    <button class="chart-tab disabled" title="Coming soon">
-      <span>Volume Comparison</span>
-    </button>
+  <!-- HEADER — matches calculator style -->
+  <div class="page-header">
+    <h2>CHARTS</h2>
+    <div class="underline"></div>
+    <p class="disclaimer">Compare token performance across time periods — for entertainment & educational purposes only.</p>
   </div>
 
-  <!-- RANGE SELECTOR + CUSTOM DATE -->
-  <div class="header">
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <!-- SUB-TABS — glow style matching calculator -->
+  <div class="sub-tabs">
+    <button class="sub-tab active">The Grays vs Others</button>
+    <button class="sub-tab disabled" title="Coming soon">Price History</button>
+    <button class="sub-tab disabled" title="Coming soon">Volume Comparison</button>
+  </div>
+
+  <!-- MAIN CHART CARD -->
+  <div class="chart-card">
+
+    <!-- Range row -->
+    <div class="range-row">
       <div class="range-bar" id="rangeBar"></div>
       <div class="range-custom">
         <label>FROM</label>
@@ -309,153 +215,165 @@
         <button class="range-go" id="dateGoBtn">GO</button>
       </div>
     </div>
-  </div>
 
-  <!-- TOKEN SELECTOR -->
-  <div class="token-bar">
-    <div class="token-bar-label">Tokens</div>
-    <div id="tokenBtns" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-  </div>
+    <!-- Token buttons -->
+    <div class="token-bar">
+      <div class="token-bar-label">Tokens</div>
+      <div id="tokenBtns" style="display:flex;flex-wrap:wrap;gap:7px"></div>
+    </div>
 
-  <!-- STATUS -->
-  <div class="status-row">
-    <div id="statusTxt"><span class="dot spin"></span>Loading…</div>
-    <div id="statusTime"></div>
-  </div>
+    <!-- Status -->
+    <div class="status-row">
+      <div id="statusTxt"><span class="dot spin"></span>Loading…</div>
+      <div id="statusTime"></div>
+    </div>
 
-  <!-- CHART -->
-  <div class="chart-wrap">
-    <div class="chart-head">
-      <div>
-        <div class="chart-label">Percentage Change from Start</div>
-        <div class="chart-period" id="periodLabel">—</div>
+    <!-- Chart -->
+    <div class="chart-inner">
+      <div class="chart-head">
+        <div>
+          <div class="chart-label">Percentage Change from Start</div>
+          <div class="chart-period" id="periodLabel">—</div>
+        </div>
       </div>
+      <div class="chart-area">
+        <canvas id="mainChart"></canvas>
+        <div class="loading" id="loadOverlay"><div class="spinner"></div></div>
+      </div>
+      <div class="chart-legend" id="chartLegend"></div>
     </div>
-    <div class="chart-area">
-      <canvas id="mainChart"></canvas>
-      <div class="loading" id="loadOverlay"><div class="spinner"></div></div>
-    </div>
-    <div class="chart-legend" id="chartLegend"></div>
+
+    <!-- Summary cards -->
+    <div class="cards" id="summaryCards"></div>
   </div>
 
-  <!-- SUMMARY CARDS -->
-  <div class="cards" id="summaryCards"></div>
+  <!-- Back button -->
+  <div class="back-row">
+    <a href="./index.html" class="back-btn">← Back to Dashboard</a>
+  </div>
+
 </div>
 
 <script>
 /* ═══════════════════════════════════════════════
    TOKEN CONFIG
    ═══════════════════════════════════════════════ */
-const dexLogo = a => `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
+const dexLogo=a=>`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
 
-const TOKENS = {
-  PTGC: {
-    name:'PTGC', sym:'PTGC', color:'#D9CA5D',
+const TOKENS={
+  PTGC:{
+    name:'PTGC',sym:'PTGC',color:'#D9CA5D',
     pool:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
-    logo: dexLogo('0x94534EeEe131840b1c0F61847c572228bdfDDE93'),
+    logo:dexLogo('0x94534EeEe131840b1c0F61847c572228bdfDDE93'),
     on:true
   },
-  UFO: {
-    name:'UFO', sym:'UFO', color:'#7CFC00',
+  UFO:{
+    name:'UFO',sym:'UFO',color:'#7CFC00',
     pool:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',
-    logo: dexLogo('0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'),
+    logo:dexLogo('0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'),
     on:true
   },
-  WPLS: {
-    name:'Wrapped PLS', sym:'WPLS', color:'#E84DE4',
+  WPLS:{
+    name:'Wrapped PLS',sym:'WPLS',color:'#E84DE4',
     cgId:'pulsechain',
-    logo: dexLogo('0xA1077a294dDE1B09bB078844df40758a5D0f9a27'),
+    logo:dexLogo('0xA1077a294dDE1B09bB078844df40758a5D0f9a27'),
+    on:true
+  },
+  PLSX:{
+    name:'PulseX',sym:'PLSX',color:'#FF6BCD',
+    tokenAddr:'0x95B303987A60C71504D99Aa1b13B4DA07b0790ab',
+    logo:dexLogo('0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'),
     on:false
   },
-  BTC: {
-    name:'Bitcoin', sym:'BTC', color:'#F7931A',
+  HEX:{
+    name:'HEX',sym:'HEX',color:'#FF6600',
+    tokenAddr:'0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
+    logo:dexLogo('0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'),
+    on:false
+  },
+  EHEX:{
+    name:'eHEX',sym:'EHEX',color:'#CC5500',
+    tokenAddr:'0x57fde0a71132198BBeC939B98976993d8D89D225',
+    logo:dexLogo('0x57fde0a71132198BBeC939B98976993d8D89D225'),
+    on:false
+  },
+  INC:{
+    name:'Incentive',sym:'INC',color:'#00BFFF',
+    tokenAddr:'0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d',
+    logo:dexLogo('0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'),
+    on:false
+  },
+  BTC:{
+    name:'Bitcoin',sym:'BTC',color:'#F7931A',
     cgId:'bitcoin',
     logo:'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
     on:true
   },
-  ETH: {
-    name:'Ethereum', sym:'ETH', color:'#627EEA',
+  ETH:{
+    name:'Ethereum',sym:'ETH',color:'#627EEA',
     cgId:'ethereum',
     logo:'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
     on:true
   },
-  SOL: {
-    name:'Solana', sym:'SOL', color:'#00E5CC',
+  SOL:{
+    name:'Solana',sym:'SOL',color:'#00E5CC',
     cgId:'solana',
     logo:'https://assets.coingecko.com/coins/images/4128/small/solana.png',
     on:false
   },
-  BNB: {
-    name:'BNB', sym:'BNB', color:'#F0B90B',
+  BNB:{
+    name:'BNB',sym:'BNB',color:'#F0B90B',
     cgId:'binancecoin',
     logo:'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
     on:false
   },
-  XRP: {
-    name:'XRP', sym:'XRP', color:'#B0B0B0',
+  XRP:{
+    name:'XRP',sym:'XRP',color:'#B0B0B0',
     cgId:'ripple',
     logo:'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
     on:false
-  },
+  }
 };
 
-const RANGES = [
-  {label:'24H',days:1},
-  {label:'7D',days:7},
-  {label:'14D',days:14},
-  {label:'1M',days:30},
-  {label:'3M',days:90},
-  {label:'6M',days:180},
-  {label:'1Y',days:365}
+const RANGES=[
+  {label:'24H',days:1},{label:'7D',days:7},{label:'14D',days:14},
+  {label:'1M',days:30},{label:'3M',days:90},{label:'6M',days:180},{label:'1Y',days:365}
 ];
 
-let range = RANGES[3];
-let customRange = null; // {from: Date, to: Date} when custom is active
-let cache = {};
-let chart = null;
+let range=RANGES[3];
+let customRange=null;
+let cache={};
+let poolCache={};
+let chart=null;
 
 /* ═══════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', () => {
-  // Set default date inputs
-  const now = new Date();
-  const monthAgo = new Date(now - 30*86400000);
-  document.getElementById('dateTo').value = now.toISOString().split('T')[0];
-  document.getElementById('dateFrom').value = monthAgo.toISOString().split('T')[0];
-  
-  // Custom date GO button
-  document.getElementById('dateGoBtn').onclick = () => {
-    const from = document.getElementById('dateFrom').value;
-    const to = document.getElementById('dateTo').value;
-    if(!from||!to) return;
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-    if(fromDate >= toDate) return;
-    const days = Math.round((toDate - fromDate) / 86400000);
-    customRange = {from: fromDate, to: toDate, days};
-    // Deactivate preset buttons
-    range = null;
-    renderRange();
-    go();
+document.addEventListener('DOMContentLoaded',()=>{
+  const now=new Date();
+  const monthAgo=new Date(now-30*86400000);
+  document.getElementById('dateTo').value=now.toISOString().split('T')[0];
+  document.getElementById('dateFrom').value=monthAgo.toISOString().split('T')[0];
+  document.getElementById('dateGoBtn').onclick=()=>{
+    const f=document.getElementById('dateFrom').value;
+    const t=document.getElementById('dateTo').value;
+    if(!f||!t)return;
+    const fd=new Date(f),td=new Date(t);
+    if(fd>=td)return;
+    customRange={from:fd,to:td,days:Math.round((td-fd)/86400000)};
+    range=null;renderRange();go();
   };
-
-  renderRange();
-  renderButtons();
-  go();
+  renderRange();renderButtons();go();
 });
+
+function getDays(){return customRange?customRange.days:(range?range.days:30)}
 
 /* ── Range tabs ── */
 function renderRange(){
   const el=document.getElementById('rangeBar');
   el.innerHTML=RANGES.map(r=>`<button class="range-btn${range&&r.days===range.days?' active':''}" data-d="${r.days}">${r.label}</button>`).join('');
   el.querySelectorAll('.range-btn').forEach(b=>{
-    b.onclick=()=>{
-      range=RANGES.find(r=>r.days===+b.dataset.d);
-      customRange=null;
-      renderRange();
-      go();
-    };
+    b.onclick=()=>{range=RANGES.find(r=>r.days===+b.dataset.d);customRange=null;renderRange();go()};
   });
 }
 
@@ -464,115 +382,122 @@ function renderButtons(){
   const el=document.getElementById('tokenBtns');
   el.innerHTML=Object.entries(TOKENS).map(([k,t])=>
     `<button class="token-btn${t.on?' selected':''}" data-k="${k}" style="--tc:${t.color}">
-      <img class="t-logo" src="${t.logo}" alt="${t.sym}"
-        onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
-      <span class="t-logo-fallback" style="background:${t.color}">${t.sym[0]}</span>
+      <img class="t-logo" src="${t.logo}" alt="${t.sym}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <span class="t-fallback" style="background:${t.color}">${t.sym[0]}</span>
       <span class="t-name">${t.sym}</span>
       <span class="t-dot"></span>
     </button>`
   ).join('');
   el.querySelectorAll('.token-btn').forEach(b=>{
-    b.onclick=()=>{TOKENS[b.dataset.k].on=!TOKENS[b.dataset.k].on;renderButtons();renderChart();renderSummary()};
+    b.onclick=()=>{
+      const k=b.dataset.k;
+      TOKENS[k].on=!TOKENS[k].on;
+      renderButtons();
+      // If newly selected and no data yet, fetch it
+      if(TOKENS[k].on&&(!TOKENS[k]._data||TOKENS[k]._data.length<2)) go();
+      else{renderChart();renderSummary()}
+    };
   });
 }
 
 /* ═══════════════════════════════════════════════
    DATA FETCHING
    ═══════════════════════════════════════════════ */
-/* ── Get active days count ── */
-function getDays(){ return customRange ? customRange.days : (range ? range.days : 30); }
-
 async function go(){
   const ld=document.getElementById('loadOverlay');
   const st=document.getElementById('statusTxt');
   ld.style.display='flex';
   st.innerHTML='<span class="dot spin"></span>Fetching price data…';
-
   const days=getDays();
+
   const results=await Promise.allSettled(
     Object.entries(TOKENS).map(async([k,t])=>{
       const ck=`${k}_${days}`;
-      // 5-min cache
-      if(cache[ck]&&Date.now()-cache[ck].ts<300000) return{k,data:cache[ck].data};
+      if(cache[ck]&&Date.now()-cache[ck].ts<300000)return{k,data:cache[ck].data};
       let data=[];
       try{
-        if(t.cgId){
-          data=await fetchCoinGecko(t.cgId,days);
-        }else if(t.pool){
-          data=await fetchGeckoTerminal(t.pool,days,k);
-          // If GeckoTerminal returned nothing, try DexScreener for minimal data
-          if(!data.length) data=await fetchDexFallback(t.pool);
-        }
-        if(data.length) cache[ck]={data,ts:Date.now()};
+        if(t.cgId) data=await fetchCoinGecko(t.cgId,days);
+        else if(t.pool) data=await fetchGeckoTerminal(t.pool,days,k);
+        else if(t.tokenAddr) data=await fetchByTokenAddr(t.tokenAddr,days,k);
+        if(data.length)cache[ck]={data,ts:Date.now()};
       }catch(e){console.error(`${k}:`,e)}
       return{k,data};
     })
   );
 
   results.forEach(r=>{
-    if(r.status==='fulfilled'){
-      const {k,data}=r.value;
-      if(data.length>0) TOKENS[k]._data=data;
-    }
+    if(r.status==='fulfilled'&&r.value.data.length>0) TOKENS[r.value.k]._data=r.value.data;
   });
 
   ld.style.display='none';
   const ok=results.filter(r=>r.status==='fulfilled'&&r.value.data.length>0).length;
   const tot=Object.keys(TOKENS).length;
   const failed=Object.entries(TOKENS).filter(([k,t])=>t.on&&(!t._data||t._data.length<2)).map(([k])=>k);
-
   if(ok>0){
     let msg=`<span class="dot live"></span>Live · ${ok}/${tot} tokens`;
-    if(failed.length) msg+=` · <span style="color:#ef4444">${failed.join(', ')} unavailable</span>`;
+    if(failed.length)msg+=` · <span style="color:#ef4444">${failed.join(', ')} unavailable</span>`;
     st.innerHTML=msg;
-  }else{
-    st.innerHTML='<span class="dot err"></span>Network error — check connection';
-  }
+  }else st.innerHTML='<span class="dot err"></span>Network error';
   document.getElementById('statusTime').textContent=new Date().toLocaleTimeString();
-
-  updatePeriod();
-  renderChart();
-  renderSummary();
+  updatePeriod();renderChart();renderSummary();
 }
 
-/* ── CoinGecko (BTC, ETH, SOL, XRP) ── */
+/* ── CoinGecko ── */
 async function fetchCoinGecko(id,days){
   const ivl=days<=1?'':days<=14?'&interval=hourly':'&interval=daily';
-  const url=`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`;
-  const r=await fetch(url);
-  if(!r.ok) throw new Error(`CoinGecko ${r.status}`);
+  const r=await fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`);
+  if(!r.ok)throw new Error(`CG ${r.status}`);
   const j=await r.json();
   return(j.prices||[]).map(([ts,p])=>({ts,price:p}));
 }
 
-/* ── GeckoTerminal (PTGC, UFO, WPLS) ── */
+/* ── GeckoTerminal by pool ── */
 async function fetchGeckoTerminal(pool,days,sym){
   let tf,agg,lim;
-  if(days<=1)       {tf='minute';agg=15;lim=96}
-  else if(days<=7)  {tf='hour';agg=1;lim=Math.min(days*24,1000)}
-  else if(days<=14) {tf='hour';agg=4;lim=Math.min(days*6,1000)}
-  else              {tf='day';agg=1;lim=Math.min(days,1000)}
-
+  if(days<=1){tf='minute';agg=15;lim=96}
+  else if(days<=7){tf='hour';agg=1;lim=Math.min(days*24,1000)}
+  else if(days<=14){tf='hour';agg=4;lim=Math.min(days*6,1000)}
+  else{tf='day';agg=1;lim=Math.min(days,1000)}
   const before=Math.floor(Date.now()/1000);
   const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${before}&currency=usd`;
-
-  console.log(`[${sym}] GeckoTerminal →`,url);
+  console.log(`[${sym}] GT pool →`,url);
   const r=await fetch(url);
-  if(!r.ok){console.error(`[${sym}] GT ${r.status}`);throw new Error(`GT ${r.status}`)}
+  if(!r.ok)throw new Error(`GT ${r.status}`);
   const j=await r.json();
   const candles=j?.data?.attributes?.ohlcv_list||[];
-  console.log(`[${sym}] Got ${candles.length} candles`);
-
-  if(!candles.length) return[];
-
+  console.log(`[${sym}] ${candles.length} candles`);
+  if(!candles.length)return await fetchDexFallback(pool);
   const startTs=Date.now()-(days*86400000);
-  return candles
-    .map(c=>({ts:c[0]*1000,price:parseFloat(c[4])}))
-    .filter(d=>d.price>0&&d.ts>=startTs)
-    .sort((a,b)=>a.ts-b.ts);
+  return candles.map(c=>({ts:c[0]*1000,price:parseFloat(c[4])})).filter(d=>d.price>0&&d.ts>=startTs).sort((a,b)=>a.ts-b.ts);
 }
 
-/* ── DexScreener fallback (minimal 2-point from 24h change) ── */
+/* ── GeckoTerminal by token address (auto-discover pool) ── */
+async function fetchByTokenAddr(addr,days,sym){
+  // Check pool cache
+  let pool=poolCache[addr];
+  if(!pool){
+    try{
+      console.log(`[${sym}] Discovering pool for ${addr}...`);
+      const r=await fetch(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${addr}/pools?sort=h24_volume_usd_desc&page=1`);
+      if(!r.ok)throw new Error(`GT pools ${r.status}`);
+      const j=await r.json();
+      const pools=j?.data||[];
+      // Find best USD-denominated pool
+      if(pools.length>0){
+        pool=pools[0].attributes?.address;
+        if(pool)poolCache[addr]=pool;
+        console.log(`[${sym}] Best pool: ${pool}`);
+      }
+    }catch(e){console.error(`[${sym}] Pool discovery failed:`,e)}
+  }
+  if(!pool){
+    console.warn(`[${sym}] No pool found`);
+    return[];
+  }
+  return fetchGeckoTerminal(pool,days,sym);
+}
+
+/* ── DexScreener fallback ── */
 async function fetchDexFallback(pool){
   try{
     const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${pool}`);
@@ -581,14 +506,9 @@ async function fetchDexFallback(pool){
     if(pair&&parseFloat(pair.priceUsd)>0){
       const price=parseFloat(pair.priceUsd);
       const chg=pair.priceChange?.h24?parseFloat(pair.priceChange.h24)/100:0;
-      const prev=price/(1+chg);
-      console.log(`[DexScreener fallback] price=${price}, 24h chg=${(chg*100).toFixed(1)}%`);
-      return[
-        {ts:Date.now()-86400000,price:prev},
-        {ts:Date.now(),price}
-      ];
+      return[{ts:Date.now()-86400000,price:price/(1+chg)},{ts:Date.now(),price}];
     }
-  }catch(e){console.error('DexScreener fallback:',e)}
+  }catch(e){}
   return[];
 }
 
@@ -597,84 +517,54 @@ async function fetchDexFallback(pool){
    ═══════════════════════════════════════════════ */
 function renderChart(){
   const ctx=document.getElementById('mainChart').getContext('2d');
-  if(chart) chart.destroy();
+  if(chart)chart.destroy();
 
-  // ── Find the latest start date among all SELECTED tokens so lines align ──
-  // Also respect custom date range if set
   let latestStart=0;
-  let endTs = Date.now();
-  if(customRange){
-    latestStart = customRange.from.getTime();
-    endTs = customRange.to.getTime() + 86400000; // end of day
-  }
+  let endTs=Date.now();
+  if(customRange){latestStart=customRange.from.getTime();endTs=customRange.to.getTime()+86400000}
   Object.entries(TOKENS).forEach(([k,t])=>{
     if(t.on&&t._data&&t._data.length>=2){
-      const firstInRange = t._data.filter(d=> !customRange || d.ts >= latestStart);
-      if(firstInRange.length && firstInRange[0].ts > latestStart) latestStart = firstInRange[0].ts;
+      const first=t._data.filter(d=>!customRange||d.ts>=latestStart);
+      if(first.length&&first[0].ts>latestStart)latestStart=first[0].ts;
     }
   });
 
-  const datasets=[];
-  const legends=[];
-
+  const datasets=[],legends=[];
   Object.entries(TOKENS).forEach(([k,t])=>{
-    if(!t.on||!t._data||t._data.length<2) return;
-    // Trim to aligned start date (and end date for custom range)
+    if(!t.on||!t._data||t._data.length<2)return;
     let raw=latestStart>0?t._data.filter(d=>d.ts>=latestStart):t._data;
-    if(customRange) raw=raw.filter(d=>d.ts<=endTs);
-    if(raw.length<2) return;
+    if(customRange)raw=raw.filter(d=>d.ts<=endTs);
+    if(raw.length<2)return;
     const p0=raw[0].price;
-    if(!p0) return;
+    if(!p0)return;
     const pts=raw.map(d=>({x:d.ts,y:((d.price-p0)/p0)*100}));
-
     datasets.push({
-      label:t.sym,
-      data:pts,
-      borderColor:t.color,
-      backgroundColor:'transparent',
-      borderWidth:(t.sym==='PTGC'||t.sym==='UFO')?3:2.2,
-      pointRadius:0,
-      pointHoverRadius:5,
-      pointHoverBackgroundColor:t.color,
-      pointHoverBorderColor:'#fff',
-      pointHoverBorderWidth:2,
-      tension:0.25,
+      label:t.sym,data:pts,borderColor:t.color,backgroundColor:'transparent',
+      borderWidth:(t.sym==='PTGC'||t.sym==='UFO')?3:2,
+      pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:t.color,
+      pointHoverBorderColor:'#fff',pointHoverBorderWidth:2,tension:0.25,
       order:k==='PTGC'?0:k==='UFO'?1:2
     });
     legends.push(`<span class="legend-item"><span class="legend-line" style="background:${t.color}"></span>${t.sym}</span>`);
   });
-
-  document.getElementById('chartLegend').innerHTML=legends.length?legends.join(''):'<div class="no-data">Select tokens above to compare</div>';
-  if(!datasets.length) return;
+  document.getElementById('chartLegend').innerHTML=legends.length?legends.join(''):'<div style="color:rgba(255,255,255,0.2);text-align:center;padding:40px;font-family:JetBrains Mono,monospace;font-size:13px">Select tokens above to compare</div>';
+  if(!datasets.length)return;
 
   chart=new Chart(ctx,{
-    type:'line',
-    data:{datasets},
+    type:'line',data:{datasets},
     options:{
-      responsive:true,
-      maintainAspectRatio:false,
+      responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{display:false},
         tooltip:{
-          backgroundColor:'rgba(14,14,22,0.95)',
-          borderColor:'rgba(255,255,255,0.08)',
-          borderWidth:1,
+          backgroundColor:'rgba(10,10,10,0.95)',borderColor:'rgba(255,255,255,0.08)',borderWidth:1,
           titleFont:{family:"'JetBrains Mono',monospace",size:11,weight:'600'},
           bodyFont:{family:"'JetBrains Mono',monospace",size:12},
-          padding:14,cornerRadius:10,
-          displayColors:true,boxWidth:8,boxHeight:8,boxPadding:4,
+          padding:14,cornerRadius:10,displayColors:true,boxWidth:8,boxHeight:8,boxPadding:4,
           callbacks:{
-            title(items){
-              if(!items.length)return'';
-              const o={month:'short',day:'numeric',year:'numeric'};
-              if(getDays()<=7) Object.assign(o,{hour:'2-digit',minute:'2-digit'});
-              return new Date(items[0].parsed.x).toLocaleDateString('en-US',o);
-            },
-            label(c){
-              const v=c.parsed.y;
-              return` ${c.dataset.label}  ${v>=0?'+':''}${v.toFixed(2)}%`;
-            },
+            title(items){if(!items.length)return'';const o={month:'short',day:'numeric',year:'numeric'};if(getDays()<=7)Object.assign(o,{hour:'2-digit',minute:'2-digit'});return new Date(items[0].parsed.x).toLocaleDateString('en-US',o)},
+            label(c){const v=c.parsed.y;return` ${c.dataset.label}  ${v>=0?'+':''}${v.toFixed(2)}%`},
             labelColor(c){return{borderColor:c.dataset.borderColor,backgroundColor:c.dataset.borderColor,borderRadius:2}}
           }
         }
@@ -682,21 +572,14 @@ function renderChart(){
       scales:{
         x:{
           type:'time',
-          time:{
-            tooltipFormat:'MMM d, yyyy',
-            displayFormats:{minute:'HH:mm',hour:'MMM d HH:mm',day:'MMM d',week:'MMM d',month:'MMM yyyy'}
-          },
-          grid:{color:'rgba(255,255,255,0.035)',drawBorder:false},
+          time:{tooltipFormat:'MMM d, yyyy',displayFormats:{minute:'HH:mm',hour:'MMM d HH:mm',day:'MMM d',week:'MMM d',month:'MMM yyyy'}},
+          grid:{color:'rgba(255,255,255,0.03)',drawBorder:false},
           ticks:{color:'rgba(255,255,255,0.55)',font:{family:"'JetBrains Mono',monospace",size:10},maxRotation:0,maxTicksLimit:getDays()<=1?8:10},
           border:{display:false}
         },
         y:{
           position:'right',
-          grid:{
-            color:c=>c.tick.value===0?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.03)',
-            drawBorder:false,
-            lineWidth:c=>c.tick.value===0?1.5:1
-          },
+          grid:{color:c=>c.tick.value===0?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.03)',drawBorder:false,lineWidth:c=>c.tick.value===0?1.5:1},
           ticks:{color:'rgba(255,255,255,0.55)',font:{family:"'JetBrains Mono',monospace",size:10},callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%',maxTicksLimit:10},
           border:{display:false}
         }
@@ -711,24 +594,19 @@ function renderChart(){
 function renderSummary(){
   const el=document.getElementById('summaryCards');
   let html='';
-  // Use same alignment as chart
-  let latestStart=0;
-  let endTs=Date.now();
-  if(customRange){
-    latestStart=customRange.from.getTime();
-    endTs=customRange.to.getTime()+86400000;
-  }
+  let latestStart=0,endTs=Date.now();
+  if(customRange){latestStart=customRange.from.getTime();endTs=customRange.to.getTime()+86400000}
   Object.entries(TOKENS).forEach(([k,t])=>{
     if(t.on&&t._data&&t._data.length>=2){
-      const firstInRange=t._data.filter(d=>!customRange||d.ts>=latestStart);
-      if(firstInRange.length&&firstInRange[0].ts>latestStart) latestStart=firstInRange[0].ts;
+      const first=t._data.filter(d=>!customRange||d.ts>=latestStart);
+      if(first.length&&first[0].ts>latestStart)latestStart=first[0].ts;
     }
   });
   Object.entries(TOKENS).forEach(([k,t])=>{
-    if(!t.on||!t._data||t._data.length<2) return;
+    if(!t.on||!t._data||t._data.length<2)return;
     let d=latestStart>0?t._data.filter(x=>x.ts>=latestStart):t._data;
-    if(customRange) d=d.filter(x=>x.ts<=endTs);
-    if(d.length<2) return;
+    if(customRange)d=d.filter(x=>x.ts<=endTs);
+    if(d.length<2)return;
     const p0=d[0].price,pN=d[d.length-1].price;
     const pct=((pN-p0)/p0)*100;
     const up=pct>=0;
@@ -738,12 +616,8 @@ function renderSummary(){
     else if(pN>=0.001)ps='$'+pN.toFixed(4);
     else if(pN>=0.0000001)ps='$'+pN.toFixed(8);
     else ps='$'+pN.toExponential(3);
-
     html+=`<div class="card" style="--cc:${t.color}">
-      <div class="card-top">
-        <img src="${t.logo}" alt="${t.sym}" onerror="this.style.display='none'"/>
-        <span class="card-sym" style="color:${t.color}">${t.sym}</span>
-      </div>
+      <div class="card-top"><img src="${t.logo}" alt="${t.sym}" onerror="this.style.display='none'"/><span class="card-sym" style="color:${t.color}">${t.sym}</span></div>
       <div class="card-chg ${up?'up':'dn'}">${up?'+':''}${pct.toFixed(2)}%</div>
       <div class="card-price">${ps}</div>
     </div>`;
@@ -751,22 +625,15 @@ function renderSummary(){
   el.innerHTML=html;
 }
 
-/* ── Helpers ── */
+/* ── Period label ── */
 function updatePeriod(){
   const el=document.getElementById('periodLabel');
   const fmt=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
   const days=getDays();
-  
-  if(customRange){
-    const yr=customRange.to.getFullYear();
-    el.textContent=`${fmt(customRange.from)} — ${fmt(customRange.to)}, ${yr}`;
-  }else{
+  if(customRange){el.textContent=`${fmt(customRange.from)} — ${fmt(customRange.to)}, ${customRange.to.getFullYear()}`}
+  else{
     const now=new Date(),start=new Date(now-days*86400000);
-    if(days<=1){
-      el.textContent=`Last 24 Hours — ${fmt(now)}, ${now.getFullYear()}`;
-    }else{
-      el.textContent=`${fmt(start)} — ${fmt(now)}, ${now.getFullYear()}`;
-    }
+    el.textContent=days<=1?`Last 24 Hours — ${fmt(now)}, ${now.getFullYear()}`:`${fmt(start)} — ${fmt(now)}, ${now.getFullYear()}`;
   }
 }
 </script>
