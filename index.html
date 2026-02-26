@@ -3585,10 +3585,8 @@
                   <button onClick={()=>setActiveTab('dashboard')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='dashboard'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Dashboard</button>
                   <button onClick={()=>setActiveTab('kpi')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='kpi'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>KPI Report</button>
                   <button onClick={()=>setActiveTab('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='social'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Social</button>
-                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Calculators</button>
-                  <button onClick={()=>setActiveTab('calculators')} className="fixed top-1 right-1 w-1.5 h-1.5 rounded-full bg-white/[0.03] hover:bg-white/20 transition-all z-50" title=""/>
-                  <button disabled className={`px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed`}>Charts</button>
-                  <a href="./charts.html" className="fixed top-1 left-1 w-3 h-3 rounded-full bg-white/[0.02] hover:bg-white/20 transition-all z-50 cursor-pointer" title=""/>
+                  <button onClick={()=>setActiveTab('calculators')} className={`px-3 py-1 text-sm rounded font-medium transition-all ${activeTab==='calculators'?`${theme.bg} text-black`:`border ${theme.border} ${theme.text} hover:bg-white/5`}`}>Calculators</button>
+                  <a href="./charts.html" onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className={`px-3 py-1 text-sm rounded font-medium transition-all border ${theme.border} ${theme.text} hover:bg-white/5`}>Charts</a>
                   <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10"><span style={{background:'linear-gradient(to right,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
                   <button onClick={onAffiliates} className={`px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20`}>Affiliates</button>
                 </div>
@@ -7011,7 +7009,10 @@
     const App=()=>{
       const[view,setView]=useState(()=>{
         const p=new URLSearchParams(window.location.search).get('token');
-        if(p==='PTGC'||p==='UFO'){window.history.replaceState({},'',window.location.pathname);return'dashboard'}
+        if(p==='PTGC'||p==='UFO'){
+          try{const v=localStorage.getItem('ptgc_nav_view');if(v==='affiliates'){localStorage.removeItem('ptgc_nav_view');window.history.replaceState({},'',window.location.pathname);return'affiliates'}}catch(e){}
+          window.history.replaceState({},'',window.location.pathname);return'dashboard'
+        }
         return'home';
       });
       const[token,setToken]=useState(()=>{
