@@ -95,7 +95,7 @@
     <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div class="flex items-center gap-4 sm:gap-6">
-          <a href="./index.html" class="text-white/40 hover:text-white/70 flex flex-col items-center leading-none transition-colors no-underline" style="cursor:pointer">
+          <a href="#" onclick="navTo('dashboard');return false" class="text-white/40 hover:text-white/70 flex flex-col items-center leading-none transition-colors no-underline" style="cursor:pointer">
             <span class="text-xl">&#8592;</span>
             <span class="text-[9px] uppercase">Home</span>
           </a>
@@ -133,13 +133,13 @@
       <!-- Page Navigation -->
       <div class="flex justify-end -mt-1 -mb-3">
         <div class="flex items-center gap-1">
-          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Dashboard</a>
-          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">KPI Report</a>
-          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Social</a>
-          <span class="px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed">Calculators</span>
+          <a href="#" onclick="navTo('dashboard');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Dashboard</a>
+          <a href="#" onclick="navTo('kpi');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">KPI Report</a>
+          <a href="#" onclick="navTo('social');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Social</a>
+          <a href="#" onclick="navTo('calculators');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Calculators</a>
           <span class="px-3 py-1 text-sm rounded font-medium bg-[#D9CA5D] text-black">Charts</span>
-          <a href="./portfolio.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10 no-underline"><span style="background:linear-gradient(to right,#D9CA5D,#7CFC00);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Portfolio</span></a>
-          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20 no-underline">Affiliates</a>
+          <a href="#" onclick="window.location.href='portfolio.html?from='+currentHdrToken;return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10 no-underline"><span style="background:linear-gradient(to right,#D9CA5D,#7CFC00);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Portfolio</span></a>
+          <a href="#" onclick="navTo('affiliates');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20 no-underline">Affiliates</a>
         </div>
       </div>
     </div>
@@ -399,6 +399,19 @@ let range = RANGES[3], cache = {}, chart = null, isRefreshing = false;
 function getPoolCache() { try { return JSON.parse(localStorage.getItem('charts_pool_cache')) || {} } catch { return {} } }
 function setPoolCache(c) { try { localStorage.setItem('charts_pool_cache', JSON.stringify(c)) } catch {} }
 
+/* NAV — route to dashboard tabs with token context */
+function navTo(tab) {
+  try {
+    localStorage.setItem('ptgc_last_token', currentHdrToken);
+    if (tab === 'affiliates') {
+      localStorage.setItem('ptgc_nav_view', 'affiliates');
+    } else {
+      localStorage.setItem('ptgc_nav_tab', tab);
+    }
+  } catch (e) {}
+  window.location.href = `./index.html?token=${currentHdrToken}`;
+}
+
 /* INIT */
 document.addEventListener('DOMContentLoaded', () => { applyHeaderTheme(); loadHeaderData(); renderRange(); renderButtons(); go() });
 function getDays() { return range ? range.days : 30 }
@@ -433,8 +446,9 @@ function setStatus(msg) { document.getElementById('statusTxt').innerHTML = msg }
 function setLoadMsg(msg) { document.getElementById('loadMsg').textContent = msg }
 
 /* MAIN ORCHESTRATOR */
+let pendingGo = false;
 async function go() {
-  if (isRefreshing) return; isRefreshing = true;
+  if (isRefreshing) { pendingGo = true; return } isRefreshing = true;
   const ld = document.getElementById('loadOverlay'), rb = document.getElementById('refreshBtn');
   ld.style.display = 'flex'; rb.classList.add('spinning');
   setLoadMsg('Loading...'); setStatus('<span class="dot spin"></span>Loading...'); const days = getDays();
@@ -481,6 +495,8 @@ async function go() {
   else setStatus('<span class="dot err"></span>Network error \u2014 try Refresh');
   document.getElementById('statusTime').textContent = new Date().toLocaleTimeString();
   updatePeriod(); renderChart(); renderSummary();
+  /* If tokens were toggled while we were loading, re-run to pick them up */
+  if (pendingGo) { pendingGo = false; go() }
 }
 
 /* SOURCE 1: CoinGecko */
