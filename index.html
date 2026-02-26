@@ -3088,6 +3088,7 @@
       const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
       const[showDAOShareModal,setShowDAOShareModal]=useState(false);
       const[showAffiliateShareModal,setShowAffiliateShareModal]=useState(false);
+      const[affiliateShareMonth,setAffiliateShareMonth]=useState(null);
       const[affiliateShareData,setAffiliateShareData]=useState(null);
       const[affiliateShareLoading,setAffiliateShareLoading]=useState(false);
       const[showLiquidityModal,setShowLiquidityModal]=useState(false);
@@ -4792,29 +4793,43 @@
                 ):(()=>{
                   const ad=affiliateShareData;
                   const cm=new Date().toISOString().slice(0,7);
+                  const shareMonths=ad.monthlyLogs?Object.keys(ad.monthlyLogs).sort().reverse():[];
+                  const selectedShareMonth=affiliateShareMonth||cm;
                   const referrers=Object.entries(ad.referrers||{});
                   const totalReferrers=referrers.length;
-                  const totalPaid=(ad.receipts||[]).reduce((s,r)=>s+(r.amount||0),0);
-                  const totalPaidUsd=(ad.receipts||[]).reduce((s,r)=>s+(r.usdValue||0),0);
-                  let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0;
+                  let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0,allTimeCommission=0;
                   if(ad.monthlyLogs){
                     Object.values(ad.monthlyLogs).forEach(month=>{
                       const entries=month.entries||[];
+                      const rate=month.settings?.commissionRate||2;
                       allTimeBuys+=entries.reduce((s,e)=>s+(e.buysCount||0),0);
                       allTimeUsd+=entries.reduce((s,e)=>s+(e.usdAmount||0),0);
                       allTimePtgc+=entries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
+                      allTimeCommission+=entries.reduce((s,e)=>s+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
                     });
                   }
-                  const currentMonthLog=ad.monthlyLogs?.[cm];
-                  const currentEntries=currentMonthLog?.entries||[];
-                  const moBuys=currentEntries.reduce((s,e)=>s+(e.buysCount||0),0);
-                  const moUsd=currentEntries.reduce((s,e)=>s+(e.usdAmount||0),0);
-                  const moPtgc=currentEntries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
-                  const moReferrers=currentEntries.length;
-                  const moPaid=(ad.receipts||[]).filter(r=>r.month===cm).reduce((s,r)=>s+(r.amount||0),0);
-                  const moLabel=new Date(cm+'-01T12:00:00').toLocaleDateString('en-US',{month:'short'})+" '"+cm.slice(2,4);
+                  const selectedMonthLog=ad.monthlyLogs?.[selectedShareMonth];
+                  const selectedEntries=selectedMonthLog?.entries||[];
+                  const selectedRate=selectedMonthLog?.settings?.commissionRate||2;
+                  const moBuys=selectedEntries.reduce((s,e)=>s+(e.buysCount||0),0);
+                  const moUsd=selectedEntries.reduce((s,e)=>s+(e.usdAmount||0),0);
+                  const moPtgc=selectedEntries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
+                  const moCommission=selectedEntries.reduce((s,e)=>s+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||selectedRate)/100)),0);
+                  const moReferrers=selectedEntries.length;
+                  const moLabel=new Date(selectedShareMonth+'-01T12:00:00').toLocaleDateString('en-US',{month:'short'})+" '"+selectedShareMonth.slice(2,4);
                   
                   return(
+                    <React.Fragment>
+                    {/* Month Selector Dropdown */}
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      <span className="text-white/60 text-sm font-medium">Month shown on card:</span>
+                      <select value={selectedShareMonth} onChange={e=>setAffiliateShareMonth(e.target.value)} className="bg-gray-800 border border-purple-500/50 text-white rounded-lg px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-purple-400" style={{minWidth:'160px'}}>
+                        {shareMonths.map(month=>(
+                          <option key={month} value={month}>{new Date(month+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
                     <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
                       {(()=>{
                         const PSUPPLY=333333333333;
@@ -4870,8 +4885,8 @@
                                 <div className="text-3xl font-bold text-green-400">{fmtUSD(moUsd)}</div>
                               </div>
                               <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">Comm. Paid</div>
-                                <div className="text-3xl font-bold text-green-400">{fmtAbbr(moPaid)}</div>
+                                <div className="text-green-400/50 text-base uppercase">Commissions</div>
+                                <div className="text-3xl font-bold text-green-400">{fmtAbbr(moCommission)}</div>
                               </div>
                             </div>
                           </div>
@@ -4905,8 +4920,8 @@
                                 <div className="text-3xl font-bold text-[#D9CA5D]">{fmtUSD(allTimeUsd)}</div>
                               </div>
                               <div className="text-center">
-                                <div className="text-[#D9CA5D]/50 text-base uppercase">Comm. Paid</div>
-                                <div className="text-3xl font-bold text-[#D9CA5D]">{fmtAbbr(totalPaid)}</div>
+                                <div className="text-[#D9CA5D]/50 text-base uppercase">Commissions</div>
+                                <div className="text-3xl font-bold text-[#D9CA5D]">{fmtAbbr(allTimeCommission)}</div>
                               </div>
                             </div>
                           </div>
@@ -4922,6 +4937,7 @@
                         );
                       })()}
                     </div>
+                    </React.Fragment>
                   );
                 })()}
                 
@@ -5726,13 +5742,15 @@
         const totalPaidUsd=(data.receipts||[]).reduce((sum,r)=>sum+(r.usdValue||0),0);
         
         // Calculate all-time from monthlyLogs (more accurate than referrers object)
-        let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0;
+        let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0,allTimeCommission=0;
         if(data.monthlyLogs){
           Object.values(data.monthlyLogs).forEach(month=>{
             const entries=month.entries||[];
+            const rate=month.settings?.commissionRate||2;
             allTimeBuys+=entries.reduce((sum,e)=>sum+(e.buysCount||0),0);
             allTimeUsd+=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
             allTimePtgc+=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
+            allTimeCommission+=entries.reduce((sum,e)=>sum+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
           });
         }
         // Fallback to referrers totals if no monthlyLogs
@@ -5744,14 +5762,16 @@
         
         // Viewing period stats - use viewingMonth or fallback to currentMonth
         const selectedMonth=viewingMonth||currentMonth;
-        let periodBuys=0,periodUsd=0,periodPtgc=0,periodReferrers=0,periodPaid=0;
+        let periodBuys=0,periodUsd=0,periodPtgc=0,periodReferrers=0,periodPaid=0,periodCommission=0;
         
         if(selectedMonth){
           const monthLog=data.monthlyLogs?.[selectedMonth];
           const entries=monthLog?.entries||[];
+          const rate=monthLog?.settings?.commissionRate||2;
           periodBuys=entries.reduce((sum,e)=>sum+(e.buysCount||0),0);
           periodPtgc=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
           periodUsd=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
+          periodCommission=entries.reduce((sum,e)=>sum+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
           periodReferrers=entries.length;
           periodPaid=(data.receipts||[]).filter(r=>r.month===selectedMonth).reduce((sum,r)=>sum+(r.amount||0),0);
         }
@@ -5763,7 +5783,7 @@
         // Leaderboard sorted by total PTGC (always all-time for leaderboard)
         const leaderboard=referrers.map(([username,r])=>({username,...r})).sort((a,b)=>(b.totalPtgc||0)-(a.totalPtgc||0));
         
-        return{totalReferrers,allTimeBuys,allTimeUsd,allTimePtgc,totalPaid,totalPaidUsd,periodBuys,periodUsd,periodPtgc,periodReferrers,periodPaid,activeThisMonth,leaderboard,currentMonth};
+        return{totalReferrers,allTimeBuys,allTimeUsd,allTimePtgc,allTimeCommission,totalPaid,totalPaidUsd,periodBuys,periodUsd,periodPtgc,periodCommission,periodReferrers,periodPaid,activeThisMonth,leaderboard,currentMonth};
       },[data,viewingMonth,currentMonth]);
       
       const truncateWallet=(w)=>w?`${w.slice(0,6)}...${w.slice(-4)}`:'—';
@@ -6694,8 +6714,8 @@
             
             {/* ALL-TIME Stats Bar - Gold */}
             <div className="bg-gradient-to-r from-[#D9CA5D]/20 via-[#D9CA5D]/10 to-[#D9CA5D]/20 border border-[#D9CA5D]/50 rounded-xl px-4 sm:px-6 py-4 mb-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 items-center">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 items-center gap-y-3" style={{gridTemplateColumns:'200px 0.8fr 0.8fr 0.9fr 1.2fr 1fr 1.2fr 1.2fr'}}>
+                <div className="flex items-center gap-2 justify-center">
                   <span className="text-3xl">📊</span>
                   <span className="text-lg font-bold text-[#D9CA5D]">ALL-TIME</span>
                 </div>
@@ -6720,6 +6740,10 @@
                   <div className="text-2xl font-bold text-[#D9CA5D]">{fmtUSD(stats?.allTimeUsd)}</div>
                 </div>
                 <div className="text-center">
+                  <div className="text-[#D9CA5D]/60 text-base uppercase">Commissions</div>
+                  <div className="text-2xl font-bold text-[#D9CA5D]">{fmtAbbr(stats?.allTimeCommission)} PTGC</div>
+                </div>
+                <div className="text-center">
                   <div className="text-[#D9CA5D]/60 text-base uppercase">Commissions Paid</div>
                   <div className="text-2xl font-bold text-[#D9CA5D]">{fmtAbbr(stats?.totalPaid)} PTGC</div>
                 </div>
@@ -6728,8 +6752,8 @@
             
             {/* Monthly Stats Bar - Green with Dropdown */}
             <div className="bg-gradient-to-r from-green-500/20 via-green-500/10 to-green-500/20 border border-green-500/50 rounded-xl px-4 sm:px-6 py-4 mb-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 items-center">
-                <div className="flex items-center">
+              <div className="grid grid-cols-2 sm:grid-cols-4 items-center gap-y-3" style={{gridTemplateColumns:'200px 0.8fr 0.8fr 0.9fr 1.2fr 1fr 1.2fr 1.2fr'}}>
+                <div className="flex items-center justify-center pr-2">
                   <div className="relative">
                     <select value={viewingMonth||currentMonth} onChange={e=>setViewingMonth(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                       {allMonths.map(month=>(
@@ -6762,6 +6786,10 @@
                 <div className="text-center">
                   <div className="text-green-400/60 text-base uppercase">USD Value</div>
                   <div className="text-2xl font-bold text-green-400">{fmtUSD(stats?.periodUsd)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-green-400/60 text-base uppercase">Commissions</div>
+                  <div className="text-2xl font-bold text-green-400">{fmtAbbr(stats?.periodCommission)} PTGC</div>
                 </div>
                 <div className="text-center">
                   <div className="text-green-400/60 text-base uppercase">Commissions Paid</div>
