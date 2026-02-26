@@ -4,544 +4,681 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>The Grays — Charts</title>
+<link rel="icon" type="image/png" href="07_Two_Color_Alien_Transparent.png"/>
+<link rel="apple-touch-icon" href="07_Two_Color_Alien_Transparent.png"/>
+<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a0a;color:#e8e8f0;font-family:'Outfit',sans-serif;min-height:100vh}
-.page{max-width:1200px;margin:0 auto;padding:16px 16px 40px}
-.page-header{text-align:center;margin-bottom:32px;padding-top:12px}
-.page-header h2{font-family:'Orbitron',sans-serif;font-size:clamp(24px,4vw,36px);font-weight:700;color:#fff;letter-spacing:6px}
-.page-header .underline{width:120px;height:2px;margin:6px auto 0;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(217,202,93,0.8),transparent)}
-.page-header .disclaimer{color:rgba(255,255,255,0.35);font-size:13px;margin-top:12px;max-width:540px;margin-left:auto;margin-right:auto}
-.sub-tabs{display:flex;justify-content:center;gap:8px;margin-bottom:28px;flex-wrap:wrap}
-.sub-tab{padding:10px 24px;border-radius:12px;font-family:'Orbitron',sans-serif;font-weight:700;font-size:clamp(12px,1.5vw,15px);cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.35);transition:all .25s}
-.sub-tab:hover{color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.15)}
-.sub-tab.active{background:linear-gradient(135deg,rgba(217,202,93,0.45),rgba(217,202,93,0.2));border:1px solid rgba(217,202,93,0.6);box-shadow:0 0 20px rgba(217,202,93,0.25),inset 0 1px 0 rgba(255,255,255,0.15);color:#fff}
-.sub-tab.disabled{opacity:0.35;cursor:not-allowed}
-.chart-card{border:4px solid rgba(217,202,93,0.3);border-radius:20px;padding:24px 20px;background:rgba(0,0,0,0.3);box-shadow:0 0 40px rgba(217,202,93,0.06);margin-bottom:24px}
-.range-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
-.range-bar{display:flex;gap:3px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:3px}
-.range-btn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.4);cursor:pointer;transition:all .2s;border:none;background:none;font-family:'JetBrains Mono',monospace;letter-spacing:0.8px}
-.range-btn:hover{color:#fff;background:rgba(255,255,255,0.04)}
-.range-btn.active{background:rgba(255,255,255,0.08);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
-.refresh-btn{display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.5);cursor:pointer;transition:all .2s;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);font-family:'JetBrains Mono',monospace}
-.refresh-btn:hover{color:#fff;background:rgba(255,255,255,0.06);border-color:rgba(217,202,93,0.4)}
-.refresh-btn.spinning .ri{animation:spin .7s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.token-bar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;align-items:center}
-.token-bar-label{font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:rgba(255,255,255,0.2);font-weight:700;margin-right:8px;font-family:'JetBrains Mono',monospace}
-.token-btn{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 8px;border-radius:10px;border:1.5px solid transparent;background:rgba(255,255,255,0.02);cursor:pointer;transition:all .25s}
-.token-btn:hover{background:rgba(255,255,255,0.05);transform:translateY(-1px)}
-.token-btn.selected{border-color:color-mix(in srgb,var(--tc) 60%,transparent);background:color-mix(in srgb,var(--tc) 6%,transparent)}
-.token-btn .tl{width:20px;height:20px;border-radius:50%;background:#1a1a2a;object-fit:cover}
-.token-btn .tf{width:20px;height:20px;border-radius:50%;display:none;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#000;font-family:'JetBrains Mono',monospace}
-.token-btn .tn{font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);transition:color .2s}
-.token-btn.selected .tn{color:#fff}
-.token-btn .td{width:6px;height:6px;border-radius:50%;background:var(--tc);opacity:0;transition:all .2s;box-shadow:0 0 6px var(--tc)}
-.token-btn.selected .td{opacity:1}
-.status-row{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;margin-bottom:10px;font-size:11px;color:rgba(255,255,255,0.25);font-family:'JetBrains Mono',monospace}
-.dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:5px}
-.dot.live{background:#22c55e;box-shadow:0 0 8px #22c55e}.dot.spin{background:#eab308;animation:pdot 1s infinite}.dot.err{background:#ef4444}
-@keyframes pdot{0%,100%{opacity:1}50%{opacity:0.3}}
-.chart-inner{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:18px 14px 10px;position:relative;margin-bottom:14px}
-.chart-head{margin-bottom:12px;padding:0 4px}
-.chart-label{font-size:12px;font-weight:600;color:rgba(255,255,255,0.4)}
-.chart-period{font-size:20px;font-weight:700;letter-spacing:-0.5px;margin-top:2px;color:#fff}
-.chart-area{position:relative;height:440px}
-.chart-area canvas{width:100%!important;height:100%!important}
-.chart-legend{display:flex;flex-wrap:wrap;gap:12px;padding:10px 4px 0}
-.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:rgba(255,255,255,0.4);font-family:'JetBrains Mono',monospace}
-.legend-line{width:16px;height:3px;border-radius:2px}
-.loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(10,10,10,0.75);border-radius:14px;z-index:10;backdrop-filter:blur(6px)}
-.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,0.08);border-top-color:#D9CA5D;border-radius:50%;animation:spin .7s linear infinite}
-.load-msg{font-size:12px;color:rgba(255,255,255,0.4);font-family:'JetBrains Mono',monospace}
-.cards{display:flex;flex-wrap:wrap;gap:10px}
-.card{flex:1;min-width:140px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;transition:transform .2s}
-.card:hover{transform:translateY(-2px)}
-.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--cc);opacity:0.7}
-.card-top{display:flex;align-items:center;gap:10px}
-.card-top img{width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,0.1)}
-.card-sym{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}
-.card-chg{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;line-height:1.1}
-.card-chg.up{color:#22c55e}.card-chg.dn{color:#ef4444}
-.card-price{font-size:14px;color:rgba(255,255,255,0.85);font-family:'JetBrains Mono',monospace;font-weight:500}
-.back-row{text-align:center;margin-top:28px}
-.back-btn{padding:10px 24px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.4);font-size:15px;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block}
-.back-btn:hover{color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.2)}
-@media(max-width:768px){.page{padding:12px 10px 32px}.chart-area{height:300px}.card{min-width:calc(50% - 6px)}.card-chg{font-size:20px}.card-top img{width:34px;height:34px}.card-sym{font-size:15px}.range-row{flex-direction:column;align-items:flex-start}.sub-tab{padding:8px 16px}}
-@media(max-width:480px){.card{min-width:100%}}
+  body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh;margin:0}
+  .font-orbitron{font-family:'Orbitron',monospace}
+  ::-webkit-scrollbar{width:8px}
+  ::-webkit-scrollbar-track{background:#1a1a1a}
+  ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+  @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+  .buy-btn{position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease}
+  .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
+  .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
+  /* Chart page specific */
+  .chart-card{border:4px solid rgba(217,202,93,0.3);border-radius:20px;padding:24px 20px;background:rgba(0,0,0,0.3);box-shadow:0 0 40px rgba(217,202,93,0.06);margin-bottom:24px}
+  .range-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+  .range-bar{display:flex;gap:3px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:3px}
+  .range-btn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.4);cursor:pointer;transition:all .2s;border:none;background:none;font-family:'JetBrains Mono',monospace;letter-spacing:0.8px}
+  .range-btn:hover{color:#fff;background:rgba(255,255,255,0.04)}
+  .range-btn.active{background:rgba(255,255,255,0.08);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+  .refresh-btn{display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.5);cursor:pointer;transition:all .2s;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);font-family:'JetBrains Mono',monospace}
+  .refresh-btn:hover{color:#fff;background:rgba(255,255,255,0.06);border-color:rgba(217,202,93,0.4)}
+  .refresh-btn.spinning .ri{animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .token-bar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;align-items:center}
+  .token-bar-label{font-size:10px;text-transform:uppercase;letter-spacing:1.8px;color:rgba(255,255,255,0.2);font-weight:700;margin-right:8px;font-family:'JetBrains Mono',monospace}
+  .token-btn{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 8px;border-radius:10px;border:1.5px solid transparent;background:rgba(255,255,255,0.02);cursor:pointer;transition:all .25s}
+  .token-btn:hover{background:rgba(255,255,255,0.05);transform:translateY(-1px)}
+  .token-btn.selected{border-color:color-mix(in srgb,var(--tc) 60%,transparent);background:color-mix(in srgb,var(--tc) 6%,transparent)}
+  .token-btn .tl{width:20px;height:20px;border-radius:50%;background:#1a1a2a;object-fit:cover}
+  .token-btn .tf{width:20px;height:20px;border-radius:50%;display:none;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#000;font-family:'JetBrains Mono',monospace}
+  .token-btn .tn{font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);transition:color .2s;font-family:'Outfit',sans-serif}
+  .token-btn.selected .tn{color:#fff}
+  .token-btn .td{width:6px;height:6px;border-radius:50%;background:var(--tc);opacity:0;transition:all .2s;box-shadow:0 0 6px var(--tc)}
+  .token-btn.selected .td{opacity:1}
+  .status-row{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;margin-bottom:10px;font-size:11px;color:rgba(255,255,255,0.25);font-family:'JetBrains Mono',monospace}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:5px}
+  .dot.live{background:#22c55e;box-shadow:0 0 8px #22c55e}.dot.spin{background:#eab308;animation:pdot 1s infinite}.dot.err{background:#ef4444}
+  @keyframes pdot{0%,100%{opacity:1}50%{opacity:0.3}}
+  .chart-inner{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:18px 14px 10px;position:relative;margin-bottom:14px}
+  .chart-head{margin-bottom:12px;padding:0 4px}
+  .chart-label{font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);font-family:'Outfit',sans-serif}
+  .chart-period{font-size:20px;font-weight:700;letter-spacing:-0.5px;margin-top:2px;color:#fff}
+  .chart-area{position:relative;height:440px}
+  .chart-area canvas{width:100%!important;height:100%!important}
+  .chart-legend{display:flex;flex-wrap:wrap;gap:12px;padding:10px 4px 0}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:rgba(255,255,255,0.4);font-family:'JetBrains Mono',monospace}
+  .legend-line{width:16px;height:3px;border-radius:2px}
+  .loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(10,10,10,0.75);border-radius:14px;z-index:10;backdrop-filter:blur(6px)}
+  .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,0.08);border-top-color:#D9CA5D;border-radius:50%;animation:spin .7s linear infinite}
+  .load-msg{font-size:12px;color:rgba(255,255,255,0.4);font-family:'JetBrains Mono',monospace}
+  .cards{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .card{width:160px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;transition:transform .2s}
+  .card:hover{transform:translateY(-2px)}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--cc);opacity:0.7}
+  .card-top{display:flex;align-items:center;gap:10px}
+  .card-top img{width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,0.1)}
+  .card-sym{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}
+  .card-chg{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;line-height:1.1}
+  .card-chg.up{color:#22c55e}.card-chg.dn{color:#ef4444}
+  .card-price{font-size:14px;color:rgba(255,255,255,0.85);font-family:'JetBrains Mono',monospace;font-weight:500}
+  @media(max-width:768px){.chart-area{height:300px}.card{width:calc(50% - 6px)}.card-chg{font-size:20px}.card-top img{width:34px;height:34px}.card-sym{font-size:15px}.range-row{flex-direction:column;align-items:flex-start}}
+  @media(max-width:480px){.card{width:100%}}
+  /* Share overlay */
+  .share-overlay{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.95);overflow:hidden}
+  .share-overlay.open{display:flex}
+  .share-hint{position:absolute;top:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;font-size:13px;padding:8px 16px;border-radius:8px;z-index:10;white-space:nowrap;font-family:'Outfit',sans-serif}
+  .share-capture{width:1200px;height:675px;flex-shrink:0;padding:28px 32px;display:flex;flex-direction:column;transform-origin:center center}
+  .share-chart-wrap{flex:1;position:relative;min-height:0}
+  .share-chart-wrap canvas{width:100%!important;height:100%!important}
+  .share-cards-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding-top:14px}
+  .share-card-item{width:150px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px 12px;position:relative;overflow:hidden}
+  .share-card-item::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--cc);opacity:0.7}
+  .camera-btn{display:flex;align-items:center;justify-content:center;background:none;border:none;color:rgba(255,255,255,0.35);cursor:pointer;transition:all .2s;font-size:22px;margin:8px auto 0;padding:4px}
+  .camera-btn:hover{color:rgba(255,255,255,0.7)}
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="page-header">
-    <h2>CHARTS</h2>
-    <div class="underline"></div>
-    <p class="disclaimer">Compare token performance across time periods — for entertainment & educational purposes only.</p>
-  </div>
-  <div class="sub-tabs">
-    <button class="sub-tab active">The Grays vs Others</button>
-    <button class="sub-tab disabled" title="Coming soon">Price History</button>
-    <button class="sub-tab disabled" title="Coming soon">Volume Comparison</button>
-  </div>
-  <div class="chart-card">
-    <div class="range-row">
-      <div class="range-bar" id="rangeBar"></div>
-      <button class="refresh-btn" id="refreshBtn" onclick="clearCacheAndRefresh()">
-        <span class="ri" style="display:inline-block">↻</span> Refresh
-      </button>
-    </div>
-    <div class="token-bar">
-      <div class="token-bar-label">Tokens</div>
-      <div id="tokenBtns" style="display:flex;flex-wrap:wrap;gap:7px"></div>
-    </div>
-    <div class="status-row">
-      <div id="statusTxt"><span class="dot spin"></span>Loading…</div>
-      <div id="statusTime"></div>
-    </div>
-    <div class="chart-inner">
-      <div class="chart-head">
-        <div class="chart-label">Percentage Change from Start</div>
-        <div class="chart-period" id="periodLabel">—</div>
+<div class="min-h-screen">
+
+  <!-- ═══════════════════════════════════════════════════════
+       HEADER — exact replica of Dashboard / Calculators
+       ═══════════════════════════════════════════════════════ -->
+  <header class="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-4 sm:gap-6">
+          <a href="./index.html" class="text-white/40 hover:text-white/70 flex flex-col items-center leading-none transition-colors no-underline" style="cursor:pointer">
+            <span class="text-xl">&#8592;</span>
+            <span class="text-[9px] uppercase">Home</span>
+          </a>
+          <img id="headerLogo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC" class="w-20 h-20 sm:w-24 sm:h-24"/>
+          <div>
+            <span id="headerTokenName" class="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold text-[#D9CA5D]">PTGC</span>
+            <div class="flex items-center gap-1">
+              <span id="headerAddress" class="text-white/40 text-xs font-mono">0x9453...DE93</span>
+              <button onclick="copyAddr()" class="text-white/40 hover:text-white/70 text-xs" id="copyBtn">&#128203;</button>
+            </div>
+          </div>
+          <div id="priceBox" class="bg-[#D9CA5D]/5 border border-[#D9CA5D]/30 rounded-xl px-5 py-3 flex items-center gap-3">
+            <span id="headerPrice" class="text-3xl sm:text-4xl font-bold text-[#D9CA5D]">&mdash;</span>
+            <span id="headerChange" class="text-3xl font-bold text-green-400">&#9650;0.00%</span>
+          </div>
+          <div id="statsBox" class="bg-[#D9CA5D]/5 border border-[#D9CA5D]/30 rounded-xl px-4 py-2 flex items-center gap-3">
+            <div class="text-center"><div class="text-white text-xs uppercase leading-tight">PLS Ratio</div><div id="headerPlsRatio" class="text-2xl sm:text-3xl font-bold text-[#D9CA5D]">&mdash;</div></div>
+            <div class="w-px self-stretch bg-white/15"></div>
+            <div class="text-center"><div class="text-white text-xs uppercase leading-tight">X's to ATH</div><div id="headerXtoATH" class="text-2xl sm:text-3xl font-bold text-[#D9CA5D]">&mdash;</div></div>
+            <div class="w-px self-stretch bg-white/15"></div>
+            <div class="text-center"><div class="text-white text-xs uppercase leading-tight">X's to a Penny</div><div id="headerXtoPenny" class="text-2xl sm:text-3xl font-bold text-[#D9CA5D]">&mdash;</div></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="buyBtn" href="https://goptgc.com/#/ptgc-onboarding" target="_blank" rel="noopener noreferrer" class="buy-btn flex items-center gap-2 px-5 py-2 rounded-xl" style="background:linear-gradient(135deg,rgba(217,202,93,0.35),rgba(217,202,93,0.15));border:1px solid rgba(217,202,93,0.5);box-shadow:0 0 20px rgba(217,202,93,0.2),inset 0 1px 0 rgba(255,255,255,0.15)">
+            <img id="buyLogo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC" class="w-10 h-10"/>
+            <span id="buyLabel" class="font-orbitron font-bold text-base text-[#D9CA5D]">BUY</span>
+          </a>
+          <button onclick="switchToken()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all">
+            <img id="switchLogo" src="07_Ufo_transparent.png" alt="Switch" class="w-8 h-8"/>
+            <span class="text-white/70 text-sm font-medium">Switch</span>
+          </button>
+        </div>
       </div>
-      <div class="chart-area">
-        <canvas id="mainChart"></canvas>
-        <div class="loading" id="loadOverlay"><div class="spinner"></div><div class="load-msg" id="loadMsg">Loading…</div></div>
+      <!-- Page Navigation -->
+      <div class="flex justify-end -mt-1 -mb-3">
+        <div class="flex items-center gap-1">
+          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Dashboard</a>
+          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">KPI Report</a>
+          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Social</a>
+          <span class="px-3 py-1 text-sm rounded font-medium border border-white/10 text-white/25 cursor-not-allowed">Calculators</span>
+          <span class="px-3 py-1 text-sm rounded font-medium bg-[#D9CA5D] text-black">Charts</span>
+          <a href="./portfolio.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10 no-underline"><span style="background:linear-gradient(to right,#D9CA5D,#7CFC00);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Portfolio</span></a>
+          <a href="./index.html" class="px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20 no-underline">Affiliates</a>
+        </div>
       </div>
-      <div class="chart-legend" id="chartLegend"></div>
     </div>
-    <div class="cards" id="summaryCards"></div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       CHARTS CONTENT — matches Calculator tab layout
+       ═══════════════════════════════════════════════════════ -->
+  <div class="max-w-5xl mx-auto px-3 sm:px-6 py-8">
+
+    <!-- Title — same as "CALCULATOR" heading -->
+    <div class="text-center mb-8">
+      <h2 class="text-3xl sm:text-4xl font-bold text-white font-orbitron tracking-widest">CHARTS</h2>
+      <div class="w-24 sm:w-32 h-0.5 mx-auto mt-1.5 rounded-full" style="background:linear-gradient(90deg,transparent,rgba(217,202,93,0.8),transparent)"></div>
+      <p class="text-white/35 text-sm mt-3 max-w-xl mx-auto">Compare token performance across time periods &mdash; for entertainment &amp; educational purposes only.</p>
+    </div>
+
+    <!-- Sub-tabs — same glow style as X Multiplier / Moon Math / Rewards -->
+    <div class="flex justify-center mb-10">
+      <div class="inline-flex gap-2" id="chartSubTabs">
+        <button class="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110 chart-sub-tab active" data-tab="compare" style="padding:10px 24px;background:linear-gradient(135deg,rgba(217,202,93,0.45),rgba(217,202,93,0.2));border:1px solid rgba(217,202,93,0.6);box-shadow:0 0 20px rgba(217,202,93,0.25),inset 0 1px 0 rgba(255,255,255,0.15);color:white">The Grays vs Others</button>
+        <button class="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all chart-sub-tab" data-tab="price" style="padding:10px 24px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);cursor:not-allowed" disabled>&#8212;</button>
+        <button class="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all chart-sub-tab" data-tab="volume" style="padding:10px 24px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);cursor:not-allowed" disabled>&#8212;</button>
+      </div>
+    </div>
+    <!-- Camera / Share button -->
+    <button class="camera-btn" onclick="openShare()" title="Share to Twitter">&#128247;</button>
+    <div class="chart-card">
+      <div class="range-row">
+        <div class="range-bar" id="rangeBar"></div>
+        <button class="refresh-btn" id="refreshBtn" onclick="clearCacheAndRefresh()">
+          <span class="ri" style="display:inline-block">&#8635;</span> Refresh
+        </button>
+      </div>
+      <div class="token-bar">
+        <div class="token-bar-label">Tokens</div>
+        <div id="tokenBtns" style="display:flex;flex-wrap:wrap;gap:7px"></div>
+      </div>
+      <div class="status-row">
+        <div id="statusTxt"><span class="dot spin"></span>Loading&#8230;</div>
+        <div id="statusTime"></div>
+      </div>
+      <div class="chart-inner">
+        <div class="chart-head" style="display:flex;align-items:center;gap:12px">
+          <div id="chartLogos" style="display:flex;align-items:center;gap:8px;flex-shrink:0"></div>
+          <div>
+            <div class="chart-label">Percentage Change from Start</div>
+            <div class="chart-period" id="periodLabel">&#8212;</div>
+          </div>
+        </div>
+        <div class="chart-area">
+          <canvas id="mainChart"></canvas>
+          <div class="loading" id="loadOverlay"><div class="spinner"></div><div class="load-msg" id="loadMsg">Loading&#8230;</div></div>
+        </div>
+        <div class="chart-legend" id="chartLegend" style="display:none"></div>
+      </div>
+      <div class="cards" id="summaryCards"></div>
+    </div>
+
   </div>
-  <div class="back-row"><a href="./index.html" class="back-btn">← Back to Dashboard</a></div>
+
+<!-- Share overlay for Twitter screenshots -->
+<div class="share-overlay" id="shareOverlay" onclick="closeShare()">
+  <div class="share-hint">Click anywhere to close &bull; Screenshot to save</div>
+  <div class="share-capture" id="shareCapture" onclick="event.stopPropagation()" style="background:radial-gradient(ellipse at 25% 0%,rgba(217,202,93,0.2) 0%,transparent 40%),radial-gradient(ellipse at 75% 0%,rgba(124,252,0,0.2) 0%,transparent 40%),linear-gradient(180deg,#0d0d0d 0%,#080808 50%,#0a0805 100%)">
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+      <div id="shareLogos" style="display:flex;align-items:center;gap:8px"></div>
+      <div style="flex:1">
+        <div style="font-family:'Outfit',sans-serif;font-size:13px;color:rgba(255,255,255,0.4)">Percentage Change from Start</div>
+        <div id="sharePeriod" style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.5px"></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;color:rgba(255,255,255,0.2)">THE GRAYS</div>
+        <div style="font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.15)">DASHBOARD</div>
+      </div>
+    </div>
+    <!-- Chart -->
+    <div class="share-chart-wrap">
+      <canvas id="shareChart"></canvas>
+    </div>
+    <!-- Summary cards -->
+    <div class="share-cards-row" id="shareCards"></div>
+    <!-- Website URL bottom right -->
+    <div style="text-align:right;padding-top:8px"><span style="font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:2px;color:rgba(217,202,93,0.4)">ptgc-ufo.com</span></div>
+  </div>
+</div>
+
 </div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
-   DATA SOURCE STRATEGY
-   ─────────────────────
-   CoinGecko (parallel, reliable):
-     BTC, ETH, SOL, BNB, XRP — always on CoinGecko
-     WPLS, PLSX, HEX, EHEX, INC — PulseChain tokens WITH CoinGecko IDs
-   
-   GeckoTerminal (sequential, hardcoded pools):
-     PTGC, UFO — small PulseChain tokens NOT on CoinGecko
-   
-   Fallback chain for ANY failure:
-     1. CoinGecko → 2. GeckoTerminal (pool) → 3. DexScreener (minimal)
-   
-   This means only 2 GeckoTerminal calls in normal operation,
-   virtually eliminating rate limit issues.
+   HEADER TOKEN CONFIG & LIVE DATA
    ═══════════════════════════════════════════════════════════════ */
-
-const dexLogo=a=>`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
-
-const TOKENS={
-  PTGC:{
-    name:'PTGC',sym:'PTGC',color:'#D9CA5D',
-    // PRIMARY: GeckoTerminal with hardcoded pool (not on CoinGecko)
-    gtPool:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
-    dexAddr:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',
-    logo:dexLogo('0x94534EeEe131840b1c0F61847c572228bdfDDE93'),on:true
+const HDR_TOKENS = {
+  PTGC: {
+    name: 'PTGC', address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93',
+    logo: '06_PTGC_V1_transparent_bg.png', colorHex: '#D9CA5D', color: 'gold',
+    pair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
+    buyUrl: 'https://goptgc.com/#/ptgc-onboarding', ath: 0.00133
   },
-  UFO:{
-    name:'UFO',sym:'UFO',color:'#7CFC00',
-    gtPool:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',
-    dexAddr:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
-    logo:dexLogo('0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'),on:true
-  },
-  WPLS:{
-    name:'WPLS',sym:'WPLS',color:'#E84DE4',
-    cgId:'pulsechain',
-    dexAddr:'0xA1077a294dDE1B09bB078844df40758a5D0f9a27',
-    logo:dexLogo('0xA1077a294dDE1B09bB078844df40758a5D0f9a27'),on:true
-  },
-  PLSX:{
-    name:'PulseX',sym:'PLSX',color:'#E63946',
-    cgId:'pulsex',
-    dexAddr:'0x95B303987A60C71504D99Aa1b13B4DA07b0790ab',
-    logo:dexLogo('0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'),on:false
-  },
-  HEX:{
-    name:'HEX',sym:'HEX',color:'#FF7849',
-    cgId:'hex-pulsechain',
-    dexAddr:'0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
-    logo:dexLogo('0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'),on:false
-  },
-  EHEX:{
-    name:'eHEX',sym:'EHEX',color:'#88B4D4',
-    cgId:'hex',
-    dexAddr:'0x57fde0a71132198BBeC939B98976993d8D89D225',
-    logo:dexLogo('0x57fde0a71132198BBeC939B98976993d8D89D225'),on:false
-  },
-  INC:{
-    name:'Incentive',sym:'INC',color:'#90EE90',
-    cgId:'incentive',
-    dexAddr:'0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d',
-    logo:dexLogo('0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'),on:false
-  },
-  BTC:{
-    name:'Bitcoin',sym:'BTC',color:'#F7931A',
-    cgId:'bitcoin',
-    logo:'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',on:true
-  },
-  ETH:{
-    name:'Ethereum',sym:'ETH',color:'#627EEA',
-    cgId:'ethereum',
-    logo:'https://assets.coingecko.com/coins/images/279/small/ethereum.png',on:true
-  },
-  SOL:{
-    name:'Solana',sym:'SOL',color:'#00E5CC',
-    cgId:'solana',
-    logo:'https://assets.coingecko.com/coins/images/4128/small/solana.png',on:false
-  },
-  BNB:{
-    name:'BNB',sym:'BNB',color:'#F0B90B',
-    cgId:'binancecoin',
-    logo:'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',on:false
-  },
-  XRP:{
-    name:'XRP',sym:'XRP',color:'#B0B0B0',
-    cgId:'ripple',
-    logo:'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',on:false
+  UFO: {
+    name: 'UFO', address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
+    logo: '07_Ufo_transparent.png', colorHex: '#7CFC00', color: 'green',
+    pair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',
+    buyUrl: 'https://goptgc.com/#/ufo-onboarding', ath: 0.000113
   }
 };
 
-const RANGES=[
-  {label:'24H',days:1},{label:'7D',days:7},{label:'14D',days:14},
-  {label:'1M',days:30},{label:'3M',days:90},{label:'6M',days:180},{label:'1Y',days:365}
+let currentHdrToken = 'PTGC';
+
+function fmtPrice(p) {
+  if (!p || isNaN(p) || p === 0) return '\u2014';
+  if (p >= 1) return '$' + p.toFixed(2);
+  if (p >= 0.0001) return '$' + p.toFixed(6);
+  const s = p.toExponential(4), [m, e] = s.split('e'), exp = Math.abs(parseInt(e));
+  const sig = parseFloat(m).toFixed(4).replace('.', '').slice(0, 4);
+  return '$0.0' + String.fromCharCode(0x2080 + (exp - 1)) + sig;
+}
+
+function fmtX(v) {
+  if (v === '\u2014' || v == null) return '\u2014';
+  const n = parseFloat(v); if (isNaN(n)) return '\u2014';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e4) return (n / 1e3).toFixed(0) + 'K';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n >= 100 ? Math.round(n) + 'x' : n.toFixed(1) + 'x';
+}
+
+function copyAddr() {
+  const t = HDR_TOKENS[currentHdrToken];
+  navigator.clipboard.writeText(t.address);
+  document.getElementById('copyBtn').textContent = '\u2713';
+  setTimeout(() => { document.getElementById('copyBtn').innerHTML = '&#128203;' }, 2000);
+}
+
+function switchToken() {
+  currentHdrToken = currentHdrToken === 'PTGC' ? 'UFO' : 'PTGC';
+  applyHeaderTheme();
+  loadHeaderData();
+}
+
+function applyHeaderTheme() {
+  const t = HDR_TOKENS[currentHdrToken];
+  const other = currentHdrToken === 'PTGC' ? 'UFO' : 'PTGC';
+  const isGold = t.color === 'gold';
+  const c = t.colorHex;
+
+  document.getElementById('headerLogo').src = t.logo;
+  document.getElementById('headerLogo').alt = t.name;
+  document.getElementById('headerTokenName').textContent = t.name;
+  document.getElementById('headerTokenName').className = `font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold text-[${c}]`;
+  document.getElementById('headerTokenName').style.color = c;
+  document.getElementById('headerAddress').textContent = t.address.slice(0, 6) + '...' + t.address.slice(-4);
+
+  // Price & stats box borders
+  const boxBorder = `1px solid ${c}4D`;
+  const boxBg = `${c}0D`;
+  ['priceBox', 'statsBox'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.borderColor = c + '4D';
+    el.style.background = c + '0D';
+  });
+
+  // Text colors in price/stats
+  ['headerPrice', 'headerPlsRatio', 'headerXtoATH', 'headerXtoPenny'].forEach(id => {
+    document.getElementById(id).style.color = c;
+  });
+
+  // BUY button
+  const buyBtn = document.getElementById('buyBtn');
+  buyBtn.href = t.buyUrl;
+  document.getElementById('buyLogo').src = t.logo;
+  document.getElementById('buyLabel').style.color = c;
+  buyBtn.style.background = isGold
+    ? 'linear-gradient(135deg,rgba(217,202,93,0.35),rgba(217,202,93,0.15))'
+    : 'linear-gradient(135deg,rgba(124,252,0,0.35),rgba(124,252,0,0.15))';
+  buyBtn.style.border = isGold
+    ? '1px solid rgba(217,202,93,0.5)' : '1px solid rgba(124,252,0,0.5)';
+  buyBtn.style.boxShadow = isGold
+    ? '0 0 20px rgba(217,202,93,0.2),inset 0 1px 0 rgba(255,255,255,0.15)'
+    : '0 0 20px rgba(124,252,0,0.2),inset 0 1px 0 rgba(255,255,255,0.15)';
+
+  // Switch button shows other token
+  document.getElementById('switchLogo').src = HDR_TOKENS[other].logo;
+}
+
+async function loadHeaderData() {
+  const t = HDR_TOKENS[currentHdrToken];
+  try {
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${t.pair}`);
+    if (!r.ok) return;
+    const j = await r.json();
+    const p = j?.pair || j?.pairs?.[0];
+    if (!p) return;
+
+    const price = parseFloat(p.priceUsd);
+    const chg = p.priceChange?.h24 ? parseFloat(p.priceChange.h24) : 0;
+    const up = chg >= 0;
+
+    document.getElementById('headerPrice').textContent = fmtPrice(price);
+    const chgEl = document.getElementById('headerChange');
+    chgEl.textContent = (up ? '\u25B2' : '\u25BC') + Math.abs(chg).toFixed(2) + '%';
+    chgEl.className = `text-3xl font-bold ${up ? 'text-green-400' : 'text-red-400'}`;
+
+    // PLS price via CoinGecko (most reliable)
+    let plsPrice = 0;
+    try {
+      const pr = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=pulsechain&vs_currencies=usd');
+      if (pr.ok) {
+        const pj = await pr.json();
+        plsPrice = pj?.pulsechain?.usd || 0;
+      }
+    } catch (e) {}
+
+    // PLS Ratio
+    const plsRatio = plsPrice > 0 && price > 0 ? (price / plsPrice).toFixed(2) : '\u2014';
+    document.getElementById('headerPlsRatio').textContent = plsRatio;
+
+    // X's to ATH
+    const xToATH = price > 0 && t.ath > price ? (t.ath / price).toFixed(1) : '\u2014';
+    document.getElementById('headerXtoATH').textContent = fmtX(xToATH);
+
+    // X's to a Penny
+    const xToPenny = price > 0 && price < 0.01 ? (0.01 / price).toFixed(1) : '\u2014';
+    document.getElementById('headerXtoPenny').textContent = fmtX(xToPenny);
+
+  } catch (e) { console.error('Header data error:', e) }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHART DATA SOURCE CONFIG
+   ═══════════════════════════════════════════════════════════════ */
+const dexLogo = a => `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
+
+const TOKENS = {
+  PTGC: { name: 'PTGC', sym: 'PTGC', color: '#D9CA5D', gtPool: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11', dexAddr: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', logo: dexLogo('0x94534EeEe131840b1c0F61847c572228bdfDDE93'), on: true, source: 'gt' },
+  UFO: { name: 'UFO', sym: 'UFO', color: '#7CFC00', gtPool: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5', dexAddr: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', logo: dexLogo('0x456548A9B56eFBbD89Ca0309edd17a9E20b04018'), on: true, source: 'gt' },
+  WPLS: { name: 'WPLS', sym: 'WPLS', color: '#E84DE4', cgId: 'pulsechain', gtPool: '0xE56043671df55dE5CDf8459710433C10324DE0aE', dexAddr: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', logo: dexLogo('0xA1077a294dDE1B09bB078844df40758a5D0f9a27'), on: true, source: 'cg' },
+  PLSX: { name: 'PulseX', sym: 'PLSX', color: '#E63946', cgId: 'pulsex', gtPool: '0x1b45b9148791d3a104184Cd5DFE5CE57193a3ee9', dexAddr: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', logo: dexLogo('0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'), on: false, source: 'gt' },
+  HEX: { name: 'HEX', sym: 'HEX', color: '#FF7849', cgId: 'hex-pulsechain', gtPool: '0xf1F4ee610b2bAbB05C635F726eF8B0C568c8dc65', dexAddr: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', logo: dexLogo('0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'), on: false, source: 'gt' },
+  EHEX: { name: 'eHEX', sym: 'EHEX', color: '#88B4D4', cgId: 'hex', gtPool: '0x55D5c232D921B9eAA6b37b5845E439aCD04b4DBa', dexAddr: '0x57fde0a71132198BBeC939B98976993d8D89D225', logo: dexLogo('0x57fde0a71132198BBeC939B98976993d8D89D225'), on: false, source: 'gt' },
+  INC: { name: 'Incentive', sym: 'INC', color: '#90EE90', cgId: 'incentive', gtPool: '0xf808Bb6265e9Ca27002c0A04562Bf50d4FE37EAA', dexAddr: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', logo: dexLogo('0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'), on: false, source: 'gt' },
+  BTC: { name: 'Bitcoin', sym: 'BTC', color: '#F7931A', cgId: 'bitcoin', logo: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png', on: true, source: 'cg' },
+  ETH: { name: 'Ethereum', sym: 'ETH', color: '#627EEA', cgId: 'ethereum', logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', on: true, source: 'cg' },
+  SOL: { name: 'Solana', sym: 'SOL', color: '#00E5CC', cgId: 'solana', logo: 'https://assets.coingecko.com/coins/images/4128/small/solana.png', on: false, source: 'cg' },
+  BNB: { name: 'BNB', sym: 'BNB', color: '#F0B90B', cgId: 'binancecoin', logo: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png', on: false, source: 'cg' },
+  XRP: { name: 'XRP', sym: 'XRP', color: '#B0B0B0', cgId: 'ripple', logo: 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png', on: false, source: 'cg' }
+};
+
+const RANGES = [
+  { label: '24H', days: 1 }, { label: '7D', days: 7 }, { label: '14D', days: 14 },
+  { label: '1M', days: 30 }, { label: '3M', days: 90 }, { label: '6M', days: 180 }, { label: '1Y', days: 365 }
 ];
+let range = RANGES[3], cache = {}, chart = null, isRefreshing = false;
 
-let range=RANGES[3];
-let cache={};
-let chart=null;
-let isRefreshing=false;
+function getPoolCache() { try { return JSON.parse(localStorage.getItem('charts_pool_cache')) || {} } catch { return {} } }
+function setPoolCache(c) { try { localStorage.setItem('charts_pool_cache', JSON.stringify(c)) } catch {} }
 
-// ── Persistent pool cache in localStorage ──
-function getPoolCache(){try{return JSON.parse(localStorage.getItem('charts_pool_cache'))||{}}catch{return{}}}
-function setPoolCache(c){try{localStorage.setItem('charts_pool_cache',JSON.stringify(c))}catch{}}
+/* INIT */
+document.addEventListener('DOMContentLoaded', () => { applyHeaderTheme(); loadHeaderData(); renderRange(); renderButtons(); go() });
+function getDays() { return range ? range.days : 30 }
 
-/* ═══════════════════════════════════════════════
-   INIT
-   ═══════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded',()=>{renderRange();renderButtons();go()});
-function getDays(){return range?range.days:30}
+function clearCacheAndRefresh() { if (isRefreshing) return; cache = {}; Object.values(TOKENS).forEach(t => delete t._data); go() }
 
-function clearCacheAndRefresh(){
-  if(isRefreshing)return;
-  cache={};
-  Object.values(TOKENS).forEach(t=>delete t._data);
-  go();
+function renderRange() {
+  const el = document.getElementById('rangeBar');
+  el.innerHTML = RANGES.map(r => `<button class="range-btn${range && r.days === range.days ? ' active' : ''}" data-d="${r.days}">${r.label}</button>`).join('');
+  el.querySelectorAll('.range-btn').forEach(b => { b.onclick = () => { range = RANGES.find(r => r.days === +b.dataset.d); renderRange(); go() } });
 }
 
-function renderRange(){
-  const el=document.getElementById('rangeBar');
-  el.innerHTML=RANGES.map(r=>`<button class="range-btn${range&&r.days===range.days?' active':''}" data-d="${r.days}">${r.label}</button>`).join('');
-  el.querySelectorAll('.range-btn').forEach(b=>{b.onclick=()=>{range=RANGES.find(r=>r.days===+b.dataset.d);renderRange();go()}});
-}
-
-function renderButtons(){
-  const el=document.getElementById('tokenBtns');
-  el.innerHTML=Object.entries(TOKENS).map(([k,t])=>
-    `<button class="token-btn${t.on?' selected':''}" data-k="${k}" style="--tc:${t.color}">
-      <img class="tl" src="${t.logo}" alt="${t.sym}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
-      <span class="tf" style="background:${t.color}">${t.sym[0]}</span>
-      <span class="tn">${t.sym}</span><span class="td"></span>
-    </button>`
+function renderButtons() {
+  const el = document.getElementById('tokenBtns');
+  el.innerHTML = Object.entries(TOKENS).map(([k, t]) =>
+    `<button class="token-btn${t.on ? ' selected' : ''}" data-k="${k}" style="--tc:${t.color}"><img class="tl" src="${t.logo}" alt="${t.sym}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><span class="tf" style="background:${t.color}">${t.sym[0]}</span><span class="tn">${t.sym}</span><span class="td"></span></button>`
   ).join('');
-  el.querySelectorAll('.token-btn').forEach(b=>{
-    b.onclick=()=>{
-      TOKENS[b.dataset.k].on=!TOKENS[b.dataset.k].on;renderButtons();
-      if(TOKENS[b.dataset.k].on&&(!TOKENS[b.dataset.k]._data||TOKENS[b.dataset.k]._data.length<2))go();
-      else{renderChart();renderSummary()}
-    };
+  el.querySelectorAll('.token-btn').forEach(b => {
+    b.onclick = () => { TOKENS[b.dataset.k].on = !TOKENS[b.dataset.k].on; renderButtons(); if (TOKENS[b.dataset.k].on && (!TOKENS[b.dataset.k]._data || TOKENS[b.dataset.k]._data.length < 2)) go(); else { renderChart(); renderSummary() } };
   });
 }
 
-/* ═══════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════ */
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-
-async function fetchRetry(url,retries=3,delayMs=1000){
-  for(let i=0;i<retries;i++){
-    try{
-      const r=await fetch(url);
-      if(r.ok)return r;
-      console.warn(`Attempt ${i+1} failed: ${r.status} for ${url}`);
-      if(r.status===429){
-        const wait=delayMs*Math.pow(2,i);
-        console.log(`Rate limited, waiting ${wait}ms...`);
-        await sleep(wait);
-      }
-    }catch(e){
-      console.warn(`Attempt ${i+1} network error:`,e.message);
-      if(i<retries-1)await sleep(delayMs*Math.pow(2,i));
-    }
+/* HELPERS */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function fetchRetry(url, retries = 3, delayMs = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try { const r = await fetch(url); if (r.ok) return r; if (r.status === 429) { await sleep(delayMs * Math.pow(2, i)); } else if (i < retries - 1) await sleep(delayMs * Math.pow(2, i)); } catch (e) { if (i < retries - 1) await sleep(delayMs * Math.pow(2, i)); }
   }
   return null;
 }
+function setStatus(msg) { document.getElementById('statusTxt').innerHTML = msg }
+function setLoadMsg(msg) { document.getElementById('loadMsg').textContent = msg }
 
-function setStatus(msg){document.getElementById('statusTxt').innerHTML=msg}
-function setLoadMsg(msg){document.getElementById('loadMsg').textContent=msg}
+/* MAIN ORCHESTRATOR */
+async function go() {
+  if (isRefreshing) return; isRefreshing = true;
+  const ld = document.getElementById('loadOverlay'), rb = document.getElementById('refreshBtn');
+  ld.style.display = 'flex'; rb.classList.add('spinning');
+  setLoadMsg('Loading...'); setStatus('<span class="dot spin"></span>Loading...'); const days = getDays();
 
-/* ═══════════════════════════════════════════════
-   DATA FETCHING — MULTI-SOURCE WITH FALLBACK
-   ═══════════════════════════════════════════════ */
-async function go(){
-  if(isRefreshing)return;
-  isRefreshing=true;
-  const ld=document.getElementById('loadOverlay');
-  const rb=document.getElementById('refreshBtn');
-  ld.style.display='flex';rb.classList.add('spinning');
-  setLoadMsg('Fetching data…');
-  setStatus('<span class="dot spin"></span>Fetching price data…');
-  const days=getDays();
-
-  // ── PHASE 1: CoinGecko tokens (parallel — BTC,ETH,SOL,BNB,XRP + WPLS,PLSX,HEX,EHEX,INC) ──
-  const cgTokens=Object.entries(TOKENS).filter(([k,t])=>t.cgId);
-  setLoadMsg(`Fetching ${cgTokens.length} CoinGecko tokens…`);
-  
-  await Promise.allSettled(cgTokens.map(async([k,t])=>{
-    const ck=`${k}_${days}`;
-    if(cache[ck]&&Date.now()-cache[ck].ts<300000){TOKENS[k]._data=cache[ck].data;return}
-    const data=await fetchFromCoinGecko(t.cgId,days,k);
-    if(data&&data.length>=2){cache[ck]={data,ts:Date.now()};TOKENS[k]._data=data}
-  }));
-
-  // Render CoinGecko results immediately
-  renderChart();renderSummary();
-
-  // ── PHASE 2: GeckoTerminal tokens (sequential — PTGC, UFO) ──
-  const gtTokens=Object.entries(TOKENS).filter(([k,t])=>!t.cgId&&t.gtPool);
-  for(const[k,t]of gtTokens){
-    const ck=`${k}_${days}`;
-    if(cache[ck]&&Date.now()-cache[ck].ts<300000){TOKENS[k]._data=cache[ck].data;continue}
-    setLoadMsg(`Fetching ${t.sym}…`);
-    const data=await fetchFromGeckoTerminal(t.gtPool,days,k);
-    if(data&&data.length>=2){cache[ck]={data,ts:Date.now()};TOKENS[k]._data=data}
-    renderChart();renderSummary();
-    if(gtTokens.indexOf(gtTokens.find(x=>x[0]===k))<gtTokens.length-1)await sleep(800);
+  // PHASE 1: GeckoTerminal (PulseChain) — only selected tokens
+  const gtTokens = Object.entries(TOKENS).filter(([k, t]) => t.on && t.source === 'gt' && t.gtPool);
+  for (let i = 0; i < gtTokens.length; i++) {
+    const [k, t] = gtTokens[i]; const ck = `${k}_${days}`;
+    if (cache[ck] && Date.now() - cache[ck].ts < 300000) { TOKENS[k]._data = cache[ck].data; continue }
+    setLoadMsg('Loading...');
+    const data = await fetchFromGeckoTerminal(t.gtPool, days, k);
+    if (data && data.length >= 2) { cache[ck] = { data, ts: Date.now() }; TOKENS[k]._data = data }
+    renderChart(); renderSummary(); if (i < gtTokens.length - 1) await sleep(600);
   }
 
-  // ── PHASE 3: Fallback — retry any tokens that failed ──
-  const failed=Object.entries(TOKENS).filter(([k,t])=>t.on&&(!t._data||t._data.length<2));
-  if(failed.length>0){
-    setLoadMsg(`Retrying ${failed.length} failed tokens…`);
-    for(const[k,t]of failed){
-      const ck=`${k}_${days}`;
-      let data=null;
-      
-      // Try GeckoTerminal pool discovery if we have a token address
-      if(!data&&t.dexAddr){
-        setLoadMsg(`Retrying ${t.sym} via GeckoTerminal…`);
-        data=await fetchViaPoolDiscovery(t.dexAddr,days,k);
-        await sleep(600);
-      }
-      
-      // Try DexScreener for minimal 2-point data
-      if((!data||data.length<2)&&(t.gtPool||t.dexAddr)){
-        setLoadMsg(`Retrying ${t.sym} via DexScreener…`);
-        const addr=t.gtPool||t.dexAddr;
-        data=await fetchFromDexScreener(addr,k);
-      }
-      
-      if(data&&data.length>=2){cache[ck]={data,ts:Date.now()};TOKENS[k]._data=data}
-      renderChart();renderSummary();
-    }
+  // PHASE 2: CoinGecko (major coins) — only selected tokens
+  const cgTokens = Object.entries(TOKENS).filter(([k, t]) => t.on && t.source === 'cg' && t.cgId);
+  for (let i = 0; i < cgTokens.length; i++) {
+    const [k, t] = cgTokens[i]; const ck = `${k}_${days}`;
+    if (cache[ck] && Date.now() - cache[ck].ts < 300000) { TOKENS[k]._data = cache[ck].data; continue }
+    setLoadMsg('Loading...');
+    const data = await fetchFromCoinGecko(t.cgId, days, k);
+    if (data && data.length >= 2) { cache[ck] = { data, ts: Date.now() }; TOKENS[k]._data = data }
+    renderChart(); renderSummary(); if (i < cgTokens.length - 1) await sleep(400);
   }
 
-  // ── DONE ──
-  ld.style.display='none';rb.classList.remove('spinning');isRefreshing=false;
-  const ok=Object.entries(TOKENS).filter(([k,t])=>t._data&&t._data.length>=2).length;
-  const tot=Object.keys(TOKENS).length;
-  const stillFailed=Object.entries(TOKENS).filter(([k,t])=>t.on&&(!t._data||t._data.length<2)).map(([k])=>k);
-  if(ok>0){
-    let msg=`<span class="dot live"></span>Live · ${ok}/${tot} tokens`;
-    if(stillFailed.length)msg+=` · <span style="color:#ef4444">${stillFailed.join(', ')} unavailable</span>`;
-    setStatus(msg);
-  }else setStatus('<span class="dot err"></span>Network error — try Refresh');
-  document.getElementById('statusTime').textContent=new Date().toLocaleTimeString();
-  updatePeriod();renderChart();renderSummary();
+  // PHASE 3: Fallback
+  const failed = Object.entries(TOKENS).filter(([k, t]) => t.on && (!t._data || t._data.length < 2));
+  for (const [k, t] of failed) {
+    const ck = `${k}_${days}`; let data = null;
+    if (!data && t.cgId) { setLoadMsg('Loading...'); data = await fetchFromCoinGecko(t.cgId, days, k); await sleep(400) }
+    if ((!data || data.length < 2) && t.dexAddr) { setLoadMsg('Loading...'); data = await fetchViaPoolDiscovery(t.dexAddr, days, k); await sleep(600) }
+    if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') { data = await fetchFromGeckoTerminal(t.gtPool, days, k); await sleep(600) }
+    if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) { data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k) }
+    if (data && data.length >= 2) { cache[ck] = { data, ts: Date.now() }; TOKENS[k]._data = data }
+    renderChart(); renderSummary();
+  }
+
+  ld.style.display = 'none'; rb.classList.remove('spinning'); isRefreshing = false;
+  const ok = Object.entries(TOKENS).filter(([k, t]) => t._data && t._data.length >= 2).length;
+  const tot = Object.keys(TOKENS).length;
+  const still = Object.entries(TOKENS).filter(([k, t]) => t.on && (!t._data || t._data.length < 2)).map(([k]) => k);
+  if (ok > 0) { let msg = `<span class="dot live"></span>Live \u00B7 ${ok}/${tot} tokens`; if (still.length) msg += ` \u00B7 <span style="color:#ef4444">${still.join(', ')} unavailable</span>`; setStatus(msg); }
+  else setStatus('<span class="dot err"></span>Network error \u2014 try Refresh');
+  document.getElementById('statusTime').textContent = new Date().toLocaleTimeString();
+  updatePeriod(); renderChart(); renderSummary();
 }
 
-/* ═══════════════════════════════════════════════
-   SOURCE 1: CoinGecko (most reliable for listed tokens)
-   ═══════════════════════════════════════════════ */
-async function fetchFromCoinGecko(id,days,sym){
-  const ivl=days<=1?'':days<=14?'&interval=hourly':'&interval=daily';
-  const url=`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`;
-  console.log(`[${sym}] CoinGecko →`,id);
-  const r=await fetchRetry(url,3,1500);
-  if(!r){console.error(`[${sym}] CoinGecko failed after retries`);return null}
-  try{
-    const j=await r.json();
-    const data=(j.prices||[]).map(([ts,p])=>({ts,price:p}));
-    console.log(`[${sym}] CoinGecko: ${data.length} points`);
-    return data.length>=2?data:null;
-  }catch(e){console.error(`[${sym}] CoinGecko parse error:`,e);return null}
+/* SOURCE 1: CoinGecko */
+async function fetchFromCoinGecko(id, days, sym) {
+  const ivl = days <= 1 ? '' : days <= 14 ? '&interval=hourly' : '&interval=daily';
+  const r = await fetchRetry(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`, 3, 2000);
+  if (!r) return null;
+  try { const j = await r.json(); if (j.error || j.status?.error_code) return null; const d = (j.prices || []).map(([ts, p]) => ({ ts, price: p })); return d.length >= 2 ? d : null } catch { return null }
 }
 
-/* ═══════════════════════════════════════════════
-   SOURCE 2: GeckoTerminal (for PTGC/UFO with known pools)
-   ═══════════════════════════════════════════════ */
-async function fetchFromGeckoTerminal(pool,days,sym){
-  let tf,agg,lim;
-  if(days<=1){tf='minute';agg=15;lim=96}
-  else if(days<=7){tf='hour';agg=1;lim=Math.min(days*24,1000)}
-  else if(days<=14){tf='hour';agg=4;lim=Math.min(days*6,1000)}
-  else{tf='day';agg=1;lim=Math.min(days,1000)}
-  const before=Math.floor(Date.now()/1000);
-  const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${before}&currency=usd`;
-  console.log(`[${sym}] GeckoTerminal pool →`,pool);
-  const r=await fetchRetry(url,3,2000);
-  if(!r){console.error(`[${sym}] GeckoTerminal failed after retries`);return null}
-  try{
-    const j=await r.json();
-    const candles=j?.data?.attributes?.ohlcv_list||[];
-    console.log(`[${sym}] GeckoTerminal: ${candles.length} candles`);
-    if(!candles.length)return null;
-    const startTs=Date.now()-(days*86400000);
-    const data=candles.map(c=>({ts:c[0]*1000,price:parseFloat(c[4])})).filter(d=>d.price>0&&d.ts>=startTs).sort((a,b)=>a.ts-b.ts);
-    return data.length>=2?data:null;
-  }catch(e){console.error(`[${sym}] GeckoTerminal parse error:`,e);return null}
+/* SOURCE 2: GeckoTerminal */
+async function fetchFromGeckoTerminal(pool, days, sym) {
+  let tf, agg, lim;
+  if (days <= 1) { tf = 'minute'; agg = 15; lim = 96 } else if (days <= 7) { tf = 'hour'; agg = 1; lim = Math.min(days * 24, 1000) } else if (days <= 14) { tf = 'hour'; agg = 4; lim = Math.min(days * 6, 1000) } else { tf = 'day'; agg = 1; lim = Math.min(days, 1000) }
+  const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000);
+  if (!r) return null;
+  try { const j = await r.json(); const c = j?.data?.attributes?.ohlcv_list || []; if (!c.length) return null; const st = Date.now() - days * 86400000; const d = c.map(x => ({ ts: x[0] * 1000, price: parseFloat(x[4]) })).filter(x => x.price > 0 && x.ts >= st).sort((a, b) => a.ts - b.ts); return d.length >= 2 ? d : null } catch { return null }
 }
 
-/* ═══════════════════════════════════════════════
-   SOURCE 3: GeckoTerminal pool discovery (fallback)
-   ═══════════════════════════════════════════════ */
-async function fetchViaPoolDiscovery(tokenAddr,days,sym){
-  // Check localStorage cache first
-  const pc=getPoolCache();
-  let pool=pc[tokenAddr];
-  if(!pool){
-    console.log(`[${sym}] Discovering pool via GeckoTerminal…`);
-    const r=await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`,2,2000);
-    if(r){
-      try{
-        const j=await r.json();
-        const pools=j?.data||[];
-        if(pools.length>0){
-          pool=pools[0].attributes?.address;
-          if(pool){pc[tokenAddr]=pool;setPoolCache(pc);console.log(`[${sym}] Discovered pool: ${pool}`)}
-        }
-      }catch(e){console.error(`[${sym}] Pool discovery parse error:`,e)}
-    }
-  }
-  if(!pool){
-    // Try DexScreener for pool discovery
-    console.log(`[${sym}] Trying DexScreener pool discovery…`);
-    const r=await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`,2,1000);
-    if(r){
-      try{
-        const j=await r.json();
-        const pairs=(j.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0);
-        if(pairs.length>0){pool=pairs[0].pairAddress;pc[tokenAddr]=pool;setPoolCache(pc);console.log(`[${sym}] DexScreener pool: ${pool}`)}
-      }catch(e){}
-    }
-  }
-  if(!pool)return null;
-  return fetchFromGeckoTerminal(pool,days,sym);
+/* SOURCE 3: Pool discovery fallback */
+async function fetchViaPoolDiscovery(tokenAddr, days, sym) {
+  const pc = getPoolCache(); let pool = pc[tokenAddr];
+  if (!pool) { const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000); if (r) { try { const j = await r.json(); const p = j?.data || []; if (p.length > 0) { pool = p[0].attributes?.address; if (pool) { pc[tokenAddr] = pool; setPoolCache(pc) } } } catch {} } }
+  if (!pool) { const r = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`, 2, 1000); if (r) { try { const j = await r.json(); const ps = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0); if (ps.length > 0) { pool = ps[0].pairAddress; pc[tokenAddr] = pool; setPoolCache(pc) } } catch {} } }
+  if (!pool) return null; return fetchFromGeckoTerminal(pool, days, sym);
 }
 
-/* ═══════════════════════════════════════════════
-   SOURCE 4: DexScreener (last resort — minimal 2-point)
-   ═══════════════════════════════════════════════ */
-async function fetchFromDexScreener(addr,sym){
-  // Try as pair address first, then as token address
-  let pair=null;
-  const r1=await fetchRetry(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${addr}`,2,1000);
-  if(r1){try{const j=await r1.json();pair=j?.pair||j?.pairs?.[0]}catch{}}
-  if(!pair){
-    const r2=await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${addr}`,2,1000);
-    if(r2){try{const j=await r2.json();pair=(j.pairs||[]).find(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0)}catch{}}
-  }
-  if(pair&&parseFloat(pair.priceUsd)>0){
-    const price=parseFloat(pair.priceUsd);
-    const chg=pair.priceChange?.h24?parseFloat(pair.priceChange.h24)/100:0;
-    console.log(`[${sym}] DexScreener fallback: $${price}, 24h ${(chg*100).toFixed(1)}%`);
-    return[{ts:Date.now()-86400000,price:price/(1+chg)},{ts:Date.now(),price}];
-  }
+/* SOURCE 4: DexScreener minimal */
+async function fetchFromDexScreener(addr, sym) {
+  let pair = null;
+  const r1 = await fetchRetry(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${addr}`, 2, 1000);
+  if (r1) { try { const j = await r1.json(); pair = j?.pair || j?.pairs?.[0] } catch {} }
+  if (!pair) { const r2 = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, 2, 1000); if (r2) { try { const j = await r2.json(); pair = (j.pairs || []).find(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0) } catch {} } }
+  if (pair && parseFloat(pair.priceUsd) > 0) { const price = parseFloat(pair.priceUsd); const chg = pair.priceChange?.h24 ? parseFloat(pair.priceChange.h24) / 100 : 0; return [{ ts: Date.now() - 86400000, price: price / (1 + chg) }, { ts: Date.now(), price }] }
   return null;
 }
 
-/* ═══════════════════════════════════════════════
-   CHART
-   ═══════════════════════════════════════════════ */
-function renderChart(){
-  const ctx=document.getElementById('mainChart').getContext('2d');
-  if(chart)chart.destroy();
-  let latestStart=0;
-  Object.entries(TOKENS).forEach(([k,t])=>{
-    if(t.on&&t._data&&t._data.length>=2&&t._data[0].ts>latestStart)latestStart=t._data[0].ts;
-  });
-  const datasets=[],legends=[];
-  Object.entries(TOKENS).forEach(([k,t])=>{
-    if(!t.on||!t._data||t._data.length<2)return;
-    const raw=latestStart>0?t._data.filter(d=>d.ts>=latestStart):t._data;
-    if(raw.length<2)return;
-    const p0=raw[0].price;if(!p0)return;
-    datasets.push({
-      label:t.sym,data:raw.map(d=>({x:d.ts,y:((d.price-p0)/p0)*100})),
-      borderColor:t.color,backgroundColor:'transparent',
-      borderWidth:(t.sym==='PTGC'||t.sym==='UFO')?3:2,
-      pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:t.color,
-      pointHoverBorderColor:'#fff',pointHoverBorderWidth:2,tension:0.25,
-      order:k==='PTGC'?0:k==='UFO'?1:2
-    });
+/* CHART LOGOS — show PTGC/UFO logos if selected and have data */
+function updateChartLogos() {
+  const el = document.getElementById('chartLogos');
+  let html = '';
+  if (TOKENS.PTGC.on && TOKENS.PTGC._data && TOKENS.PTGC._data.length >= 2) {
+    html += `<img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" style="width:64px;height:64px;object-fit:contain"/>`;
+  }
+  if (TOKENS.UFO.on && TOKENS.UFO._data && TOKENS.UFO._data.length >= 2) {
+    html += `<img src="07_Ufo_transparent.png" alt="UFO" style="width:64px;height:64px;object-fit:contain"/>`;
+  }
+  el.innerHTML = html;
+}
+
+/* CHART */
+function renderChart() {
+  const ctx = document.getElementById('mainChart').getContext('2d'); if (chart) chart.destroy();
+  let latestStart = 0;
+  Object.entries(TOKENS).forEach(([k, t]) => { if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart) latestStart = t._data[0].ts });
+  const datasets = [], legends = [];
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (!t.on || !t._data || t._data.length < 2) return;
+    const raw = latestStart > 0 ? t._data.filter(d => d.ts >= latestStart) : t._data; if (raw.length < 2) return;
+    const p0 = raw[0].price; if (!p0) return;
+    datasets.push({ label: t.sym, data: raw.map(d => ({ x: d.ts, y: ((d.price - p0) / p0) * 100 })), borderColor: t.color, backgroundColor: 'transparent', borderWidth: (t.sym === 'PTGC' || t.sym === 'UFO') ? 3 : 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: t.color, pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, tension: 0.25, order: k === 'PTGC' ? 0 : k === 'UFO' ? 1 : 2 });
     legends.push(`<span class="legend-item"><span class="legend-line" style="background:${t.color}"></span>${t.sym}</span>`);
   });
-  document.getElementById('chartLegend').innerHTML=legends.length?legends.join(''):'<div style="color:rgba(255,255,255,0.2);text-align:center;padding:40px;font-family:JetBrains Mono,monospace;font-size:13px">Select tokens above to compare</div>';
-  if(!datasets.length)return;
-  chart=new Chart(ctx,{type:'line',data:{datasets},options:{
-    responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-    plugins:{legend:{display:false},tooltip:{
-      backgroundColor:'rgba(10,10,10,0.95)',borderColor:'rgba(255,255,255,0.08)',borderWidth:1,
-      titleFont:{family:"'JetBrains Mono',monospace",size:11,weight:'600'},
-      bodyFont:{family:"'JetBrains Mono',monospace",size:12},
-      padding:14,cornerRadius:10,displayColors:true,boxWidth:8,boxHeight:8,boxPadding:4,
-      callbacks:{
-        title(items){if(!items.length)return'';return new Date(items[0].parsed.x).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric',...(getDays()<=7?{hour:'2-digit',minute:'2-digit'}:{})})},
-        label(c){const v=c.parsed.y;return` ${c.dataset.label}  ${v>=0?'+':''}${v.toFixed(2)}%`},
-        labelColor(c){return{borderColor:c.dataset.borderColor,backgroundColor:c.dataset.borderColor,borderRadius:2}}
-      }
-    }},
-    scales:{
-      x:{type:'time',time:{tooltipFormat:'MMMM d, yyyy',displayFormats:{minute:'HH:mm',hour:'MMM d HH:mm',day:'MMM d',week:'MMM d',month:'MMM yyyy'}},grid:{color:'rgba(255,255,255,0.03)',drawBorder:false},ticks:{color:'rgba(255,255,255,0.55)',font:{family:"'JetBrains Mono',monospace",size:10},maxRotation:0,maxTicksLimit:getDays()<=1?8:10},border:{display:false}},
-      y:{position:'right',grid:{color:c=>c.tick.value===0?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.03)',drawBorder:false,lineWidth:c=>c.tick.value===0?1.5:1},ticks:{color:'rgba(255,255,255,0.55)',font:{family:"'JetBrains Mono',monospace",size:10},callback:v=>(v>=0?'+':'')+v.toFixed(1)+'%',maxTicksLimit:10},border:{display:false}}
+  document.getElementById('chartLegend').innerHTML = '';
+  updateChartLogos();
+  if (!datasets.length) return;
+  chart = new Chart(ctx, { type: 'line', data: { datasets }, options: {
+    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,10,10,0.95)', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1, titleFont: { family: "'JetBrains Mono',monospace", size: 11, weight: '600' }, bodyFont: { family: "'JetBrains Mono',monospace", size: 12 }, padding: 14, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8, boxPadding: 4, callbacks: { title(items) { if (!items.length) return ''; return new Date(items[0].parsed.x).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}) }) }, label(c) { const v = c.parsed.y; return ` ${c.dataset.label}  ${v >= 0 ? '+' : ''}${v.toFixed(2)}%` }, labelColor(c) { return { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor, borderRadius: 2 } } } } },
+    scales: {
+      x: { type: 'time', time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
+      y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 10 }, border: { display: false } }
     }
   }});
 }
 
-/* ═══════════════════════════════════════════════
-   SUMMARY CARDS
-   ═══════════════════════════════════════════════ */
-function renderSummary(){
-  const el=document.getElementById('summaryCards');let html='';
-  let latestStart=0;
-  Object.entries(TOKENS).forEach(([k,t])=>{if(t.on&&t._data&&t._data.length>=2&&t._data[0].ts>latestStart)latestStart=t._data[0].ts});
-  Object.entries(TOKENS).forEach(([k,t])=>{
-    if(!t.on||!t._data||t._data.length<2)return;
-    const d=latestStart>0?t._data.filter(x=>x.ts>=latestStart):t._data;if(d.length<2)return;
-    const p0=d[0].price,pN=d[d.length-1].price,pct=((pN-p0)/p0)*100,up=pct>=0;
-    let ps;
-    if(pN>=100)ps='$'+pN.toLocaleString('en-US',{maximumFractionDigits:0});
-    else if(pN>=1)ps='$'+pN.toLocaleString('en-US',{maximumFractionDigits:2});
-    else if(pN>=0.001)ps='$'+pN.toFixed(4);
-    else if(pN>=0.0000001)ps='$'+pN.toFixed(8);
-    else ps='$'+pN.toExponential(3);
-    html+=`<div class="card" style="--cc:${t.color}"><div class="card-top"><img src="${t.logo}" alt="${t.sym}" onerror="this.style.display='none'"/><span class="card-sym" style="color:${t.color}">${t.sym}</span></div><div class="card-chg ${up?'up':'dn'}">${up?'+':''}${pct.toFixed(2)}%</div><div class="card-price">${ps}</div></div>`;
+/* SUMMARY CARDS — sorted highest to lowest % change */
+function renderSummary() {
+  const el = document.getElementById('summaryCards');
+  let latestStart = 0;
+  Object.entries(TOKENS).forEach(([k, t]) => { if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart) latestStart = t._data[0].ts });
+  const items = [];
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (!t.on || !t._data || t._data.length < 2) return;
+    const d = latestStart > 0 ? t._data.filter(x => x.ts >= latestStart) : t._data; if (d.length < 2) return;
+    const p0 = d[0].price, pN = d[d.length - 1].price, pct = ((pN - p0) / p0) * 100;
+    let ps; if (pN >= 100) ps = '$' + pN.toLocaleString('en-US', { maximumFractionDigits: 0 }); else if (pN >= 1) ps = '$' + pN.toLocaleString('en-US', { maximumFractionDigits: 2 }); else if (pN >= 0.001) ps = '$' + pN.toFixed(4); else if (pN >= 0.0000001) ps = '$' + pN.toFixed(8); else ps = '$' + pN.toExponential(3);
+    items.push({ sym: t.sym, color: t.color, logo: t.logo, pct, ps });
   });
-  el.innerHTML=html;
+  items.sort((a, b) => b.pct - a.pct);
+  el.innerHTML = items.map(i => {
+    const up = i.pct >= 0;
+    return `<div class="card" style="--cc:${i.color}"><div class="card-top"><img src="${i.logo}" alt="${i.sym}" onerror="this.style.display='none'"/><span class="card-sym" style="color:${i.color}">${i.sym}</span></div><div class="card-chg ${up ? 'up' : 'dn'}">${up ? '+' : ''}${i.pct.toFixed(2)}%</div><div class="card-price">${i.ps}</div></div>`;
+  }).join('');
 }
 
-function updatePeriod(){
-  const el=document.getElementById('periodLabel');
-  const days=getDays(),now=new Date(),start=new Date(now-days*86400000);
-  const fmt=d=>d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  el.textContent=days<=1?`Last 24 Hours — ${fmt(now)}`:`${fmt(start)} — ${fmt(now)}`;
+function updatePeriod() {
+  const el = document.getElementById('periodLabel'); const days = getDays(), now = new Date(), start = new Date(now - days * 86400000);
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  el.textContent = days <= 1 ? `Last 24 Hours \u2014 ${fmt(now)}` : `${fmt(start)} \u2014 ${fmt(now)}`;
 }
+
+/* ═══════════════════════════════════════════════
+   SHARE / TWITTER SCREENSHOT
+   ═══════════════════════════════════════════════ */
+let shareChartInstance = null;
+
+function openShare() {
+  const overlay = document.getElementById('shareOverlay');
+  overlay.classList.add('open');
+
+  // Scale to fit viewport
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const scaleX = vw / 1250, scaleY = vh / 720;
+  const scale = Math.min(scaleX, scaleY, 1);
+  const capture = document.getElementById('shareCapture');
+  capture.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+
+  // Logos
+  const logosEl = document.getElementById('shareLogos');
+  let logosHtml = '';
+  if (TOKENS.PTGC.on && TOKENS.PTGC._data && TOKENS.PTGC._data.length >= 2) {
+    logosHtml += '<img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" style="width:52px;height:52px;object-fit:contain"/>';
+  }
+  if (TOKENS.UFO.on && TOKENS.UFO._data && TOKENS.UFO._data.length >= 2) {
+    logosHtml += '<img src="07_Ufo_transparent.png" alt="UFO" style="width:52px;height:52px;object-fit:contain"/>';
+  }
+  logosEl.innerHTML = logosHtml;
+
+  // Period label
+  const days = getDays(), now = new Date(), start = new Date(now - days * 86400000);
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('sharePeriod').textContent = days <= 1 ? `Last 24 Hours \u2014 ${fmt(now)}` : `${fmt(start)} \u2014 ${fmt(now)}`;
+
+  renderShareChart();
+  renderShareCards();
+}
+
+function closeShare() {
+  document.getElementById('shareOverlay').classList.remove('open');
+  if (shareChartInstance) { shareChartInstance.destroy(); shareChartInstance = null }
+}
+
+function renderShareChart() {
+  const ctx = document.getElementById('shareChart').getContext('2d');
+  if (shareChartInstance) shareChartInstance.destroy();
+
+  let latestStart = 0;
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart) latestStart = t._data[0].ts;
+  });
+
+  const datasets = [];
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (!t.on || !t._data || t._data.length < 2) return;
+    const raw = latestStart > 0 ? t._data.filter(d => d.ts >= latestStart) : t._data;
+    if (raw.length < 2) return;
+    const p0 = raw[0].price; if (!p0) return;
+    datasets.push({
+      label: t.sym, data: raw.map(d => ({ x: d.ts, y: ((d.price - p0) / p0) * 100 })),
+      borderColor: t.color, backgroundColor: 'transparent',
+      borderWidth: (t.sym === 'PTGC' || t.sym === 'UFO') ? 3 : 2,
+      pointRadius: 0, tension: 0.25,
+      order: k === 'PTGC' ? 0 : k === 'UFO' ? 1 : 2
+    });
+  });
+  if (!datasets.length) return;
+
+  shareChartInstance = new Chart(ctx, { type: 'line', data: { datasets }, options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+      x: { type: 'time', time: { displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: 8 }, border: { display: false } },
+      y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 8 }, border: { display: false } }
+    }
+  }});
+}
+
+function renderShareCards() {
+  const el = document.getElementById('shareCards');
+  let latestStart = 0;
+  Object.entries(TOKENS).forEach(([k, t]) => { if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart) latestStart = t._data[0].ts });
+  const items = [];
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (!t.on || !t._data || t._data.length < 2) return;
+    const d = latestStart > 0 ? t._data.filter(x => x.ts >= latestStart) : t._data; if (d.length < 2) return;
+    const p0 = d[0].price, pN = d[d.length - 1].price, pct = ((pN - p0) / p0) * 100;
+    let ps; if (pN >= 100) ps = '$' + pN.toLocaleString('en-US', { maximumFractionDigits: 0 }); else if (pN >= 1) ps = '$' + pN.toLocaleString('en-US', { maximumFractionDigits: 2 }); else if (pN >= 0.001) ps = '$' + pN.toFixed(4); else if (pN >= 0.0000001) ps = '$' + pN.toFixed(8); else ps = '$' + pN.toExponential(3);
+    items.push({ sym: t.sym, color: t.color, logo: t.logo, pct, ps });
+  });
+  items.sort((a, b) => b.pct - a.pct);
+  el.innerHTML = items.map(i => {
+    const up = i.pct >= 0;
+    return `<div class="share-card-item" style="--cc:${i.color}"><div style="display:flex;align-items:center;gap:8px"><img src="${i.logo}" alt="${i.sym}" style="width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.1)" onerror="this.style.display='none'"/><span style="font-size:15px;font-weight:700;color:${i.color};font-family:'JetBrains Mono',monospace">${i.sym}</span></div><div style="font-size:20px;font-weight:800;color:${up ? '#22c55e' : '#ef4444'};font-family:'JetBrains Mono',monospace;margin-top:4px">${up ? '+' : ''}${i.pct.toFixed(2)}%</div><div style="font-size:12px;color:rgba(255,255,255,0.7);font-family:'JetBrains Mono',monospace">${i.ps}</div></div>`;
+  }).join('');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeShare() });
 </script>
 </body>
 </html>
