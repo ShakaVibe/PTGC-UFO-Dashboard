@@ -457,7 +457,10 @@ async function loadHeaderData() {
   } catch (e) {}
 
   try {
-    const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${t.pair}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${t.pair}`, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!r.ok) return;
     const j = await r.json();
     const p = j?.pair || j?.pairs?.[0];
@@ -469,12 +472,14 @@ async function loadHeaderData() {
     // PLS price via DexScreener (avoids using CoinGecko rate limit budget)
     let plsPrice = 0;
     try {
-      const pr = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xE56043671df55dE5CDf8459710433C10324DE0aE');
+      const controller2 = new AbortController();
+      const timeout2 = setTimeout(() => controller2.abort(), 10000);
+      const pr = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xE56043671df55dE5CDf8459710433C10324DE0aE', { signal: controller2.signal });
+      clearTimeout(timeout2);
       if (pr.ok) {
         const pj = await pr.json();
         const pp = pj?.pair || pj?.pairs?.[0];
         if (pp) {
-          // This is a WPLS/DAI pair; extract PLS price from quote
           const wplsPrice = parseFloat(pp.priceUsd);
           if (wplsPrice > 0) plsPrice = wplsPrice;
         }
@@ -491,7 +496,7 @@ async function loadHeaderData() {
     try { sessionStorage.setItem('hdr_' + currentHdrToken, JSON.stringify(data)) } catch (e) {}
     applyHeaderValues(data, t);
 
-  } catch (e) { console.error('Header data error:', e) }
+  } catch (e) { if (e.name !== 'AbortError') console.error('Header data error:', e); }
 }
 
 function applyHeaderValues(data, t) {
@@ -614,15 +619,20 @@ function loadCache() {
 
 function safeSaveCache(data) {
   try {
-    const json = JSON.stringify(data || cache);
-    // Check size before writing
+    const obj = data || cache;
+    const json = JSON.stringify(obj);
     if (json.length > MAX_CACHE_SIZE) {
-      // Prune oldest entries until under limit
-      const entries = Object.entries(data || cache).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
-      const pruned = { ...data || cache };
-      for (const [k] of entries) {
-        delete pruned[k];
-        if (JSON.stringify(pruned).length <= MAX_CACHE_SIZE) break;
+      // Prune oldest entries: sort once, remove from start until under limit
+      const entries = Object.entries(obj).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
+      const pruned = {};
+      // Add entries from NEWEST first, stop when we'd exceed limit
+      let estSize = 2; // "{}"
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const entryJson = JSON.stringify(entries[i][1]);
+        const addSize = entries[i][0].length + entryJson.length + 4; // key + value + quotes/colon/comma
+        if (estSize + addSize > MAX_CACHE_SIZE) break;
+        pruned[entries[i][0]] = entries[i][1];
+        estSize += addSize;
       }
       localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(pruned));
       if (!data) cache = pruned;
@@ -630,7 +640,6 @@ function safeSaveCache(data) {
       localStorage.setItem(CACHE_STORAGE_KEY, json);
     }
   } catch (e) {
-    // localStorage full — clear chart cache and try again
     try { localStorage.removeItem(CACHE_STORAGE_KEY); } catch {}
     console.warn('Cache save failed, cleared:', e);
   }
@@ -689,11 +698,19 @@ function loadSelections() {
   try {
     const sel = JSON.parse(localStorage.getItem('charts_sel_tokens'));
     if (sel && Array.isArray(sel) && sel.length > 0) {
-      Object.keys(TOKENS).forEach(k => { TOKENS[k].on = sel.includes(k) });
+      // Only apply selections for tokens that actually exist
+      const validKeys = new Set(Object.keys(TOKENS));
+      const validSel = sel.filter(k => validKeys.has(k));
+      if (validSel.length > 0) {
+        Object.keys(TOKENS).forEach(k => { TOKENS[k].on = validSel.includes(k) });
+      }
     }
     const rd = parseInt(localStorage.getItem('charts_sel_range'));
-    if (rd) { const found = RANGES.find(r => r.days === rd); if (found) range = found }
-  } catch {}
+    if (rd && !isNaN(rd)) { const found = RANGES.find(r => r.days === rd); if (found) range = found }
+  } catch {
+    // Corrupted selection data — just use defaults
+    console.warn('Failed to load saved selections, using defaults');
+  }
 }
 
 /* NAV — route to dashboard tabs with token context */
@@ -729,26 +746,35 @@ document.addEventListener('DOMContentLoaded', () => {
 function getDays() { return range ? range.days : 30 }
 
 function clearCacheAndRefresh() {
+  // Cancel any pending debounced go()
+  clearTimeout(_goDebounceTimer);
+
   if (isRefreshing) {
     // Force-cancel the current fetch cycle
     fetchGeneration++;
     isRefreshing = false;
     pendingGo = false;
+    if (activeAbortController) { activeAbortController.abort(); activeAbortController = null; }
     document.getElementById('loadOverlay').style.display = 'none';
     document.getElementById('refreshBtn').classList.remove('spinning');
   }
   cache = {};
   try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch {}
-  // Also clear old sessionStorage cache from previous version
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
   Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
   go();
 }
 
+let _goDebounceTimer = null;
+function debouncedGo(delayMs = 150) {
+  clearTimeout(_goDebounceTimer);
+  _goDebounceTimer = setTimeout(() => go(), delayMs);
+}
+
 function renderRange() {
   const el = document.getElementById('rangeBar');
   el.innerHTML = RANGES.map(r => `<button class="range-btn${range && r.days === range.days ? ' active' : ''}" data-d="${r.days}">${r.label}</button>`).join('');
-  el.querySelectorAll('.range-btn').forEach(b => { b.onclick = () => { range = RANGES.find(r => r.days === +b.dataset.d); renderRange(); saveSelections(); go() } });
+  el.querySelectorAll('.range-btn').forEach(b => { b.onclick = () => { range = RANGES.find(r => r.days === +b.dataset.d); renderRange(); saveSelections(); debouncedGo() } });
 }
 
 function renderPresets() {
@@ -763,7 +789,7 @@ function renderPresets() {
       renderButtons();
       updatePresetHighlight();
       saveSelections();
-      go();
+      debouncedGo();
     };
   });
   updatePresetHighlight();
@@ -785,12 +811,29 @@ function renderButtons() {
   ).join('');
   el.querySelectorAll('.token-btn').forEach(b => {
     b.onclick = () => {
-      TOKENS[b.dataset.k].on = !TOKENS[b.dataset.k].on;
+      const k = b.dataset.k;
+      TOKENS[k].on = !TOKENS[k].on;
       renderButtons();
       updatePresetHighlight();
       saveSelections();
-      if (TOKENS[b.dataset.k].on && (!TOKENS[b.dataset.k]._data || TOKENS[b.dataset.k]._data.length < 2)) go();
-      else { renderChart(); renderSummary() }
+
+      if (TOKENS[k].on) {
+        // Token turned ON — try to apply cached data for CURRENT range
+        const tier = getTier(getDays());
+        const cached = getCached(k, tier);
+        if (cached && cached.stale) {
+          applyTokenData(k, cached.data, cached.limited, getDays());
+          renderChart(); renderSummary(); updateStatusLine();
+        } else {
+          // No usable cache — must fetch
+          delete TOKENS[k]._data; delete TOKENS[k]._limited;
+          go();
+        }
+      } else {
+        // Token turned OFF — clean up and re-render
+        delete TOKENS[k]._data; delete TOKENS[k]._limited;
+        renderChart(); renderSummary(); updateStatusLine();
+      }
     };
   });
 }
@@ -800,14 +843,23 @@ function renderButtons() {
    ═══════════════════════════════════════════════════════════════ */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* Smart retry — skip retries for 400/404 (permanent errors), timeout protection */
-async function fetchRetry(url, retries = 3, delayMs = 1000) {
+/* Smart retry — skip retries for 400/404, timeout protection, external abort support */
+async function fetchRetry(url, retries = 3, delayMs = 1000, externalSignal) {
   for (let i = 0; i < retries; i++) {
+    // If externally aborted (range change / refresh), bail immediately
+    if (externalSignal && externalSignal.aborted) return null;
     try {
+      // Combine: 15s timeout + external abort (whichever fires first)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
+      // If external signal fires, also abort this request
+      const onExternalAbort = () => controller.abort();
+      if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+
       const r = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
+      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
+
       if (r.ok) return r;
       if (r.status === 400 || r.status === 404 || r.status === 403) return null;
       if (r.status === 429) {
@@ -819,7 +871,12 @@ async function fetchRetry(url, retries = 3, delayMs = 1000) {
       }
       if (i < retries - 1) await sleep(delayMs);
     } catch (e) {
-      if (e.name === 'AbortError') console.warn(`Request timed out: ${url.split('?')[0]}`);
+      if (externalSignal && externalSignal.aborted) return null; // Clean exit on cancel
+      if (e.name === 'AbortError') {
+        // Could be timeout or external — check which
+        if (externalSignal && externalSignal.aborted) return null;
+        console.warn(`Request timed out: ${url.split('?')[0]}`);
+      }
       if (i < retries - 1) await sleep(delayMs * Math.pow(2, i));
     }
   }
@@ -833,10 +890,11 @@ function setLoadMsg(msg) { document.getElementById('loadMsg').textContent = msg 
    SHARED DATA HELPERS
    ═══════════════════════════════════════════════════════════════ */
 
-/* Filter full-tier data down to the selected range */
+/* Filter full-tier data down to the selected range.
+   Adds 1-day buffer so daily candles at midnight aren't clipped by time-of-day offset. */
 function filterToRange(data, days) {
   if (!data || !data.length) return data;
-  const cutoff = Date.now() - days * 86400000;
+  const cutoff = Date.now() - (days + 1) * 86400000; // +1 day buffer
   return data.filter(d => d.ts >= cutoff);
 }
 
@@ -919,16 +977,34 @@ function getShareItems(includeStartPrice) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MAIN ORCHESTRATOR V2
+   MAIN ORCHESTRATOR V3
    
-   Key improvements:
-   1. Stale-while-revalidate: show cached data INSTANTLY, refresh in bg
-   2. Progressive rendering: chart updates as each token arrives
-   3. Tiered caching: one "daily" fetch covers 1M/3M/6M/1Y
-   4. Generation tracking: range switches cancel stale fetches
-   5. Smarter rate limiting: GT tokens fire fast, CG tokens stagger
+   Key improvements over V2:
+   1. try/finally on isRefreshing — can never get permanently stuck
+   2. AbortController — generation changes CANCEL in-flight HTTP requests
+   3. Watchdog — auto-recovers from stuck states after 60s
+   4. Smarter progressive rendering — uses chart.update() not destroy/create
    ═══════════════════════════════════════════════════════════════ */
 let pendingGo = false;
+let activeAbortController = null; // Abort in-flight fetches when generation changes
+
+/* Self-healing watchdog — detects stuck state and auto-recovers */
+let _watchdogTimer = null;
+function startWatchdog() {
+  clearTimeout(_watchdogTimer);
+  _watchdogTimer = setTimeout(() => {
+    if (isRefreshing) {
+      console.warn('Watchdog: go() appears stuck. Force-recovering.');
+      fetchGeneration++;
+      isRefreshing = false;
+      pendingGo = false;
+      if (activeAbortController) { activeAbortController.abort(); activeAbortController = null; }
+      document.getElementById('loadOverlay').style.display = 'none';
+      document.getElementById('refreshBtn').classList.remove('spinning');
+      updateStatusLine();
+    }
+  }, 60000); // 60 second safety net
+}
 
 /* Apply cached/fetched data to a token for the current range */
 function applyTokenData(k, data, limited, days) {
@@ -946,171 +1022,175 @@ async function go() {
   isRefreshing = true;
   fetchGeneration++;
   const currentGen = fetchGeneration;
+
+  // Cancel any in-flight requests from a previous go() cycle
+  if (activeAbortController) { activeAbortController.abort(); }
+  activeAbortController = new AbortController();
+  const signal = activeAbortController.signal;
+
+  startWatchdog(); // Safety net
+
   const days = getDays();
   const tier = getTier(days);
   const ld = document.getElementById('loadOverlay');
   const rb = document.getElementById('refreshBtn');
 
-  /* ── PHASE 0: Stale-while-revalidate ──────────────────────
-     Show any cached data IMMEDIATELY (even if stale).
-     Users see the chart in <50ms on return visits. */
-  let anyStaleShown = false;
-  let needFetch = [];
+  try {
+    /* ── PHASE 0: Stale-while-revalidate ──────────────────────
+       Show any cached data IMMEDIATELY (even if stale).
+       Users see the chart in <50ms on return visits. */
+    let anyStaleShown = false;
+    let needFetch = [];
 
-  Object.entries(TOKENS).forEach(([k, t]) => {
-    if (!t.on) return;
-    const cached = getCached(k, tier);
-    if (cached && cached.stale) {
-      // Have usable cached data — show it now
-      applyTokenData(k, cached.data, cached.limited, days);
-      anyStaleShown = true;
-      if (!cached.fresh) {
-        needFetch.push([k, t]); // Stale — queue background refresh
-      }
-      // else: fresh — no refetch needed
-    } else {
-      // No cache at all — must fetch
-      delete t._data; delete t._limited;
-      needFetch.push([k, t]);
-    }
-  });
-
-  // If we had ANY cached data, render it instantly (no spinner)
-  if (anyStaleShown) {
-    renderChart(); renderSummary(); updateStatusLine(); updatePeriod();
-  }
-
-  // If nothing needs fetching, we're done
-  if (needFetch.length === 0) {
-    isRefreshing = false;
-    if (pendingGo) { pendingGo = false; go(); }
-    return;
-  }
-
-  /* ── PHASE 1: Show loading indicator ───────────────────── */
-  // Only show full overlay if we have NO data at all to show
-  const hasAnyData = Object.entries(TOKENS).some(([k, t]) => t.on && t._data && t._data.length >= 2);
-  if (!hasAnyData) {
-    ld.style.display = 'flex';
-    setLoadMsg('Loading...');
-  }
-  rb.classList.add('spinning');
-  setStatus('<span class="dot spin"></span>Loading ' + needFetch.length + ' token' + (needFetch.length > 1 ? 's' : '') + '...');
-
-  const total = needFetch.length;
-  let completed = 0;
-
-  function progress(sym) {
-    completed++;
-    if (!hasAnyData) setLoadMsg(`${sym}... (${completed}/${total})`);
-    setStatus(`<span class="dot spin"></span>Loading... ${completed}/${total}`);
-  }
-
-  /* ── PHASE 2: Parallel fetching by source ────────────────
-     GT tokens fire with 250ms stagger (generous rate limits).
-     CG tokens fire with 1500ms stagger (free tier ~10-30/min).
-     Both groups run in parallel (different APIs). */
-  const gtTokens = needFetch.filter(([k, t]) => t.source === 'gt' && t.gtPool);
-  const cgTokens = needFetch.filter(([k, t]) => t.source === 'cg' && t.cgId);
-
-  const gtPromises = gtTokens.map(([k, t], i) =>
-    sleep(i * 250).then(async () => {
-      if (currentGen !== fetchGeneration) return; // Abort if range changed
-      try {
-        const data = await fetchFromGeckoTerminal(t.gtPool, tier, k);
-        if (data && data.length >= 2) {
-          setCached(k, tier, data, false);
-          if (currentGen === fetchGeneration) {
-            applyTokenData(k, data, false, days);
-            ld.style.display = 'none'; // Hide overlay as soon as first data arrives
-            renderChart(); renderSummary(); // Progressive: show as it arrives
-          }
+    Object.entries(TOKENS).forEach(([k, t]) => {
+      if (!t.on) return;
+      const cached = getCached(k, tier);
+      if (cached && cached.stale) {
+        applyTokenData(k, cached.data, cached.limited, days);
+        anyStaleShown = true;
+        if (!cached.fresh) {
+          needFetch.push([k, t]);
         }
-      } catch (e) { console.warn(`GT fetch failed for ${k}:`, e); }
-      progress(t.sym);
-    })
-  );
+      } else {
+        delete t._data; delete t._limited;
+        needFetch.push([k, t]);
+      }
+    });
 
-  const cgPromises = cgTokens.map(([k, t], i) =>
-    sleep(i * 1500).then(async () => {
-      if (currentGen !== fetchGeneration) return;
-      try {
-        const data = await fetchFromCoinGecko(t.cgId, tier, k);
-        if (data && data.length >= 2) {
-          setCached(k, tier, data, false);
-          if (currentGen === fetchGeneration) {
+    if (anyStaleShown) {
+      renderChart(); renderSummary(); updateStatusLine(); updatePeriod();
+    }
+
+    if (needFetch.length === 0) {
+      return; // finally block handles cleanup
+    }
+
+    /* ── PHASE 1: Show loading indicator ───────────────────── */
+    const hasAnyData = Object.entries(TOKENS).some(([k, t]) => t.on && t._data && t._data.length >= 2);
+    if (!hasAnyData) {
+      ld.style.display = 'flex';
+      setLoadMsg('Loading...');
+    }
+    rb.classList.add('spinning');
+    setStatus('<span class="dot spin"></span>Loading ' + needFetch.length + ' token' + (needFetch.length > 1 ? 's' : '') + '...');
+
+    const total = needFetch.length;
+    let completed = 0;
+
+    function progress(sym) {
+      completed++;
+      if (!hasAnyData) setLoadMsg(`${sym}... (${completed}/${total})`);
+      setStatus(`<span class="dot spin"></span>Loading... ${completed}/${total}`);
+    }
+
+    /* ── PHASE 2: Parallel fetching ────────────────────────── */
+    const gtTokens = needFetch.filter(([k, t]) => t.source === 'gt' && t.gtPool);
+    const cgTokens = needFetch.filter(([k, t]) => t.source === 'cg' && t.cgId);
+
+    const gtPromises = gtTokens.map(([k, t], i) =>
+      sleep(i * 250).then(async () => {
+        if (currentGen !== fetchGeneration) return;
+        try {
+          const data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
+          if (data && data.length >= 2 && currentGen === fetchGeneration) {
+            setCached(k, tier, data, false);
             applyTokenData(k, data, false, days);
             ld.style.display = 'none';
             renderChart(); renderSummary();
           }
+        } catch (e) { if (e.name !== 'AbortError') console.warn(`GT fetch failed for ${k}:`, e); }
+        progress(t.sym);
+      })
+    );
+
+    const cgPromises = cgTokens.map(([k, t], i) =>
+      sleep(i * 1500).then(async () => {
+        if (currentGen !== fetchGeneration) return;
+        try {
+          const data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
+          if (data && data.length >= 2 && currentGen === fetchGeneration) {
+            setCached(k, tier, data, false);
+            applyTokenData(k, data, false, days);
+            ld.style.display = 'none';
+            renderChart(); renderSummary();
+          }
+        } catch (e) { if (e.name !== 'AbortError') console.warn(`CG fetch failed for ${k}:`, e); }
+        progress(t.sym);
+      })
+    );
+
+    await Promise.allSettled([...gtPromises, ...cgPromises]);
+
+    if (currentGen !== fetchGeneration) return;
+
+    /* ── PHASE 3: Fallback for failures ────────────────────── */
+    const failed = needFetch.filter(([k, t]) => !t._data || t._data.length < 2);
+    if (failed.length > 0) {
+      for (const [k, t] of failed) {
+        if (currentGen !== fetchGeneration) break;
+        let data = null;
+        setStatus(`<span class="dot spin"></span>Retrying ${t.sym}...`);
+
+        if (t.cgId && t.source !== 'cg') {
+          data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
+          await sleep(1500);
         }
-      } catch (e) { console.warn(`CG fetch failed for ${k}:`, e); }
-      progress(t.sym);
-    })
-  );
-
-  await Promise.allSettled([...gtPromises, ...cgPromises]);
-
-  if (currentGen !== fetchGeneration) {
-    isRefreshing = false;
-    ld.style.display = 'none'; rb.classList.remove('spinning');
-    return;
-  }
-
-  /* ── PHASE 3: Fallback for failures ────────────────────── */
-  const failed = needFetch.filter(([k, t]) => !t._data || t._data.length < 2);
-  if (failed.length > 0 && currentGen === fetchGeneration) {
-    for (const [k, t] of failed) {
-      if (currentGen !== fetchGeneration) break;
-      let data = null;
-      setStatus(`<span class="dot spin"></span>Retrying ${t.sym}...`);
-
-      // Try alternate sources
-      if (t.cgId && t.source !== 'cg') {
-        data = await fetchFromCoinGecko(t.cgId, tier, k);
-        await sleep(1500);
-      }
-      if ((!data || data.length < 2) && t.dexAddr) {
-        data = await fetchViaPoolDiscovery(t.dexAddr, tier, k);
-        await sleep(500);
-      }
-      if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
-        data = await fetchFromGeckoTerminal(t.gtPool, tier, k);
-        await sleep(500);
-      }
-      // DexScreener 2-point fallback (last resort, marked as limited)
-      if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) {
-        data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k);
+        if ((!data || data.length < 2) && t.dexAddr) {
+          data = await fetchViaPoolDiscovery(t.dexAddr, tier, k, signal);
+          await sleep(500);
+        }
+        if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
+          data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
+          await sleep(500);
+        }
+        if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) {
+          data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k, signal);
+          if (data && data.length >= 2) {
+            setCached(k, tier, data, true);
+            TOKENS[k]._limited = true;
+            TOKENS[k]._data = data;
+            continue;
+          }
+        }
         if (data && data.length >= 2) {
-          setCached(k, tier, data, true);
-          TOKENS[k]._limited = true;
-          TOKENS[k]._data = data;
-          continue;
+          setCached(k, tier, data, false);
+          applyTokenData(k, data, false, days);
         }
       }
-      if (data && data.length >= 2) {
-        setCached(k, tier, data, false);
-        applyTokenData(k, data, false, days);
-      }
+      if (currentGen === fetchGeneration) { renderChart(); renderSummary(); }
     }
-    if (currentGen === fetchGeneration) { renderChart(); renderSummary(); }
+
+    /* ── PHASE 4: Finalize ─────────────────────────────────── */
+    if (currentGen === fetchGeneration) {
+      updateStatusLine(); updatePeriod(); renderChart(); renderSummary();
+      saveCache();
+    }
+
+  } catch (e) {
+    // Global safety net — log but never leave the chart broken
+    if (e.name !== 'AbortError') {
+      console.error('go() error:', e);
+      updateStatusLine();
+    }
+  } finally {
+    // ALWAYS clean up — this can never get stuck
+    ld.style.display = 'none';
+    rb.classList.remove('spinning');
+    isRefreshing = false;
+    clearTimeout(_watchdogTimer);
+
+    if (pendingGo) { pendingGo = false; go(); }
   }
-
-  /* ── PHASE 4: Finalize ─────────────────────────────────── */
-  ld.style.display = 'none'; rb.classList.remove('spinning');
-  isRefreshing = false;
-
-  if (currentGen === fetchGeneration) {
-    updateStatusLine(); updatePeriod(); renderChart(); renderSummary();
-    saveCache();
-  }
-
-  if (pendingGo) { pendingGo = false; go(); }
 }
 
 function updateStatusLine() {
   const ok = Object.entries(TOKENS).filter(([k, t]) => t.on && t._data && t._data.length >= 2).length;
   const total = Object.entries(TOKENS).filter(([k, t]) => t.on).length;
+  if (total === 0) {
+    setStatus('<span style="color:rgba(255,255,255,0.4)">Select tokens above to chart</span>');
+    document.getElementById('statusTime').textContent = '';
+    return;
+  }
   const still = Object.entries(TOKENS).filter(([k, t]) => t.on && (!t._data || t._data.length < 2)).map(([k]) => k);
   const limited = Object.entries(TOKENS).filter(([k, t]) => t.on && t._limited).map(([k]) => k);
   if (ok > 0) {
@@ -1171,9 +1251,9 @@ function cleanData(data, maxAgeDays) {
 }
 
 /* SOURCE 1: CoinGecko */
-async function fetchFromCoinGecko(id, tier, sym) {
+async function fetchFromCoinGecko(id, tier, sym, signal) {
   const { days, ivl } = cgParamsForTier(tier);
-  const r = await fetchRetry(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`, 3, 2000);
+  const r = await fetchRetry(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`, 3, 2000, signal);
   if (!r) return null;
   try {
     const j = await r.json();
@@ -1184,9 +1264,9 @@ async function fetchFromCoinGecko(id, tier, sym) {
 }
 
 /* SOURCE 2: GeckoTerminal */
-async function fetchFromGeckoTerminal(pool, tier, sym) {
+async function fetchFromGeckoTerminal(pool, tier, sym, signal) {
   const { tf, agg, lim, maxAge } = gtParamsForTier(tier);
-  const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000);
+  const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000, signal);
   if (!r) return null;
   try {
     const j = await r.json();
@@ -1198,32 +1278,34 @@ async function fetchFromGeckoTerminal(pool, tier, sym) {
 }
 
 /* SOURCE 3: Pool discovery fallback */
-async function fetchViaPoolDiscovery(tokenAddr, tier, sym) {
+async function fetchViaPoolDiscovery(tokenAddr, tier, sym, signal) {
   let pool = getPoolAddr(tokenAddr);
   if (!pool) {
     try {
-      const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000);
+      const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000, signal);
       if (r) { const j = await r.json(); const p = j?.data || []; if (p.length > 0) { pool = p[0].attributes?.address; if (pool) setPoolAddr(tokenAddr, pool); } }
     } catch (e) { console.warn(`Pool discovery (GT) failed for ${sym}:`, e); }
     await sleep(500);
   }
+  if (signal && signal.aborted) return null;
   if (!pool) {
     try {
-      const r = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`, 2, 1000);
+      const r = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`, 2, 1000, signal);
       if (r) { const j = await r.json(); const ps = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0); if (ps.length > 0) { pool = ps[0].pairAddress; setPoolAddr(tokenAddr, pool); } }
     } catch (e) { console.warn(`Pool discovery (DS) failed for ${sym}:`, e); }
   }
   if (!pool) return null;
-  return fetchFromGeckoTerminal(pool, tier, sym);
+  return fetchFromGeckoTerminal(pool, tier, sym, signal);
 }
 
 /* SOURCE 4: DexScreener minimal (2-point — marked as limited) */
-async function fetchFromDexScreener(addr, sym) {
+async function fetchFromDexScreener(addr, sym, signal) {
   let pair = null;
-  const r1 = await fetchRetry(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${addr}`, 2, 1000);
+  const r1 = await fetchRetry(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${addr}`, 2, 1000, signal);
   if (r1) { try { const j = await r1.json(); pair = j?.pair || j?.pairs?.[0]; } catch {} }
   if (!pair) {
-    const r2 = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, 2, 1000);
+    if (signal && signal.aborted) return null;
+    const r2 = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, 2, 1000, signal);
     if (r2) { try { const j = await r2.json(); pair = (j.pairs || []).find(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0); } catch {} }
   }
   if (pair && parseFloat(pair.priceUsd) > 0) {
@@ -1256,31 +1338,75 @@ function updateChartLogos() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   CHART RENDERING
+   CHART RENDERING — uses chart.update() for smooth progressive loads
    ═══════════════════════════════════════════════════════════════ */
+let _renderPending = false;
+let _lastRenderGen = 0;
+
 function renderChart() {
-  const ctx = document.getElementById('mainChart').getContext('2d');
-  if (chart) chart.destroy();
+  // Coalesce rapid-fire renders into one frame (progressive loading calls this 5-10x)
+  if (_renderPending) return;
+  _renderPending = true;
+  requestAnimationFrame(() => {
+    _renderPending = false;
+    _doRenderChart();
+  });
+}
+
+function _doRenderChart() {
   const datasets = buildDatasets();
   document.getElementById('chartLegend').innerHTML = '';
   updateChartLogos();
-  if (!datasets.length) return;
 
-  chart = new Chart(ctx, { type: 'line', data: { datasets }, options: {
+  if (!datasets.length) {
+    if (chart) { chart.destroy(); chart = null; }
+    return;
+  }
+
+  const chartOpts = {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,10,10,0.95)', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1, titleFont: { family: "'JetBrains Mono',monospace", size: 11, weight: '600' }, bodyFont: { family: "'JetBrains Mono',monospace", size: 12 }, padding: 14, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8, boxPadding: 4, callbacks: { title(items) { if (!items.length) return ''; return new Date(items[0].parsed.x).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}) }) }, label(c) { const v = c.parsed.y; return ` ${c.dataset.label}  ${v >= 0 ? '+' : ''}${v.toFixed(2)}%` }, labelColor(c) { return { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor, borderRadius: 2 } } } } },
     scales: {
       x: { type: 'time', time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 10 }, border: { display: false } }
     }
-  }});
+  };
+
+  // If chart exists and we're in the same fetch generation, UPDATE smoothly
+  // If it's a new generation (range change), RECREATE for clean axis reconfiguration
+  if (chart && _lastRenderGen === fetchGeneration) {
+    try {
+      chart.data.datasets = datasets;
+      chart.update('none'); // 'none' = no animation, instant update
+      return;
+    } catch (e) {
+      // If update fails for any reason, fall through to recreate
+      console.warn('Chart update failed, recreating:', e);
+    }
+  }
+
+  // Full recreation needed (first render, range change, or recovery from error)
+  if (chart) { try { chart.destroy(); } catch {} chart = null; }
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  chart = new Chart(ctx, { type: 'line', data: { datasets }, options: chartOpts });
+  _lastRenderGen = fetchGeneration;
 }
 
 /* ═══════════════════════════════════════════════════════════════
    SUMMARY CARDS — sorted highest to lowest % change
    ═══════════════════════════════════════════════════════════════ */
+let _summaryPending = false;
 function renderSummary() {
+  if (_summaryPending) return;
+  _summaryPending = true;
+  requestAnimationFrame(() => {
+    _summaryPending = false;
+    _doRenderSummary();
+  });
+}
+function _doRenderSummary() {
   const el = document.getElementById('summaryCards');
+  if (!el) return;
   const items = getShareItems(false);
   el.innerHTML = items.map(i => {
     const up = i.pct >= 0;
