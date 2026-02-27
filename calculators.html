@@ -401,6 +401,7 @@
       const[rwdStakedAmount,setRwdStakedAmount]=useState('');
       const[rwdLpShareRate,setRwdLpShareRate]=useState(''); // UFO tokens in LP (share rate)
       const[rwdLpLoading,setRwdLpLoading]=useState(false);
+      const[showShareRateInfo,setShowShareRateInfo]=useState(false);
       const[rwdVolume,setRwdVolume]=useState('');
       const[rwdVolSource,setRwdVolSource]=useState('live24h');
       const[rwdTimeSpan,setRwdTimeSpan]=useState('monthly');
@@ -1267,15 +1268,15 @@
                 <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between flex-wrap gap-2">
                   <span className="text-white/60 text-sm font-bold uppercase tracking-widest">{'\uD83C\uDF19'} Moon Math</span>
                   {/* Compact Bag Input */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-white/30 text-xs font-semibold uppercase">My Bag:</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/30 text-sm font-semibold uppercase">My Bag:</span>
                     <div className="relative">
-                      <img src={mCfg.logo} alt={mCfg.name} className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4"/>
-                      <input type="text" inputMode="numeric" value={displayMoonBag} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonBagAmount(raw)}} placeholder="0" className="w-32 pl-8 pr-2 py-1.5 rounded-lg bg-black/40 text-white text-sm font-bold focus:outline-none transition placeholder:text-white/10" style={{border:`1px solid ${moonGlow}0.3)`}}/>
+                      <img src={mCfg.logo} alt={mCfg.name} className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5"/>
+                      <input type="text" inputMode="numeric" value={displayMoonBag} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonBagAmount(raw)}} placeholder="0" className="w-44 pl-10 pr-3 py-2 rounded-lg bg-black/40 text-white text-base font-bold focus:outline-none transition placeholder:text-white/10" style={{border:`1px solid ${moonGlow}0.3)`}}/>
                     </div>
-                    {moonBag>0&&mPrice>0&&<span className={`text-xs font-semibold ${moonThemeText}`}>{fmtDollar(moonBagCurrent)}</span>}
-                    <button onClick={loadMoonBagFromPortfolio} disabled={moonBagLoading} className={`text-xs font-semibold transition ${moonBagLoading?'opacity-40':''} ${moonThemeText}`} style={{opacity:moonBagLoading?0.4:0.6}} title="Load from portfolio">
-                      {moonBagLoading?<span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span>:'\uD83D\uDCC2'}
+                    {moonBag>0&&mPrice>0&&<span className={`text-sm font-semibold ${moonThemeText}`}>{fmtDollar(moonBagCurrent)}</span>}
+                    <button onClick={loadMoonBagFromPortfolio} disabled={moonBagLoading} className={`text-sm font-semibold transition flex items-center gap-1 whitespace-nowrap ${moonBagLoading?'opacity-40 cursor-not-allowed':''} ${moonThemeText}`} style={{opacity:moonBagLoading?0.4:0.7}}>
+                      {moonBagLoading?<><span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span> Loading...</>:<>{'\uD83D\uDCC2'} Load from Portfolio {'\u2192'}</>}
                     </button>
                   </div>
                 </div>
@@ -1750,10 +1751,10 @@
               {/* Current Market Prices */}
               <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
                 <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
-                  <span className="text-white/60 text-xs font-bold uppercase tracking-widest">Current Market Prices</span>
+                  <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Current Market Prices</span>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-green-400/70 text-xs font-bold uppercase">Live</span>
+                    <span className="text-green-400/70 text-sm font-bold uppercase">Live</span>
                   </div>
                 </div>
                 <div className="px-6 py-3">
@@ -1761,16 +1762,16 @@
                     <div className="flex items-center gap-3">
                       <img src={cfg.logo} alt={cfg.name} className="w-9 h-9" style={{filter:`drop-shadow(0 0 6px ${glowColor}0.3))`}}/>
                       <div>
-                        <div className="text-white/40 text-xs uppercase tracking-wide">{cfg.name} Price</div>
+                        <div className="text-white/40 text-sm uppercase tracking-wide">{cfg.name} Price</div>
                         <div className={`text-3xl font-bold ${theme.text}`}><Price p={price} c={theme.text}/></div>
                       </div>
                     </div>
                     <div>
-                      <div className="text-white/40 text-xs uppercase tracking-wide">Market Cap</div>
+                      <div className="text-white/40 text-sm uppercase tracking-wide">Market Cap</div>
                       <div className="text-3xl font-bold text-white">{fmtMcap(data?.mcap||0)}</div>
                     </div>
                     <div>
-                      <div className="text-white/40 text-xs uppercase tracking-wide">24h Volume</div>
+                      <div className="text-white/40 text-sm uppercase tracking-wide">24h Volume</div>
                       <div className={`text-3xl font-bold ${theme.text}`}>{fmtUSD(liveVol24hUSD)}</div>
                     </div>
                   </div>
@@ -1781,7 +1782,7 @@
               <div className="rounded-2xl overflow-hidden" style={{border:`4px solid ${glowColor}0.85)`,boxShadow:`0 0 25px ${glowColor}0.15), inset 0 0 25px ${glowColor}0.05)`,background:`linear-gradient(180deg, ${glowColor}0.08) 0%, rgba(17,17,17,0.9) 40%, rgba(17,17,17,0.95) 100%)`}}>
                 <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between">
                   <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Reward Calculator</span>
-                  <span className="text-white/40 text-xs hidden sm:block"><span className="text-white/20">{'\u25B8'}</span> Enter holdings <span className="text-white/20">{'\u25B8'}</span> Set volume <span className="text-white/20">{'\u25B8'}</span> View rewards</span>
+                  <span className="text-white/40 text-sm hidden sm:block"><span className="text-white/20">{'\u25B8'}</span> Enter holdings <span className="text-white/20">{'\u25B8'}</span> Set volume <span className="text-white/20">{'\u25B8'}</span> View rewards</span>
                 </div>
                 <div className="p-5 space-y-4">
                   
@@ -1794,7 +1795,7 @@
                         <input type="text" inputMode="numeric" value={displayRwdTokenAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdTokenAmount(raw)}} placeholder="Enter total held" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex items-center justify-between mt-2 ml-1">
-                        {rwdBag>0&&price>0?<span className="text-white/40 text-sm font-semibold">Value: <span className={theme.text}>{fmtDollar(rwdBag*price)}</span>{!isPTGC&&<span className="text-white/20 text-xs ml-2">(tokens in LP don't earn reflections)</span>}</span>:<span/>}
+                        {rwdBag>0&&price>0?<span className="text-white/40 text-sm font-semibold">Value: <span className={theme.text}>{fmtDollar(rwdBag*price)}</span>{!isPTGC&&<span className="text-white/20 text-sm ml-2">(tokens in LP don't earn reflections)</span>}</span>:<span/>}
                         <button onClick={loadRwdHoldingFromPortfolio} disabled={rwdPortfolioLoading} className={`text-sm font-semibold transition flex items-center gap-1 ${rwdPortfolioLoading?'opacity-40 cursor-not-allowed':''} ${theme.text}`} style={{opacity:rwdPortfolioLoading?0.4:0.7}}>
                           {rwdPortfolioLoading?<><span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span> Loading...</>:<>{'\uD83D\uDCC2'} Load from Portfolio {'\u2192'}</>}
                         </button>
@@ -1809,7 +1810,7 @@
                         <input type="text" inputMode="numeric" value={displayRwdStakedAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdStakedAmount(raw)}} placeholder="Enter staked amount" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex items-center justify-between mt-2 ml-1">
-                        {rwdStaked>0&&totalStakedPool>0?<span className="text-white/30 text-xs">Your share of staked pool: <span className="text-white/50 font-semibold">{(userShareOfStaked*100).toFixed(4)}%</span></span>:<span className="text-white/20 text-xs">Stakers earn additional rewards from {(stakerPct*100)}% fee</span>}
+                        {rwdStaked>0&&totalStakedPool>0?<span className="text-white/30 text-sm">Your share of staked pool: <span className="text-white/50 font-semibold">{(userShareOfStaked*100).toFixed(4)}%</span></span>:<span className="text-white/20 text-sm">Stakers earn additional rewards from {(stakerPct*100)}% fee</span>}
                         <button onClick={loadRwdStakedFromPortfolio} disabled={rwdStakeLoading} className={`text-sm font-semibold transition flex items-center gap-1 ${rwdStakeLoading?'opacity-40 cursor-not-allowed':''} ${theme.text}`} style={{opacity:rwdStakeLoading?0.4:0.7}}>
                           {rwdStakeLoading?<><span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span> Loading...</>:<>{'\uD83D\uDCC2'} Load from Portfolio {'\u2192'}</>}
                         </button>
@@ -1817,14 +1818,28 @@
                     </div>
                     ):(
                     <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
-                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">UFO Share Rate</div>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold flex items-center gap-2">UFO Share Rate
+                        <span className="relative inline-block">
+                          <button onClick={()=>setShowShareRateInfo(!showShareRateInfo)} className="w-5 h-5 rounded-full border border-white/30 text-white/40 hover:text-white/70 hover:border-white/50 transition text-xs font-bold flex items-center justify-center" style={{fontSize:'11px',lineHeight:1}}>i</button>
+                          {showShareRateInfo&&(
+                          <div className="absolute z-50 left-1/2 -translate-x-1/2 top-7 w-72 rounded-xl p-4 text-left" style={{background:'#1a1a1a',border:`1px solid ${glowColor}0.5)`,boxShadow:`0 8px 32px rgba(0,0,0,0.6), 0 0 15px ${glowColor}0.15)`}}>
+                            <div className="text-white/80 text-sm leading-relaxed normal-case tracking-normal font-normal">
+                              <p className="mb-2">When you provide liquidity through the <strong className="text-white">UFO DApp</strong>, you receive <strong className="text-white">1 UFO Share Rate for every UFO token</strong> you deposit into an approved LP pair.</p>
+                              <p className="mb-2">Your share rate is <strong className="text-white">permanently locked</strong> at the amount you deposited {'\u2014'} it never changes regardless of impermanent loss or price fluctuations in the pool.</p>
+                              <p><strong className="text-white">3% of all UFO trading volume</strong> is converted to PLS and distributed to LP providers proportionally based on their share rate.</p>
+                            </div>
+                            <button onClick={()=>setShowShareRateInfo(false)} className="mt-3 text-sm font-semibold transition" style={{color:solidColor,opacity:0.8}}>Got it {'\u2715'}</button>
+                          </div>
+                          )}
+                        </span>
+                      </div>
                       <div className="relative">
                         <img src={cfg.logo} alt={cfg.name} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-6 h-6" style={{filter:`drop-shadow(0 0 4px ${glowColor}0.4))`}}/>
                         <input type="text" inputMode="numeric" value={displayRwdLpShare} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdLpShareRate(raw)}} placeholder="Your UFO share rate" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex items-center justify-between mt-2 ml-1">
-                        {rwdLpShare>0&&totalShareRate>0?<span className="text-white/30 text-xs">Your share: <span className="text-white/50 font-semibold">{(userShareOfLP*100).toFixed(4)}%</span> <span className="text-white/20">of {fmtAbbr(totalShareRate)} total share rate</span></span>:<span className="text-white/20 text-xs">LP providers earn {(lpProviderPct*100)}% fee in PLS {'\u00B7'} Enter your share rate to see yield</span>}
-                        <button onClick={loadRwdLpFromPortfolio} disabled={rwdLpLoading} className={`text-sm font-semibold transition flex items-center gap-1 ${rwdLpLoading?'opacity-40 cursor-not-allowed':''} ${theme.text}`} style={{opacity:rwdLpLoading?0.4:0.7}}>
+                        {rwdLpShare>0&&totalShareRate>0?<span className="text-white/30 text-sm">Your share: <span className="text-white/50 font-semibold">{(userShareOfLP*100).toFixed(4)}%</span> <span className="text-white/20">of {fmtAbbr(totalShareRate)} total</span></span>:<span/>}
+                        <button onClick={loadRwdLpFromPortfolio} disabled={rwdLpLoading} className={`text-sm font-semibold transition flex items-center gap-1 whitespace-nowrap ${rwdLpLoading?'opacity-40 cursor-not-allowed':''} ${theme.text}`} style={{opacity:rwdLpLoading?0.4:0.7}}>
                           {rwdLpLoading?<><span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full"></span> Loading...</>:<>{'\uD83D\uDCC2'} Load from Portfolio {'\u2192'}</>}
                         </button>
                       </div>
@@ -1866,7 +1881,7 @@
                           Custom
                         </button>
                       </div>
-                      {dailyVolUSD>0&&<div className="text-white/25 text-xs mt-2 ml-1">{fmtUSD(dailyVolUSD)}/day {'\u2192'} Fee generated: {fmtUSD(dailyVolUSD*cfg.taxRate)}/day ({(cfg.taxRate*100)}% fee)</div>}
+                      {dailyVolUSD>0&&<div className="text-white/25 text-sm mt-2 ml-1">{fmtUSD(dailyVolUSD)}/day {'\u2192'} Fee generated: {fmtUSD(dailyVolUSD*cfg.taxRate)}/day ({(cfg.taxRate*100)}% fee)</div>}
                     </div>
                     
                     <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
@@ -1877,17 +1892,17 @@
                         <option value="monthly" style={{background:'#111'}}>Monthly</option>
                         <option value="yearly" style={{background:'#111'}}>Yearly</option>
                       </select>
-                      <div className="text-white/20 text-xs mt-2 ml-1">{spanLabel} = {spanDays} day{spanDays>1?'s':''} of volume at selected rate</div>
+                      <div className="text-white/20 text-sm mt-2 ml-1">{spanLabel} = {spanDays} day{spanDays>1?'s':''} of volume at selected rate</div>
                     </div>
                   </div>
                   
                   {/* Live Stats Bar */}
                   <div className="flex flex-wrap gap-4 px-2 py-2">
-                    <div className="text-white/25 text-xs">Circ. Supply: <span className="text-white/50 font-semibold">{fmtAbbr(circulatingSupply)}</span></div>
-                    {isPTGC&&<div className="text-white/25 text-xs">Total Staked: <span className="text-white/50 font-semibold">{totalStakedPool>0?fmtAbbr(totalStakedPool):'\u2014'}</span></div>}
-                    {!isPTGC&&<div className="text-white/25 text-xs">Total Share Rate: <span className="text-white/50 font-semibold">{totalShareRate>0?fmtAbbr(totalShareRate):'\u2014'}</span></div>}
-                    {!isPTGC&&<div className="text-white/25 text-xs">Eligible for Reflections: <span className="text-white/50 font-semibold">{fmtAbbr(eligibleSupply)}</span></div>}
-                    <div className="text-white/25 text-xs">Fee: <span className="text-white/50 font-semibold">{(cfg.taxRate*100)}%</span> ({cfg.taxBreakdown.map(t=>`${t.name} ${t.pct}%`).join(' \u00B7 ')})</div>
+                    <div className="text-white/25 text-sm">Circ. Supply: <span className="text-white/50 font-semibold">{fmtAbbr(circulatingSupply)}</span></div>
+                    {isPTGC&&<div className="text-white/25 text-sm">Total Staked: <span className="text-white/50 font-semibold">{totalStakedPool>0?fmtAbbr(totalStakedPool):'\u2014'}</span></div>}
+                    {!isPTGC&&<div className="text-white/25 text-sm">Total Share Rate: <span className="text-white/50 font-semibold">{totalShareRate>0?fmtAbbr(totalShareRate):'\u2014'}</span></div>}
+                    {!isPTGC&&<div className="text-white/25 text-sm">Eligible for Reflections: <span className="text-white/50 font-semibold">{fmtAbbr(eligibleSupply)}</span></div>}
+                    <div className="text-white/25 text-sm">Fee: <span className="text-white/50 font-semibold">{(cfg.taxRate*100)}%</span> ({cfg.taxBreakdown.map(t=>`${t.name} ${t.pct}%`).join(' \u00B7 ')})</div>
                   </div>
                 </div>
               </div>
@@ -1922,25 +1937,25 @@
                   <div className="rounded-xl p-5 mb-5" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
                     <div className="flex items-center gap-3 mb-4">
                       <img src={cfg.logo} alt={cfg.name} className="w-8 h-8" style={{filter:`drop-shadow(0 0 5px ${glowColor}0.5))`}}/>
-                      <span className="text-white/70 text-base font-bold uppercase tracking-widest">Reward Breakdown</span>
+                      <span className="text-white/70 text-lg font-bold uppercase tracking-widest">Reward Breakdown</span>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-lg">{'\uD83D\uDC8E'}</span><span className="text-white/50 text-xs uppercase tracking-wide font-bold">Holder Reflections</span></div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtDollar(periodHolderUSD)}</div>
-                        <div className="text-white/35 text-xs font-semibold">{fmtComma(Math.round(periodHolderTokens),0)} {cfg.name}</div>
-                        <div className="text-white/20 text-xs mt-1">{(holderPct*100)}% fee {'\u00D7'} {(userShareOfSupply*100).toFixed(6)}% supply</div>
+                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDC8E'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Holder Reflections</span></div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(periodHolderUSD)}</div>
+                        <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodHolderTokens),0)} {cfg.name}</div>
+                        <div className="text-white/30 text-sm mt-1">{(holderPct*100)}% fee {'\u00D7'} {(userShareOfSupply*100).toFixed(6)}% supply</div>
                       </div>
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-lg">{'\uD83D\uDC8E\uD83D\uDC8E'}</span><span className="text-white/50 text-xs uppercase tracking-wide font-bold">Staker Rewards</span></div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtDollar(periodStakerUSD)}</div>
-                        <div className="text-white/35 text-xs font-semibold">{fmtComma(Math.round(periodStakerTokens),0)} {cfg.name}</div>
-                        <div className="text-white/20 text-xs mt-1">{(stakerPct*100)}% fee {'\u00D7'} {(userShareOfStaked*100).toFixed(4)}% staked</div>
+                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDC8E\uD83D\uDC8E'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Staker Rewards</span></div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(periodStakerUSD)}</div>
+                        <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodStakerTokens),0)} {cfg.name}</div>
+                        <div className="text-white/30 text-sm mt-1">{(stakerPct*100)}% fee {'\u00D7'} {(userShareOfStaked*100).toFixed(4)}% staked</div>
                       </div>
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-lg">{'\uD83D\uDCB0'}</span><span className="text-white/50 text-xs uppercase tracking-wide font-bold">Total Rewards</span></div>
-                        <div className="text-green-400 text-2xl font-bold" style={{textShadow:'0 0 15px rgba(74,222,128,0.3)'}}>{fmtDollar(periodTotalUSD)}</div>
-                        <div className="text-white/35 text-xs font-semibold">{fmtComma(Math.round(periodHolderTokens+periodStakerTokens),0)} {cfg.name}</div>
+                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDCB0'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Total Rewards</span></div>
+                        <div className="text-green-400 text-3xl font-bold" style={{textShadow:'0 0 15px rgba(74,222,128,0.3)'}}>{fmtDollar(periodTotalUSD)}</div>
+                        <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodHolderTokens+periodStakerTokens),0)} {cfg.name}</div>
                       </div>
                     </div>
                   </div>
@@ -1951,30 +1966,30 @@
                   <div className="rounded-xl p-5 mb-5" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
                     <div className="flex items-center gap-3 mb-4">
                       <img src={cfg.logo} alt={cfg.name} className="w-8 h-8" style={{filter:`drop-shadow(0 0 5px ${glowColor}0.5))`}}/>
-                      <span className="text-white/70 text-base font-bold uppercase tracking-widest">Reward Breakdown</span>
+                      <span className="text-white/70 text-lg font-bold uppercase tracking-widest">Reward Breakdown</span>
                     </div>
                     <div className={`grid ${rwdBag>0&&rwdLpShare>0?'grid-cols-3':'grid-cols-2'} gap-4`}>
                       {rwdBag>0&&(
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-lg">{'\uD83D\uDC8E'}</span><span className="text-white/50 text-xs uppercase tracking-wide font-bold">Holder Reflections</span></div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtDollar(periodHolderUSD)}</div>
-                        <div className="text-white/35 text-xs font-semibold">{fmtComma(Math.round(periodHolderTokens),0)} UFO</div>
-                        <div className="text-white/20 text-xs mt-1">{(holderPct*100)}% fee {'\u00D7'} {(userShareOfSupply*100).toFixed(6)}% eligible supply (excl. LP)</div>
+                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDC8E'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Holder Reflections</span></div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(periodHolderUSD)}</div>
+                        <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodHolderTokens),0)} UFO</div>
+                        <div className="text-white/30 text-sm mt-1">{(holderPct*100)}% fee {'\u00D7'} {(userShareOfSupply*100).toFixed(6)}% eligible supply (excl. LP)</div>
                       </div>
                       )}
                       {rwdLpShare>0&&(
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-lg">{'\uD83D\uDCA7'}</span><span className="text-white/50 text-xs uppercase tracking-wide font-bold">LP Rewards (PLS)</span></div>
-                        <div className={`text-2xl font-bold ${theme.text}`}>{fmtDollar(periodLpUSD)}</div>
-                        <div className="text-white/35 text-xs font-semibold">{fmtComma(Math.round(periodLpPLS),0)} PLS</div>
-                        <div className="text-white/20 text-xs mt-1">{(lpProviderPct*100)}% fee {'\u00D7'} {(userShareOfLP*100).toFixed(4)}% share rate</div>
+                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDCA7'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">LP Rewards (PLS)</span></div>
+                        <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(periodLpUSD)}</div>
+                        <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodLpPLS),0)} PLS</div>
+                        <div className="text-white/30 text-sm mt-1">{(lpProviderPct*100)}% fee {'\u00D7'} {(userShareOfLP*100).toFixed(4)}% share rate</div>
                       </div>
                       )}
                       {rwdBag>0&&rwdLpShare>0&&(
                       <div className="text-center">
-                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-lg">{'\uD83D\uDCB0'}</span><span className="text-white/50 text-xs uppercase tracking-wide font-bold">Total Rewards</span></div>
-                        <div className="text-green-400 text-2xl font-bold" style={{textShadow:'0 0 15px rgba(74,222,128,0.3)'}}>{fmtDollar(periodTotalUSD)}</div>
-                        <div className="text-white/35 text-xs font-semibold">{fmtComma(Math.round(periodHolderTokens),0)} UFO + {fmtComma(Math.round(periodLpPLS),0)} PLS</div>
+                        <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDCB0'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Total Rewards</span></div>
+                        <div className="text-green-400 text-3xl font-bold" style={{textShadow:'0 0 15px rgba(74,222,128,0.3)'}}>{fmtDollar(periodTotalUSD)}</div>
+                        <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodHolderTokens),0)} UFO + {fmtComma(Math.round(periodLpPLS),0)} PLS</div>
                       </div>
                       )}
                     </div>
@@ -1994,10 +2009,10 @@
                         const isActive=p.label.toLowerCase()===rwdTimeSpan;
                         return(
                         <div key={i}>
-                          <div className="text-white/40 text-xs uppercase mb-1.5 font-semibold tracking-wide">{p.label}</div>
-                          <div className={`text-xl font-bold ${isActive?theme.text:'text-white'}`} style={isActive?{textShadow:`0 0 15px ${glowColor}0.3)`}:{}}>{fmtDollar(pUSD)}</div>
-                          {isPTGC&&<div className="text-white/25 text-xs mt-0.5">{fmtComma(Math.round((dailyHolderTokens+dailyStakerTokens)*p.days),0)} {cfg.name}</div>}
-                          {!isPTGC&&<div className="text-white/25 text-xs mt-0.5">{fmtComma(Math.round(dailyHolderTokens*p.days),0)} UFO{rwdLpShare>0?` + ${fmtComma(Math.round(dailyLpRewardPLS*p.days),0)} PLS`:''}</div>}
+                          <div className="text-white/40 text-base uppercase mb-1.5 font-semibold tracking-wide">{p.label}</div>
+                          <div className={`text-2xl font-bold ${isActive?theme.text:'text-white'}`} style={isActive?{textShadow:`0 0 15px ${glowColor}0.3)`}:{}}>{fmtDollar(pUSD)}</div>
+                          {isPTGC&&<div className="text-white/35 text-base mt-0.5">{fmtComma(Math.round((dailyHolderTokens+dailyStakerTokens)*p.days),0)} {cfg.name}</div>}
+                          {!isPTGC&&<div className="text-white/35 text-base mt-0.5">{fmtComma(Math.round(dailyHolderTokens*p.days),0)} UFO{rwdLpShare>0?` + ${fmtComma(Math.round(dailyLpRewardPLS*p.days),0)} PLS`:''}</div>}
                         </div>
                         );
                       })}
@@ -2012,7 +2027,7 @@
                 <div className="flex items-start gap-3">
                   <span className="text-yellow-500/60 text-lg mt-0.5">{'\u26A0\uFE0F'}</span>
                   <div className="text-white/35 text-sm leading-relaxed">
-                    <span className="text-yellow-500/60 font-bold uppercase text-xs">Disclaimer {'\u2014'} Estimates Only</span>
+                    <span className="text-yellow-500/60 font-bold uppercase text-sm">Disclaimer {'\u2014'} Estimates Only</span>
                     {isPTGC?(
                     <>
                     <p className="mt-1.5">This calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. Actual rewards depend on real-time volume, the total number of holders, your proportional share of circulating supply, the total staked pool size, and many other dynamic factors. Rewards are not guaranteed and fluctuate constantly with market conditions.</p>
