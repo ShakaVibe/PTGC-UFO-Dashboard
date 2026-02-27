@@ -550,13 +550,13 @@ const PRESETS = [
   { label: 'All', keys: Object.keys(TOKENS) }
 ];
 
-let range = RANGES[3], chart = null, isRefreshing = false;
+let range = RANGES[3], chart = null, isRefreshing = false, fetchGeneration = 0;
 
 /* ═══════════════════════════════════════════════════════════════
    CACHE — sessionStorage backed with 5-min TTL
    ═══════════════════════════════════════════════════════════════ */
 let cache = {};
-const CACHE_TTL = 300000; // 5 minutes
+const CACHE_TTL = 480000; // 8 minutes (reduced refetching to avoid rate limits)
 
 function loadCache() {
   try {
@@ -642,7 +642,14 @@ document.addEventListener('DOMContentLoaded', () => {
 function getDays() { return range ? range.days : 30 }
 
 function clearCacheAndRefresh() {
-  if (isRefreshing) return;
+  if (isRefreshing) {
+    // Force-cancel the current fetch cycle
+    fetchGeneration++;
+    isRefreshing = false;
+    pendingGo = false;
+    document.getElementById('loadOverlay').style.display = 'none';
+    document.getElementById('refreshBtn').classList.remove('spinning');
+  }
   cache = {};
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
   Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
@@ -704,17 +711,31 @@ function renderButtons() {
    ═══════════════════════════════════════════════════════════════ */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* Smart retry — skip retries for 400/404 (permanent errors) */
+/* Smart retry — skip retries for 400/404 (permanent errors), timeout protection */
 async function fetchRetry(url, retries = 3, delayMs = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
-      const r = await fetch(url);
+      // Add 15s timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const r = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
       if (r.ok) return r;
       // Don't retry client errors (except 429 rate limit)
       if (r.status === 400 || r.status === 404 || r.status === 403) return null;
-      if (r.status === 429) { await sleep(delayMs * Math.pow(2, i)); continue }
+      if (r.status === 429) {
+        // Check for Retry-After header
+        const retryAfter = r.headers.get('Retry-After');
+        const waitMs = retryAfter ? Math.min(parseInt(retryAfter) * 1000, 10000) : delayMs * Math.pow(2, i);
+        console.warn(`Rate limited (429) on ${url.split('?')[0]}, waiting ${waitMs}ms`);
+        await sleep(waitMs);
+        continue;
+      }
       if (i < retries - 1) await sleep(delayMs);
     } catch (e) {
+      if (e.name === 'AbortError') {
+        console.warn(`Request timed out: ${url.split('?')[0]}`);
+      }
       if (i < retries - 1) await sleep(delayMs * Math.pow(2, i));
     }
   }
@@ -728,25 +749,59 @@ function setLoadMsg(msg) { document.getElementById('loadMsg').textContent = msg 
    SHARED DATA HELPERS — eliminates duplication
    ═══════════════════════════════════════════════════════════════ */
 
-/* Get the latest start timestamp among all active tokens (for aligned comparison) */
+/* Get the latest start timestamp among active tokens with FULL data (for aligned comparison).
+   "Limited" tokens (DexScreener 2-point fallbacks) are EXCLUDED so they don't force
+   all other tokens to clip to 24h when viewing 1M/3M/6M/1Y ranges. */
 function getLatestStart() {
   let latestStart = 0;
+  const fullDataTokens = [];
+  const limitedTokens = [];
+
   Object.entries(TOKENS).forEach(([k, t]) => {
-    if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart)
-      latestStart = t._data[0].ts;
+    if (!t.on || !t._data || t._data.length < 2) return;
+    if (t._limited) { limitedTokens.push(k); return; }
+    fullDataTokens.push([k, t]);
+    if (t._data[0].ts > latestStart) latestStart = t._data[0].ts;
   });
+
+  // If ALL tokens are limited, fall back to using them for alignment
+  if (fullDataTokens.length === 0 && limitedTokens.length > 0) {
+    Object.entries(TOKENS).forEach(([k, t]) => {
+      if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart)
+        latestStart = t._data[0].ts;
+    });
+  }
+
   return latestStart;
 }
 
-/* Build chart datasets from active tokens */
+/* Build chart datasets from active tokens.
+   Full-data tokens are aligned to latestStart.
+   Limited tokens use their own full range (so 2-point DexScreener data isn't further clipped). */
 function buildDatasets() {
   const latestStart = getLatestStart();
   const datasets = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
-    const raw = latestStart > 0 ? t._data.filter(d => d.ts >= latestStart) : t._data;
+
+    // Limited tokens keep their own range; full-data tokens align to latestStart
+    let raw;
+    if (t._limited) {
+      raw = t._data;
+    } else {
+      raw = latestStart > 0 ? t._data.filter(d => d.ts >= latestStart) : t._data;
+    }
+
+    // Deduplicate by timestamp (APIs sometimes return duplicates)
+    const seen = new Set();
+    raw = raw.filter(d => {
+      if (seen.has(d.ts)) return false;
+      seen.add(d.ts);
+      return true;
+    });
+
     if (raw.length < 2) return;
-    const p0 = raw[0].price; if (!p0) return;
+    const p0 = raw[0].price; if (!p0 || p0 <= 0) return;
     datasets.push({
       label: t.sym, key: k,
       data: raw.map(d => ({ x: d.ts, y: ((d.price - p0) / p0) * 100 })),
@@ -768,9 +823,19 @@ function getShareItems(includeStartPrice) {
   const items = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
-    const d = latestStart > 0 ? t._data.filter(x => x.ts >= latestStart) : t._data;
+
+    // Limited tokens keep their own range (same logic as buildDatasets)
+    let d;
+    if (t._limited) {
+      d = t._data;
+    } else {
+      d = latestStart > 0 ? t._data.filter(x => x.ts >= latestStart) : t._data;
+    }
+
     if (d.length < 2) return;
-    const p0 = d[0].price, pN = d[d.length - 1].price, pct = ((pN - p0) / p0) * 100;
+    const p0 = d[0].price, pN = d[d.length - 1].price;
+    if (!p0 || p0 <= 0) return;
+    const pct = ((pN - p0) / p0) * 100;
     const item = { sym: t.sym, color: t.color, logo: t.logo, pct, ps: fmtCardPrice(pN), limited: !!t._limited };
     if (includeStartPrice) { item.startP = fmtCardPrice(p0); item.endP = fmtCardPrice(pN) }
     items.push(item);
@@ -787,6 +852,8 @@ let pendingGo = false;
 async function go() {
   if (isRefreshing) { pendingGo = true; return }
   isRefreshing = true;
+  fetchGeneration++;
+  const currentGen = fetchGeneration;
   const ld = document.getElementById('loadOverlay'), rb = document.getElementById('refreshBtn');
   ld.style.display = 'flex'; rb.classList.add('spinning');
   setLoadMsg('Loading...'); setStatus('<span class="dot spin"></span>Loading...');
@@ -825,79 +892,102 @@ async function go() {
   const gtTokens = needFetch.filter(([k, t]) => t.source === 'gt' && t.gtPool);
   const cgTokens = needFetch.filter(([k, t]) => t.source === 'cg' && t.cgId);
 
-  // Stagger GT requests by 200ms, CG requests by 300ms
+  // Stagger GT requests by 300ms, CG requests by 1500ms (free API rate limit is ~10-30/min)
   const gtPromises = gtTokens.map(([k, t], i) =>
-    sleep(i * 200).then(async () => {
+    sleep(i * 300).then(async () => {
       const ck = `${k}_${days}`;
-      const data = await fetchFromGeckoTerminal(t.gtPool, days, k);
-      if (data && data.length >= 2) {
-        cache[ck] = { data, ts: Date.now() };
-        TOKENS[k]._data = data;
-        TOKENS[k]._limited = false;
-      }
+      try {
+        const data = await fetchFromGeckoTerminal(t.gtPool, days, k);
+        if (data && data.length >= 2) {
+          cache[ck] = { data, ts: Date.now() };
+          TOKENS[k]._data = data;
+          TOKENS[k]._limited = false;
+        }
+      } catch (e) { console.warn(`GT fetch failed for ${k}:`, e) }
       progress(t.sym);
     })
   );
 
   const cgPromises = cgTokens.map(([k, t], i) =>
-    sleep(i * 300).then(async () => {
+    sleep(i * 1500).then(async () => {
       const ck = `${k}_${days}`;
-      const data = await fetchFromCoinGecko(t.cgId, days, k);
-      if (data && data.length >= 2) {
-        cache[ck] = { data, ts: Date.now() };
-        TOKENS[k]._data = data;
-        TOKENS[k]._limited = false;
-      }
+      try {
+        const data = await fetchFromCoinGecko(t.cgId, days, k);
+        if (data && data.length >= 2) {
+          cache[ck] = { data, ts: Date.now() };
+          TOKENS[k]._data = data;
+          TOKENS[k]._limited = false;
+        }
+      } catch (e) { console.warn(`CG fetch failed for ${k}:`, e) }
       progress(t.sym);
     })
   );
 
   // Run GT and CG in parallel (they're different APIs)
   await Promise.allSettled([...gtPromises, ...cgPromises]);
+
+  // If range changed while we were fetching, abort and let the new fetch take over
+  if (currentGen !== fetchGeneration) {
+    isRefreshing = false;
+    ld.style.display = 'none'; rb.classList.remove('spinning');
+    return;
+  }
+
   renderChart(); renderSummary();
 
-  // PHASE 3: Fallback for anything that failed
+  // PHASE 3: Fallback for anything that failed — batch renders instead of per-token
   const failed = needFetch.filter(([k, t]) => !t._data || t._data.length < 2);
-  for (const [k, t] of failed) {
-    const ck = `${k}_${days}`;
-    let data = null;
-    setLoadMsg(`Retrying ${t.sym}...`);
+  if (failed.length > 0 && currentGen === fetchGeneration) {
+    let anyFallbackSucceeded = false;
+    for (const [k, t] of failed) {
+      const ck = `${k}_${days}`;
+      let data = null;
+      setLoadMsg(`Retrying ${t.sym}...`);
 
-    // Try alternate source
-    if (!data && t.cgId && t.source !== 'cg') {
-      data = await fetchFromCoinGecko(t.cgId, days, k);
-      await sleep(400);
-    }
-    if ((!data || data.length < 2) && t.dexAddr) {
-      data = await fetchViaPoolDiscovery(t.dexAddr, days, k);
-      await sleep(400);
-    }
-    if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
-      data = await fetchFromGeckoTerminal(t.gtPool, days, k);
-      await sleep(400);
-    }
-    // DexScreener minimal 2-point fallback (mark as limited)
-    if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) {
-      data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k);
+      // Try alternate source
+      if (!data && t.cgId && t.source !== 'cg') {
+        data = await fetchFromCoinGecko(t.cgId, days, k);
+        await sleep(1500); // Respect CG rate limits
+      }
+      if ((!data || data.length < 2) && t.dexAddr) {
+        data = await fetchViaPoolDiscovery(t.dexAddr, days, k);
+        await sleep(500);
+      }
+      if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
+        data = await fetchFromGeckoTerminal(t.gtPool, days, k);
+        await sleep(500);
+      }
+      // DexScreener minimal 2-point fallback (mark as limited)
+      if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) {
+        data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k);
+        if (data && data.length >= 2) {
+          TOKENS[k]._limited = true;
+          cache[ck] = { data, ts: Date.now(), limited: true };
+          TOKENS[k]._data = data;
+          anyFallbackSucceeded = true;
+          continue;
+        }
+      }
       if (data && data.length >= 2) {
-        TOKENS[k]._limited = true;
-        cache[ck] = { data, ts: Date.now(), limited: true };
+        cache[ck] = { data, ts: Date.now() };
         TOKENS[k]._data = data;
-        renderChart(); renderSummary();
-        continue;
+        TOKENS[k]._limited = false;
+        anyFallbackSucceeded = true;
       }
     }
-    if (data && data.length >= 2) {
-      cache[ck] = { data, ts: Date.now() };
-      TOKENS[k]._data = data;
-      TOKENS[k]._limited = false;
+    // Single batch render after all fallbacks complete
+    if (anyFallbackSucceeded) {
+      renderChart(); renderSummary();
     }
-    renderChart(); renderSummary();
   }
 
   ld.style.display = 'none'; rb.classList.remove('spinning'); isRefreshing = false;
-  updateStatusLine(); updatePeriod(); renderChart(); renderSummary();
-  saveCache();
+
+  // Final generation check — if range changed during fetch, don't render stale data
+  if (currentGen === fetchGeneration) {
+    updateStatusLine(); updatePeriod(); renderChart(); renderSummary();
+    saveCache();
+  }
 
   /* If tokens were toggled while we were loading, re-run */
   if (pendingGo) { pendingGo = false; go() }
@@ -930,10 +1020,23 @@ async function fetchFromCoinGecko(id, days, sym) {
   if (!r) return null;
   try {
     const j = await r.json();
-    if (j.error || j.status?.error_code) return null;
-    const d = (j.prices || []).map(([ts, p]) => ({ ts, price: p }));
+    if (j.error || j.status?.error_code) { console.warn(`CoinGecko error for ${sym}:`, j.error || j.status); return null; }
+
+    // Deduplicate and validate
+    const seen = new Set();
+    const d = (j.prices || [])
+      .map(([ts, p]) => ({ ts, price: p }))
+      .filter(x => {
+        if (!x.price || x.price <= 0 || isNaN(x.price)) return false;
+        // Round to nearest minute to prevent near-duplicate timestamps
+        const roundedTs = Math.round(x.ts / 60000) * 60000;
+        if (seen.has(roundedTs)) return false;
+        seen.add(roundedTs);
+        return true;
+      });
+
     return d.length >= 2 ? d : null;
-  } catch { return null }
+  } catch (e) { console.warn(`CoinGecko parse error for ${sym}:`, e); return null }
 }
 
 /* SOURCE 2: GeckoTerminal */
@@ -942,7 +1045,7 @@ async function fetchFromGeckoTerminal(pool, days, sym) {
   if (days <= 1) { tf = 'minute'; agg = 15; lim = 96 }
   else if (days <= 7) { tf = 'hour'; agg = 1; lim = Math.min(days * 24, 1000) }
   else if (days <= 14) { tf = 'hour'; agg = 4; lim = Math.min(days * 6, 1000) }
-  else { tf = 'day'; agg = 1; lim = Math.min(days, 1000) }
+  else { tf = 'day'; agg = 1; lim = Math.min(days + 5, 1000) } // +5 buffer for missing days
   const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000);
   if (!r) return null;
   try {
@@ -950,21 +1053,57 @@ async function fetchFromGeckoTerminal(pool, days, sym) {
     const c = j?.data?.attributes?.ohlcv_list || [];
     if (!c.length) return null;
     const st = Date.now() - days * 86400000;
-    const d = c.map(x => ({ ts: x[0] * 1000, price: parseFloat(x[4]) })).filter(x => x.price > 0 && x.ts >= st).sort((a, b) => a.ts - b.ts);
+
+    // Parse, validate, and deduplicate
+    const seen = new Set();
+    const d = c
+      .map(x => {
+        const ts = x[0] * 1000;
+        const price = parseFloat(x[4]); // close price
+        return { ts, price };
+      })
+      .filter(x => {
+        if (!x.price || x.price <= 0 || isNaN(x.price)) return false;
+        if (x.ts < st) return false;
+        if (seen.has(x.ts)) return false;
+        seen.add(x.ts);
+        return true;
+      })
+      .sort((a, b) => a.ts - b.ts);
+
     return d.length >= 2 ? d : null;
-  } catch { return null }
+  } catch (e) { console.warn(`GeckoTerminal parse error for ${sym}:`, e); return null }
 }
 
 /* SOURCE 3: Pool discovery fallback */
 async function fetchViaPoolDiscovery(tokenAddr, days, sym) {
   let pool = getPoolAddr(tokenAddr);
   if (!pool) {
-    const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000);
-    if (r) { try { const j = await r.json(); const p = j?.data || []; if (p.length > 0) { pool = p[0].attributes?.address; if (pool) setPoolAddr(tokenAddr, pool) } } catch {} }
+    try {
+      const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000);
+      if (r) {
+        const j = await r.json();
+        const p = j?.data || [];
+        if (p.length > 0) {
+          pool = p[0].attributes?.address;
+          if (pool) setPoolAddr(tokenAddr, pool);
+        }
+      }
+    } catch (e) { console.warn(`Pool discovery (GT) failed for ${sym}:`, e) }
+    await sleep(500);
   }
   if (!pool) {
-    const r = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`, 2, 1000);
-    if (r) { try { const j = await r.json(); const ps = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0); if (ps.length > 0) { pool = ps[0].pairAddress; setPoolAddr(tokenAddr, pool) } } catch {} }
+    try {
+      const r = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`, 2, 1000);
+      if (r) {
+        const j = await r.json();
+        const ps = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0);
+        if (ps.length > 0) {
+          pool = ps[0].pairAddress;
+          setPoolAddr(tokenAddr, pool);
+        }
+      }
+    } catch (e) { console.warn(`Pool discovery (DexScreener) failed for ${sym}:`, e) }
   }
   if (!pool) return null;
   return fetchFromGeckoTerminal(pool, days, sym);
@@ -982,7 +1121,16 @@ async function fetchFromDexScreener(addr, sym) {
   if (pair && parseFloat(pair.priceUsd) > 0) {
     const price = parseFloat(pair.priceUsd);
     const chg = pair.priceChange?.h24 ? parseFloat(pair.priceChange.h24) / 100 : 0;
-    return [{ ts: Date.now() - 86400000, price: price / (1 + chg) }, { ts: Date.now(), price }];
+    // Guard against extreme changes that would produce nonsensical back-calculated prices
+    // e.g., -99% change → divides by 0.01, producing 100x inflated past price
+    const divisor = 1 + chg;
+    if (divisor <= 0.05 || divisor > 20 || isNaN(divisor)) {
+      // Change is too extreme for reliable back-calculation, use flat line
+      return [{ ts: Date.now() - 86400000, price }, { ts: Date.now(), price }];
+    }
+    const pastPrice = price / divisor;
+    if (pastPrice <= 0 || !isFinite(pastPrice)) return null;
+    return [{ ts: Date.now() - 86400000, price: pastPrice }, { ts: Date.now(), price }];
   }
   return null;
 }
