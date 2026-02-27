@@ -414,6 +414,8 @@
       const[moonOtherPairs,setMoonOtherPairs]=useState(null);
       const[moonDirectAmount,setMoonDirectAmount]=useState('');
       const[moonCrossWeights,setMoonCrossWeights]=useState({}); // {coreSymbol: {otherCoreSymbol: weight}}
+      const[moonXInputs,setMoonXInputs]=useState({}); // {pairAddress: string} — user-typed X targets per core row
+      const[moonDirectXInput,setMoonDirectXInput]=useState(''); // user-typed X target for direct buy
       const CORE_DECIMALS={'WPLS':18,'PLSX':18,'INC':18,'HEX':8,'EHEX':8};
       
       const loadRwdHoldingFromPortfolio=async()=>{
@@ -743,6 +745,46 @@
       const displayMoonBag=moonBagAmount?(parseFloat(moonBagAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
       const displayMoonGlobal=moonGlobalAmount?(parseFloat(moonGlobalAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
       
+      // Binary search: find dollar amount for a target X on direct buy
+      const calcDollarsForDirectX=(targetX,totalTokenLiqUSD,currentPrice)=>{
+        if(targetX<=1||totalTokenLiqUSD<=0||currentPrice<=0)return 0;
+        let lo=0,hi=totalTokenLiqUSD*200;
+        for(let i=0;i<50;i++){
+          const mid=(lo+hi)/2;
+          const reserveUSD=totalTokenLiqUSD/2;
+          const reserveToken=reserveUSD/currentPrice;
+          const amtFee=mid*997;
+          const tOut=(amtFee*reserveToken)/(reserveUSD*1000+amtFee);
+          if(tOut>=reserveToken*0.999){hi=mid;continue;}
+          const xR=(reserveUSD+mid)/(reserveToken-tOut)/currentPrice;
+          if(xR<targetX)lo=mid;else hi=mid;
+        }
+        return Math.round((lo+hi)/2);
+      };
+      
+      // Binary search: find dollar amount for a target core X (single core, iterative 80-step model)
+      const calcDollarsForCoreX=(targetX,coreTotalLiq,corePrice,numSteps)=>{
+        if(targetX<=1||coreTotalLiq<=0||corePrice<=0)return 0;
+        numSteps=numSteps||80;
+        let lo=0,hi=coreTotalLiq*200;
+        for(let i=0;i<50;i++){
+          const mid=(lo+hi)/2;
+          let sP=corePrice,sL=coreTotalLiq;
+          const chunk=mid/numSteps;
+          let broke=false;
+          for(let s=0;s<numSteps;s++){
+            const rU=sL/2,rC=rU/sP;
+            const aF=chunk*997;
+            const cO=(aF*rC)/(rU*1000+aF);
+            if(cO>=rC*0.99){broke=true;break;}
+            sP=(rU+chunk)/(rC-cO);
+            sL=(rU+chunk)*2;
+          }
+          const xR=sP/corePrice;
+          if(broke||xR<targetX)lo=mid;else hi=mid;
+        }
+        return Math.round((lo+hi)/2);
+      };      
       return(
         <div className="max-w-5xl mx-auto px-3 sm:px-6 py-8">
           
@@ -1253,7 +1295,7 @@
                         {/* Segmented mode control */}
                         <div className="inline-flex rounded-lg overflow-hidden" style={{background:'rgba(0,0,0,0.3)',border:`1px solid ${moonGlow}0.2)`}}>
                           {modeLabels.map(m=>(
-                            <button key={m.id} onClick={()=>{setMoonMode(m.id);setMoonAmounts({})}} className="px-3 py-1 text-xs font-bold transition-all" style={{
+                            <button key={m.id} onClick={()=>{setMoonMode(m.id);setMoonAmounts({});setMoonXInputs({})}} className="px-3 py-1 text-xs font-bold transition-all" style={{
                               background:moonMode===m.id?moonSolid:'transparent',
                               color:moonMode===m.id?'#000':'rgba(255,255,255,0.35)'
                             }}>{m.label}</button>
@@ -1266,11 +1308,11 @@
                         <>
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                            <input type="text" inputMode="numeric" value={displayMoonGlobal} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonGlobalAmount(raw)}} placeholder="Enter dollar amount" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${moonGlow}0.7)`}}/>
+                            <input type="text" inputMode="numeric" value={displayMoonGlobal} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonGlobalAmount(raw);setMoonXInputs({})}} placeholder="Enter dollar amount" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${moonGlow}0.7)`}}/>
                           </div>
                           <div className="flex flex-wrap gap-2 mt-3">
                             {[{v:'100000',l:'$100K'},{v:'500000',l:'$500K'},{v:'1000000',l:'$1M'},{v:'5000000',l:'$5M'},{v:'10000000',l:'$10M'},{v:'100000000',l:'$100M'}].map(p=>(
-                              <button key={p.v} onClick={()=>setMoonGlobalAmount(p.v)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${moonGlobalAmount===p.v?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={moonGlobalAmount===p.v?{background:moonSolid}:{background:'rgba(255,255,255,0.05)'}}>{p.l}</button>
+                              <button key={p.v} onClick={()=>{setMoonGlobalAmount(p.v);setMoonXInputs({})}} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${moonGlobalAmount===p.v?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={moonGlobalAmount===p.v?{background:moonSolid}:{background:'rgba(255,255,255,0.05)'}}>{p.l}</button>
                             ))}
                           </div>
                           {moonMode==='even'&&totalSlots>0&&(parseFloat(moonGlobalAmount)||0)>0&&(
@@ -1318,6 +1360,9 @@
                     <div className="space-y-2">
                       {(()=>{
                         const indDirectAmt=moonDirectAmount?(parseFloat(moonDirectAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
+                        // Compute displayed X: user-typed X takes priority, otherwise computed from simulation
+                        const directXComputed=directImpact?directImpact.xMult.toFixed(2):'';
+                        const directXDisplay=moonDirectXInput||directXComputed;
                         return(
                           <div className="rounded-xl overflow-hidden transition-all" style={{background:`linear-gradient(135deg,${moonGlow}0.06),rgba(17,17,17,0.5))`,border:`1px solid ${directImpact?moonGlow+'0.55)':moonGlow+'0.15)'}`}}>
                             <div className="px-5 py-4">
@@ -1331,26 +1376,30 @@
                                   </div>
                                 </div>
                                 
-                                {/* Always manual input for direct buy — centered */}
+                                {/* Dollar + X inputs side by side — centered */}
                                 <div className="flex justify-center">
                                   <div className="flex items-center gap-2">
                                     <div className="relative">
                                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                                      <input type="text" inputMode="numeric" value={indDirectAmt} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonDirectAmount(raw)}} placeholder="Amount..." className="w-40 sm:w-48 pl-9 pr-3 py-3 rounded-lg bg-black/40 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-lg" style={{border:`2px solid ${moonGlow}0.4)`}}/>
+                                      <input type="text" inputMode="numeric" value={indDirectAmt} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonDirectAmount(raw);setMoonDirectXInput('');}} placeholder="Amount..." className="w-36 sm:w-44 pl-9 pr-3 py-3 rounded-lg bg-black/40 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-lg" style={{border:`2px solid ${moonGlow}0.4)`}}/>
                                     </div>
-                                    {moonDirectAmount&&(
-                                      <button onClick={()=>setMoonDirectAmount('')} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/20 hover:text-white/60 hover:bg-white/5 transition text-xl" title="Clear">{'\u00D7'}</button>
+                                    <span className="text-white/15 text-lg">{'\u00D7'}</span>
+                                    <div className="relative">
+                                      <input type="text" inputMode="decimal" value={directXDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonDirectXInput(raw);const xVal=parseFloat(raw)||0;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else if(raw===''){setMoonDirectAmount('');} }} onBlur={()=>{if(directImpact)setMoonDirectXInput('');}} placeholder="X..." className={`w-24 sm:w-28 pl-3 pr-3 py-3 rounded-lg bg-black/40 text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-lg ${moonDirectXInput?'text-green-400':'text-green-400/70'}`} style={{border:`2px solid rgba(74,222,128,${moonDirectXInput?'0.6':'0.25'})`}}/>
+                                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-400/30 text-sm font-bold">x</span>
+                                    </div>
+                                    {(moonDirectAmount||moonDirectXInput)&&(
+                                      <button onClick={()=>{setMoonDirectAmount('');setMoonDirectXInput('');}} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/20 hover:text-white/60 hover:bg-white/5 transition text-xl" title="Clear">{'\u00D7'}</button>
                                     )}
                                   </div>
                                 </div>
                                 
-                                {/* Inline Results — fixed right column */}
-                                <div className="flex items-center justify-end min-w-[220px]">
+                                {/* Inline Results — price only (X now in input) */}
+                                <div className="flex items-center justify-end min-w-[140px]">
                                   {directImpact&&(
                                     <div className="flex items-center gap-2.5">
                                       <span className="text-white/20">{'\u2192'}</span>
                                       <span className={`font-bold text-xl ${moonThemeText}`}><Price p={directImpact.newPriceUSD} c={moonThemeText}/></span>
-                                      <span className="text-green-400 font-bold text-xl">{fmtX(directImpact.xMult.toFixed(2))}</span>
                                     </div>
                                   )}
                                 </div>
@@ -1402,6 +1451,10 @@
                         const displayVal=hasOverride?(parseFloat(manualVal)||0).toLocaleString('en-US',{maximumFractionDigits:0}):(moonMode!=='independent'&&computedAmt>0?computedAmt.toLocaleString('en-US',{maximumFractionDigits:0}):'');
                         const coreLogo=getLogo(row.coreAddress);
                         const rowHasValue=hasOverride||(moonMode!=='independent'&&computedAmt>0);
+                        // X input: show user-typed X or computed X from simulation
+                        const userXVal=moonXInputs[row.pairAddress]||'';
+                        const computedCoreX=impact?(coreMults[row.coreSymbol]||impact.coreXmult):null;
+                        const coreXDisplay=userXVal||(computedCoreX?computedCoreX.toFixed(2):'');
                         
                         return(
                           <div key={row.pairAddress} className="rounded-xl overflow-hidden transition-all" style={{background:`linear-gradient(135deg,${moonGlow}0.04),rgba(17,17,17,0.5))`,border:`1px solid ${impact?moonGlow+'0.45)':moonGlow+'0.12)'}`}}>
@@ -1416,33 +1469,36 @@
                                   </div>
                                 </div>
                                 
-                                {/* Always-editable input — centered */}
+                                {/* Dollar + X inputs side by side — centered */}
                                 <div className="flex justify-center">
                                   {hasData&&(
                                     <div className="flex items-center gap-2">
                                       <div className="relative">
                                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                                        <input type="text" inputMode="numeric" value={displayVal} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonAmounts(prev=>{const next={...prev};if(raw===''){delete next[row.pairAddress];}else{next[row.pairAddress]=raw;}return next;})}} placeholder="Amount..." className={`w-40 sm:w-48 pl-9 pr-3 py-3 rounded-lg bg-black/40 text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-lg ${hasOverride?'text-white':'text-white/60'}`} style={{border:`2px solid ${hasOverride?moonGlow+'0.7)':moonGlow+'0.4)'}`}}/>
+                                        <input type="text" inputMode="numeric" value={displayVal} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonAmounts(prev=>{const next={...prev};if(raw===''){delete next[row.pairAddress];}else{next[row.pairAddress]=raw;}return next;});setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} placeholder="Amount..." className={`w-36 sm:w-44 pl-9 pr-3 py-3 rounded-lg bg-black/40 text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-lg ${hasOverride?'text-white':'text-white/60'}`} style={{border:`2px solid ${hasOverride?moonGlow+'0.7)':moonGlow+'0.4)'}`}}/>
                                       </div>
-                                      {rowHasValue&&(
-                                        <button onClick={()=>{setMoonAmounts(prev=>{const next={...prev};if(moonMode==='independent'){next[row.pairAddress]='';}else{delete next[row.pairAddress];}return next;});}} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/20 hover:text-white/60 hover:bg-white/5 transition text-xl" title="Clear">{'\u00D7'}</button>
+                                      <span className="text-white/15 text-lg">{'\u00D7'}</span>
+                                      <div className="relative">
+                                        <input type="text" inputMode="decimal" value={coreXDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonXInputs(prev=>({...prev,[row.pairAddress]:raw}));const xVal=parseFloat(raw)||0;if(xVal>1&&row.coreTotalLiq>0&&row.corePriceUSD>0){const dollars=calcDollarsForCoreX(xVal,row.coreTotalLiq,row.corePriceUSD);setMoonAmounts(prev=>({...prev,[row.pairAddress]:String(dollars)}));}else if(raw===''){setMoonAmounts(prev=>{const next={...prev};if(moonMode==='independent'){next[row.pairAddress]='';}else{delete next[row.pairAddress];}return next;});}}} onBlur={()=>{if(computedCoreX)setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} placeholder="X..." className={`w-24 sm:w-28 pl-3 pr-3 py-3 rounded-lg bg-black/40 text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-lg ${userXVal?'text-orange-400':'text-orange-400/70'}`} style={{border:`2px solid rgba(251,146,60,${userXVal?'0.6':'0.25'})`}}/>
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-400/30 text-sm font-bold">x</span>
+                                      </div>
+                                      {(rowHasValue||userXVal)&&(
+                                        <button onClick={()=>{setMoonAmounts(prev=>{const next={...prev};if(moonMode==='independent'){next[row.pairAddress]='';}else{delete next[row.pairAddress];}return next;});setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/20 hover:text-white/60 hover:bg-white/5 transition text-xl" title="Clear">{'\u00D7'}</button>
                                       )}
                                     </div>
                                   )}
                                 </div>
                                 
-                                {/* Inline Results — fixed right column */}
-                                <div className="flex items-center justify-end min-w-[220px]">
+                                {/* Inline Results — pool weight + price (X now in input) */}
+                                <div className="flex items-center justify-end min-w-[180px]">
                                   {impact?(()=>{
                                     const reflexMult=coreMults[row.coreSymbol]||impact.coreXmult;
-                                    const displayMult=reflexMult;
                                     const displayPrice=impact.oldCorePrice*reflexMult;
                                     return(
                                     <div className="flex items-center gap-2.5">
                                       <span className="text-white/15 text-sm font-semibold" title="Pool weight: this core's PTGC pool / total PTGC liquidity">{(impact.poolWeight*100).toFixed(0)}% pool</span>
                                       <span className="text-white/20">{'\u2192'}</span>
                                       <span className="text-white/70 font-bold text-xl"><Price p={displayPrice} c="text-white/70"/></span>
-                                      <span className="text-orange-400 font-bold text-xl">{fmtX(displayMult.toFixed(2))}</span>
                                     </div>
                                     );
                                   })():(!hasCoreLiq&&hasReserves&&!moonLoading?(
