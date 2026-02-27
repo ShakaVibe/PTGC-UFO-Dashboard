@@ -472,8 +472,8 @@
       };
       
       // Load UFO share rate from LP staking contract
-      // For each pair in staking contract: call stakingInfo(wallet, pair) → get stakedUFO
-      // User's total share rate = sum of stakedUFO across all pairs and wallets
+      // Fetches pair addresses directly from staking contract (like portfolio.html does),
+      // then calls stakingInfo(wallet, pair) for each to get stakedUFO (share rate)
       const loadRwdLpFromPortfolio=async()=>{
         setRwdLpLoading(true);
         try{
@@ -481,35 +481,51 @@
           if(!stored){setRwdLpLoading(false);return}
           const wallets=JSON.parse(stored);
           if(!wallets||!wallets.length){setRwdLpLoading(false);return}
-          // Use staking pairs from contract, or fall back to hardcoded LP addresses
-          const pairsToQuery=stakingPairs.length>0?stakingPairs:[
-            '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5','0x31c77e0519a0347aa547aeab6e866c30a1a32123',
-            '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf','0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db',
-            '0xd3a87bda2238ee28b424d38991df1fbadd2be666','0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca'
-          ];
+          
+          // Step 1: Fetch pair addresses from staking contract (same as portfolio.html)
+          const pairsToQuery=[];
+          for(let i=0;i<7;i++){
+            try{
+              const idx=BigInt(i).toString(16).padStart(64,'0');
+              const pRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:UFO_LP_STAKING,data:'0xb91ac788'+idx},'latest'],id:60+i});
+              if(pRes.result&&pRes.result!=='0x'){
+                const addr='0x'+pRes.result.slice(-40);
+                if(addr!=='0x0000000000000000000000000000000000000000'){
+                  pairsToQuery.push(addr);
+                }
+              }
+            }catch(e){console.error('pairs('+i+') fetch error:',e)}
+          }
+          console.log('LP reward pairs fetched:',pairsToQuery.length,pairsToQuery);
+          if(pairsToQuery.length===0){console.error('No staking pairs found');setRwdLpLoading(false);return}
+          
+          // Step 2: For each wallet × pair, call stakingInfo(wallet, pair) and sum stakedUFO
           let totalUserShareRate=0;
           for(const w of wallets){
-            for(const pairAddr of pairsToQuery){
+            const paddedWallet=w.address.slice(2).toLowerCase().padStart(64,'0');
+            for(let pi=0;pi<pairsToQuery.length;pi++){
+              const pairAddr=pairsToQuery[pi];
               try{
                 // stakingInfo(address wallet, address pair) → selector 0x5750ec53
-                // NOTE: wallet first, then pair (same order as portfolio.html)
-                const paddedWallet=w.address.slice(2).toLowerCase().padStart(64,'0');
                 const paddedPair=pairAddr.slice(2).toLowerCase().padStart(64,'0');
-                const res=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:UFO_LP_STAKING,data:'0x5750ec53'+paddedWallet+paddedPair},'latest'],id:1});
+                const res=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:UFO_LP_STAKING,data:'0x5750ec53'+paddedWallet+paddedPair},'latest'],id:70+pi});
                 if(res.result&&res.result!=='0x'&&res.result.length>=130){
-                  // stakedUFO is the 2nd uint256 in the return data (word index 1, bytes 66-130)
+                  // Return: stakedLP(word0), stakedUFO(word1), rewardExcluded(word2), pendingReward(word3), pool(word4)
+                  const stakedLPHex=res.result.slice(2,66);
                   const stakedUFOHex=res.result.slice(66,130);
-                  const stakedUFO=Number(BigInt('0x'+stakedUFOHex))/Math.pow(10,18);
-                  if(stakedUFO>0){
-                    console.log(`Wallet ${w.address.slice(0,8)}... pair ${pairAddr.slice(0,10)}...: ${stakedUFO.toLocaleString()} UFO share rate`);
+                  const stakedLP=Number(BigInt('0x'+stakedLPHex))/1e18;
+                  const stakedUFO=Number(BigInt('0x'+stakedUFOHex))/1e18;
+                  if(stakedLP>0&&stakedUFO>0){
+                    console.log(`  Wallet ${w.address.slice(0,10)}... pair[${pi}] ${pairAddr.slice(0,10)}...: stakedLP=${Math.round(stakedLP).toLocaleString()}, stakedUFO=${Math.round(stakedUFO).toLocaleString()}`);
                     totalUserShareRate+=stakedUFO;
                   }
                 }
-              }catch(e){console.error('stakingInfo fetch error:',pairAddr,w.address,e)}
+              }catch(e){console.error('stakingInfo error:',pairAddr,e)}
             }
           }
-          console.log('Total user UFO share rate:',totalUserShareRate.toLocaleString());
+          console.log('Total user UFO share rate:',Math.round(totalUserShareRate).toLocaleString());
           if(totalUserShareRate>0)setRwdLpShareRate(String(Math.floor(totalUserShareRate)));
+          else console.warn('No share rate found for any wallet/pair combination');
         }catch(e){console.error('LP portfolio load error:',e)}
         setRwdLpLoading(false);
       };
