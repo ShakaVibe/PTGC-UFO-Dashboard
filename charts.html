@@ -117,6 +117,14 @@
 </style>
 </head>
 <body>
+<!-- MAINTENANCE OVERLAY — remove this div to re-enable charts -->
+<div id="maintenanceOverlay" style="position:fixed;inset:0;z-index:9999;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:32px;text-align:center">
+  <img src="07_Two_Color_Alien_Transparent.png" alt="The Grays" style="width:120px;height:120px;object-fit:contain;opacity:0.8"/>
+  <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:700;color:#D9CA5D;letter-spacing:2px">CHARTS UNDER MAINTENANCE</div>
+  <div style="font-family:'Outfit',sans-serif;font-size:16px;color:rgba(255,255,255,0.5);max-width:420px;line-height:1.6">We're upgrading the charts with improved data sources and better performance. Check back soon!</div>
+  <a href="./index.html" style="margin-top:16px;display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;border:1.5px solid rgba(217,202,93,0.4);background:rgba(217,202,93,0.08);color:#D9CA5D;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s" onmouseover="this.style.background='rgba(217,202,93,0.15)'" onmouseout="this.style.background='rgba(217,202,93,0.08)'">&larr; Back to Dashboard</a>
+</div>
+
 <div class="min-h-screen">
 
   <!-- ═══════════════════════════════════════════════════════
@@ -559,7 +567,6 @@ const RANGES = [
 
 /* Token presets */
 const PRESETS = [
-  { label: 'Default', keys: ['PTGC', 'UFO', 'WPLS', 'BTC', 'ETH'] },
   { label: 'Grays', keys: ['PTGC', 'UFO'] },
   { label: 'PulseChain', keys: ['PTGC', 'UFO', 'WPLS', 'PLSX', 'HEX', 'EHEX', 'INC'] },
   { label: 'Majors', keys: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'] },
@@ -599,7 +606,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v4_cache';
+const CACHE_STORAGE_KEY = 'charts_v2_cache';
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -702,21 +709,22 @@ function setPoolAddr(network, tokenAddr, pool) { const c = getPoolCache(); c[`${
 function saveSelections() {
   try {
     const sel = Object.entries(TOKENS).filter(([k, t]) => t.on).map(([k]) => k);
-    localStorage.setItem('charts_v2_sel_tokens', JSON.stringify(sel));
-    localStorage.setItem('charts_v2_sel_range', String(range.days));
+    localStorage.setItem('charts_sel_tokens', JSON.stringify(sel));
+    localStorage.setItem('charts_sel_range', String(range.days));
   } catch {}
 }
 function loadSelections() {
   try {
-    const sel = JSON.parse(localStorage.getItem('charts_v2_sel_tokens'));
+    const sel = JSON.parse(localStorage.getItem('charts_sel_tokens'));
     if (sel && Array.isArray(sel) && sel.length > 0) {
+      // Only apply selections for tokens that actually exist
       const validKeys = new Set(Object.keys(TOKENS));
       const validSel = sel.filter(k => validKeys.has(k));
       if (validSel.length > 0) {
         Object.keys(TOKENS).forEach(k => { TOKENS[k].on = validSel.includes(k) });
       }
     }
-    const rd = parseInt(localStorage.getItem('charts_v2_sel_range'));
+    const rd = parseInt(localStorage.getItem('charts_sel_range'));
     if (rd && !isNaN(rd)) { const found = RANGES.find(r => r.days === rd); if (found) range = found }
   } catch {
     // Corrupted selection data — just use defaults
@@ -741,11 +749,8 @@ function navTo(tab) {
    INIT
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  // Migrate: clean up old sessionStorage cache from V1
   try { sessionStorage.removeItem('charts_data_cache'); } catch {}
-  try { localStorage.removeItem('charts_v2_cache'); } catch {}
-  try { localStorage.removeItem('charts_v3_cache'); } catch {}
-  try { localStorage.removeItem('charts_sel_tokens'); } catch {}
-  try { localStorage.removeItem('charts_sel_range'); } catch {}
   
   loadSelections();
   cache = loadCache();
@@ -774,8 +779,6 @@ function clearCacheAndRefresh() {
   }
   cache = {};
   try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch {}
-  try { localStorage.removeItem('charts_v2_cache') } catch {}
-  try { localStorage.removeItem('charts_v3_cache') } catch {}
   try { localStorage.removeItem('charts_pool_cache') } catch {}
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
   Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
@@ -912,17 +915,45 @@ function filterToRange(data, days) {
   return data.filter(d => d.ts >= cutoff);
 }
 
-/* Each token uses its OWN full data range for percentage calculation.
-   Tokens with less history start their line later on the chart. */
+/* Get the latest start timestamp among active tokens with FULL data.
+   "Limited" tokens (DexScreener 2-point fallbacks) are EXCLUDED so they
+   don't force all other tokens to clip to 24h on 1M/3M/6M/1Y views. */
+function getLatestStart() {
+  let latestStart = 0;
+  const fullDataTokens = [];
+  const limitedTokens = [];
+
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (!t.on || !t._data || t._data.length < 2) return;
+    if (t._limited) { limitedTokens.push(k); return; }
+    fullDataTokens.push([k, t]);
+    if (t._data[0].ts > latestStart) latestStart = t._data[0].ts;
+  });
+
+  if (fullDataTokens.length === 0 && limitedTokens.length > 0) {
+    Object.entries(TOKENS).forEach(([k, t]) => {
+      if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart)
+        latestStart = t._data[0].ts;
+    });
+  }
+
+  return latestStart;
+}
 
 /* Build chart datasets from active tokens */
 function buildDatasets() {
+  const latestStart = getLatestStart();
   const datasets = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
-    let raw = t._data;
+
+    let raw = t._limited ? t._data
+      : (latestStart > 0 ? t._data.filter(d => d.ts >= latestStart) : t._data);
+
+    // Deduplicate by timestamp
     const seen = new Set();
     raw = raw.filter(d => { if (seen.has(d.ts)) return false; seen.add(d.ts); return true; });
+
     if (raw.length < 2) return;
     const p0 = raw[0].price; if (!p0 || p0 <= 0) return;
     datasets.push({
@@ -942,10 +973,14 @@ function buildDatasets() {
 
 /* Build sorted share items for all active tokens */
 function getShareItems(includeStartPrice) {
+  const latestStart = getLatestStart();
   const items = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
-    const d = t._data;
+
+    let d = t._limited ? t._data
+      : (latestStart > 0 ? t._data.filter(x => x.ts >= latestStart) : t._data);
+
     if (d.length < 2) return;
     const p0 = d[0].price, pN = d[d.length - 1].price;
     if (!p0 || p0 <= 0) return;
@@ -1210,7 +1245,7 @@ function updateStatusLine() {
      daily  → 365d of daily candles — covers 1M through 1Y
    ═══════════════════════════════════════════════════════════════ */
 
-/* Shared: validate, deduplicate, sort, and remove outlier spikes */
+/* Shared: validate, deduplicate, sort a data array */
 function cleanData(data, maxAgeDays) {
   if (!data || !data.length) return null;
   const cutoff = Date.now() - maxAgeDays * 86400000;
@@ -1225,44 +1260,7 @@ function cleanData(data, maxAgeDays) {
       return true;
     })
     .sort((a, b) => a.ts - b.ts);
-
-  if (cleaned.length < 4) return cleaned.length >= 2 ? cleaned : null;
-
-  // Pass 1: single-candle spikes
-  let pass1 = [cleaned[0]];
-  for (let i = 1; i < cleaned.length - 1; i++) {
-    const prev = cleaned[i - 1].price, curr = cleaned[i].price, next = cleaned[i + 1].price;
-    const devPrev = Math.abs(curr - prev) / prev;
-    const devNext = Math.abs(curr - next) / next;
-    const neighborDev = Math.abs(next - prev) / prev;
-    if (devPrev > 0.30 && devNext > 0.30 && neighborDev < 0.15) {
-      console.log(`Spike filter: removed point at ${new Date(cleaned[i].ts).toISOString()} $${curr.toFixed(8)}`);
-      continue;
-    }
-    pass1.push(cleaned[i]);
-  }
-  pass1.push(cleaned[cleaned.length - 1]);
-
-  // Pass 2: V-shape spikes (2 consecutive outliers)
-  if (pass1.length < 5) return pass1.length >= 2 ? pass1 : null;
-  let pass2 = [pass1[0]];
-  let i = 1;
-  while (i < pass1.length - 1) {
-    if (i + 1 < pass1.length - 1) {
-      const before = pass1[i - 1].price, p1 = pass1[i].price, p2 = pass1[i + 1].price, after = pass1[i + 2].price;
-      const dev1 = Math.abs(p1 - before) / before;
-      const dev2 = Math.abs(p2 - after) / after;
-      const outerDev = Math.abs(after - before) / before;
-      if (dev1 > 0.25 && dev2 > 0.25 && outerDev < 0.15) {
-        console.log(`V-spike filter: removed 2 points at ${new Date(pass1[i].ts).toISOString()}`);
-        i += 2; continue;
-      }
-    }
-    pass2.push(pass1[i]);
-    i++;
-  }
-  if (i === pass1.length - 1) pass2.push(pass1[pass1.length - 1]);
-  return pass2.length >= 2 ? pass2 : null;
+  return cleaned.length >= 2 ? cleaned : null;
 }
 
 /* SOURCE 1: Moralis OHLCV — PulseChain (paid, CORS-enabled) */
@@ -1276,46 +1274,22 @@ function moralisParamsForTier(tier) {
 
 async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   const { timeframe, daysBack } = moralisParamsForTier(tier);
+  const toDate = new Date().toISOString();
+  const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString();
   const moralisHeaders = { 'X-API-Key': MORALIS_API_KEY, 'accept': 'application/json' };
-  const now = Date.now();
-
-  /* Moralis caps results at ~100 per request. For daily tier (365 days),
-     we paginate with multiple requests of ~120-day windows. */
-  const windowDays = (tier === 'daily') ? 120 : daysBack;
-  const allResults = [];
-  let windowEnd = now;
-  const absoluteStart = now - daysBack * 86400000;
-
-  while (windowEnd > absoluteStart) {
-    if (signal && signal.aborted) return null;
-    const windowStart = Math.max(windowEnd - windowDays * 86400000, absoluteStart);
-    const url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${new Date(windowStart).toISOString()}&toDate=${new Date(windowEnd).toISOString()}&limit=500`;
-    const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
-    if (r) {
-      try {
-        const j = await r.json();
-        const results = j?.result || [];
-        if (results.length > 0) {
-          allResults.push(...results);
-          console.log(`Moralis ${sym} page: ${results.length} candles (${new Date(windowStart).toLocaleDateString()} → ${new Date(windowEnd).toLocaleDateString()})`);
-        }
-      } catch (e) { console.warn(`Moralis parse error for ${sym}:`, e); }
-    }
-
-    windowEnd = windowStart - 1; // Move window back, -1ms to avoid overlap
-
-    /* Only paginate for daily tier. Minute/hourly should fit in one request. */
-    if (tier !== 'daily') break;
-    /* Small delay between pages to stay within Moralis rate limits */
-    if (windowEnd > absoluteStart) await sleep(300);
-  }
-
-  if (!allResults.length) return null;
-  const raw = allResults.map(c => ({
-    ts: new Date(c.timestamp).getTime(),
-    price: parseFloat(c.close)
-  }));
-  return cleanData(raw, daysBack + 1);
+  const url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}`;
+  const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
+  if (!r) return null;
+  try {
+    const j = await r.json();
+    const results = j?.result || [];
+    if (!results.length) return null;
+    const raw = results.map(c => ({
+      ts: new Date(c.timestamp).getTime(),
+      price: parseFloat(c.close)
+    }));
+    return cleanData(raw, daysBack + 1);
+  } catch (e) { console.warn(`Moralis parse error for ${sym}:`, e); return null; }
 }
 
 /* Discover pair address via DexScreener for tokens without hardcoded pair (e.g. WPLS) */
@@ -1327,24 +1301,12 @@ async function discoverPairForMoralis(dexAddr, signal) {
     if (r) {
       const j = await r.json();
       const pairs = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0);
-      if (!pairs.length) return null;
       pairs.sort((a, b) => parseFloat(b.volume?.h24 || 0) - parseFloat(a.volume?.h24 || 0));
-      const addrLower = dexAddr.toLowerCase();
-      const baseMatch = pairs.filter(p =>
-        p.baseToken && p.baseToken.address && p.baseToken.address.toLowerCase() === addrLower
-      );
-      const STABLECOINS = ['dai', 'usdc', 'usdt', 'busd', 'tusd', 'frax'];
-      const safeBaseMatch = baseMatch.filter(p => {
-        const qSym = (p.quoteToken?.symbol || '').toLowerCase();
-        return !STABLECOINS.includes(qSym);
-      });
-      const best = (safeBaseMatch.length > 0 ? safeBaseMatch[0]
-                   : baseMatch.length > 0 ? baseMatch[0]
-                   : pairs[0]);
-      pool = best.pairAddress;
-      console.log(`Discovered pair for ${dexAddr}: ${pool} (base=${best.baseToken?.symbol}, quote=${best.quoteToken?.symbol})`);
-      setPoolAddr('moralis', dexAddr, pool);
-      return pool;
+      if (pairs.length > 0) {
+        pool = pairs[0].pairAddress;
+        setPoolAddr('moralis', dexAddr, pool);
+        return pool;
+      }
     }
   } catch (e) { console.warn(`Pair discovery failed for ${dexAddr}:`, e); }
   return null;
@@ -1357,16 +1319,7 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
     pairAddr = await discoverPairForMoralis(tokenConfig.dexAddr, signal);
   }
   if (!pairAddr) return null;
-  const data = await fetchFromMoralis(pairAddr, tier, sym, signal);
-  if (data && data.length >= 2 && !tokenConfig.pairAddr) {
-    const allNearOne = data.every(d => d.price >= 0.90 && d.price <= 1.10);
-    if (allNearOne) {
-      console.warn(`${sym}: ~$1 prices — stablecoin pair confusion. Clearing pool cache.`);
-      const pc = getPoolCache(); delete pc[`moralis_${tokenConfig.dexAddr}`]; setPoolCache(pc);
-      return null;
-    }
-  }
-  return data;
+  return fetchFromMoralis(pairAddr, tier, sym, signal);
 }
 
 /* SOURCE 2: CryptoCompare — free, CORS-enabled from any domain */
@@ -1468,7 +1421,7 @@ function _doRenderChart() {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,10,10,0.95)', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1, titleFont: { family: "'JetBrains Mono',monospace", size: 11, weight: '600' }, bodyFont: { family: "'JetBrains Mono',monospace", size: 12 }, padding: 14, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8, boxPadding: 4, callbacks: { title(items) { if (!items.length) return ''; return new Date(items[0].parsed.x).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}) }) }, label(c) { const v = c.parsed.y; return ` ${c.dataset.label}  ${v >= 0 ? '+' : ''}${v.toFixed(2)}%` }, labelColor(c) { return { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor, borderRadius: 2 } } } } },
     scales: {
-      x: { type: 'time', min: Date.now() - getDays() * 86400000, max: Date.now(), time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
+      x: { type: 'time', time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 10 }, border: { display: false } }
     }
   };
@@ -1518,11 +1471,9 @@ function _doRenderSummary() {
 
 function updatePeriod() {
   const el = document.getElementById('periodLabel');
-  const days = getDays(), now = new Date();
+  const days = getDays(), now = new Date(), start = new Date(now - days * 86400000);
   const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  if (days <= 1) { el.textContent = `Last 24 Hours \u2014 ${fmt(now)}`; return; }
-  const start = new Date(now - days * 86400000);
-  el.textContent = `${fmt(start)} \u2014 ${fmt(now)}`;
+  el.textContent = days <= 1 ? `Last 24 Hours \u2014 ${fmt(now)}` : `${fmt(start)} \u2014 ${fmt(now)}`;
 }
 
 /* ═══════════════════════════════════════════════════════════════
