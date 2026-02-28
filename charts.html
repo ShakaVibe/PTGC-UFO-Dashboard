@@ -530,6 +530,13 @@ function applyHeaderValues(data, t) {
 /* ═══════════════════════════════════════════════════════════════
    CHART DATA SOURCE CONFIG
    ═══════════════════════════════════════════════════════════════ */
+
+/* API Keys — paid tiers unlock generous rate limits */
+const CG_PRO_API_KEY = 'CG-o1oxEQxZG8fHzTrQnbTbBxfA';
+const CG_PRO_BASE = 'https://pro-api.coingecko.com';
+const MORALIS_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjZjMzk5M2I1LWQ3NTgtNDU1MS1hYTQwLTIzZjM4YjlhNjJmZSIsIm9yZ0lkIjoiNDg5NzQxIiwidXNlcklkIjoiNTAzODc5IiwidHlwZUlkIjoiZWUwNjY5NTYtOWI4Yy00ZjI1LTlhOWEtNjM3Mjg2NzYyMzdlIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NzAwNTYyMDYsImV4cCI6NDkyNTgxNjIwNn0.c2xp-hC0CzB3f6ECyL_-igEGtWuD4o7-YdxCtuW_0vk';
+const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
+
 const dexLogo = a => `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
 
 const TOKENS = {
@@ -683,8 +690,8 @@ function getPoolCache() {
   } catch { return {} }
 }
 function setPoolCache(c) { try { localStorage.setItem('charts_pool_cache', JSON.stringify(c)) } catch {} }
-function getPoolAddr(tokenAddr) { const c = getPoolCache(); const e = c[tokenAddr]; return e ? (typeof e === 'string' ? e : e.addr) : null }
-function setPoolAddr(tokenAddr, pool) { const c = getPoolCache(); c[tokenAddr] = { addr: pool, ts: Date.now() }; setPoolCache(c) }
+function getPoolAddr(network, tokenAddr) { const c = getPoolCache(); const key = `${network}_${tokenAddr}`; const e = c[key] || c[tokenAddr]; return e ? (typeof e === 'string' ? e : e.addr) : null }
+function setPoolAddr(network, tokenAddr, pool) { const c = getPoolCache(); c[`${network}_${tokenAddr}`] = { addr: pool, ts: Date.now() }; setPoolCache(c) }
 
 /* Persist token selection & range across sessions */
 function saveSelections() {
@@ -844,19 +851,16 @@ function renderButtons() {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* Smart retry — skip retries for 400/404, timeout protection, external abort support */
-async function fetchRetry(url, retries = 3, delayMs = 1000, externalSignal) {
+async function fetchRetry(url, retries = 3, delayMs = 1000, externalSignal, headers = {}) {
   for (let i = 0; i < retries; i++) {
-    // If externally aborted (range change / refresh), bail immediately
     if (externalSignal && externalSignal.aborted) return null;
     try {
-      // Combine: 15s timeout + external abort (whichever fires first)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
-      // If external signal fires, also abort this request
       const onExternalAbort = () => controller.abort();
       if (externalSignal) externalSignal.addEventListener('abort', onExternalAbort, { once: true });
 
-      const r = await fetch(url, { signal: controller.signal });
+      const r = await fetch(url, { signal: controller.signal, headers });
       clearTimeout(timeout);
       if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
 
@@ -871,9 +875,8 @@ async function fetchRetry(url, retries = 3, delayMs = 1000, externalSignal) {
       }
       if (i < retries - 1) await sleep(delayMs);
     } catch (e) {
-      if (externalSignal && externalSignal.aborted) return null; // Clean exit on cancel
+      if (externalSignal && externalSignal.aborted) return null;
       if (e.name === 'AbortError') {
-        // Could be timeout or external — check which
         if (externalSignal && externalSignal.aborted) return null;
         console.warn(`Request timed out: ${url.split('?')[0]}`);
       }
@@ -1103,8 +1106,9 @@ async function go() {
       })
     );
 
+    /* CG Pro: 500 calls/min = ~8/sec — 200ms stagger is plenty safe */
     const cgPromises = cgTokens.map(([k, t], i) =>
-      sleep(i * 1500).then(async () => {
+      sleep(i * 200).then(async () => {
         if (currentGen !== fetchGeneration) return;
         try {
           const data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
@@ -1131,18 +1135,27 @@ async function go() {
         let data = null;
         setStatus(`<span class="dot spin"></span>Retrying ${t.sym}...`);
 
+        /* Fallback A: If GT token failed, try CG Pro */
         if (t.cgId && t.source !== 'cg') {
           data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
-          await sleep(1500);
+          await sleep(200);
         }
+        /* Fallback B: Try Moralis OHLCV (works for PulseChain tokens with pair address) */
+        if ((!data || data.length < 2) && t.gtPool) {
+          data = await fetchFromMoralis(t.gtPool, tier, k, signal, 'pulsechain');
+          await sleep(200);
+        }
+        /* Fallback C: If CG token failed, try GeckoTerminal via pool discovery */
         if ((!data || data.length < 2) && t.dexAddr) {
-          data = await fetchViaPoolDiscovery(t.dexAddr, tier, k, signal);
+          data = await fetchViaPoolDiscoveryDS(t.dexAddr, tier, k, signal);
           await sleep(500);
         }
+        /* Fallback D: Try GT direct if we have a pool address */
         if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
           data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
           await sleep(500);
         }
+        /* Fallback E: DexScreener 2-point (last resort, marked limited) */
         if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) {
           data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k, signal);
           if (data && data.length >= 2) {
@@ -1205,7 +1218,19 @@ function updateStatusLine() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   DATA SOURCES — tier-based fetching
+   DATA SOURCES — tier-based fetching, 5 layers of redundancy
+   
+   ARCHITECTURE:
+     PRIMARY for PulseChain tokens (PTGC/UFO/WPLS/PLSX/HEX/eHEX/INC):
+       → GeckoTerminal (free, generous limits)
+     PRIMARY for Majors (BTC/ETH/SOL/BNB/XRP):
+       → CoinGecko PRO (500 calls/min with paid key)
+     FALLBACK chain (tried in order if primary fails):
+       1. CG Pro (for GT tokens that have cgId)
+       2. Moralis OHLCV (for any token with a pair address — paid, 1500 CU/s)
+       3. GT Pool Discovery via DexScreener (find new pool → fetch from GT)
+       4. GT direct (if pool address exists but wasn't primary)
+       5. DexScreener 2-point (last resort, marked as "limited data")
    
    Each source fetches the MAXIMUM data for a tier:
      minute → 24h of 15-min candles (96 points)
@@ -1250,10 +1275,11 @@ function cleanData(data, maxAgeDays) {
   return cleaned.length >= 2 ? cleaned : null;
 }
 
-/* SOURCE 1: CoinGecko */
+/* SOURCE 1: CoinGecko PRO — 500 calls/min with paid key (was 5-15 on free tier) */
 async function fetchFromCoinGecko(id, tier, sym, signal) {
   const { days, ivl } = cgParamsForTier(tier);
-  const r = await fetchRetry(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`, 3, 2000, signal);
+  const cgHeaders = { 'x-cg-pro-api-key': CG_PRO_API_KEY };
+  const r = await fetchRetry(`${CG_PRO_BASE}/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`, 3, 2000, signal, cgHeaders);
   if (!r) return null;
   try {
     const j = await r.json();
@@ -1263,7 +1289,7 @@ async function fetchFromCoinGecko(id, tier, sym, signal) {
   } catch (e) { console.warn(`CG parse error for ${sym}:`, e); return null; }
 }
 
-/* SOURCE 2: GeckoTerminal */
+/* SOURCE 2: GeckoTerminal OHLCV — PulseChain pools */
 async function fetchFromGeckoTerminal(pool, tier, sym, signal) {
   const { tf, agg, lim, maxAge } = gtParamsForTier(tier);
   const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000, signal);
@@ -1277,21 +1303,42 @@ async function fetchFromGeckoTerminal(pool, tier, sym, signal) {
   } catch (e) { console.warn(`GT parse error for ${sym}:`, e); return null; }
 }
 
-/* SOURCE 3: Pool discovery fallback */
-async function fetchViaPoolDiscovery(tokenAddr, tier, sym, signal) {
-  let pool = getPoolAddr(tokenAddr);
-  if (!pool) {
-    try {
-      const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000, signal);
-      if (r) { const j = await r.json(); const p = j?.data || []; if (p.length > 0) { pool = p[0].attributes?.address; if (pool) setPoolAddr(tokenAddr, pool); } }
-    } catch (e) { console.warn(`Pool discovery (GT) failed for ${sym}:`, e); }
-    await sleep(500);
+/* SOURCE 3: Moralis OHLCV — PulseChain + multi-chain (paid, 1500 CU/s) */
+function moralisParamsForTier(tier) {
+  switch (tier) {
+    case 'minute': return { timeframe: '15min', daysBack: 1 };
+    case 'hourly': return { timeframe: '1h', daysBack: 14 };
+    case 'daily':  return { timeframe: '1d', daysBack: 365 };
   }
-  if (signal && signal.aborted) return null;
+}
+
+async function fetchFromMoralis(pairAddr, tier, sym, signal, chain = 'pulsechain') {
+  const { timeframe, daysBack } = moralisParamsForTier(tier);
+  const toDate = new Date().toISOString();
+  const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString();
+  const moralisHeaders = { 'X-API-Key': MORALIS_API_KEY, 'accept': 'application/json' };
+  const url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=${chain}&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}`;
+  const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
+  if (!r) return null;
+  try {
+    const j = await r.json();
+    const results = j?.result || [];
+    if (!results.length) return null;
+    const raw = results.map(c => ({
+      ts: new Date(c.timestamp).getTime(),
+      price: parseFloat(c.close)
+    }));
+    return cleanData(raw, daysBack + 1);
+  } catch (e) { console.warn(`Moralis parse error for ${sym}:`, e); return null; }
+}
+
+/* SOURCE 4: Pool discovery fallback for PulseChain tokens via DexScreener */
+async function fetchViaPoolDiscoveryDS(tokenAddr, tier, sym, signal) {
+  let pool = getPoolAddr('pulsechain', tokenAddr);
   if (!pool) {
     try {
       const r = await fetchRetry(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`, 2, 1000, signal);
-      if (r) { const j = await r.json(); const ps = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0); if (ps.length > 0) { pool = ps[0].pairAddress; setPoolAddr(tokenAddr, pool); } }
+      if (r) { const j = await r.json(); const ps = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0); if (ps.length > 0) { pool = ps[0].pairAddress; setPoolAddr('pulsechain', tokenAddr, pool); } }
     } catch (e) { console.warn(`Pool discovery (DS) failed for ${sym}:`, e); }
   }
   if (!pool) return null;
