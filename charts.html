@@ -117,13 +117,7 @@
 </style>
 </head>
 <body>
-<!-- MAINTENANCE OVERLAY — remove this div to re-enable charts -->
-<div id="maintenanceOverlay" style="position:fixed;inset:0;z-index:9999;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:32px;text-align:center">
-  <img src="07_Two_Color_Alien_Transparent.png" alt="The Grays" style="width:120px;height:120px;object-fit:contain;opacity:0.8"/>
-  <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:700;color:#D9CA5D;letter-spacing:2px">CHARTS UNDER MAINTENANCE</div>
-  <div style="font-family:'Outfit',sans-serif;font-size:16px;color:rgba(255,255,255,0.5);max-width:420px;line-height:1.6">We're upgrading the charts with improved data sources and better performance. Check back soon!</div>
-  <a href="./index.html" style="margin-top:16px;display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;border:1.5px solid rgba(217,202,93,0.4);background:rgba(217,202,93,0.08);color:#D9CA5D;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s" onmouseover="this.style.background='rgba(217,202,93,0.15)'" onmouseout="this.style.background='rgba(217,202,93,0.08)'">&larr; Back to Dashboard</a>
-</div>
+<!-- Maintenance overlay removed — charts re-enabled -->
 
 <div class="min-h-screen">
 
@@ -567,6 +561,7 @@ const RANGES = [
 
 /* Token presets */
 const PRESETS = [
+  { label: 'Default', keys: ['PTGC', 'UFO', 'WPLS', 'BTC', 'ETH'] },
   { label: 'Grays', keys: ['PTGC', 'UFO'] },
   { label: 'PulseChain', keys: ['PTGC', 'UFO', 'WPLS', 'PLSX', 'HEX', 'EHEX', 'INC'] },
   { label: 'Majors', keys: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'] },
@@ -606,7 +601,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v2_cache';
+const CACHE_STORAGE_KEY = 'charts_v5_cache';
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -709,13 +704,19 @@ function setPoolAddr(network, tokenAddr, pool) { const c = getPoolCache(); c[`${
 function saveSelections() {
   try {
     const sel = Object.entries(TOKENS).filter(([k, t]) => t.on).map(([k]) => k);
-    localStorage.setItem('charts_sel_tokens', JSON.stringify(sel));
-    localStorage.setItem('charts_sel_range', String(range.days));
+    localStorage.setItem('charts_v3_sel_tokens', JSON.stringify(sel));
+    localStorage.setItem('charts_v3_sel_range', String(range.days));
   } catch {}
 }
 function loadSelections() {
   try {
-    const sel = JSON.parse(localStorage.getItem('charts_sel_tokens'));
+    // Clean up ALL old selection keys so they never interfere
+    try { localStorage.removeItem('charts_sel_tokens'); } catch {}
+    try { localStorage.removeItem('charts_sel_range'); } catch {}
+    try { localStorage.removeItem('charts_v2_sel_tokens'); } catch {}
+    try { localStorage.removeItem('charts_v2_sel_range'); } catch {}
+
+    const sel = JSON.parse(localStorage.getItem('charts_v3_sel_tokens'));
     if (sel && Array.isArray(sel) && sel.length > 0) {
       // Only apply selections for tokens that actually exist
       const validKeys = new Set(Object.keys(TOKENS));
@@ -724,7 +725,8 @@ function loadSelections() {
         Object.keys(TOKENS).forEach(k => { TOKENS[k].on = validSel.includes(k) });
       }
     }
-    const rd = parseInt(localStorage.getItem('charts_sel_range'));
+    // If no saved selection, the TOKENS config `on: true` defaults remain active
+    const rd = parseInt(localStorage.getItem('charts_v3_sel_range'));
     if (rd && !isNaN(rd)) { const found = RANGES.find(r => r.days === rd); if (found) range = found }
   } catch {
     // Corrupted selection data — just use defaults
@@ -749,8 +751,12 @@ function navTo(tab) {
    INIT
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Migrate: clean up old sessionStorage cache from V1
+  // Migrate: clean up old caches from previous versions
   try { sessionStorage.removeItem('charts_data_cache'); } catch {}
+  try { localStorage.removeItem('charts_v2_cache'); } catch {}
+  try { localStorage.removeItem('charts_v3_cache'); } catch {}
+  try { localStorage.removeItem('charts_v4_cache'); } catch {}
+  try { localStorage.removeItem('charts_pool_cache'); } catch {} // Force fresh pair discovery
   
   loadSelections();
   cache = loadCache();
@@ -915,40 +921,13 @@ function filterToRange(data, days) {
   return data.filter(d => d.ts >= cutoff);
 }
 
-/* Get the latest start timestamp among active tokens with FULL data.
-   "Limited" tokens (DexScreener 2-point fallbacks) are EXCLUDED so they
-   don't force all other tokens to clip to 24h on 1M/3M/6M/1Y views. */
-function getLatestStart() {
-  let latestStart = 0;
-  const fullDataTokens = [];
-  const limitedTokens = [];
-
-  Object.entries(TOKENS).forEach(([k, t]) => {
-    if (!t.on || !t._data || t._data.length < 2) return;
-    if (t._limited) { limitedTokens.push(k); return; }
-    fullDataTokens.push([k, t]);
-    if (t._data[0].ts > latestStart) latestStart = t._data[0].ts;
-  });
-
-  if (fullDataTokens.length === 0 && limitedTokens.length > 0) {
-    Object.entries(TOKENS).forEach(([k, t]) => {
-      if (t.on && t._data && t._data.length >= 2 && t._data[0].ts > latestStart)
-        latestStart = t._data[0].ts;
-    });
-  }
-
-  return latestStart;
-}
-
-/* Build chart datasets from active tokens */
+/* Build chart datasets from active tokens — each token uses its own full data range independently */
 function buildDatasets() {
-  const latestStart = getLatestStart();
   const datasets = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
 
-    let raw = t._limited ? t._data
-      : (latestStart > 0 ? t._data.filter(d => d.ts >= latestStart) : t._data);
+    let raw = t._data;
 
     // Deduplicate by timestamp
     const seen = new Set();
@@ -973,14 +952,11 @@ function buildDatasets() {
 
 /* Build sorted share items for all active tokens */
 function getShareItems(includeStartPrice) {
-  const latestStart = getLatestStart();
   const items = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
 
-    let d = t._limited ? t._data
-      : (latestStart > 0 ? t._data.filter(x => x.ts >= latestStart) : t._data);
-
+    const d = t._data;
     if (d.length < 2) return;
     const p0 = d[0].price, pN = d[d.length - 1].price;
     if (!p0 || p0 <= 0) return;
@@ -1245,12 +1221,12 @@ function updateStatusLine() {
      daily  → 365d of daily candles — covers 1M through 1Y
    ═══════════════════════════════════════════════════════════════ */
 
-/* Shared: validate, deduplicate, sort a data array */
+/* Shared: validate, deduplicate, sort, and remove spike glitches */
 function cleanData(data, maxAgeDays) {
   if (!data || !data.length) return null;
   const cutoff = Date.now() - maxAgeDays * 86400000;
   const seen = new Set();
-  const cleaned = data
+  let cleaned = data
     .filter(d => {
       if (!d.price || d.price <= 0 || isNaN(d.price)) return false;
       if (d.ts < cutoff) return false;
@@ -1260,6 +1236,62 @@ function cleanData(data, maxAgeDays) {
       return true;
     })
     .sort((a, b) => a.ts - b.ts);
+
+  // Spike filter: rolling median approach
+  // For each point, compare to the median of a window around it.
+  // If it deviates more than threshold from the local median, remove it.
+  if (cleaned.length > 6) {
+    const WINDOW = 5; // look at 5 neighbors on each side
+    const THRESHOLD = 0.20; // 20% deviation from local median = spike
+    const halfW = Math.floor(WINDOW / 2);
+
+    // Build array of flags
+    const isSpike = new Array(cleaned.length).fill(false);
+
+    for (let i = 0; i < cleaned.length; i++) {
+      // Get window of neighbors (excluding self)
+      const neighbors = [];
+      for (let j = Math.max(0, i - halfW); j <= Math.min(cleaned.length - 1, i + halfW); j++) {
+        if (j !== i) neighbors.push(cleaned[j].price);
+      }
+      if (neighbors.length < 2) continue;
+
+      // Compute median of neighbors
+      neighbors.sort((a, b) => a - b);
+      const mid = Math.floor(neighbors.length / 2);
+      const median = neighbors.length % 2 ? neighbors[mid] : (neighbors[mid - 1] + neighbors[mid]) / 2;
+
+      if (median <= 0) continue;
+      const deviation = Math.abs(cleaned[i].price - median) / median;
+      if (deviation > THRESHOLD) {
+        isSpike[i] = true;
+      }
+    }
+
+    // Don't remove first and last points (they anchor the chart)
+    isSpike[0] = false;
+    isSpike[cleaned.length - 1] = false;
+
+    // Only remove spikes if they're isolated clusters (<=3 consecutive flagged points)
+    // This prevents removing legitimate large moves
+    let i = 0;
+    while (i < isSpike.length) {
+      if (isSpike[i]) {
+        let runStart = i;
+        while (i < isSpike.length && isSpike[i]) i++;
+        let runLen = i - runStart;
+        // If more than 3 consecutive points are flagged, it's probably a real move, un-flag them
+        if (runLen > 3) {
+          for (let j = runStart; j < runStart + runLen; j++) isSpike[j] = false;
+        }
+      } else {
+        i++;
+      }
+    }
+
+    cleaned = cleaned.filter((d, idx) => !isSpike[idx]);
+  }
+
   return cleaned.length >= 2 ? cleaned : null;
 }
 
@@ -1277,19 +1309,46 @@ async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   const toDate = new Date().toISOString();
   const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString();
   const moralisHeaders = { 'X-API-Key': MORALIS_API_KEY, 'accept': 'application/json' };
-  const url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}`;
-  const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
-  if (!r) return null;
-  try {
-    const j = await r.json();
-    const results = j?.result || [];
-    if (!results.length) return null;
-    const raw = results.map(c => ({
-      ts: new Date(c.timestamp).getTime(),
-      price: parseFloat(c.close)
-    }));
-    return cleanData(raw, daysBack + 1);
-  } catch (e) { console.warn(`Moralis parse error for ${sym}:`, e); return null; }
+
+  let allResults = [];
+  let cursor = null;
+  const MAX_PAGES = 8; // Safety limit to prevent infinite loops
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (signal && signal.aborted) return null;
+
+    let url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+
+    const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
+    if (!r) break;
+
+    try {
+      const j = await r.json();
+      const results = j?.result || [];
+      if (!results.length) break;
+      allResults = allResults.concat(results);
+
+      // Check for pagination cursor
+      cursor = j?.cursor || null;
+      if (!cursor) break; // No more pages
+
+      // Small delay between pages to be polite to the API
+      await sleep(300);
+    } catch (e) {
+      console.warn(`Moralis parse error for ${sym} (page ${page}):`, e);
+      break;
+    }
+  }
+
+  if (!allResults.length) return null;
+  console.log(`Moralis: ${sym} fetched ${allResults.length} candles across pagination`);
+
+  const raw = allResults.map(c => ({
+    ts: new Date(c.timestamp).getTime(),
+    price: parseFloat(c.close)
+  }));
+  return cleanData(raw, daysBack + 1);
 }
 
 /* Discover pair address via DexScreener for tokens without hardcoded pair (e.g. WPLS) */
@@ -1301,9 +1360,31 @@ async function discoverPairForMoralis(dexAddr, signal) {
     if (r) {
       const j = await r.json();
       const pairs = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0);
-      pairs.sort((a, b) => parseFloat(b.volume?.h24 || 0) - parseFloat(a.volume?.h24 || 0));
-      if (pairs.length > 0) {
-        pool = pairs[0].pairAddress;
+
+      // Avoid stablecoin quote tokens (DAI, USDC, USDT, etc.) which return ~$1 prices
+      const stablecoins = new Set(['DAI', 'USDC', 'USDT', 'BUSD', 'TUSD', 'FRAX', 'LUSD', 'UST', 'USDL']);
+
+      // Prefer pairs where:
+      // 1. baseToken matches our token address (not quoteToken)
+      // 2. quoteToken is NOT a stablecoin
+      // 3. Highest volume among those
+      const scored = pairs.map(p => {
+        const isBase = p.baseToken?.address?.toLowerCase() === dexAddr.toLowerCase();
+        const quoteIsStable = stablecoins.has(p.quoteToken?.symbol?.toUpperCase());
+        const baseIsStable = stablecoins.has(p.baseToken?.symbol?.toUpperCase());
+        // Prefer: base match + non-stablecoin quote
+        let priority = 0;
+        if (isBase && !quoteIsStable) priority = 3;
+        else if (isBase && quoteIsStable) priority = 1; // base match but stablecoin quote — risky
+        else if (!baseIsStable) priority = 2; // quote match, non-stable base
+        else priority = 0; // worst case
+        return { pair: p, priority, volume: parseFloat(p.volume?.h24 || 0) };
+      });
+      scored.sort((a, b) => b.priority - a.priority || b.volume - a.volume);
+
+      if (scored.length > 0) {
+        pool = scored[0].pair.pairAddress;
+        console.log(`Pair discovery for ${dexAddr}: chose ${pool} (priority=${scored[0].priority}, vol=${scored[0].volume})`);
         setPoolAddr('moralis', dexAddr, pool);
         return pool;
       }
@@ -1319,7 +1400,25 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
     pairAddr = await discoverPairForMoralis(tokenConfig.dexAddr, signal);
   }
   if (!pairAddr) return null;
-  return fetchFromMoralis(pairAddr, tier, sym, signal);
+  const data = await fetchFromMoralis(pairAddr, tier, sym, signal);
+
+  // $1 sanity check: if ALL prices are ~$1 (±5%), we probably fetched a stablecoin pair
+  // This catches WPLS/DAI and similar wrong-pair issues
+  if (data && data.length > 0) {
+    const allNearDollar = data.every(d => d.price > 0.95 && d.price < 1.05);
+    if (allNearDollar) {
+      console.warn(`${sym}: All prices ~$1 — likely wrong pair (stablecoin). Discarding data and clearing pool cache.`);
+      // Clear the cached pool for this token so next attempt discovers a new pair
+      if (tokenConfig.dexAddr) {
+        const c = getPoolCache();
+        delete c[`moralis_${tokenConfig.dexAddr}`];
+        setPoolCache(c);
+      }
+      return null;
+    }
+  }
+
+  return data;
 }
 
 /* SOURCE 2: CryptoCompare — free, CORS-enabled from any domain */
@@ -1421,7 +1520,7 @@ function _doRenderChart() {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,10,10,0.95)', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1, titleFont: { family: "'JetBrains Mono',monospace", size: 11, weight: '600' }, bodyFont: { family: "'JetBrains Mono',monospace", size: 12 }, padding: 14, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8, boxPadding: 4, callbacks: { title(items) { if (!items.length) return ''; return new Date(items[0].parsed.x).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}) }) }, label(c) { const v = c.parsed.y; return ` ${c.dataset.label}  ${v >= 0 ? '+' : ''}${v.toFixed(2)}%` }, labelColor(c) { return { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor, borderRadius: 2 } } } } },
     scales: {
-      x: { type: 'time', time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
+      x: { type: 'time', min: Date.now() - getDays() * 86400000, max: Date.now(), time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 10 }, border: { display: false } }
     }
   };
