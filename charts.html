@@ -741,7 +741,6 @@ function navTo(tab) {
    INIT
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Clean up old cache/selection keys
   try { sessionStorage.removeItem('charts_data_cache'); } catch {}
   try { localStorage.removeItem('charts_v2_cache'); } catch {}
   try { localStorage.removeItem('charts_v3_cache'); } catch {}
@@ -914,21 +913,16 @@ function filterToRange(data, days) {
 }
 
 /* Each token uses its OWN full data range for percentage calculation.
-   Tokens with less historical data simply start their line later on the chart.
-   This prevents one token with limited data from clipping all others' x-axis. */
+   Tokens with less history start their line later on the chart. */
 
-/* Build chart datasets from active tokens — each uses its own start */
+/* Build chart datasets from active tokens */
 function buildDatasets() {
   const datasets = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
-
     let raw = t._data;
-
-    // Deduplicate by timestamp
     const seen = new Set();
     raw = raw.filter(d => { if (seen.has(d.ts)) return false; seen.add(d.ts); return true; });
-
     if (raw.length < 2) return;
     const p0 = raw[0].price; if (!p0 || p0 <= 0) return;
     datasets.push({
@@ -951,8 +945,7 @@ function getShareItems(includeStartPrice) {
   const items = [];
   Object.entries(TOKENS).forEach(([k, t]) => {
     if (!t.on || !t._data || t._data.length < 2) return;
-
-    let d = t._data;
+    const d = t._data;
     if (d.length < 2) return;
     const p0 = d[0].price, pN = d[d.length - 1].price;
     if (!p0 || p0 <= 0) return;
@@ -1235,9 +1228,7 @@ function cleanData(data, maxAgeDays) {
 
   if (cleaned.length < 4) return cleaned.length >= 2 ? cleaned : null;
 
-  /* Spike filter — two passes:
-     Pass 1: Single-candle outliers (>30% dev from both neighbors, neighbors within 15%)
-     Pass 2: V-shape spikes (2 consecutive outliers that snap back) */
+  // Pass 1: single-candle spikes
   let pass1 = [cleaned[0]];
   for (let i = 1; i < cleaned.length - 1; i++) {
     const prev = cleaned[i - 1].price, curr = cleaned[i].price, next = cleaned[i + 1].price;
@@ -1252,6 +1243,7 @@ function cleanData(data, maxAgeDays) {
   }
   pass1.push(cleaned[cleaned.length - 1]);
 
+  // Pass 2: V-shape spikes (2 consecutive outliers)
   if (pass1.length < 5) return pass1.length >= 2 ? pass1 : null;
   let pass2 = [pass1[0]];
   let i = 1;
@@ -1263,15 +1255,13 @@ function cleanData(data, maxAgeDays) {
       const outerDev = Math.abs(after - before) / before;
       if (dev1 > 0.25 && dev2 > 0.25 && outerDev < 0.15) {
         console.log(`V-spike filter: removed 2 points at ${new Date(pass1[i].ts).toISOString()}`);
-        i += 2;
-        continue;
+        i += 2; continue;
       }
     }
     pass2.push(pass1[i]);
     i++;
   }
   if (i === pass1.length - 1) pass2.push(pass1[pass1.length - 1]);
-
   return pass2.length >= 2 ? pass2 : null;
 }
 
@@ -1286,22 +1276,46 @@ function moralisParamsForTier(tier) {
 
 async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   const { timeframe, daysBack } = moralisParamsForTier(tier);
-  const toDate = new Date().toISOString();
-  const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString();
   const moralisHeaders = { 'X-API-Key': MORALIS_API_KEY, 'accept': 'application/json' };
-  const url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}`;
-  const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
-  if (!r) return null;
-  try {
-    const j = await r.json();
-    const results = j?.result || [];
-    if (!results.length) return null;
-    const raw = results.map(c => ({
-      ts: new Date(c.timestamp).getTime(),
-      price: parseFloat(c.close)
-    }));
-    return cleanData(raw, daysBack + 1);
-  } catch (e) { console.warn(`Moralis parse error for ${sym}:`, e); return null; }
+  const now = Date.now();
+
+  /* Moralis caps results at ~100 per request. For daily tier (365 days),
+     we paginate with multiple requests of ~120-day windows. */
+  const windowDays = (tier === 'daily') ? 120 : daysBack;
+  const allResults = [];
+  let windowEnd = now;
+  const absoluteStart = now - daysBack * 86400000;
+
+  while (windowEnd > absoluteStart) {
+    if (signal && signal.aborted) return null;
+    const windowStart = Math.max(windowEnd - windowDays * 86400000, absoluteStart);
+    const url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${new Date(windowStart).toISOString()}&toDate=${new Date(windowEnd).toISOString()}&limit=500`;
+    const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
+    if (r) {
+      try {
+        const j = await r.json();
+        const results = j?.result || [];
+        if (results.length > 0) {
+          allResults.push(...results);
+          console.log(`Moralis ${sym} page: ${results.length} candles (${new Date(windowStart).toLocaleDateString()} → ${new Date(windowEnd).toLocaleDateString()})`);
+        }
+      } catch (e) { console.warn(`Moralis parse error for ${sym}:`, e); }
+    }
+
+    windowEnd = windowStart - 1; // Move window back, -1ms to avoid overlap
+
+    /* Only paginate for daily tier. Minute/hourly should fit in one request. */
+    if (tier !== 'daily') break;
+    /* Small delay between pages to stay within Moralis rate limits */
+    if (windowEnd > absoluteStart) await sleep(300);
+  }
+
+  if (!allResults.length) return null;
+  const raw = allResults.map(c => ({
+    ts: new Date(c.timestamp).getTime(),
+    price: parseFloat(c.close)
+  }));
+  return cleanData(raw, daysBack + 1);
 }
 
 /* Discover pair address via DexScreener for tokens without hardcoded pair (e.g. WPLS) */
@@ -1315,8 +1329,6 @@ async function discoverPairForMoralis(dexAddr, signal) {
       const pairs = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0);
       if (!pairs.length) return null;
       pairs.sort((a, b) => parseFloat(b.volume?.h24 || 0) - parseFloat(a.volume?.h24 || 0));
-
-      /* Prefer pairs where OUR token is the baseToken to avoid stablecoin confusion */
       const addrLower = dexAddr.toLowerCase();
       const baseMatch = pairs.filter(p =>
         p.baseToken && p.baseToken.address && p.baseToken.address.toLowerCase() === addrLower
@@ -1346,15 +1358,11 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
   }
   if (!pairAddr) return null;
   const data = await fetchFromMoralis(pairAddr, tier, sym, signal);
-
-  /* Sanity: if ALL prices ~$1 for a discovered pair, it's stablecoin confusion */
   if (data && data.length >= 2 && !tokenConfig.pairAddr) {
     const allNearOne = data.every(d => d.price >= 0.90 && d.price <= 1.10);
     if (allNearOne) {
-      console.warn(`${sym}: ~$1 prices detected — clearing pool cache`);
-      const pc = getPoolCache();
-      delete pc[`moralis_${tokenConfig.dexAddr}`];
-      setPoolCache(pc);
+      console.warn(`${sym}: ~$1 prices — stablecoin pair confusion. Clearing pool cache.`);
+      const pc = getPoolCache(); delete pc[`moralis_${tokenConfig.dexAddr}`]; setPoolCache(pc);
       return null;
     }
   }
@@ -1512,24 +1520,9 @@ function updatePeriod() {
   const el = document.getElementById('periodLabel');
   const days = getDays(), now = new Date();
   const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  if (days <= 1) { el.innerHTML = `Last 24 Hours \u2014 ${fmt(now)}`; return; }
-
-  /* Show actual data start if it's significantly less than requested */
-  let earliestTs = Infinity;
-  Object.entries(TOKENS).forEach(([k, t]) => {
-    if (t.on && t._data && t._data.length >= 2 && !t._limited) {
-      if (t._data[0].ts < earliestTs) earliestTs = t._data[0].ts;
-    }
-  });
-  const requestedStart = new Date(now - days * 86400000);
-  const actualStart = earliestTs < Infinity ? new Date(earliestTs) : requestedStart;
-  const coveragePct = Math.round(((now.getTime() - actualStart.getTime()) / (days * 86400000)) * 100);
-
-  if (coveragePct < 80 && earliestTs < Infinity) {
-    el.innerHTML = `${fmt(actualStart)} \u2014 ${fmt(now)} <span style="font-size:12px;color:rgba(255,255,255,0.3);font-weight:400;margin-left:8px">(${coveragePct}% of ${range.label} available)</span>`;
-  } else {
-    el.textContent = `${fmt(requestedStart)} \u2014 ${fmt(now)}`;
-  }
+  if (days <= 1) { el.textContent = `Last 24 Hours \u2014 ${fmt(now)}`; return; }
+  const start = new Date(now - days * 86400000);
+  el.textContent = `${fmt(start)} \u2014 ${fmt(now)}`;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1551,11 +1544,9 @@ document.addEventListener('click', e => {
 });
 
 function getSharePeriodText() {
-  const days = getDays(), now = new Date();
+  const days = getDays(), now = new Date(), start = new Date(now - days * 86400000);
   const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  if (days <= 1) return `Last 24 Hours \u2014 ${fmt(now)}`;
-  const start = new Date(now - days * 86400000);
-  return `${fmt(start)} \u2014 ${fmt(now)}`;
+  return days <= 1 ? `Last 24 Hours \u2014 ${fmt(now)}` : `${fmt(start)} \u2014 ${fmt(now)}`;
 }
 
 function getShareLogosHtml() {
