@@ -595,7 +595,7 @@ const TIER_CONFIG = {
 /* Which tier does a range need? */
 function getTier(days) {
   if (days <= 1) return 'minute';
-  if (days <= 7) return 'hourly';
+  if (days <= 14) return 'hourly';  // hourly tier fetches 14d — covers 7D and 14D
   return 'daily';
 }
 
@@ -607,7 +607,9 @@ let cache = {};
 
 function loadCache() {
   try {
-    const raw = localStorage.getItem(CACHE_STORAGE_KEY);
+    let raw = localStorage.getItem(CACHE_STORAGE_KEY);
+    // Fall back to sessionStorage if localStorage is empty
+    if (!raw) raw = sessionStorage.getItem(CACHE_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     // Prune entries past their stale TTL
@@ -647,8 +649,12 @@ function safeSaveCache(data) {
       localStorage.setItem(CACHE_STORAGE_KEY, json);
     }
   } catch (e) {
-    try { localStorage.removeItem(CACHE_STORAGE_KEY); } catch {}
-    console.warn('Cache save failed, cleared:', e);
+    // localStorage full or unavailable — fall back to sessionStorage
+    try {
+      const obj = data || cache;
+      sessionStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(obj));
+    } catch {}
+    console.warn('Cache save to localStorage failed, using sessionStorage:', e.message);
   }
 }
 
@@ -767,6 +773,7 @@ function clearCacheAndRefresh() {
   }
   cache = {};
   try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch {}
+  try { localStorage.removeItem('charts_pool_cache') } catch {}
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
   Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
   go();
@@ -775,6 +782,7 @@ function clearCacheAndRefresh() {
 let _goDebounceTimer = null;
 function debouncedGo(delayMs = 150) {
   clearTimeout(_goDebounceTimer);
+  pendingGo = false; // Cancel any queued re-entry — the debounce supersedes it
   _goDebounceTimer = setTimeout(() => go(), delayMs);
 }
 
@@ -1135,27 +1143,42 @@ async function go() {
         let data = null;
         setStatus(`<span class="dot spin"></span>Retrying ${t.sym}...`);
 
-        /* Fallback A: If GT token failed, try CG Pro */
-        if (t.cgId && t.source !== 'cg') {
+        if (t.source === 'cg') {
+          /* ── CG-primary token (BTC/ETH/SOL/BNB/XRP) fallback chain ── */
+          /* Retry A: CG Pro once more (with 2s delay for rate limit recovery) */
+          await sleep(2000);
           data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
-          await sleep(200);
+
+          /* Retry B: CG Free API — different endpoint, no key, lower rate limit */
+          if ((!data || data.length < 2) && t.cgId) {
+            await sleep(1500);
+            data = await fetchFromCoinGeckoFree(t.cgId, tier, k, signal);
+          }
+        } else {
+          /* ── GT-primary token (PulseChain) fallback chain ── */
+          /* Fallback A: Try CG Pro (PulseChain tokens that have a cgId) */
+          if (t.cgId) {
+            data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
+            await sleep(200);
+          }
+          /* Fallback B: Try Moralis OHLCV */
+          if ((!data || data.length < 2) && t.gtPool) {
+            data = await fetchFromMoralis(t.gtPool, tier, k, signal, '0x171');
+            await sleep(200);
+          }
+          /* Fallback C: GT via DexScreener pool discovery */
+          if ((!data || data.length < 2) && t.dexAddr) {
+            data = await fetchViaPoolDiscoveryDS(t.dexAddr, tier, k, signal);
+            await sleep(500);
+          }
+          /* Fallback D: GT direct (if pool address exists but wasn't primary) */
+          if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
+            data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
+            await sleep(500);
+          }
         }
-        /* Fallback B: Try Moralis OHLCV (works for PulseChain tokens with pair address) */
-        if ((!data || data.length < 2) && t.gtPool) {
-          data = await fetchFromMoralis(t.gtPool, tier, k, signal, 'pulsechain');
-          await sleep(200);
-        }
-        /* Fallback C: If CG token failed, try GeckoTerminal via pool discovery */
-        if ((!data || data.length < 2) && t.dexAddr) {
-          data = await fetchViaPoolDiscoveryDS(t.dexAddr, tier, k, signal);
-          await sleep(500);
-        }
-        /* Fallback D: Try GT direct if we have a pool address */
-        if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
-          data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
-          await sleep(500);
-        }
-        /* Fallback E: DexScreener 2-point (last resort, marked limited) */
+
+        /* Last resort for ANY token with PulseChain presence: DexScreener 2-point */
         if ((!data || data.length < 2) && (t.gtPool || t.dexAddr)) {
           data = await fetchFromDexScreener(t.gtPool || t.dexAddr, k, signal);
           if (data && data.length >= 2) {
@@ -1218,24 +1241,20 @@ function updateStatusLine() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   DATA SOURCES — tier-based fetching, 5 layers of redundancy
+   DATA SOURCES — tier-based fetching, multi-layer redundancy
    
    ARCHITECTURE:
      PRIMARY for PulseChain tokens (PTGC/UFO/WPLS/PLSX/HEX/eHEX/INC):
-       → GeckoTerminal (free, generous limits)
+       → GeckoTerminal free (PulseChain pools, generous limits)
+       → Fallback: CG Pro → Moralis → GT Pool Discovery → GT Direct → DexScreener 2pt
      PRIMARY for Majors (BTC/ETH/SOL/BNB/XRP):
        → CoinGecko PRO (500 calls/min with paid key)
-     FALLBACK chain (tried in order if primary fails):
-       1. CG Pro (for GT tokens that have cgId)
-       2. Moralis OHLCV (for any token with a pair address — paid, 1500 CU/s)
-       3. GT Pool Discovery via DexScreener (find new pool → fetch from GT)
-       4. GT direct (if pool address exists but wasn't primary)
-       5. DexScreener 2-point (last resort, marked as "limited data")
+       → Fallback: CG Pro retry → CG Free API (different endpoint, no key)
    
    Each source fetches the MAXIMUM data for a tier:
      minute → 24h of 15-min candles (96 points)
-     hourly → 14d of 1-hr candles (336 points) — covers both 7D and 14D
-     daily  → 365d of daily candles — covers 14D through 1Y
+     hourly → 14d of 1-hr candles (336 points) — covers 7D and 14D
+     daily  → 365d of daily candles — covers 1M through 1Y
    ═══════════════════════════════════════════════════════════════ */
 
 /* Tier → GeckoTerminal parameters */
@@ -1289,6 +1308,19 @@ async function fetchFromCoinGecko(id, tier, sym, signal) {
   } catch (e) { console.warn(`CG parse error for ${sym}:`, e); return null; }
 }
 
+/* SOURCE 1B: CoinGecko FREE — last resort for majors if Pro is down (5-15 calls/min) */
+async function fetchFromCoinGeckoFree(id, tier, sym, signal) {
+  const { days, ivl } = cgParamsForTier(tier);
+  const r = await fetchRetry(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${ivl}`, 2, 3000, signal);
+  if (!r) return null;
+  try {
+    const j = await r.json();
+    if (j.error || j.status?.error_code) return null;
+    const raw = (j.prices || []).map(([ts, p]) => ({ ts, price: p }));
+    return cleanData(raw, days + 1);
+  } catch { return null; }
+}
+
 /* SOURCE 2: GeckoTerminal OHLCV — PulseChain pools */
 async function fetchFromGeckoTerminal(pool, tier, sym, signal) {
   const { tf, agg, lim, maxAge } = gtParamsForTier(tier);
@@ -1312,7 +1344,7 @@ function moralisParamsForTier(tier) {
   }
 }
 
-async function fetchFromMoralis(pairAddr, tier, sym, signal, chain = 'pulsechain') {
+async function fetchFromMoralis(pairAddr, tier, sym, signal, chain = '0x171') {
   const { timeframe, daysBack } = moralisParamsForTier(tier);
   const toDate = new Date().toISOString();
   const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString();
@@ -1345,7 +1377,7 @@ async function fetchViaPoolDiscoveryDS(tokenAddr, tier, sym, signal) {
   return fetchFromGeckoTerminal(pool, tier, sym, signal);
 }
 
-/* SOURCE 4: DexScreener minimal (2-point — marked as limited) */
+/* SOURCE 5: DexScreener minimal (2-point — marked as limited) */
 async function fetchFromDexScreener(addr, sym, signal) {
   let pair = null;
   const r1 = await fetchRetry(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${addr}`, 2, 1000, signal);
@@ -1691,6 +1723,20 @@ function renderShareCardsSC() {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeShare() });
+
+/* Auto-refresh when tab becomes visible — stale data gets re-fetched */
+let _lastVisibleTs = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const elapsed = Date.now() - _lastVisibleTs;
+  _lastVisibleTs = Date.now();
+  // Only auto-refresh if tab was hidden for >2 minutes (stale data likely)
+  if (elapsed > 120000 && !isRefreshing) {
+    console.log(`Tab visible after ${Math.round(elapsed/1000)}s — refreshing data`);
+    go();
+    loadHeaderData(); // Also refresh header price
+  }
+});
 </script>
 </body>
 </html>
