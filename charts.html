@@ -547,10 +547,10 @@ const TOKENS = {
   HEX: { name: 'HEX', sym: 'HEX', color: '#FF7849', cgId: 'hex-pulsechain', gtPool: '0xf1F4ee610b2bAbB05C635F726eF8B0C568c8dc65', dexAddr: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', logo: dexLogo('0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'), on: false, source: 'gt' },
   EHEX: { name: 'eHEX', sym: 'EHEX', color: '#88B4D4', cgId: 'hex', gtPool: '0x55D5c232D921B9eAA6b37b5845E439aCD04b4DBa', dexAddr: '0x57fde0a71132198BBeC939B98976993d8D89D225', logo: dexLogo('0x57fde0a71132198BBeC939B98976993d8D89D225'), on: false, source: 'gt' },
   INC: { name: 'Incentive', sym: 'INC', color: '#90EE90', cgId: 'incentive', gtPool: '0xf808Bb6265e9Ca27002c0A04562Bf50d4FE37EAA', dexAddr: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', logo: dexLogo('0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'), on: false, source: 'gt' },
-  BTC: { name: 'Bitcoin', sym: 'BTC', color: '#F7931A', cgId: 'bitcoin', logo: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png', on: true, source: 'cg' },
-  ETH: { name: 'Ethereum', sym: 'ETH', color: '#627EEA', cgId: 'ethereum', logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', on: true, source: 'cg' },
-  SOL: { name: 'Solana', sym: 'SOL', color: '#00E5CC', cgId: 'solana', logo: 'https://assets.coingecko.com/coins/images/4128/small/solana.png', on: false, source: 'cg' },
-  BNB: { name: 'BNB', sym: 'BNB', color: '#F0B90B', cgId: 'binancecoin', logo: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png', on: false, source: 'cg' },
+  BTC: { name: 'Bitcoin', sym: 'BTC', color: '#F7931A', cgId: 'bitcoin', gtNetwork: 'eth', gtTokenAddr: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', logo: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png', on: true, source: 'gt' },
+  ETH: { name: 'Ethereum', sym: 'ETH', color: '#627EEA', cgId: 'ethereum', gtNetwork: 'eth', gtTokenAddr: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', on: true, source: 'gt' },
+  SOL: { name: 'Solana', sym: 'SOL', color: '#00E5CC', cgId: 'solana', gtNetwork: 'solana', gtTokenAddr: 'So11111111111111111111111111111111111111112', logo: 'https://assets.coingecko.com/coins/images/4128/small/solana.png', on: false, source: 'gt' },
+  BNB: { name: 'BNB', sym: 'BNB', color: '#F0B90B', cgId: 'binancecoin', gtNetwork: 'bsc', gtTokenAddr: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', logo: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png', on: false, source: 'gt' },
   XRP: { name: 'XRP', sym: 'XRP', color: '#B0B0B0', cgId: 'ripple', logo: 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png', on: false, source: 'cg' }
 };
 
@@ -1095,14 +1095,14 @@ async function go() {
     }
 
     /* ── PHASE 2: Parallel fetching ────────────────────────── */
-    const gtTokens = needFetch.filter(([k, t]) => t.source === 'gt' && t.gtPool);
+    const gtTokens = needFetch.filter(([k, t]) => t.source === 'gt');
     const cgTokens = needFetch.filter(([k, t]) => t.source === 'cg' && t.cgId);
 
     const gtPromises = gtTokens.map(([k, t], i) =>
-      sleep(i * 250).then(async () => {
+      sleep(i * 300).then(async () => {
         if (currentGen !== fetchGeneration) return;
         try {
-          const data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
+          const data = await fetchGT(t, tier, k, signal);
           if (data && data.length >= 2 && currentGen === fetchGeneration) {
             setCached(k, tier, data, false);
             applyTokenData(k, data, false, days);
@@ -1155,25 +1155,25 @@ async function go() {
             data = await fetchFromCoinGeckoFree(t.cgId, tier, k, signal);
           }
         } else {
-          /* ── GT-primary token (PulseChain) fallback chain ── */
-          /* Fallback A: Try CG Pro (PulseChain tokens that have a cgId) */
+          /* ── GT-primary token fallback chain ── */
+          /* Fallback A: Try CG Pro (any token with a cgId) */
           if (t.cgId) {
             data = await fetchFromCoinGecko(t.cgId, tier, k, signal);
             await sleep(200);
           }
-          /* Fallback B: Try Moralis OHLCV */
+          /* Fallback B: Try CG Free (different endpoint, no key — last resort for majors) */
+          if ((!data || data.length < 2) && t.cgId) {
+            data = await fetchFromCoinGeckoFree(t.cgId, tier, k, signal);
+            await sleep(200);
+          }
+          /* Fallback C: Try Moralis OHLCV (PulseChain tokens with pair address) */
           if ((!data || data.length < 2) && t.gtPool) {
             data = await fetchFromMoralis(t.gtPool, tier, k, signal, '0x171');
             await sleep(200);
           }
-          /* Fallback C: GT via DexScreener pool discovery */
+          /* Fallback D: GT via DexScreener pool discovery (PulseChain tokens) */
           if ((!data || data.length < 2) && t.dexAddr) {
             data = await fetchViaPoolDiscoveryDS(t.dexAddr, tier, k, signal);
-            await sleep(500);
-          }
-          /* Fallback D: GT direct (if pool address exists but wasn't primary) */
-          if ((!data || data.length < 2) && t.gtPool && t.source !== 'gt') {
-            data = await fetchFromGeckoTerminal(t.gtPool, tier, k, signal);
             await sleep(500);
           }
         }
@@ -1244,12 +1244,15 @@ function updateStatusLine() {
    DATA SOURCES — tier-based fetching, multi-layer redundancy
    
    ARCHITECTURE:
-     PRIMARY for PulseChain tokens (PTGC/UFO/WPLS/PLSX/HEX/eHEX/INC):
-       → GeckoTerminal free (PulseChain pools, generous limits)
-       → Fallback: CG Pro → Moralis → GT Pool Discovery → GT Direct → DexScreener 2pt
-     PRIMARY for Majors (BTC/ETH/SOL/BNB/XRP):
-       → CoinGecko PRO (500 calls/min with paid key)
-       → Fallback: CG Pro retry → CG Free API (different endpoint, no key)
+     PRIMARY for ALL tokens except XRP:
+       → GeckoTerminal (free, multi-chain: pulsechain, eth, bsc, solana)
+       → PulseChain tokens use direct pool address
+       → Majors (BTC/ETH/SOL/BNB) use pool discovery on their native chain
+     PRIMARY for XRP only:
+       → CoinGecko PRO (no reliable DEX pool for XRP)
+     FALLBACK chain (tried in order if primary fails):
+       GT tokens: CG Pro → CG Free → Moralis → DexScreener pool discovery → DexScreener 2pt
+       CG tokens: CG Pro retry → CG Free
    
    Each source fetches the MAXIMUM data for a tier:
      minute → 24h of 15-min candles (96 points)
@@ -1321,10 +1324,10 @@ async function fetchFromCoinGeckoFree(id, tier, sym, signal) {
   } catch { return null; }
 }
 
-/* SOURCE 2: GeckoTerminal OHLCV — PulseChain pools */
-async function fetchFromGeckoTerminal(pool, tier, sym, signal) {
+/* SOURCE 2: GeckoTerminal OHLCV — ANY chain (pulsechain, eth, bsc, solana) */
+async function fetchFromGeckoTerminal(pool, tier, sym, signal, network = 'pulsechain') {
   const { tf, agg, lim, maxAge } = gtParamsForTier(tier);
-  const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000, signal);
+  const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/${network}/pools/${pool}/ohlcv/${tf}?aggregate=${agg}&limit=${lim}&before_timestamp=${Math.floor(Date.now() / 1000)}&currency=usd`, 3, 2000, signal);
   if (!r) return null;
   try {
     const j = await r.json();
@@ -1333,6 +1336,43 @@ async function fetchFromGeckoTerminal(pool, tier, sym, signal) {
     const raw = c.map(x => ({ ts: x[0] * 1000, price: parseFloat(x[4]) }));
     return cleanData(raw, maxAge + 1);
   } catch (e) { console.warn(`GT parse error for ${sym}:`, e); return null; }
+}
+
+/* Discover best pool for a token on ANY network via GeckoTerminal */
+async function discoverPoolGT(network, tokenAddr, signal) {
+  const cached = getPoolAddr(network, tokenAddr);
+  if (cached) return cached;
+  try {
+    const r = await fetchRetry(`https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${tokenAddr}/pools?sort=h24_volume_usd_desc&page=1`, 2, 2000, signal);
+    if (r) {
+      const j = await r.json();
+      const pools = j?.data || [];
+      if (pools.length > 0) {
+        const pool = pools[0].attributes?.address;
+        if (pool) { setPoolAddr(network, tokenAddr, pool); return pool; }
+      }
+    }
+  } catch (e) { console.warn(`GT pool discovery failed for ${network}/${tokenAddr}:`, e); }
+  return null;
+}
+
+/* Discover pool then fetch OHLCV */
+async function discoverAndFetchGT(network, tokenAddr, tier, sym, signal) {
+  const pool = await discoverPoolGT(network, tokenAddr, signal);
+  if (!pool) return null;
+  return fetchFromGeckoTerminal(pool, tier, sym, signal, network);
+}
+
+/* UNIFIED GT FETCH — handles both direct pools and multi-chain discovery */
+async function fetchGT(tokenConfig, tier, sym, signal) {
+  const network = tokenConfig.gtNetwork || 'pulsechain';
+  if (tokenConfig.gtPool) {
+    return fetchFromGeckoTerminal(tokenConfig.gtPool, tier, sym, signal, network);
+  }
+  if (tokenConfig.gtTokenAddr) {
+    return discoverAndFetchGT(network, tokenConfig.gtTokenAddr, tier, sym, signal);
+  }
+  return null;
 }
 
 /* SOURCE 3: Moralis OHLCV — PulseChain + multi-chain (paid, 1500 CU/s) */
