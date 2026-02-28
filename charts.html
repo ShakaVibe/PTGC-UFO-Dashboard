@@ -559,7 +559,6 @@ const RANGES = [
 
 /* Token presets */
 const PRESETS = [
-  { label: 'Default', keys: ['PTGC', 'UFO', 'WPLS', 'BTC', 'ETH'] },
   { label: 'Grays', keys: ['PTGC', 'UFO'] },
   { label: 'PulseChain', keys: ['PTGC', 'UFO', 'WPLS', 'PLSX', 'HEX', 'EHEX', 'INC'] },
   { label: 'Majors', keys: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'] },
@@ -599,7 +598,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v4_cache';
+const CACHE_STORAGE_KEY = 'charts_v2_cache';
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -702,13 +701,13 @@ function setPoolAddr(network, tokenAddr, pool) { const c = getPoolCache(); c[`${
 function saveSelections() {
   try {
     const sel = Object.entries(TOKENS).filter(([k, t]) => t.on).map(([k]) => k);
-    localStorage.setItem('charts_v2_sel_tokens', JSON.stringify(sel));
-    localStorage.setItem('charts_v2_sel_range', String(range.days));
+    localStorage.setItem('charts_sel_tokens', JSON.stringify(sel));
+    localStorage.setItem('charts_sel_range', String(range.days));
   } catch {}
 }
 function loadSelections() {
   try {
-    const sel = JSON.parse(localStorage.getItem('charts_v2_sel_tokens'));
+    const sel = JSON.parse(localStorage.getItem('charts_sel_tokens'));
     if (sel && Array.isArray(sel) && sel.length > 0) {
       // Only apply selections for tokens that actually exist
       const validKeys = new Set(Object.keys(TOKENS));
@@ -717,7 +716,7 @@ function loadSelections() {
         Object.keys(TOKENS).forEach(k => { TOKENS[k].on = validSel.includes(k) });
       }
     }
-    const rd = parseInt(localStorage.getItem('charts_v2_sel_range'));
+    const rd = parseInt(localStorage.getItem('charts_sel_range'));
     if (rd && !isNaN(rd)) { const found = RANGES.find(r => r.days === rd); if (found) range = found }
   } catch {
     // Corrupted selection data — just use defaults
@@ -742,12 +741,8 @@ function navTo(tab) {
    INIT
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Migrate: clean up old cache/selection keys from previous versions
+  // Migrate: clean up old sessionStorage cache from V1
   try { sessionStorage.removeItem('charts_data_cache'); } catch {}
-  try { localStorage.removeItem('charts_v2_cache'); } catch {}
-  try { localStorage.removeItem('charts_v3_cache'); } catch {}
-  try { localStorage.removeItem('charts_sel_tokens'); } catch {}
-  try { localStorage.removeItem('charts_sel_range'); } catch {}
   
   loadSelections();
   cache = loadCache();
@@ -776,8 +771,6 @@ function clearCacheAndRefresh() {
   }
   cache = {};
   try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch {}
-  try { localStorage.removeItem('charts_v2_cache') } catch {} // old version
-  try { localStorage.removeItem('charts_v3_cache') } catch {} // old version
   try { localStorage.removeItem('charts_pool_cache') } catch {}
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
   Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
@@ -1244,7 +1237,7 @@ function updateStatusLine() {
      daily  → 365d of daily candles — covers 1M through 1Y
    ═══════════════════════════════════════════════════════════════ */
 
-/* Shared: validate, deduplicate, sort a data array */
+/* Shared: validate, deduplicate, sort, and remove outlier spikes */
 function cleanData(data, maxAgeDays) {
   if (!data || !data.length) return null;
   const cutoff = Date.now() - maxAgeDays * 86400000;
@@ -1259,7 +1252,36 @@ function cleanData(data, maxAgeDays) {
       return true;
     })
     .sort((a, b) => a.ts - b.ts);
-  return cleaned.length >= 2 ? cleaned : null;
+
+  if (cleaned.length < 3) return cleaned.length >= 2 ? cleaned : null;
+
+  /* Spike filter: remove single-candle outliers.
+     A point is a spike if it deviates >40% from BOTH its neighbors,
+     while the neighbors are within 20% of each other.
+     This catches bad candles from low-liquidity trades without
+     removing legitimate rapid moves (which persist across 2+ candles). */
+  const spikeThreshold = 0.40; // 40% deviation from neighbors
+  const neighborThreshold = 0.20; // neighbors must be within 20% of each other
+  const filtered = [cleaned[0]]; // always keep first point
+
+  for (let i = 1; i < cleaned.length - 1; i++) {
+    const prev = cleaned[i - 1].price;
+    const curr = cleaned[i].price;
+    const next = cleaned[i + 1].price;
+
+    const devFromPrev = Math.abs(curr - prev) / prev;
+    const devFromNext = Math.abs(curr - next) / next;
+    const neighborDev = Math.abs(next - prev) / prev;
+
+    if (devFromPrev > spikeThreshold && devFromNext > spikeThreshold && neighborDev < neighborThreshold) {
+      console.log(`Spike filter: removed outlier at ${new Date(cleaned[i].ts).toISOString()} price=$${curr.toFixed(8)} (prev=$${prev.toFixed(8)}, next=$${next.toFixed(8)})`);
+      continue; // skip this point
+    }
+    filtered.push(cleaned[i]);
+  }
+  filtered.push(cleaned[cleaned.length - 1]); // always keep last point
+
+  return filtered.length >= 2 ? filtered : null;
 }
 
 /* SOURCE 1: Moralis OHLCV — PulseChain (paid, CORS-enabled) */
@@ -1300,36 +1322,12 @@ async function discoverPairForMoralis(dexAddr, signal) {
     if (r) {
       const j = await r.json();
       const pairs = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0);
-      if (!pairs.length) return null;
-
-      /* Sort by 24h volume descending */
       pairs.sort((a, b) => parseFloat(b.volume?.h24 || 0) - parseFloat(a.volume?.h24 || 0));
-
-      /* Prefer pairs where OUR token is the baseToken.
-         This avoids the WPLS/DAI bug where Moralis returns the quote-side
-         (stablecoin) price instead of our token's price. */
-      const addrLower = dexAddr.toLowerCase();
-      const baseMatch = pairs.filter(p =>
-        p.baseToken && p.baseToken.address && p.baseToken.address.toLowerCase() === addrLower
-      );
-
-      /* Also avoid pairs where the other side is a stablecoin if our token is quote,
-         because Moralis OHLCV may return the stablecoin's ~$1 price */
-      const STABLECOINS = ['dai', 'usdc', 'usdt', 'busd', 'tusd', 'frax'];
-      const safeBaseMatch = baseMatch.filter(p => {
-        const qSym = (p.quoteToken?.symbol || '').toLowerCase();
-        return !STABLECOINS.includes(qSym);
-      });
-
-      /* Pick best: safe base-match > any base-match > highest volume overall */
-      const best = (safeBaseMatch.length > 0 ? safeBaseMatch[0]
-                   : baseMatch.length > 0 ? baseMatch[0]
-                   : pairs[0]);
-
-      pool = best.pairAddress;
-      console.log(`Discovered pair for ${dexAddr}: ${pool} (base=${best.baseToken?.symbol}, quote=${best.quoteToken?.symbol}, vol=$${best.volume?.h24})`);
-      setPoolAddr('moralis', dexAddr, pool);
-      return pool;
+      if (pairs.length > 0) {
+        pool = pairs[0].pairAddress;
+        setPoolAddr('moralis', dexAddr, pool);
+        return pool;
+      }
     }
   } catch (e) { console.warn(`Pair discovery failed for ${dexAddr}:`, e); }
   return null;
@@ -1342,24 +1340,7 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
     pairAddr = await discoverPairForMoralis(tokenConfig.dexAddr, signal);
   }
   if (!pairAddr) return null;
-  const data = await fetchFromMoralis(pairAddr, tier, sym, signal);
-
-  /* Sanity check: if ALL prices are suspiciously close to $1.00 (0.90–1.10),
-     this is likely a stablecoin pair returning the wrong side's price.
-     Clear pool cache and return null so fallback/retry can discover a better pair. */
-  if (data && data.length >= 2 && !tokenConfig.pairAddr) {
-    const allNearOne = data.every(d => d.price >= 0.90 && d.price <= 1.10);
-    if (allNearOne) {
-      console.warn(`${sym}: Moralis returned ~$1 prices — likely stablecoin pair confusion. Clearing pool cache.`);
-      // Clear the cached pool so next attempt discovers a different pair
-      const pc = getPoolCache();
-      delete pc[`moralis_${tokenConfig.dexAddr}`];
-      setPoolCache(pc);
-      return null;
-    }
-  }
-
-  return data;
+  return fetchFromMoralis(pairAddr, tier, sym, signal);
 }
 
 /* SOURCE 2: CryptoCompare — free, CORS-enabled from any domain */
