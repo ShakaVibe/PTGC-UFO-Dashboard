@@ -559,6 +559,7 @@ const RANGES = [
 
 /* Token presets */
 const PRESETS = [
+  { label: 'Default', keys: ['PTGC', 'UFO', 'WPLS', 'BTC', 'ETH'] },
   { label: 'Grays', keys: ['PTGC', 'UFO'] },
   { label: 'PulseChain', keys: ['PTGC', 'UFO', 'WPLS', 'PLSX', 'HEX', 'EHEX', 'INC'] },
   { label: 'Majors', keys: ['BTC', 'ETH', 'SOL', 'BNB', 'XRP'] },
@@ -598,7 +599,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v2_cache';
+const CACHE_STORAGE_KEY = 'charts_v4_cache';
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -701,13 +702,13 @@ function setPoolAddr(network, tokenAddr, pool) { const c = getPoolCache(); c[`${
 function saveSelections() {
   try {
     const sel = Object.entries(TOKENS).filter(([k, t]) => t.on).map(([k]) => k);
-    localStorage.setItem('charts_sel_tokens', JSON.stringify(sel));
-    localStorage.setItem('charts_sel_range', String(range.days));
+    localStorage.setItem('charts_v2_sel_tokens', JSON.stringify(sel));
+    localStorage.setItem('charts_v2_sel_range', String(range.days));
   } catch {}
 }
 function loadSelections() {
   try {
-    const sel = JSON.parse(localStorage.getItem('charts_sel_tokens'));
+    const sel = JSON.parse(localStorage.getItem('charts_v2_sel_tokens'));
     if (sel && Array.isArray(sel) && sel.length > 0) {
       // Only apply selections for tokens that actually exist
       const validKeys = new Set(Object.keys(TOKENS));
@@ -716,7 +717,7 @@ function loadSelections() {
         Object.keys(TOKENS).forEach(k => { TOKENS[k].on = validSel.includes(k) });
       }
     }
-    const rd = parseInt(localStorage.getItem('charts_sel_range'));
+    const rd = parseInt(localStorage.getItem('charts_v2_sel_range'));
     if (rd && !isNaN(rd)) { const found = RANGES.find(r => r.days === rd); if (found) range = found }
   } catch {
     // Corrupted selection data — just use defaults
@@ -741,8 +742,12 @@ function navTo(tab) {
    INIT
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Migrate: clean up old sessionStorage cache from V1
+  // Clean up old cache/selection keys from previous versions
   try { sessionStorage.removeItem('charts_data_cache'); } catch {}
+  try { localStorage.removeItem('charts_v2_cache'); } catch {}
+  try { localStorage.removeItem('charts_v3_cache'); } catch {}
+  try { localStorage.removeItem('charts_sel_tokens'); } catch {}
+  try { localStorage.removeItem('charts_sel_range'); } catch {}
   
   loadSelections();
   cache = loadCache();
@@ -771,6 +776,8 @@ function clearCacheAndRefresh() {
   }
   cache = {};
   try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch {}
+  try { localStorage.removeItem('charts_v2_cache') } catch {}
+  try { localStorage.removeItem('charts_v3_cache') } catch {}
   try { localStorage.removeItem('charts_pool_cache') } catch {}
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
   Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
@@ -1253,35 +1260,58 @@ function cleanData(data, maxAgeDays) {
     })
     .sort((a, b) => a.ts - b.ts);
 
-  if (cleaned.length < 3) return cleaned.length >= 2 ? cleaned : null;
+  if (cleaned.length < 4) return cleaned.length >= 2 ? cleaned : null;
 
-  /* Spike filter: remove single-candle outliers.
-     A point is a spike if it deviates >40% from BOTH its neighbors,
-     while the neighbors are within 20% of each other.
-     This catches bad candles from low-liquidity trades without
-     removing legitimate rapid moves (which persist across 2+ candles). */
-  const spikeThreshold = 0.40; // 40% deviation from neighbors
-  const neighborThreshold = 0.20; // neighbors must be within 20% of each other
-  const filtered = [cleaned[0]]; // always keep first point
+  /* ── Spike filter ──
+     Pass 1: Remove single-candle outliers.
+       A point is a spike if it deviates >30% from BOTH neighbors,
+       while those neighbors are within 15% of each other.
+     Pass 2: Remove V-shape spikes (2 consecutive outlier candles).
+       Two adjacent points are a V-shape if both deviate >25% from the
+       points just outside them, and those outer points are within 15%. */
 
+  // Pass 1: single-point spikes
+  let pass1 = [cleaned[0]];
   for (let i = 1; i < cleaned.length - 1; i++) {
     const prev = cleaned[i - 1].price;
     const curr = cleaned[i].price;
     const next = cleaned[i + 1].price;
-
-    const devFromPrev = Math.abs(curr - prev) / prev;
-    const devFromNext = Math.abs(curr - next) / next;
+    const devPrev = Math.abs(curr - prev) / prev;
+    const devNext = Math.abs(curr - next) / next;
     const neighborDev = Math.abs(next - prev) / prev;
-
-    if (devFromPrev > spikeThreshold && devFromNext > spikeThreshold && neighborDev < neighborThreshold) {
-      console.log(`Spike filter: removed outlier at ${new Date(cleaned[i].ts).toISOString()} price=$${curr.toFixed(8)} (prev=$${prev.toFixed(8)}, next=$${next.toFixed(8)})`);
-      continue; // skip this point
+    if (devPrev > 0.30 && devNext > 0.30 && neighborDev < 0.15) {
+      console.log(`Spike filter: removed point at ${new Date(cleaned[i].ts).toISOString()} $${curr.toFixed(8)} (neighbors: $${prev.toFixed(8)}, $${next.toFixed(8)})`);
+      continue;
     }
-    filtered.push(cleaned[i]);
+    pass1.push(cleaned[i]);
   }
-  filtered.push(cleaned[cleaned.length - 1]); // always keep last point
+  pass1.push(cleaned[cleaned.length - 1]);
 
-  return filtered.length >= 2 ? filtered : null;
+  // Pass 2: V-shape spikes (2 consecutive outlier points)
+  if (pass1.length < 5) return pass1.length >= 2 ? pass1 : null;
+  let pass2 = [pass1[0]];
+  let i = 1;
+  while (i < pass1.length - 1) {
+    if (i + 1 < pass1.length - 1) {
+      const before = pass1[i - 1].price;
+      const p1 = pass1[i].price;
+      const p2 = pass1[i + 1].price;
+      const after = pass1[i + 2].price;
+      const dev1 = Math.abs(p1 - before) / before;
+      const dev2 = Math.abs(p2 - after) / after;
+      const outerDev = Math.abs(after - before) / before;
+      if (dev1 > 0.25 && dev2 > 0.25 && outerDev < 0.15) {
+        console.log(`V-spike filter: removed 2 points at ${new Date(pass1[i].ts).toISOString()} $${p1.toFixed(8)} & $${p2.toFixed(8)}`);
+        i += 2; // skip both points
+        continue;
+      }
+    }
+    pass2.push(pass1[i]);
+    i++;
+  }
+  if (i === pass1.length - 1) pass2.push(pass1[pass1.length - 1]);
+
+  return pass2.length >= 2 ? pass2 : null;
 }
 
 /* SOURCE 1: Moralis OHLCV — PulseChain (paid, CORS-enabled) */
@@ -1322,12 +1352,32 @@ async function discoverPairForMoralis(dexAddr, signal) {
     if (r) {
       const j = await r.json();
       const pairs = (j.pairs || []).filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0);
+      if (!pairs.length) return null;
+
       pairs.sort((a, b) => parseFloat(b.volume?.h24 || 0) - parseFloat(a.volume?.h24 || 0));
-      if (pairs.length > 0) {
-        pool = pairs[0].pairAddress;
-        setPoolAddr('moralis', dexAddr, pool);
-        return pool;
-      }
+
+      /* Prefer pairs where OUR token is the baseToken.
+         Avoids WPLS/DAI bug where Moralis returns the stablecoin price. */
+      const addrLower = dexAddr.toLowerCase();
+      const baseMatch = pairs.filter(p =>
+        p.baseToken && p.baseToken.address && p.baseToken.address.toLowerCase() === addrLower
+      );
+
+      /* Also avoid pairs where the other side is a stablecoin */
+      const STABLECOINS = ['dai', 'usdc', 'usdt', 'busd', 'tusd', 'frax'];
+      const safeBaseMatch = baseMatch.filter(p => {
+        const qSym = (p.quoteToken?.symbol || '').toLowerCase();
+        return !STABLECOINS.includes(qSym);
+      });
+
+      const best = (safeBaseMatch.length > 0 ? safeBaseMatch[0]
+                   : baseMatch.length > 0 ? baseMatch[0]
+                   : pairs[0]);
+
+      pool = best.pairAddress;
+      console.log(`Discovered pair for ${dexAddr}: ${pool} (base=${best.baseToken?.symbol}, quote=${best.quoteToken?.symbol}, vol=$${best.volume?.h24})`);
+      setPoolAddr('moralis', dexAddr, pool);
+      return pool;
     }
   } catch (e) { console.warn(`Pair discovery failed for ${dexAddr}:`, e); }
   return null;
@@ -1340,7 +1390,23 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
     pairAddr = await discoverPairForMoralis(tokenConfig.dexAddr, signal);
   }
   if (!pairAddr) return null;
-  return fetchFromMoralis(pairAddr, tier, sym, signal);
+  const data = await fetchFromMoralis(pairAddr, tier, sym, signal);
+
+  /* Sanity check: if ALL prices are near $1 (0.90–1.10) for a discovered pair,
+     this is likely a stablecoin pair returning the wrong side's price.
+     Clear pool cache so next attempt finds a better pair. */
+  if (data && data.length >= 2 && !tokenConfig.pairAddr) {
+    const allNearOne = data.every(d => d.price >= 0.90 && d.price <= 1.10);
+    if (allNearOne) {
+      console.warn(`${sym}: Moralis returned ~$1 prices — stablecoin pair confusion. Clearing pool cache.`);
+      const pc = getPoolCache();
+      delete pc[`moralis_${tokenConfig.dexAddr}`];
+      setPoolCache(pc);
+      return null;
+    }
+  }
+
+  return data;
 }
 
 /* SOURCE 2: CryptoCompare — free, CORS-enabled from any domain */
@@ -1492,9 +1558,37 @@ function _doRenderSummary() {
 
 function updatePeriod() {
   const el = document.getElementById('periodLabel');
-  const days = getDays(), now = new Date(), start = new Date(now - days * 86400000);
+  const days = getDays(), now = new Date();
   const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  el.textContent = days <= 1 ? `Last 24 Hours \u2014 ${fmt(now)}` : `${fmt(start)} \u2014 ${fmt(now)}`;
+
+  /* Show the ACTUAL data start date, not the requested range.
+     This prevents confusion when Moralis has less history than requested
+     (e.g., 6M and 1Y showing the same data). */
+  let earliestTs = Infinity;
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (t.on && t._data && t._data.length >= 2 && !t._limited) {
+      if (t._data[0].ts < earliestTs) earliestTs = t._data[0].ts;
+    }
+  });
+
+  if (days <= 1) {
+    el.innerHTML = `Last 24 Hours \u2014 ${fmt(now)}`;
+    return;
+  }
+
+  const requestedStart = new Date(now - days * 86400000);
+  const actualStart = earliestTs < Infinity ? new Date(earliestTs) : requestedStart;
+
+  /* If actual data covers less than 80% of the requested range, show a note */
+  const requestedMs = days * 86400000;
+  const actualMs = now.getTime() - actualStart.getTime();
+  const coveragePct = Math.round((actualMs / requestedMs) * 100);
+
+  if (coveragePct < 80 && earliestTs < Infinity) {
+    el.innerHTML = `${fmt(actualStart)} \u2014 ${fmt(now)} <span style="font-size:12px;color:rgba(255,255,255,0.3);font-weight:400;margin-left:8px">(${coveragePct}% of ${range.label} range \u2014 data starts here)</span>`;
+  } else {
+    el.textContent = `${fmt(actualStart)} \u2014 ${fmt(now)}`;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1516,9 +1610,18 @@ document.addEventListener('click', e => {
 });
 
 function getSharePeriodText() {
-  const days = getDays(), now = new Date(), start = new Date(now - days * 86400000);
+  const days = getDays(), now = new Date();
   const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  return days <= 1 ? `Last 24 Hours \u2014 ${fmt(now)}` : `${fmt(start)} \u2014 ${fmt(now)}`;
+  if (days <= 1) return `Last 24 Hours \u2014 ${fmt(now)}`;
+  /* Use actual data start date (same logic as updatePeriod) */
+  let earliestTs = Infinity;
+  Object.entries(TOKENS).forEach(([k, t]) => {
+    if (t.on && t._data && t._data.length >= 2 && !t._limited) {
+      if (t._data[0].ts < earliestTs) earliestTs = t._data[0].ts;
+    }
+  });
+  const actualStart = earliestTs < Infinity ? new Date(earliestTs) : new Date(now - days * 86400000);
+  return `${fmt(actualStart)} \u2014 ${fmt(now)}`;
 }
 
 function getShareLogosHtml() {
