@@ -5229,10 +5229,6 @@
             totalCommPaidUsd+=getEntryPaidAmountUsd(me,rate);
           }
         });
-        // If we have receipts and they're higher, use those (receipts are authoritative)
-        const receiptCommPaid=receipts.reduce((sum,r)=>sum+(r.amount||0),0);
-        const receiptCommPaidUsd=receipts.reduce((sum,r)=>sum+(r.usdValue||0),0);
-        if(receiptCommPaid>totalCommPaid){totalCommPaid=receiptCommPaid;totalCommPaidUsd=receiptCommPaidUsd;}
         
         return{...referrer,username,monthlyEntries,receipts,totalCommPaid,totalCommPaidUsd,totalBuys:lifetimeBuys,totalPtgc:lifetimePtgc,totalUsd:lifetimeUsd};
       };
@@ -5256,9 +5252,6 @@
         if(!data)return[];
         const referrers=Object.entries(data.referrers||{});
         return referrers.map(([username,r])=>{
-          const userReceipts=(data.receipts||[]).filter(rec=>rec.username===username);
-          const receiptCommPaid=userReceipts.reduce((sum,rec)=>sum+(rec.amount||0),0);
-          const receiptCommPaidUsd=userReceipts.reduce((sum,rec)=>sum+(rec.usdValue||0),0);
           let pending=0,commPaid=0,commPaidUsd=0;
           Object.values(data.monthlyLogs||{}).forEach(log=>{
             const entry=(log.entries||[]).find(e=>e.username===username);
@@ -5278,8 +5271,6 @@
               }
             }
           });
-          // Use receipts if they're higher (authoritative)
-          if(receiptCommPaid>commPaid){commPaid=receiptCommPaid;commPaidUsd=receiptCommPaidUsd;}
           return{name:username,wallet:r.wallet,buys:r.totalBuys||0,ptgc:r.totalPtgc||0,usd:r.totalUsd||0,commPaid,commPaidUsd,pending};
         });
       },[data]);
