@@ -5013,6 +5013,21 @@
       // Current month key - USE UTC TIME
       const currentMonth=new Date().toISOString().slice(0,7);
       
+      // Helper: get paid commission for an entry using entry-level data (not buys array sums)
+      // The buys array may contain ALL buys ever for a referrer, so summing it overcounts
+      const getEntryPaidComm=(e,rate)=>{
+        const cr=e.commissionRate||rate;
+        const entryComm=e.commissionPtgc||((e.ptgcAmount||0)*(cr/100));
+        const entryCommUsd=(e.usdAmount||0)*(cr/100);
+        if(!e.buys?.length){return(e.status==='paid')?{ptgc:entryComm,usd:entryCommUsd}:{ptgc:0,usd:0};}
+        const qualify=e.buys.filter(b=>b.ptgcAmount>0&&b.meetsThreshold!==false);
+        if(!qualify.length)return{ptgc:0,usd:0};
+        const paidCount=qualify.filter(b=>b.paid).length;
+        if(paidCount===qualify.length)return{ptgc:entryComm,usd:entryCommUsd};
+        if(paidCount>0){const frac=paidCount/qualify.length;return{ptgc:entryComm*frac,usd:entryCommUsd*frac};}
+        return{ptgc:0,usd:0};
+      };
+      
       useEffect(()=>{
         const fetchData=async()=>{
           try{
@@ -5070,10 +5085,10 @@
             allTimeUsd+=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
             allTimePtgc+=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
             allTimeCommission+=entries.reduce((sum,e)=>sum+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
-            entries.forEach(e=>{if(e.buys)e.buys.forEach(b=>{if(b.paid){const r=e.commissionRate||rate;txTotalPaid+=(b.ptgcAmount||0)*(r/100);txTotalPaidUsd+=(b.usdAmount||0)*(r/100);}});});
+            entries.forEach(e=>{const pc=getEntryPaidComm(e,rate);txTotalPaid+=pc.ptgc;txTotalPaidUsd+=pc.usd;});
           });
         }
-        // Use receipts as source of truth (tx-based can double-count buys across months)
+        // Use receipts as source of truth; fall back to entry-level calculation
         const totalPaid=receiptTotalPaid>0?receiptTotalPaid:txTotalPaid;
         const totalPaidUsd=receiptTotalPaidUsd>0?receiptTotalPaidUsd:txTotalPaidUsd;
         // Fallback to referrers totals if no monthlyLogs
@@ -5098,7 +5113,7 @@
           periodReferrers=entries.length;
           const receiptPeriodPaid=(data.receipts||[]).filter(r=>r.month===selectedMonth).reduce((sum,r)=>sum+(r.amount||0),0);
           let txPeriodPaid=0;
-          entries.forEach(e=>{if(e.buys)e.buys.forEach(b=>{if(b.paid){const cr=e.commissionRate||rate;txPeriodPaid+=(b.ptgcAmount||0)*(cr/100);}});});
+          entries.forEach(e=>{const pc=getEntryPaidComm(e,rate);txPeriodPaid+=pc.ptgc;});
           periodPaid=receiptPeriodPaid>0?receiptPeriodPaid:txPeriodPaid;
         }
         
@@ -5194,18 +5209,13 @@
         const receiptCommPaid=receipts.reduce((sum,r)=>sum+(r.amount||0),0);
         const receiptCommPaidUsd=receipts.reduce((sum,r)=>sum+(r.usdValue||0),0);
         
-        // Also calculate from paid buy transactions (in case receipts are missing)
+        // Also calculate from entry-level paid status (in case receipts are missing)
         let txCommPaid=0,txCommPaidUsd=0;
         monthlyEntries.forEach(me=>{
-          if(me.buys){
-            const rate=me.commissionRate||me.settings?.commissionRate||2;
-            me.buys.forEach(b=>{
-              if(b.paid){
-                txCommPaid+=(b.ptgcAmount||0)*(rate/100);
-                txCommPaidUsd+=(b.usdAmount||0)*(rate/100);
-              }
-            });
-          }
+          const rate=me.commissionRate||me.settings?.commissionRate||2;
+          const pc=getEntryPaidComm(me,rate);
+          txCommPaid+=pc.ptgc;
+          txCommPaidUsd+=pc.usd;
         });
         
         // Use receipts as source of truth (tx-based can double-count buys across months)
@@ -5240,12 +5250,16 @@
           let pending=0,txCommPaid=0,txCommPaidUsd=0;
           Object.values(data.monthlyLogs||{}).forEach(log=>{
             const entry=(log.entries||[]).find(e=>e.username===username);
-            if(entry?.buys){
+            if(entry){
               const rate=entry.commissionRate||log.settings?.commissionRate||2;
-              entry.buys.forEach(b=>{
-                if(!b.paid&&b.meetsThreshold!==false)pending+=(b.ptgcAmount||0)*(rate/100);
-                if(b.paid){txCommPaid+=(b.ptgcAmount||0)*(rate/100);txCommPaidUsd+=(b.usdAmount||0)*(rate/100);}
-              });
+              const cr=entry.commissionRate||rate;
+              const entryComm=entry.commissionPtgc||((entry.ptgcAmount||0)*(cr/100));
+              const pc=getEntryPaidComm(entry,rate);
+              txCommPaid+=pc.ptgc;
+              txCommPaidUsd+=pc.usd;
+              // Pending = total entry commission minus paid portion
+              const unpaidComm=entryComm-pc.ptgc;
+              if(unpaidComm>0)pending+=unpaidComm;
             }
           });
           const commPaid=receiptCommPaid>0?receiptCommPaid:txCommPaid;
@@ -5291,10 +5305,12 @@
         if(!data?.monthlyLogs?.[currentMonth])return[];
         const entries=data.monthlyLogs[currentMonth].entries||[];
         const allTx=[];
+        const seen=new Set();
         entries.forEach(entry=>{
           (entry.buys||[]).forEach(b=>{
             if(b.ptgcAmount>0){
-              allTx.push({...b,username:entry.username,wallet:entry.wallet});
+              const key=b.txHash||`${b.date}-${b.ptgcAmount}-${b.buyer||''}`;
+              if(!seen.has(key)){seen.add(key);allTx.push({...b,username:entry.username,wallet:entry.wallet});}
             }
           });
         });
@@ -5378,33 +5394,44 @@
             const details=getReferrerDetails(selectedReferrer);
             if(!details)return null;
             
-            // Get all transactions for this referrer across all months
+            // Get all transactions for this referrer across all months (deduplicated)
             const allTx=[];
+            const seenTxKeys=new Set();
             Object.entries(data.monthlyLogs||{}).forEach(([month,log])=>{
               const entry=(log.entries||[]).find(e=>e.username===selectedReferrer);
               if(entry?.buys){
                 entry.buys.forEach(b=>{
-                  allTx.push({...b,month,rate:entry.commissionRate||log.settings?.commissionRate||2});
+                  const key=b.txHash||`${b.date}-${b.ptgcAmount}-${b.buyer||''}`;
+                  if(!seenTxKeys.has(key)){
+                    seenTxKeys.add(key);
+                    allTx.push({...b,month,rate:entry.commissionRate||log.settings?.commissionRate||2});
+                  }
                 });
               }
             });
             allTx.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
             
-            // Calculate pending
+            // Calculate pending using entry-level data
             let pending=0,pendingUsd=0;
-            allTx.forEach(tx=>{
-              if(!tx.paid&&tx.meetsThreshold!==false){
-                const comm=(tx.ptgcAmount||0)*(tx.rate/100);
-                pending+=comm;
-                pendingUsd+=(tx.usdAmount||0)*(tx.rate/100);
-              }
+            details.monthlyEntries.forEach(me=>{
+              const rate=me.commissionRate||me.settings?.commissionRate||2;
+              const cr=me.commissionRate||rate;
+              const entryComm=me.commissionPtgc||((me.ptgcAmount||0)*(cr/100));
+              const entryCommUsd=(me.usdAmount||0)*(cr/100);
+              const pc=getEntryPaidComm(me,rate);
+              const unpaidComm=entryComm-pc.ptgc;
+              const unpaidUsd=entryCommUsd-pc.usd;
+              if(unpaidComm>0)pending+=unpaidComm;
+              if(unpaidUsd>0)pendingUsd+=unpaidUsd;
             });
             
             // Monthly breakdown
             const monthlyBreakdown=details.monthlyEntries.map(me=>{
               const paidTx=me.buys?.filter(b=>b.paid).length||0;
               const totalTx=me.buys?.length||0;
-              const paidComm=me.buys?.filter(b=>b.paid).reduce((s,b)=>(s+(b.ptgcAmount||0)*((me.commissionRate||me.settings?.commissionRate||2)/100)),0)||0;
+              const rate=me.commissionRate||me.settings?.commissionRate||2;
+              const pc=getEntryPaidComm(me,rate);
+              const paidComm=pc.ptgc;
               return{...me,paidTx,totalTx,paidComm};
             });
             
