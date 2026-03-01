@@ -160,6 +160,7 @@
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
     const fmtComma=(n,dec=2)=>n==null||isNaN(n)?'\u2014':Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+    const fmtDollarCompact=(n)=>{if(n==null||isNaN(n))return'\u2014';const a=Math.abs(n);if(a>=1e9)return'$'+(n/1e9).toFixed(2)+'B';if(a>=1e6)return'$'+(n/1e6).toFixed(2)+'M';if(a>=1e4)return'$'+(n/1e3).toFixed(2)+'K';return fmtDollar(n)};
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
@@ -428,6 +429,62 @@
       const[moonApplyAllAmount,setMoonApplyAllAmount]=useState(''); // apply-all dollar amount
       const[moonApplyAllX,setMoonApplyAllX]=useState(''); // apply-all X target
       const CORE_DECIMALS={'WPLS':18,'PLSX':18,'INC':18,'HEX':8,'EHEX':8};
+      
+      // Fresh Capital Calculator state
+      const[freshUSD,setFreshUSD]=useState('');
+      const[freshMode,setFreshMode]=useState('vs'); // 'vs', 'allin', 'split'
+      const[freshAllinToken,setFreshAllinToken]=useState('PTGC');
+      const[freshSplitPct,setFreshSplitPct]=useState(50); // PTGC percentage
+      const[freshPtgcStrategy,setFreshPtgcStrategy]=useState('hold'); // 'hold' or 'holdstake'
+      const[freshUfoStrategy,setFreshUfoStrategy]=useState('hold'); // 'hold' or 'lp'
+      const[freshPtgcStakePct,setFreshPtgcStakePct]=useState(100); // % of PTGC tokens to stake (rest just held)
+      const[freshUfoLpPct,setFreshUfoLpPct]=useState(100); // % of UFO tokens to provide as LP (rest just held)
+      const[freshVolSource,setFreshVolSource]=useState('live24h');
+      const[freshVolCustom,setFreshVolCustom]=useState(''); // PTGC custom vol (or both when preset)
+      const[freshVolCustomUfo,setFreshVolCustomUfo]=useState(''); // UFO custom vol
+      const[freshVolIsPreset,setFreshVolIsPreset]=useState(false); // true only when a preset button was clicked
+      
+      // Fresh Capital - other token data (need both PTGC + UFO for comparison)
+      const[freshOtherData,setFreshOtherData]=useState(null);
+      const[freshOtherBurn,setFreshOtherBurn]=useState({total:0,pct:0,supply:0});
+      const[freshOtherStaking,setFreshOtherStaking]=useState(null);
+      const[freshOtherShareRate,setFreshOtherShareRate]=useState(0);
+      const[freshOtherVolume,setFreshOtherVolume]=useState(null);
+      const[freshOtherLoading,setFreshOtherLoading]=useState(false);
+      
+      // Fetch other token data when Fresh Capital tab is active
+      useEffect(()=>{
+        if(calcTab!=='fresh')return;
+        const otherKey=token==='PTGC'?'UFO':'PTGC';
+        const otherCfg=TOKENS[otherKey];
+        setFreshOtherLoading(true);
+        (async()=>{
+          try{
+            const[d,b]=await Promise.all([
+              fetchDex(otherCfg.address,otherCfg.mainPair),
+              fetchBurn(otherCfg.address,otherCfg.decimals)
+            ]);
+            setFreshOtherData(d);
+            setFreshOtherBurn(b);
+            if(otherKey==='PTGC'&&otherCfg.stakingContract){
+              const s=await fetchStakingData(otherCfg.stakingContract,otherCfg.address,otherCfg.decimals,otherCfg.totalSupply);
+              setFreshOtherStaking(s);
+            }
+            if(otherKey==='UFO'){
+              try{
+                const res=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:UFO_LP_STAKING,data:'0x46c003ac'},'latest'],id:80});
+                if(res.result&&res.result!=='0x')setFreshOtherShareRate(Number(BigInt(res.result))/1e18);
+              }catch(e){}
+            }
+            if(coingeckoDataCache&&coingeckoDataCache[otherKey]){
+              setFreshOtherVolume({vol24h:d?.vol||0,vol7d:coingeckoDataCache[otherKey].volume?.vol7d||0,vol30d:coingeckoDataCache[otherKey].volume?.vol30d||0,vol90d:coingeckoDataCache[otherKey].volume?.vol90d||0});
+            } else {
+              setFreshOtherVolume({vol24h:d?.vol||0,vol7d:0,vol30d:0,vol90d:0});
+            }
+          }catch(e){console.error('Fresh Capital: other token fetch error',e)}
+          setFreshOtherLoading(false);
+        })();
+      },[calcTab,token]);
       
       const loadRwdHoldingFromPortfolio=async()=>{
         setRwdPortfolioLoading(true);
@@ -860,7 +917,7 @@
           {/* Calculator Nav - glass/glow style like Buy button */}
           <div className="flex justify-center mb-10">
             <div className="inline-flex gap-2">
-              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'}].map(b=>{
+              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'}].map(b=>{
                 const active=calcTab===b.id;
                 return(
                   <button key={b.id} onClick={()=>setCalcTab(b.id)} className="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110" style={{
@@ -2047,7 +2104,547 @@
           })()}
 
 
-          
+          {/* ====== FRESH CAPITAL ====== */}
+          {calcTab==='fresh'&&(()=>{
+            // Resolve PTGC and UFO data regardless of which token is currently selected
+            const ptgcCfg=TOKENS.PTGC;
+            const ufoCfg=TOKENS.UFO;
+            const ptgcData=token==='PTGC'?data:freshOtherData;
+            const ufoData=token==='UFO'?data:freshOtherData;
+            const ptgcBurnData=token==='PTGC'?burn:freshOtherBurn;
+            const ufoBurnData=token==='UFO'?burn:freshOtherBurn;
+            const ptgcStaking=token==='PTGC'?stakingData:(freshOtherStaking||{staked:0,locked:0});
+            const ufoShareRate=token==='UFO'?totalUFOShareRate:freshOtherShareRate;
+            const ptgcVol=token==='PTGC'?volumeByPeriod:(freshOtherVolume||{vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+            const ufoVol=token==='UFO'?volumeByPeriod:(freshOtherVolume||{vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+            
+            const ptgcPrice=ptgcData?.price||0;
+            const ufoPrice=ufoData?.price||0;
+            const ptgcCirc=ptgcCfg.totalSupply-(ptgcBurnData?.total||0);
+            const ufoCirc=ufoCfg.totalSupply-(ufoBurnData?.total||0);
+            const ufoTokensInLP=ufoData?.tokensInLP||0;
+            const ufoEligibleSupply=Math.max(ufoCirc-ufoTokensInLP,1);
+            const ptgcTotalStaked=(ptgcStaking?.staked||0)+(ptgcStaking?.locked||0);
+            
+            const inputUSD=parseFloat(freshUSD)||0;
+            const displayFreshUSD=freshUSD?(parseFloat(freshUSD)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
+            
+            // Volume calculation
+            const isPresetCustom=freshVolIsPreset;
+            const getVolForToken=(volData,tkn)=>{
+              const v24=volData?.vol24h||0;
+              const v7d=volData?.vol7d||0;
+              const v30d=volData?.vol30d||0;
+              const v90d=volData?.vol90d||0;
+              if(freshVolSource==='live24h')return v24;
+              if(freshVolSource==='avg7d')return v7d>0?v7d/7:0;
+              if(freshVolSource==='avg30d')return v30d>0?v30d/30:0;
+              if(freshVolSource==='avg90d')return v90d>0?v90d/90:0;
+              if(freshVolSource==='custom'){
+                if(isPresetCustom)return parseFloat(freshVolCustom)||0;
+                // Per-token custom volumes
+                if(tkn==='PTGC')return parseFloat(freshVolCustom)||0;
+                return parseFloat(freshVolCustomUfo)||0;
+              }
+              return v24;
+            };
+            const ptgcDailyVol=getVolForToken(ptgcVol,'PTGC');
+            const ufoDailyVol=getVolForToken(ufoVol,'UFO');
+            const displayFreshVolPtgc=freshVolSource==='custom'&&!isPresetCustom?(freshVolCustom?(parseFloat(freshVolCustom)||0).toLocaleString('en-US',{maximumFractionDigits:0}):''):'';
+            const displayFreshVolUfo=freshVolSource==='custom'&&!isPresetCustom?(freshVolCustomUfo?(parseFloat(freshVolCustomUfo)||0).toLocaleString('en-US',{maximumFractionDigits:0}):''):'';
+            
+            // Calculate per-side amounts
+            const getSideAmounts=()=>{
+              if(freshMode==='vs')return{ptgcUSD:inputUSD,ufoUSD:inputUSD};
+              if(freshMode==='allin'){
+                if(freshAllinToken==='PTGC')return{ptgcUSD:inputUSD,ufoUSD:0};
+                return{ptgcUSD:0,ufoUSD:inputUSD};
+              }
+              return{ptgcUSD:inputUSD*(freshSplitPct/100),ufoUSD:inputUSD*((100-freshSplitPct)/100)};
+            };
+            const{ptgcUSD,ufoUSD}=getSideAmounts();
+            
+            // Net after fees
+            const ptgcNetUSD=ptgcUSD*(1-ptgcCfg.taxRate);
+            const ufoNetUSD=ufoUSD*(1-ufoCfg.taxRate);
+            const ptgcFeeUSD=ptgcUSD*ptgcCfg.taxRate;
+            const ufoFeeUSD=ufoUSD*ufoCfg.taxRate;
+            
+            // Tokens received
+            const ptgcTokens=ptgcPrice>0?ptgcNetUSD/ptgcPrice:0;
+            const ufoTokens=ufoPrice>0?ufoNetUSD/ufoPrice:0;
+            
+            // Sea creatures computed inline via getBurnC
+            
+            // Reward calculations handled by calcRewardsSplit below
+            
+            // Updated calcRewards to handle split percentages
+            const calcRewardsSplit=(isPTGC,tokens,dailyVol,tokenPrice,circSupply,eligibleSupply,totalStakedPool,shareRate,strategy,splitPct)=>{
+              const feeConfig=isPTGC?ptgcCfg:ufoCfg;
+              const holderPct=(feeConfig.taxBreakdown.find(t=>t.name==='Holders')?.pct||0)/100;
+              const stakerPct=isPTGC?(feeConfig.taxBreakdown.find(t=>t.name==='Stakers')?.pct||0)/100:0;
+              const lpProviderPct=!isPTGC?(feeConfig.taxBreakdown.find(t=>t.name==='LP Providers')?.pct||0)/100:0;
+              const dailyVolTokens=tokenPrice>0?dailyVol/tokenPrice:0;
+              
+              // For UFO LP: tokens in LP do NOT earn holder reflections
+              // Only the held portion earns reflections
+              const lpTokens=!isPTGC&&strategy==='lp'?tokens*(splitPct/100):0;
+              const holdTokens=!isPTGC&&strategy==='lp'?tokens-lpTokens:tokens;
+              
+              const eligSup=isPTGC?circSupply:eligibleSupply;
+              const userShareHold=holdTokens>0?holdTokens/eligSup:0;
+              const dailyHolderTokens=dailyVolTokens*holderPct*userShareHold;
+              const dailyHolderUSD=dailyHolderTokens*tokenPrice;
+              
+              // Staking: only the splitPct portion is staked
+              let dailyStakerTokens=0,dailyStakerUSD=0;
+              const stakedTokens=isPTGC&&strategy==='holdstake'?tokens*(splitPct/100):0;
+              if(isPTGC&&strategy==='holdstake'&&totalStakedPool>0&&stakedTokens>0){
+                const userShareStake=stakedTokens/(totalStakedPool+stakedTokens);
+                dailyStakerTokens=dailyVolTokens*stakerPct*userShareStake;
+                dailyStakerUSD=dailyStakerTokens*tokenPrice;
+              }
+              
+              // LP: only the splitPct portion goes to LP
+              let dailyLpUSD=0,dailyLpPLS=0;
+              if(!isPTGC&&strategy==='lp'&&shareRate>0&&lpTokens>0){
+                const userLpShare=lpTokens/(shareRate+lpTokens);
+                dailyLpUSD=dailyVol*lpProviderPct*userLpShare;
+                dailyLpPLS=pls>0?dailyLpUSD/pls:0;
+              }
+              
+              return{
+                dailyHolderTokens,dailyHolderUSD,dailyStakerTokens,dailyStakerUSD,dailyLpUSD,dailyLpPLS,
+                daily:dailyHolderUSD+dailyStakerUSD+dailyLpUSD,
+                weekly:(dailyHolderUSD+dailyStakerUSD+dailyLpUSD)*7,
+                monthly:(dailyHolderUSD+dailyStakerUSD+dailyLpUSD)*30,
+                yearly:(dailyHolderUSD+dailyStakerUSD+dailyLpUSD)*365,
+                holderPct,stakerPct,lpProviderPct,stakedTokens,lpTokens,holdTokens
+              };
+            };
+            
+            const ptgcRewards=calcRewardsSplit(true,ptgcTokens,ptgcDailyVol,ptgcPrice,ptgcCirc,ptgcCirc,ptgcTotalStaked,0,freshPtgcStrategy,freshPtgcStakePct);
+            const ufoRewards=calcRewardsSplit(false,ufoTokens,ufoDailyVol,ufoPrice,ufoCirc,ufoEligibleSupply,0,ufoShareRate,freshUfoStrategy,freshUfoLpPct);
+            
+            const showPTGC=freshMode==='vs'||freshMode==='split'||(freshMode==='allin'&&freshAllinToken==='PTGC');
+            const showUFO=freshMode==='vs'||freshMode==='split'||(freshMode==='allin'&&freshAllinToken==='UFO');
+            const isSingle=(freshMode==='allin');
+            const isLoading=freshOtherLoading&&(showPTGC&&!ptgcData||showUFO&&!ufoData);
+            
+            // Sea creatures inline (max 4)
+            const getCreatures=(tkns,circ)=>{
+              if(tkns<=0||circ<=0)return[];
+              const pct=(tkns/circ)*100;
+              return getBurnC(pct).slice(0,4);
+            };
+            
+            // Render one token column — FIXED HEIGHT, all sections always present
+            const renderColumn=(isPTGC,amtUSD,netUSD,feeUSD,tokens,tokenPrice,rewards,strategy,setStrategy,splitPct,setSplitPct)=>{
+              const tCfg=isPTGC?ptgcCfg:ufoCfg;
+              const tGlow=isPTGC?'rgba(217,202,93,':'rgba(124,252,0,';
+              const tSolid=isPTGC?'#D9CA5D':'#7CFC00';
+              const tText=isPTGC?'text-[#D9CA5D]':'text-[#7CFC00]';
+              const tCirc=isPTGC?ptgcCirc:ufoCirc;
+              const creatures=getCreatures(tokens,tCirc);
+              const hasStakeOrLp=isPTGC?strategy==='holdstake':strategy==='lp';
+              const isEmpty=amtUSD<=0;
+              
+              return(
+                <div className={`flex-1 ${isSingle?'max-w-2xl mx-auto':''}`}>
+                  <div className="rounded-xl overflow-hidden flex flex-col" style={{background:`linear-gradient(180deg,${tGlow}0.12) 0%,${tGlow}0.02) 100%)`,border:`2px solid ${tGlow}0.5)`}}>
+                    {/* Token Header + Price */}
+                    <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img src={tCfg.logo} alt={tCfg.name} className="w-12 h-12" style={{filter:`drop-shadow(0 0 10px ${tGlow}0.6))`}}/>
+                        <div>
+                          <div className={`font-orbitron text-2xl font-bold ${tText}`}>{tCfg.name}</div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+                            <span className={`text-base font-bold ${tText}`}><Price p={tokenPrice}/></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-white/40 text-sm">Fee {(tCfg.taxRate*100)}%</div>
+                        <div className="text-red-400/70 text-sm font-bold">{isEmpty?'—':`-${fmtDollar(feeUSD)}`}</div>
+                      </div>
+                    </div>
+                    
+                    {/* Investment → Net */}
+                    <div className="px-5 pb-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/50 text-base">{isEmpty?'$0.00':fmtDollar(amtUSD)} invested</span>
+                        <span className={`font-bold text-lg ${tText}`}>{isEmpty?'—':fmtDollar(netUSD)+' net'}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Tokens Received + Sea Creatures */}
+                    <div className="mx-5 mb-4 rounded-lg p-4 flex items-center justify-between" style={{background:'rgba(0,0,0,0.3)',border:`1px solid ${tGlow}0.3)`}}>
+                      <div>
+                        <div className="text-white/40 text-xs uppercase tracking-widest">Tokens Received</div>
+                        <div className={`text-3xl font-bold ${isEmpty?'text-white/15':tText}`} style={isEmpty?{}:{textShadow:`0 0 15px ${tGlow}0.3)`}}>{isEmpty?'—':fmtAbbr(tokens)}</div>
+                        <div className="text-white/30 text-sm">{isEmpty?'Enter amount above':fmt(Math.floor(tokens))+' exact'}</div>
+                      </div>
+                      {!isEmpty&&creatures.length>0&&(
+                      <div className="flex items-center gap-3">
+                        {creatures.map((c,i)=>(
+                          <div key={i} className="flex items-center gap-0.5" title={c.n}>
+                            <span className="text-2xl">{c.e}</span>
+                            <span className="text-white/50 text-sm font-bold">x{c.cnt}</span>
+                          </div>
+                        ))}
+                      </div>
+                      )}
+                    </div>
+                    
+                    {/* Strategy Picker — ALWAYS same height */}
+                    <div className="mx-5 mb-4">
+                      <div className="text-white/40 text-xs uppercase tracking-widest mb-2 font-semibold">Reward Strategy</div>
+                      <div className="flex gap-2 mb-3">
+                        {isPTGC?(<>
+                          <button onClick={()=>setStrategy('hold')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='hold'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
+                            {'\uD83D\uDC8E'} Hold Only
+                          </button>
+                          <button onClick={()=>setStrategy('holdstake')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='holdstake'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
+                            {'\uD83D\uDC8E\uD83D\uDC8E'} Hold + Stake
+                          </button>
+                        </>):(<>
+                          <button onClick={()=>setStrategy('hold')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='hold'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
+                            {'\uD83D\uDC8E'} Hold Only
+                          </button>
+                          <button onClick={()=>setStrategy('lp')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='lp'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
+                            {'\uD83D\uDCA7'} Hold + LP
+                          </button>
+                        </>)}
+                      </div>
+                      {/* Slider area — ALWAYS reserve space */}
+                      <div style={{minHeight:'66px'}}>
+                        {hasStakeOrLp?(
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-white/40 text-sm">Hold {100-splitPct}%</span>
+                            <span style={{color:tSolid}} className="text-sm font-bold">{isPTGC?'Stake':'LP'} {splitPct}%</span>
+                          </div>
+                          <div className="relative h-2.5 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.1)'}}>
+                            <div className="absolute right-0 top-0 h-full rounded-full" style={{width:`${splitPct}%`,background:tSolid,opacity:0.6}}></div>
+                          </div>
+                          <input type="range" min="0" max="100" step="10" value={splitPct} onChange={e=>setSplitPct(parseInt(e.target.value))} className="w-full cursor-pointer" style={{accentColor:tSolid,opacity:0.5,height:'14px',marginTop:'-2px'}}/>
+                        </div>
+                        ):(<div className="h-[60px]"></div>)}
+                      </div>
+                      {/* LP Warning area — ALWAYS reserve space for UFO */}
+                      {!isPTGC&&(
+                      <div style={{minHeight:'38px'}}>
+                        {strategy==='lp'?(
+                        <div className="flex items-start gap-1.5 px-3 py-2 rounded-lg bg-yellow-500/8 border border-yellow-500/15">
+                          <span className="text-yellow-500/70 text-xs mt-px">{'\u26A0\uFE0F'}</span>
+                          <span className="text-yellow-400/60 text-xs leading-snug">LP requires ~{fmtDollar(netUSD*(splitPct/100))} of a paired token (WPLS, PLSX, INC, HEX, or EHEX)</span>
+                        </div>
+                        ):(<div className="h-[38px]"></div>)}
+                      </div>
+                      )}
+                      {/* PTGC spacer to match UFO's warning area */}
+                      {isPTGC&&<div style={{minHeight:'38px'}}></div>}
+                    </div>
+                    
+                    {/* Reward Projections — ALWAYS show */}
+                    <div className="mx-5 mb-5">
+                      <div className="text-white/45 text-sm uppercase tracking-widest mb-2 font-bold">Estimated Rewards</div>
+                      {/* Breakdown lines — ALWAYS reserve 2 lines */}
+                      <div style={{minHeight:'66px'}}>
+                        {isEmpty?(
+                          <div className="text-white/20 text-base py-2">Enter an amount to see reward projections</div>
+                        ):(<>
+                          {rewards.dailyHolderUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDC8E'} Reflections ({(rewards.holderPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyHolderUSD)}/day</span></div>}
+                          {isPTGC&&strategy==='holdstake'&&rewards.dailyStakerUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDC8E\uD83D\uDC8E'} Staking ({(rewards.stakerPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyStakerUSD)}/day</span></div>}
+                          {!isPTGC&&strategy==='lp'&&rewards.dailyLpUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDCA7'} LP ({(rewards.lpProviderPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyLpUSD)}/day</span></div>}
+                        </>)}
+                      </div>
+                      {/* Time span grid */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {[{label:'Daily',val:rewards.daily,days:1},{label:'Weekly',val:rewards.weekly,days:7},{label:'Monthly',val:rewards.monthly,days:30},{label:'Yearly',val:rewards.yearly,days:365}].map(p=>{
+                          const rTokens=(rewards.dailyHolderTokens+rewards.dailyStakerTokens)*p.days;
+                          const rPLS=rewards.dailyLpPLS*p.days;
+                          return(
+                          <div key={p.label} className="rounded-lg p-3 text-center" style={{background:'rgba(0,0,0,0.3)',border:`1px solid ${tGlow}0.2)`,minHeight:'90px'}}>
+                            <div className="text-white/45 text-sm uppercase mb-1 font-bold">{p.label}</div>
+                            <div className={`text-xl font-bold ${isEmpty?'text-white/15':tText}`}>{isEmpty?'\u2014':fmtDollarCompact(p.val)}</div>
+                            {!isEmpty&&rTokens>0&&<div className="text-white/35 text-sm">{fmtAbbr(rTokens)}</div>}
+                            {!isEmpty&&rPLS>0&&<div className="text-white/35 text-sm">+{fmtAbbr(rPLS)} PLS</div>}
+                          </div>
+                          );
+                        })}
+                      </div>
+                      {/* APY — accounts for full capital deployed (LP requires matching pair) */}
+                      <div className="mt-2.5 text-center" style={{minHeight:'28px'}}>
+                        {!isEmpty&&rewards.yearly>0&&tokens>0&&tokenPrice>0&&(
+                        (()=>{
+                          // For LP strategy: total capital = held tokens value + LP tokens value × 2 (both sides of pair)
+                          const totalCapital=!isPTGC&&strategy==='lp'
+                            ?((rewards.holdTokens||0)*tokenPrice)+((rewards.lpTokens||0)*tokenPrice*2)
+                            :tokens*tokenPrice;
+                          const apy=totalCapital>0?(rewards.yearly/totalCapital)*100:0;
+                          return(
+                          <>
+                            <span className="text-white/45 text-base">APY: </span>
+                            <span className={`font-bold text-2xl ${tText}`}>{apy.toFixed(2)}%</span>
+                          </>
+                          );
+                        })()
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            };
+            
+            return(
+            <div className="space-y-5">
+              
+              {/* Investment Input + Volume — Merged */}
+              <div className="rounded-2xl overflow-hidden" style={{border:'3px solid rgba(255,255,255,0.15)',boxShadow:'0 0 30px rgba(255,255,255,0.05)',background:'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(17,17,17,0.95) 40%)'}}>
+                <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
+                  <span className="text-white/60 text-sm font-bold uppercase tracking-widest">New Capital Simulator</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                    <span className="text-green-400/70 text-sm font-bold uppercase">Live</span>
+                  </div>
+                </div>
+                <div className="p-4 pb-3">
+                  {/* USD Input + Mode — single row */}
+                  <div className="flex items-center gap-4 mb-3 justify-center">
+                    <div className="relative w-72">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-2xl font-bold">$</span>
+                      <input type="text" inputMode="numeric" value={displayFreshUSD} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshUSD(raw)}} placeholder="Amount" className="w-full pl-11 pr-14 py-3 rounded-xl bg-black/50 text-white text-2xl font-bold text-center focus:outline-none transition placeholder:text-white/15 placeholder:text-lg" style={{border:'2px solid rgba(255,255,255,0.3)'}}/>
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">USD</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {[{id:'vs',label:'VS Compare'},{id:'allin',label:'All In'},{id:'split',label:'Split'}].map(m=>(
+                        <button key={m.id} onClick={()=>setFreshMode(m.id)} className="px-4 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap" style={freshMode===m.id?{background:'linear-gradient(135deg, rgba(217,202,93,0.2), rgba(124,252,0,0.2))',border:'2px solid rgba(255,255,255,0.3)',color:'white',boxShadow:'0 0 12px rgba(255,255,255,0.08)'}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* All-In Token Picker */}
+                  {freshMode==='allin'&&(
+                  <div className="flex justify-center gap-3 mb-2">
+                    <button onClick={()=>setFreshAllinToken('PTGC')} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-base transition-all" style={freshAllinToken==='PTGC'?{background:'rgba(217,202,93,0.2)',border:'2px solid rgba(217,202,93,0.6)',boxShadow:'0 0 10px rgba(217,202,93,0.15)'}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)'}}>
+                      <img src={ptgcCfg.logo} alt="PTGC" className="w-7 h-7"/>
+                      <span className={freshAllinToken==='PTGC'?'text-[#D9CA5D]':'text-white/35'}>PTGC</span>
+                    </button>
+                    <button onClick={()=>setFreshAllinToken('UFO')} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-base transition-all" style={freshAllinToken==='UFO'?{background:'rgba(124,252,0,0.2)',border:'2px solid rgba(124,252,0,0.6)',boxShadow:'0 0 10px rgba(124,252,0,0.15)'}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)'}}>
+                      <img src={ufoCfg.logo} alt="UFO" className="w-7 h-7"/>
+                      <span className={freshAllinToken==='UFO'?'text-[#7CFC00]':'text-white/35'}>UFO</span>
+                    </button>
+                  </div>
+                  )}
+                  
+                  {/* Split Slider */}
+                  {freshMode==='split'&&(
+                  <div className="max-w-md mx-auto mb-2">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <img src={ptgcCfg.logo} alt="PTGC" className="w-6 h-6"/>
+                        <span className="text-[#D9CA5D] font-bold text-lg">{freshSplitPct}%</span>
+                        {inputUSD>0&&<span className="text-white/30 text-sm">({fmtDollar(ptgcUSD)})</span>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {inputUSD>0&&<span className="text-white/30 text-sm">({fmtDollar(ufoUSD)})</span>}
+                        <span className="text-[#7CFC00] font-bold text-lg">{100-freshSplitPct}%</span>
+                        <img src={ufoCfg.logo} alt="UFO" className="w-6 h-6"/>
+                      </div>
+                    </div>
+                    <div className="relative h-3 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.1)'}}>
+                      <div className="absolute left-0 top-0 h-full" style={{width:`${freshSplitPct}%`,background:'linear-gradient(90deg,#D9CA5D,#b8a83d)'}}></div>
+                      <div className="absolute right-0 top-0 h-full" style={{width:`${100-freshSplitPct}%`,background:'linear-gradient(90deg,#5cbf00,#7CFC00)'}}></div>
+                    </div>
+                    <input type="range" min="0" max="100" step="5" value={freshSplitPct} onChange={e=>setFreshSplitPct(parseInt(e.target.value))} className="w-full mt-0.5 cursor-pointer" style={{accentColor:'white',opacity:0.4,height:'14px'}}/>
+                    <div className="flex justify-center gap-2">
+                      {[{l:'25/75',v:25},{l:'50/50',v:50},{l:'75/25',v:75}].map(p=>(
+                        <button key={p.v} onClick={()=>setFreshSplitPct(p.v)} className={`px-3 py-1 rounded text-xs font-bold transition ${freshSplitPct===p.v?'bg-white/15 text-white':'bg-white/5 text-white/30 hover:text-white/50'}`}>{p.l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  )}
+                  
+                  {/* Volume Selector — centered, larger */}
+                  <div className="border-t border-white/[0.06] pt-3 mt-1">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex items-center gap-3 flex-wrap justify-center">
+                        <span className="text-white/50 text-sm font-bold uppercase tracking-wide">Volume:</span>
+                        {[
+                          {id:'live24h',label:'24hr'},
+                          {id:'avg7d',label:'7d Avg'},
+                          {id:'avg30d',label:'30d Avg'},
+                          {id:'avg90d',label:'90d Avg'},
+                        ].map(b=>(
+                          <button key={b.id} onClick={()=>{setFreshVolSource(b.id);setFreshVolCustom('');setFreshVolCustomUfo('');setFreshVolIsPreset(false)}} className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition ${freshVolSource===b.id?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={freshVolSource===b.id?{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)'}:{background:'rgba(255,255,255,0.05)'}}>
+                            {b.label}
+                          </button>
+                        ))}
+                        <span className="text-white/15 text-lg">|</span>
+                        {[{val:'1000000',label:'$1M'},{val:'2000000',label:'$2M'},{val:'5000000',label:'$5M'}].map(b=>(
+                          <button key={b.val} onClick={()=>{setFreshVolSource('custom');setFreshVolCustom(b.val);setFreshVolCustomUfo(b.val);setFreshVolIsPreset(true)}} className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition ${freshVolSource==='custom'&&isPresetCustom&&freshVolCustom===b.val?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={freshVolSource==='custom'&&isPresetCustom&&freshVolCustom===b.val?{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)'}:{background:'rgba(255,255,255,0.05)'}}>
+                            {b.label}
+                          </button>
+                        ))}
+                        <button onClick={()=>{setFreshVolSource('custom');setFreshVolIsPreset(false);if(isPresetCustom){setFreshVolCustom('');setFreshVolCustomUfo('')}}} className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition ${freshVolSource==='custom'&&!isPresetCustom?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={freshVolSource==='custom'&&!isPresetCustom?{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)'}:{background:'rgba(255,255,255,0.05)'}}>
+                          Custom
+                        </button>
+                      </div>
+                      {freshVolSource==='custom'&&!isPresetCustom&&(
+                        <div className="flex items-center gap-3 justify-center">
+                          <div className="flex items-center gap-2">
+                            <img src={ptgcCfg.logo} alt="PTGC" className="w-5 h-5"/>
+                            <div className="relative w-44">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">$</span>
+                              <input type="text" inputMode="numeric" value={displayFreshVolPtgc} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshVolCustom(raw)}} placeholder="PTGC vol/day" className="w-full pl-7 pr-3 py-2 rounded-lg bg-black/50 text-[#D9CA5D] text-base font-bold text-center focus:outline-none transition placeholder:text-white/15 placeholder:text-xs" style={{border:'1.5px solid rgba(217,202,93,0.3)'}}/>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <img src={ufoCfg.logo} alt="UFO" className="w-5 h-5"/>
+                            <div className="relative w-44">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">$</span>
+                              <input type="text" inputMode="numeric" value={displayFreshVolUfo} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshVolCustomUfo(raw)}} placeholder="UFO vol/day" className="w-full pl-7 pr-3 py-2 rounded-lg bg-black/50 text-[#7CFC00] text-base font-bold text-center focus:outline-none transition placeholder:text-white/15 placeholder:text-xs" style={{border:'1.5px solid rgba(124,252,0,0.3)'}}/>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {freshVolSource!=='custom'&&(ptgcDailyVol>0||ufoDailyVol>0)&&(
+                      <div className="flex gap-6 text-lg">
+                        {showPTGC&&<span className="text-white/30">PTGC: <span className="text-[#D9CA5D]/70 font-bold">{fmtUSD(ptgcDailyVol)}/day</span></span>}
+                        {showUFO&&<span className="text-white/30">UFO: <span className="text-[#7CFC00]/70 font-bold">{fmtUSD(ufoDailyVol)}/day</span></span>}
+                      </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Loading */}
+              {isLoading&&(
+                <div className="text-center py-8">
+                  <div className="animate-spin inline-block w-8 h-8 rounded-full mb-3" style={{borderWidth:'3px',borderColor:'rgba(255,255,255,0.3)',borderTopColor:'transparent'}}></div>
+                  <div className="text-white/40 text-base">Loading token data...</div>
+                </div>
+              )}
+              
+              {/* Side by Side Columns — flex stretch for equal height, always visible */}
+              {!isLoading&&(
+              <div className={`flex gap-5 ${isSingle?'justify-center':'items-stretch'}`}>
+                {showPTGC&&renderColumn(true,ptgcUSD,ptgcNetUSD,ptgcFeeUSD,ptgcTokens,ptgcPrice,ptgcRewards,freshPtgcStrategy,setFreshPtgcStrategy,freshPtgcStakePct,setFreshPtgcStakePct)}
+                {showUFO&&renderColumn(false,ufoUSD,ufoNetUSD,ufoFeeUSD,ufoTokens,ufoPrice,ufoRewards,freshUfoStrategy,setFreshUfoStrategy,freshUfoLpPct,setFreshUfoLpPct)}
+              </div>
+              )}
+              
+              {/* Comparison Box — VS mode only */}
+              {inputUSD>0&&!isLoading&&freshMode==='vs'&&(ptgcRewards.daily>0||ufoRewards.daily>0)&&(
+              <div className="rounded-2xl overflow-hidden" style={{border:'2px solid rgba(255,255,255,0.12)',background:'linear-gradient(135deg, rgba(217,202,93,0.06), rgba(17,17,17,0.9) 40%, rgba(124,252,0,0.06))'}}>
+                <div className="px-6 py-3 border-b border-white/[0.06]">
+                  <span className="font-orbitron text-lg font-bold text-white/70 uppercase tracking-widest">Results</span>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-3 gap-8">
+                    {/* Tokens */}
+                    <div className="text-center">
+                      <div className="text-white/45 text-base uppercase mb-3 font-bold tracking-wide">Tokens Received</div>
+                      <div className="flex items-center justify-center gap-2 mb-1.5">
+                        <img src={ptgcCfg.logo} alt="" className="w-7 h-7"/>
+                        <span className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(ptgcTokens)}</span>
+                        <span className="text-[#D9CA5D]/50 text-base">PTGC</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-center gap-2">
+                        <img src={ufoCfg.logo} alt="" className="w-7 h-7"/>
+                        <span className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(ufoTokens)}</span>
+                        <span className="text-[#7CFC00]/50 text-base">UFO</span>
+                      </div>
+                    </div>
+                    {/* Monthly */}
+                    <div className="text-center">
+                      <div className="text-white/45 text-base uppercase mb-3 font-bold tracking-wide">Monthly Rewards</div>
+                      <div className="flex items-center justify-center gap-2 mb-1.5">
+                        <img src={ptgcCfg.logo} alt="" className="w-6 h-6"/>
+                        <span className="text-[#D9CA5D] font-bold text-2xl">{fmtDollarCompact(ptgcRewards.monthly)}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-center gap-2">
+                        <img src={ufoCfg.logo} alt="" className="w-6 h-6"/>
+                        <span className="text-[#7CFC00] font-bold text-2xl">{fmtDollarCompact(ufoRewards.monthly)}</span>
+                      </div>
+                    </div>
+                    {/* Yearly */}
+                    <div className="text-center">
+                      <div className="text-white/45 text-base uppercase mb-3 font-bold tracking-wide">Yearly Rewards</div>
+                      <div className="flex items-center justify-center gap-2 mb-1.5">
+                        <img src={ptgcCfg.logo} alt="" className="w-6 h-6"/>
+                        <span className="text-[#D9CA5D] font-bold text-2xl">{fmtDollarCompact(ptgcRewards.yearly)}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-center gap-2">
+                        <img src={ufoCfg.logo} alt="" className="w-6 h-6"/>
+                        <span className="text-[#7CFC00] font-bold text-2xl">{fmtDollarCompact(ufoRewards.yearly)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* APY Comparison Bar */}
+                  {(()=>{
+                    const ptgcAPY=ptgcTokens*ptgcPrice>0?(ptgcRewards.yearly/(ptgcTokens*ptgcPrice))*100:0;
+                    // UFO APY: if LP strategy, total capital includes both sides of the pair
+                    const ufoTotalCapital=freshUfoStrategy==='lp'
+                      ?((ufoRewards.holdTokens||0)*ufoPrice)+((ufoRewards.lpTokens||0)*ufoPrice*2)
+                      :ufoTokens*ufoPrice;
+                    const ufoAPY=ufoTotalCapital>0?(ufoRewards.yearly/ufoTotalCapital)*100:0;
+                    if(ptgcAPY<=0&&ufoAPY<=0)return null;
+                    const maxAPY=Math.max(ptgcAPY,ufoAPY);
+                    return(
+                    <div className="mt-5 pt-5 border-t border-white/[0.06]">
+                      <div className="text-white/45 text-base uppercase font-bold tracking-wide text-center mb-3">APY Comparison</div>
+                      <div className="space-y-2.5 max-w-lg mx-auto">
+                        <div className="flex items-center gap-3">
+                          <img src={ptgcCfg.logo} alt="" className="w-7 h-7 flex-shrink-0"/>
+                          <div className="flex-1 h-7 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.05)'}}>
+                            <div className="h-full rounded-full flex items-center justify-end px-3 transition-all" style={{width:`${maxAPY>0?Math.max((ptgcAPY/maxAPY)*100,8):0}%`,background:'linear-gradient(90deg,rgba(217,202,93,0.3),rgba(217,202,93,0.6))'}}>
+                              <span className="text-black text-lg font-bold whitespace-nowrap" style={{textShadow:'0 0 6px rgba(255,255,255,0.8), 0 0 12px rgba(255,255,255,0.4)'}}>{ptgcAPY.toFixed(2)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <img src={ufoCfg.logo} alt="" className="w-7 h-7 flex-shrink-0"/>
+                          <div className="flex-1 h-7 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.05)'}}>
+                            <div className="h-full rounded-full flex items-center justify-end px-3 transition-all" style={{width:`${maxAPY>0?Math.max((ufoAPY/maxAPY)*100,8):0}%`,background:'linear-gradient(90deg,rgba(124,252,0,0.3),rgba(124,252,0,0.6))'}}>
+                              <span className="text-black text-lg font-bold whitespace-nowrap" style={{textShadow:'0 0 6px rgba(255,255,255,0.8), 0 0 12px rgba(255,255,255,0.4)'}}>{ufoAPY.toFixed(2)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    );
+                  })()}
+                </div>
+              </div>
+              )}
+              
+              {/* Disclaimer */}
+              <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-yellow-500/60 text-lg mt-0.5">{'\u26A0\uFE0F'}</span>
+                  <div className="text-white/35 text-sm leading-relaxed">
+                    <span className="text-yellow-500/60 font-bold uppercase text-xs">Educational Tool — Not Financial Advice</span>
+                    <p className="mt-2">The New Capital Simulator calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. All projections shown are hypothetical and based on current conditions at the time of calculation. Token amounts are calculated using live prices and account for buy fees (PTGC {(ptgcCfg.taxRate*100)}%, UFO {(ufoCfg.taxRate*100)}%).</p>
+                    <p className="mt-2"><strong className="text-yellow-500/50">Results will NOT match reality.</strong> There are countless real-world factors that will cause actual outcomes to differ significantly from these projections, including but not limited to: changes in trading volume (which fluctuates constantly and can drop to near zero), price volatility and market crashes, changes in the number of holders and their proportional share of supply, staking pool size changes as other users stake or unstake, LP pool composition changes, arbitrage bot activity, MEV and front-running, slippage on large trades, sell pressure from other holders, overall crypto market cycles and sentiment, regulatory changes, smart contract risks, liquidity additions and removals, token burns affecting supply, whale activity, exchange listings or delistings, and general macroeconomic conditions.</p>
+                    <p className="mt-2"><strong className="text-white/50">Past performance does not guarantee future results.</strong> Historical volume averages shown here reflect past activity and should not be interpreted as a prediction of future volume. A token that had $5M daily volume last month could have $50K daily volume next month, or vice versa. Reward projections scale linearly with volume — if volume drops 90%, your rewards drop 90%.</p>
+                    <p className="mt-2">For UFO LP rewards, your share rate equals the UFO tokens you deposit. LP requires matching value on the other side of the pair, which is <strong className="text-white/50">not included</strong> in the investment calculation above. LP providers are also exposed to impermanent loss, which can reduce the total value of your position. Holder reflections exclude tokens locked in LP contracts from the eligible supply calculation.</p>
+                    <p className="mt-2 text-yellow-500/40">This tool does not constitute financial advice. Always do your own research (DYOR), consult with a qualified financial advisor before making investment decisions, and <strong className="text-white/50">never invest more than you can afford to lose</strong>. Cryptocurrency investments carry significant risk including the potential loss of your entire investment.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            );
+          })()}          
           <div className="mt-10 text-center">
             <button onClick={onBack} className="px-6 py-2.5 rounded-lg border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all text-base">
               {'\u2190'} Back to Dashboard
