@@ -5056,11 +5056,12 @@
         
         // All-time totals - sum across ALL months in monthlyLogs for accuracy
         const totalReferrers=referrers.length;
-        const totalPaid=(data.receipts||[]).reduce((sum,r)=>sum+(r.amount||0),0);
-        const totalPaidUsd=(data.receipts||[]).reduce((sum,r)=>sum+(r.usdValue||0),0);
+        const receiptTotalPaid=(data.receipts||[]).reduce((sum,r)=>sum+(r.amount||0),0);
+        const receiptTotalPaidUsd=(data.receipts||[]).reduce((sum,r)=>sum+(r.usdValue||0),0);
         
         // Calculate all-time from monthlyLogs (more accurate than referrers object)
         let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0,allTimeCommission=0;
+        let txTotalPaid=0,txTotalPaidUsd=0;
         if(data.monthlyLogs){
           Object.values(data.monthlyLogs).forEach(month=>{
             const entries=month.entries||[];
@@ -5069,8 +5070,11 @@
             allTimeUsd+=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
             allTimePtgc+=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
             allTimeCommission+=entries.reduce((sum,e)=>sum+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
+            entries.forEach(e=>{if(e.buys)e.buys.forEach(b=>{if(b.paid){const r=e.commissionRate||rate;txTotalPaid+=(b.ptgcAmount||0)*(r/100);txTotalPaidUsd+=(b.usdAmount||0)*(r/100);}});});
           });
         }
+        const totalPaid=Math.max(receiptTotalPaid,txTotalPaid);
+        const totalPaidUsd=Math.max(receiptTotalPaidUsd,txTotalPaidUsd);
         // Fallback to referrers totals if no monthlyLogs
         if(allTimeBuys===0&&allTimeUsd===0){
           allTimeBuys=referrers.reduce((sum,[,r])=>sum+(r.totalBuys||0),0);
@@ -5091,7 +5095,10 @@
           periodUsd=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
           periodCommission=entries.reduce((sum,e)=>sum+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
           periodReferrers=entries.length;
-          periodPaid=(data.receipts||[]).filter(r=>r.month===selectedMonth).reduce((sum,r)=>sum+(r.amount||0),0);
+          const receiptPeriodPaid=(data.receipts||[]).filter(r=>r.month===selectedMonth).reduce((sum,r)=>sum+(r.amount||0),0);
+          let txPeriodPaid=0;
+          entries.forEach(e=>{if(e.buys)e.buys.forEach(b=>{if(b.paid){const cr=e.commissionRate||rate;txPeriodPaid+=(b.ptgcAmount||0)*(cr/100);}});});
+          periodPaid=Math.max(receiptPeriodPaid,txPeriodPaid);
         }
         
         // Current month stats
@@ -5182,10 +5189,29 @@
         
         const receipts=(data.receipts||[]).filter(r=>r.username===username).sort((a,b)=>new Date(b.date)-new Date(a.date));
         
-        // Calculate total commissions paid
-        const totalCommPaid=receipts.reduce((sum,r)=>sum+(r.amount||0),0);
+        // Calculate total commissions paid from receipts
+        const receiptCommPaid=receipts.reduce((sum,r)=>sum+(r.amount||0),0);
+        const receiptCommPaidUsd=receipts.reduce((sum,r)=>sum+(r.usdValue||0),0);
         
-        return{...referrer,username,monthlyEntries,receipts,totalCommPaid,totalBuys:lifetimeBuys,totalPtgc:lifetimePtgc,totalUsd:lifetimeUsd};
+        // Also calculate from paid buy transactions (in case receipts are missing)
+        let txCommPaid=0,txCommPaidUsd=0;
+        monthlyEntries.forEach(me=>{
+          if(me.buys){
+            const rate=me.commissionRate||me.settings?.commissionRate||2;
+            me.buys.forEach(b=>{
+              if(b.paid){
+                txCommPaid+=(b.ptgcAmount||0)*(rate/100);
+                txCommPaidUsd+=(b.usdAmount||0)*(rate/100);
+              }
+            });
+          }
+        });
+        
+        // Use whichever is higher (receipts are authoritative when present, but paid tx flags catch gaps)
+        const totalCommPaid=Math.max(receiptCommPaid,txCommPaid);
+        const totalCommPaidUsd=Math.max(receiptCommPaidUsd,txCommPaidUsd);
+        
+        return{...referrer,username,monthlyEntries,receipts,totalCommPaid,totalCommPaidUsd,totalBuys:lifetimeBuys,totalPtgc:lifetimePtgc,totalUsd:lifetimeUsd};
       };
       
       // Group receipts by date
@@ -5208,16 +5234,21 @@
         const referrers=Object.entries(data.referrers||{});
         return referrers.map(([username,r])=>{
           const userReceipts=(data.receipts||[]).filter(rec=>rec.username===username);
-          const commPaid=userReceipts.reduce((sum,rec)=>sum+(rec.amount||0),0);
-          const commPaidUsd=userReceipts.reduce((sum,rec)=>sum+(rec.usdValue||0),0);
-          let pending=0;
+          const receiptCommPaid=userReceipts.reduce((sum,rec)=>sum+(rec.amount||0),0);
+          const receiptCommPaidUsd=userReceipts.reduce((sum,rec)=>sum+(rec.usdValue||0),0);
+          let pending=0,txCommPaid=0,txCommPaidUsd=0;
           Object.values(data.monthlyLogs||{}).forEach(log=>{
             const entry=(log.entries||[]).find(e=>e.username===username);
             if(entry?.buys){
               const rate=entry.commissionRate||log.settings?.commissionRate||2;
-              entry.buys.forEach(b=>{if(!b.paid&&b.meetsThreshold!==false)pending+=(b.ptgcAmount||0)*(rate/100);});
+              entry.buys.forEach(b=>{
+                if(!b.paid&&b.meetsThreshold!==false)pending+=(b.ptgcAmount||0)*(rate/100);
+                if(b.paid){txCommPaid+=(b.ptgcAmount||0)*(rate/100);txCommPaidUsd+=(b.usdAmount||0)*(rate/100);}
+              });
             }
           });
+          const commPaid=Math.max(receiptCommPaid,txCommPaid);
+          const commPaidUsd=Math.max(receiptCommPaidUsd,txCommPaidUsd);
           return{name:username,wallet:r.wallet,buys:r.totalBuys||0,ptgc:r.totalPtgc||0,usd:r.totalUsd||0,commPaid,commPaidUsd,pending};
         });
       },[data]);
@@ -5456,7 +5487,7 @@
                     <div className="bg-black/40 border border-white/10 rounded-lg p-3">
                       <div className="text-gray-400 text-sm uppercase mb-1">Commission Paid</div>
                       <div className="text-2xl font-bold text-green-400">{fmtAbbr(details.totalCommPaid)}</div>
-                      <div className="text-gray-400 text-sm">{fmtDollar(details.receipts.reduce((s,r)=>s+(r.usdValue||0),0))}</div>
+                      <div className="text-gray-400 text-sm">{fmtDollar(details.totalCommPaidUsd||details.receipts.reduce((s,r)=>s+(r.usdValue||0),0))}</div>
                     </div>
                     <div className="bg-black/40 border border-white/10 rounded-lg p-3 relative">
                       <div className="flex items-center gap-1 mb-1">
