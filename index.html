@@ -5064,16 +5064,6 @@
       const getEntryCommUsd=(e,fallbackRate)=>{
         return(e.usdAmount||0)*((e.commissionRate||fallbackRate)/100);
       };
-      // Helper: get the ACTUAL paid amount (including fee coverage, matching toolbox)
-      // When fee is covered, the actual amount sent = base commission / 0.95
-      const getEntryPaidAmount=(e,fallbackRate)=>{
-        const base=getEntryComm(e,fallbackRate);
-        return(e.feeCovered!==false)?base/0.95:base;
-      };
-      const getEntryPaidAmountUsd=(e,fallbackRate)=>{
-        const base=getEntryCommUsd(e,fallbackRate);
-        return(e.feeCovered!==false)?base/0.95:base;
-      };
       
       // Calculate stats from data based on viewing period
       const stats=useMemo(()=>{
@@ -5095,8 +5085,8 @@
             // FIX: Sum entry-level commission for PAID entries only, with fee coverage
             entries.forEach(e=>{
               if(isEntryPaid(e)){
-                totalPaid+=getEntryPaidAmount(e,rate);
-                totalPaidUsd+=getEntryPaidAmountUsd(e,rate);
+                totalPaid+=getEntryComm(e,rate);
+                totalPaidUsd+=getEntryCommUsd(e,rate);
               }
             });
           });
@@ -5126,7 +5116,7 @@
           // FIX: Sum entry-level commission for PAID entries only, with fee coverage
           entries.forEach(e=>{
             if(isEntryPaid(e)){
-              periodPaid+=getEntryPaidAmount(e,rate);
+              periodPaid+=getEntryComm(e,rate);
             }
           });
           console.log('[PTGC-FIX] Period',selectedMonth,'periodPaid:',periodPaid,'periodCommission:',periodCommission);
@@ -5225,8 +5215,8 @@
         monthlyEntries.forEach(me=>{
           const rate=me.commissionRate||me.settings?.commissionRate||2;
           if(isEntryPaid(me)){
-            totalCommPaid+=getEntryPaidAmount(me,rate);
-            totalCommPaidUsd+=getEntryPaidAmountUsd(me,rate);
+            totalCommPaid+=getEntryComm(me,rate);
+            totalCommPaidUsd+=getEntryCommUsd(me,rate);
           }
         });
         
@@ -5260,8 +5250,8 @@
               const entryComm=getEntryComm(entry,rate);
               const entryCommUsd=getEntryCommUsd(entry,rate);
               if(isEntryPaid(entry)){
-                commPaid+=getEntryPaidAmount(entry,rate);
-                commPaidUsd+=getEntryPaidAmountUsd(entry,rate);
+                commPaid+=getEntryComm(entry,rate);
+                commPaidUsd+=getEntryCommUsd(entry,rate);
               }else{
                 // Not fully paid - check if below threshold
                 const isBelowThreshold=entry.buys?.length?
@@ -5436,7 +5426,7 @@
               const paidTx=me.buys?.filter(b=>b.paid).length||0;
               const totalTx=me.buys?.length||0;
               const rate=me.commissionRate||me.settings?.commissionRate||2;
-              const paidComm=isEntryPaid(me)?getEntryPaidAmount(me,rate):0;
+              const paidComm=isEntryPaid(me)?getEntryComm(me,rate):0;
               return{...me,paidTx,totalTx,paidComm};
             });
             
