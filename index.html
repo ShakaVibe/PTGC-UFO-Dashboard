@@ -5064,6 +5064,16 @@
       const getEntryCommUsd=(e,fallbackRate)=>{
         return(e.usdAmount||0)*((e.commissionRate||fallbackRate)/100);
       };
+      // Helper: get the ACTUAL paid amount (including fee coverage, matching toolbox)
+      // When fee is covered, the actual amount sent = base commission / 0.95
+      const getEntryPaidAmount=(e,fallbackRate)=>{
+        const base=getEntryComm(e,fallbackRate);
+        return(e.feeCovered!==false)?base/0.95:base;
+      };
+      const getEntryPaidAmountUsd=(e,fallbackRate)=>{
+        const base=getEntryCommUsd(e,fallbackRate);
+        return(e.feeCovered!==false)?base/0.95:base;
+      };
       
       // Calculate stats from data based on viewing period
       const stats=useMemo(()=>{
@@ -5082,11 +5092,11 @@
             allTimeUsd+=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
             allTimePtgc+=entries.reduce((sum,e)=>sum+(e.ptgcAmount||0),0);
             allTimeCommission+=entries.reduce((sum,e)=>sum+getEntryComm(e,rate),0);
-            // FIX: Sum entry-level commission for PAID entries only (not from buys array)
+            // FIX: Sum entry-level commission for PAID entries only, with fee coverage
             entries.forEach(e=>{
               if(isEntryPaid(e)){
-                totalPaid+=getEntryComm(e,rate);
-                totalPaidUsd+=getEntryCommUsd(e,rate);
+                totalPaid+=getEntryPaidAmount(e,rate);
+                totalPaidUsd+=getEntryPaidAmountUsd(e,rate);
               }
             });
           });
@@ -5113,10 +5123,10 @@
           periodUsd=entries.reduce((sum,e)=>sum+(e.usdAmount||0),0);
           periodCommission=entries.reduce((sum,e)=>sum+getEntryComm(e,rate),0);
           periodReferrers=entries.length;
-          // FIX: Sum entry-level commission for PAID entries only (not from buys array)
+          // FIX: Sum entry-level commission for PAID entries only, with fee coverage
           entries.forEach(e=>{
             if(isEntryPaid(e)){
-              periodPaid+=getEntryComm(e,rate);
+              periodPaid+=getEntryPaidAmount(e,rate);
             }
           });
           console.log('[PTGC-FIX] Period',selectedMonth,'periodPaid:',periodPaid,'periodCommission:',periodCommission);
@@ -5210,13 +5220,13 @@
         
         const receipts=(data.receipts||[]).filter(r=>r.username===username).sort((a,b)=>new Date(b.date)-new Date(a.date));
         
-        // Calculate total commissions paid from entry-level data
+        // Calculate total commissions paid from entry-level data (with fee coverage)
         let totalCommPaid=0,totalCommPaidUsd=0;
         monthlyEntries.forEach(me=>{
           const rate=me.commissionRate||me.settings?.commissionRate||2;
           if(isEntryPaid(me)){
-            totalCommPaid+=getEntryComm(me,rate);
-            totalCommPaidUsd+=getEntryCommUsd(me,rate);
+            totalCommPaid+=getEntryPaidAmount(me,rate);
+            totalCommPaidUsd+=getEntryPaidAmountUsd(me,rate);
           }
         });
         // If we have receipts and they're higher, use those (receipts are authoritative)
@@ -5257,8 +5267,8 @@
               const entryComm=getEntryComm(entry,rate);
               const entryCommUsd=getEntryCommUsd(entry,rate);
               if(isEntryPaid(entry)){
-                commPaid+=entryComm;
-                commPaidUsd+=entryCommUsd;
+                commPaid+=getEntryPaidAmount(entry,rate);
+                commPaidUsd+=getEntryPaidAmountUsd(entry,rate);
               }else{
                 // Not fully paid - check if below threshold
                 const isBelowThreshold=entry.buys?.length?
@@ -5435,7 +5445,7 @@
               const paidTx=me.buys?.filter(b=>b.paid).length||0;
               const totalTx=me.buys?.length||0;
               const rate=me.commissionRate||me.settings?.commissionRate||2;
-              const paidComm=isEntryPaid(me)?getEntryComm(me,rate):0;
+              const paidComm=isEntryPaid(me)?getEntryPaidAmount(me,rate):0;
               return{...me,paidTx,totalTx,paidComm};
             });
             
@@ -6173,7 +6183,7 @@
                   <div className="text-2xl font-bold text-green-400">{fmtAbbr(stats?.periodCommission)} PTGC</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-green-400/60 text-base uppercase">Comm. Paid</div>
+                  <div className="text-green-400/60 text-base uppercase">Commissions Paid</div>
                   <div className="text-2xl font-bold text-green-400">{fmtAbbr(stats?.periodPaid)} PTGC</div>
                 </div>
               </div>
