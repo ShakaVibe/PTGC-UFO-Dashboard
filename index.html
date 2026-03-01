@@ -5073,8 +5073,9 @@
             entries.forEach(e=>{if(e.buys)e.buys.forEach(b=>{if(b.paid){const r=e.commissionRate||rate;txTotalPaid+=(b.ptgcAmount||0)*(r/100);txTotalPaidUsd+=(b.usdAmount||0)*(r/100);}});});
           });
         }
-        const totalPaid=Math.max(receiptTotalPaid,txTotalPaid);
-        const totalPaidUsd=Math.max(receiptTotalPaidUsd,txTotalPaidUsd);
+        // Use receipts as source of truth (tx-based can double-count buys across months)
+        const totalPaid=receiptTotalPaid>0?receiptTotalPaid:txTotalPaid;
+        const totalPaidUsd=receiptTotalPaidUsd>0?receiptTotalPaidUsd:txTotalPaidUsd;
         // Fallback to referrers totals if no monthlyLogs
         if(allTimeBuys===0&&allTimeUsd===0){
           allTimeBuys=referrers.reduce((sum,[,r])=>sum+(r.totalBuys||0),0);
@@ -5098,7 +5099,7 @@
           const receiptPeriodPaid=(data.receipts||[]).filter(r=>r.month===selectedMonth).reduce((sum,r)=>sum+(r.amount||0),0);
           let txPeriodPaid=0;
           entries.forEach(e=>{if(e.buys)e.buys.forEach(b=>{if(b.paid){const cr=e.commissionRate||rate;txPeriodPaid+=(b.ptgcAmount||0)*(cr/100);}});});
-          periodPaid=Math.max(receiptPeriodPaid,txPeriodPaid);
+          periodPaid=receiptPeriodPaid>0?receiptPeriodPaid:txPeriodPaid;
         }
         
         // Current month stats
@@ -5207,9 +5208,9 @@
           }
         });
         
-        // Use whichever is higher (receipts are authoritative when present, but paid tx flags catch gaps)
-        const totalCommPaid=Math.max(receiptCommPaid,txCommPaid);
-        const totalCommPaidUsd=Math.max(receiptCommPaidUsd,txCommPaidUsd);
+        // Use receipts as source of truth (tx-based can double-count buys across months)
+        const totalCommPaid=receiptCommPaid>0?receiptCommPaid:txCommPaid;
+        const totalCommPaidUsd=receiptCommPaidUsd>0?receiptCommPaidUsd:txCommPaidUsd;
         
         return{...referrer,username,monthlyEntries,receipts,totalCommPaid,totalCommPaidUsd,totalBuys:lifetimeBuys,totalPtgc:lifetimePtgc,totalUsd:lifetimeUsd};
       };
@@ -5247,8 +5248,8 @@
               });
             }
           });
-          const commPaid=Math.max(receiptCommPaid,txCommPaid);
-          const commPaidUsd=Math.max(receiptCommPaidUsd,txCommPaidUsd);
+          const commPaid=receiptCommPaid>0?receiptCommPaid:txCommPaid;
+          const commPaidUsd=receiptCommPaidUsd>0?receiptCommPaidUsd:txCommPaidUsd;
           return{name:username,wallet:r.wallet,buys:r.totalBuys||0,ptgc:r.totalPtgc||0,usd:r.totalUsd||0,commPaid,commPaidUsd,pending};
         });
       },[data]);
