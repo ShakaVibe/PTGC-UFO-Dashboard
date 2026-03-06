@@ -1496,7 +1496,7 @@
     };
     
     // KPI Content component with dual token support
-    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false})=>{
+    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod})=>{
       const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
       const[otherData,setOtherData]=useState(null);
@@ -1576,7 +1576,7 @@
         const liqMcapPct=d?.mcap>0?((d?.liq||0)/(d?.mcap)*100):0;
         const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         
-        const valueGen7d=(()=>{const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*0.04;})();
+        const valueGen7d=(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
         const creaturesRaw=getBurnC(burnPctNum,'Squid');
         const creatures=creaturesRaw.filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
         const burn7dPct=b.supply>0?(burn7dAmt/b.supply)*100:0;
@@ -3301,7 +3301,7 @@
           {/* KPI Report Tab Content */}
           {activeTab==='kpi'&&(
             <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
-              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')}/>
+              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod}/>
             </div>
           )}
           
@@ -3446,7 +3446,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod}/>
               </div>
             </div>
           )}
@@ -4277,7 +4277,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
               </div>
             </div>
           )}
