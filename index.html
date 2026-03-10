@@ -1334,6 +1334,247 @@
       );
     };
     
+    // ===== HOLDER ANALYTICS MODAL =====
+    const HolderAnalyticsModal=({open,close,token,cfg,theme,holders,holderChange,holdersByPeriod})=>{
+      const[chartPeriod,setChartPeriod]=useState('30D');
+      const chartRef=React.useRef(null);
+      const chartInst=React.useRef(null);
+
+      useEffect(()=>{
+        if(!open||!chartRef.current||!window.Chart)return;
+        const snapshots=holderHistoryCacheNew?.snapshots||[];
+        const days=chartPeriod==='7D'?7:chartPeriod==='30D'?30:90;
+        const cutoff=Date.now()-(days*24*60*60*1000);
+        const filtered=snapshots.filter(s=>new Date(s.timestamp).getTime()>=cutoff&&s[token]>0);
+        // Always include a "now" point
+        const pts=[...filtered,{timestamp:new Date().toISOString(),[token]:holders||0}];
+        if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}
+        try{
+          const ctx=chartRef.current.getContext('2d');
+          const grad=ctx.createLinearGradient(0,0,0,180);
+          grad.addColorStop(0,cfg.colorHex+'55');
+          grad.addColorStop(1,cfg.colorHex+'00');
+          chartInst.current=new window.Chart(ctx,{
+            type:'line',
+            data:{
+              labels:pts.map(d=>{
+                const dt=new Date(d.timestamp);
+                return chartPeriod==='7D'
+                  ?dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+                  :chartPeriod==='30D'
+                  ?dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+                  :dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+              }),
+              datasets:[{
+                data:pts.map(d=>d[token]),
+                borderColor:cfg.colorHex,
+                backgroundColor:grad,
+                borderWidth:2,
+                fill:true,
+                tension:0.35,
+                pointRadius:pts.length>15?0:3,
+                pointHoverRadius:5,
+                pointBackgroundColor:cfg.colorHex,
+                pointBorderColor:'#111',
+                pointBorderWidth:1
+              }]
+            },
+            options:{
+              responsive:true,
+              maintainAspectRatio:false,
+              plugins:{
+                legend:{display:false},
+                tooltip:{
+                  backgroundColor:'#1a1a1a',
+                  borderColor:cfg.colorHex,
+                  borderWidth:1,
+                  titleColor:'#fff',
+                  bodyColor:cfg.colorHex,
+                  padding:10,
+                  displayColors:false,
+                  callbacks:{label:c=>c.parsed.y.toLocaleString()+' holders'}
+                }
+              },
+              scales:{
+                x:{grid:{color:'#1e1e1e'},ticks:{color:'#555',maxTicksLimit:7,maxRotation:0}},
+                y:{
+                  grid:{color:'#1e1e1e'},
+                  ticks:{color:'#555',callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
+                  suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[token]||Infinity));return Math.floor(mn*0.997)})(),
+                }
+              }
+            }
+          });
+        }catch(e){console.error('HolderAnalyticsModal chart error:',e);}
+        return()=>{if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}};
+      },[open,chartPeriod,token,holders]);
+
+      if(!open)return null;
+
+      const cur=holdersByPeriod.current||holders||0;
+      const d1Ago=holdersByPeriod.d1Ago;
+      const d7Ago=holdersByPeriod.d7Ago;
+      const d30Ago=holdersByPeriod.d30Ago;
+      const d90Ago=holdersByPeriod.d90Ago;
+
+      // 24H change: use live holderChange first, fall back to snapshot diff
+      const calcChange=(a,b)=>(a!=null&&b!=null)?a-b:null;
+      const chg24h=holderChange!=null?holderChange:calcChange(cur,d1Ago);
+      const chg7d=calcChange(cur,d7Ago);
+      const chg30d=calcChange(cur,d30Ago);
+      const chg90d=calcChange(cur,d90Ago);
+
+      // Daily-rate comparison:
+      // dailyAvg = net growth over period / days
+      // pct = ((today_24h - dailyAvg) / |dailyAvg|) * 100
+      const dailyAvg7d=chg7d!=null?chg7d/7:null;
+      const dailyAvg30d=chg30d!=null?chg30d/30:null;
+      const dailyAvg90d=chg90d!=null?chg90d/90:null;
+      const calcRatePct=(today,dailyAvg)=>{
+        if(today==null||dailyAvg==null)return null;
+        if(dailyAvg===0)return today>0?100:today<0?-100:0;
+        return((today-dailyAvg)/Math.abs(dailyAvg))*100;
+      };
+      const ratePct7d=calcRatePct(chg24h,dailyAvg7d);
+      const ratePct30d=calcRatePct(chg24h,dailyAvg30d);
+      const ratePct90d=calcRatePct(chg24h,dailyAvg90d);
+
+      const PctBadge=({val})=>{
+        if(val===null||val===undefined)return<span className="text-white/30 text-sm">—</span>;
+        const pos=val>=0;
+        return<span className={`font-bold text-lg ${pos?'text-green-400':'text-red-400'}`}>{pos?'▲':'▼'} {Math.abs(val).toFixed(1)}%</span>;
+      };
+      const fmtRate=r=>{
+        if(r===null||r===undefined)return null;
+        const abs=Math.abs(r);
+        return(r>=0?'+':'')+abs.toFixed(1)+'/day';
+      };
+
+      return(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={close}>
+          <div className={`bg-[#111] border ${theme.border} rounded-2xl w-full max-w-lg`} onClick={e=>e.stopPropagation()}>
+            <div className="p-5">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <img src={cfg.logo} alt={token} className="w-16 h-16 rounded-full"/>
+                  <div>
+                    <span className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</span>
+                    <div className="text-white/50 text-base mt-0.5">Holder Analytics</div>
+                  </div>
+                </div>
+                <button onClick={close} className="text-white/50 hover:text-white text-2xl">×</button>
+              </div>
+
+              {/* Current + 24H change hero */}
+              <div className={`${theme.card} border ${theme.border} rounded-xl p-4 mb-4 flex items-center justify-between`}>
+                <div>
+                  <div className="text-white/50 text-xs uppercase mb-1">Current Holders</div>
+                  <div className={`text-4xl font-bold ${theme.text}`}>{fmt(cur)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-white/50 text-xs uppercase mb-1">24H Change</div>
+                  <div className="text-2xl">
+                    {chg24h!=null
+                      ?<span className={`font-bold ${chg24h>=0?'text-green-400':'text-red-400'}`}>{chg24h>=0?'▲':'▼'} {chg24h>=0?'+':''}{fmt(chg24h)}</span>
+                      :<span className="text-white/30 text-lg">—</span>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {/* Period snapshots — larger numbers, net change below */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {[
+                  {l:'7D Ago',v:d7Ago,chg:chg7d,gather:false},
+                  {l:'30D Ago',v:d30Ago,chg:chg30d,gather:false},
+                  {l:'90D Ago',v:d90Ago,chg:chg90d,gather:d90Ago===null}
+                ].map(({l,v,chg,gather})=>(
+                  <div key={l} className={`${theme.card} border ${theme.border} rounded-xl p-3 text-center`}>
+                    <div className="text-white/40 text-xs uppercase mb-1">{l}</div>
+                    {gather
+                      ?<div className="text-white/30 text-sm italic py-1">Gathering data...</div>
+                      :<>
+                        <div className="text-white font-bold text-2xl">{v!=null?fmt(v):'—'}</div>
+                        <div className="text-base font-semibold mt-0.5">
+                          {chg!=null
+                            ?<span className={chg>=0?'text-green-400':'text-red-400'}>{chg>=0?'+':''}{fmt(chg)}</span>
+                            :<span className="text-white/25">—</span>
+                          }
+                        </div>
+                      </>
+                    }
+                  </div>
+                ))}
+              </div>
+
+              {/* Today vs Daily Growth Rate */}
+              <div className={`${theme.card} border ${theme.border} rounded-xl p-4 mb-4`}>
+                <div className="text-white/50 text-xs uppercase mb-1">Today vs Daily Growth Rate</div>
+                <div className="text-white/30 text-xs mb-3">Today: {chg24h!=null?(chg24h>=0?'+':'')+fmt(chg24h)+' holders':' —'} &nbsp;|&nbsp; Comparing to avg holders gained per day over each period</div>
+                <div className="space-y-2.5">
+                  {[
+                    {l:'vs 7D',dailyAvg:dailyAvg7d,pct:ratePct7d,days:7,total:chg7d},
+                    {l:'vs 30D',dailyAvg:dailyAvg30d,pct:ratePct30d,days:30,total:chg30d},
+                    {l:'vs 90D',dailyAvg:dailyAvg90d,pct:ratePct90d,days:90,total:chg90d,gather:d90Ago===null}
+                  ].map(({l,dailyAvg,pct,gather})=>(
+                    <div key={l} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white/60 text-sm w-12">{l}</span>
+                        {gather
+                          ?<span className="text-white/30 text-xs italic">Gathering data...</span>
+                          :dailyAvg!=null
+                            ?<span className={`text-sm font-semibold px-2 py-0.5 rounded-full ${dailyAvg>=0?'bg-green-500/10 text-green-400/70':'bg-red-500/10 text-red-400/70'}`}>{fmtRate(dailyAvg)} avg</span>
+                            :<span className="text-white/25 text-xs">—</span>
+                        }
+                      </div>
+                      {!gather&&<PctBadge val={pct}/>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mini line chart with period toggle */}
+              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-white/50 text-xs uppercase">Holder Trend</div>
+                  <div className="flex gap-1">
+                    {['7D','30D','90D'].map(p=>(
+                      <button key={p} onClick={()=>setChartPeriod(p)}
+                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${chartPeriod===p?'text-black':'text-white/40 hover:text-white/70'}`}
+                        style={chartPeriod===p?{background:cfg.colorHex}:{background:'transparent'}}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{height:'140px',position:'relative'}}>
+                  {chartPeriod==='90D'&&d90Ago===null
+                    ?(
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                        <span className="text-3xl">⏳</span>
+                        <span className="text-white/40 text-sm italic">Gathering data...</span>
+                        <span className="text-white/25 text-xs">90-day history not yet available</span>
+                      </div>
+                    ):(
+                      <>
+                        <canvas ref={chartRef} style={{width:'100%',height:'100%'}}></canvas>
+                        {(!holderHistoryCacheNew?.snapshots?.length)&&(
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-white/30 text-sm">Loading chart data...</span>
+                          </div>
+                        )}
+                      </>
+                    )
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const BurnModal=({open,close,token,burn,price,cfg})=>{
       const[hist,setHist]=useState({h12:null,h24:null,d7:null,d30:null});
       useEffect(()=>{
@@ -2390,6 +2631,10 @@
       const[showHoldersShareModal,setShowHoldersShareModal]=useState(false);
       const[holdersShareData,setHoldersShareData]=useState(null);
       const[holdersShareLoading,setHoldersShareLoading]=useState(false);
+      const ptgcShareChartRef=React.useRef(null);
+      const ufoShareChartRef=React.useRef(null);
+      const ptgcShareChartInst=React.useRef(null);
+      const ufoShareChartInst=React.useRef(null);
       const[otherTokenPairs,setOtherTokenPairs]=useState([]);
       
       const closeModalAndReturn=(setModalFn)=>{
@@ -2580,7 +2825,7 @@
                 if(!relevant.length)return null;
                 return relevant.reduce((a,s)=>a+s[tkn],0)/relevant.length;
               };
-              return{current:currentCount,d7Ago:findClosest(7),d30Ago:findClosest(30),d90Ago:findClosest(90),avg7d:calcAvg(7),avg30d:calcAvg(30),avg90d:calcAvg(90)};
+              return{current:currentCount,d1Ago:findClosest(1),d7Ago:findClosest(7),d30Ago:findClosest(30),d90Ago:findClosest(90),avg7d:calcAvg(7),avg30d:calcAvg(30),avg90d:calcAvg(90)};
             };
             
             setHoldersShareData({
@@ -2602,7 +2847,70 @@
           }
         })();
       },[showHoldersShareModal]);
-      
+
+      // Render 30D charts in the share card when data is ready
+      useEffect(()=>{
+        if(!holdersShareData||!window.Chart)return;
+        const snapshots=holderHistoryCacheNew?.snapshots||[];
+        const cutoff=Date.now()-(30*24*60*60*1000);
+        const pts30=snapshots.filter(s=>new Date(s.timestamp).getTime()>=cutoff);
+
+        const makeChart=(ref,instRef,tokenKey,colorHex,currentCount)=>{
+          if(!ref.current)return;
+          if(instRef.current){instRef.current.destroy();instRef.current=null;}
+          const pts=[...pts30.filter(s=>s[tokenKey]>0),{timestamp:new Date().toISOString(),[tokenKey]:currentCount}];
+          if(pts.length<2)return;
+          try{
+            const ctx=ref.current.getContext('2d');
+            const grad=ctx.createLinearGradient(0,0,0,120);
+            grad.addColorStop(0,colorHex+'44');
+            grad.addColorStop(1,colorHex+'00');
+            instRef.current=new window.Chart(ctx,{
+              type:'line',
+              data:{
+                labels:pts.map(d=>new Date(d.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+                datasets:[{
+                  data:pts.map(d=>d[tokenKey]),
+                  borderColor:colorHex,
+                  backgroundColor:grad,
+                  borderWidth:2,
+                  fill:true,
+                  tension:0.35,
+                  pointRadius:0,
+                  pointHoverRadius:0
+                }]
+              },
+              options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                animation:{duration:0},
+                plugins:{legend:{display:false},tooltip:{enabled:false}},
+                scales:{
+                  x:{display:false},
+                  y:{
+                    display:true,
+                    grid:{color:'rgba(255,255,255,0.05)',drawBorder:false},
+                    ticks:{color:'rgba(255,255,255,0.3)',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v,maxTicksLimit:4},
+                    suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[tokenKey]||Infinity));return Math.floor(mn*0.997)})()
+                  }
+                }
+              }
+            });
+          }catch(e){console.error('Share chart error:',e);}
+        };
+
+        // Small delay to ensure canvases are mounted
+        setTimeout(()=>{
+          makeChart(ptgcShareChartRef,ptgcShareChartInst,'PTGC',TOKENS.PTGC.colorHex,holdersShareData.PTGC.holders);
+          makeChart(ufoShareChartRef,ufoShareChartInst,'UFO',TOKENS.UFO.colorHex,holdersShareData.UFO.holders);
+        },100);
+
+        return()=>{
+          if(ptgcShareChartInst.current){ptgcShareChartInst.current.destroy();ptgcShareChartInst.current=null;}
+          if(ufoShareChartInst.current){ufoShareChartInst.current.destroy();ufoShareChartInst.current=null;}
+        };
+      },[holdersShareData]);
+
       useEffect(()=>{
         // Reset all state immediately when token changes
         setData(null);
@@ -2621,7 +2929,7 @@
         setBurnShowTokens(false);
         setShowRHCores(false);
         setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
-        setHoldersByPeriod({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
+        setHoldersByPeriod({current:null,d1Ago:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
         setLiquidityChange24h(null);
         setTxnChange24h(null);
         
@@ -2747,6 +3055,7 @@
             
             setHoldersByPeriod({
               current: h,
+              d1Ago: findClosestSnapshot(1),
               d7Ago: findClosestSnapshot(7),
               d30Ago: findClosestSnapshot(30),
               d90Ago: findClosestSnapshot(90),
@@ -2755,7 +3064,7 @@
               avg90d: calcAverage(90)
             });
           } else {
-            setHoldersByPeriod({ current: h, d7Ago: null, d30Ago: null, d90Ago: null, avg7d: null, avg30d: null, avg90d: null });
+            setHoldersByPeriod({ current: h, d1Ago: null, d7Ago: null, d30Ago: null, d90Ago: null, avg7d: null, avg30d: null, avg90d: null });
           }
         };
         load();
@@ -3620,94 +3929,16 @@
           )}
           
           {/* Holder Analytics Modal */}
-          {showHolderModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowHolderModal(false)}>
-              <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e=>e.stopPropagation()}>
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <img src={cfg.logo} alt={token} className="w-14 h-14 rounded-full"/>
-                      <div>
-                        <span className={`font-orbitron text-2xl font-bold ${theme.text}`}>{token}</span>
-                        <div className="text-white/50 text-base">Holder Analytics</div>
-                      </div>
-                    </div>
-                    <button onClick={()=>setShowHolderModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
-                  </div>
-                  
-                  {/* Holder Counts by Period */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    {[
-                      {label:'Current',value:holdersByPeriod.current},
-                      {label:'7D Ago',value:holdersByPeriod.d7Ago},
-                      {label:'30D Ago',value:holdersByPeriod.d30Ago},
-                      {label:'90D Ago',value:holdersByPeriod.d90Ago}
-                    ].map(({label,value})=>(
-                      <div key={label} className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
-                        <div className="text-white/50 text-base uppercase">{label}</div>
-                        <div className={`text-3xl font-bold ${theme.text}`}>{value!==null&&value!==undefined?fmt(value):<span className="text-lg text-white/30">Gathering data...</span>}</div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Growth Stats */}
-                  <div className={`${theme.card} border ${theme.border} rounded-lg p-4 mb-4`}>
-                    <div className="text-white/50 text-base uppercase mb-3">Holder Growth</div>
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      {[
-                        {label:'7D Growth',current:holdersByPeriod.current,past:holdersByPeriod.d7Ago},
-                        {label:'30D Growth',current:holdersByPeriod.current,past:holdersByPeriod.d30Ago},
-                        {label:'90D Growth',current:holdersByPeriod.current,past:holdersByPeriod.d90Ago}
-                      ].map(({label,current,past})=>{
-                        const hasData=current!==null&&past!==null&&current!==undefined&&past!==undefined;
-                        const growth=hasData?current-past:null;
-                        return(
-                          <div key={label}>
-                            <div className="text-white/40 text-base">{label}</div>
-                            <div className={`text-2xl font-bold ${hasData?(growth>=0?'text-green-400':'text-red-400'):'text-white/30'}`}>
-                              {hasData?(growth>=0?'+':'')+fmt(growth):<span className="text-lg">Gathering...</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  
-                  {/* Comparisons */}
-                  <div className={`${theme.card} border ${theme.border} rounded-lg p-4`}>
-                    <div className="text-white/50 text-base uppercase mb-3">Today vs Averages</div>
-                    <div className="space-y-3">
-                      {[
-                        {label:'vs 7D Avg',avg:holdersByPeriod.avg7d},
-                        {label:'vs 30D Avg',avg:holdersByPeriod.avg30d},
-                        {label:'vs 90D Avg',avg:holdersByPeriod.avg90d}
-                      ].map(({label,avg})=>{
-                        const current=holdersByPeriod.current;
-                        const hasData=current!==null&&avg!==null&&current!==undefined&&avg!==undefined;
-                        if(!hasData){
-                          return(
-                            <div key={label} className="flex justify-between items-center">
-                              <span className="text-white/60 text-lg">{label}</span>
-                              <span className="text-base text-white/30">Gathering data...</span>
-                            </div>
-                          );
-                        }
-                        const change=avg>0?((current-avg)/avg)*100:0;
-                        return(
-                          <div key={label} className="flex justify-between items-center">
-                            <span className="text-white/60 text-lg">{label}</span>
-                            <span className={`text-xl font-bold ${change>=0?'text-green-400':'text-red-400'}`}>
-                              {change>=0?'\u25B2':'\u25BC'} {Math.abs(change).toFixed(1)}%
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          <HolderAnalyticsModal
+            open={showHolderModal}
+            close={()=>setShowHolderModal(false)}
+            token={token}
+            cfg={cfg}
+            theme={theme}
+            holders={holders}
+            holderChange={holderChange}
+            holdersByPeriod={holdersByPeriod}
+          />
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
           {showBurnShareModal&&(
@@ -4553,198 +4784,150 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowHoldersShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowHoldersShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-                
-                <div 
+
+                <div
                   id="holders-share-capture"
                   className="relative overflow-hidden border-2 border-white/30"
-                  style={{
-                    width:'1200px',height:'675px',
-                    background:'linear-gradient(180deg, #0a0a0a 0%, #050505 100%)'
-                  }}
+                  style={{width:'1200px',height:'675px',background:'linear-gradient(180deg,#0a0a0a 0%,#050505 100%)'}}
                 >
-                  {/* Gold glow for PTGC (left) - stronger */}
-                  <div className="absolute left-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(217,202,93,0.25) 0%, transparent 65%)'}}></div>
-                  {/* Green glow for UFO (right) - stronger */}
-                  <div className="absolute right-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(124,252,0,0.25) 0%, transparent 65%)'}}></div>
-                  
-                  <div className="relative w-full h-full pt-4 pb-8 px-7 flex flex-col">
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-5">
-                        <img src={COMBINED_LOGO} alt="The Grays" className="h-16" style={{transform:'scale(2.5)',marginLeft:'30px',marginRight:'30px'}}/>
-                        <div>
-                          <div className="text-3xl font-bold text-white font-orbitron">Holder Analytics</div>
-                          <div className="text-white/50 text-base mt-1">The Grays — PTGC & UFO Combined Holder Stats</div>
-                        </div>
+                  {/* Background glows */}
+                  <div className="absolute left-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 40%, rgba(217,202,93,0.15) 0%, transparent 60%)'}}></div>
+                  <div className="absolute right-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 40%, rgba(124,252,0,0.15) 0%, transparent 60%)'}}></div>
+
+                  {/* ── OUTER CONTAINER: exact 675px, no overflow ── */}
+                  <div className="relative w-full h-full" style={{display:'flex',flexDirection:'column',padding:'24px 28px 20px 28px',boxSizing:'border-box',overflow:'hidden'}}>
+
+                    {/* ── HEADER: 60px ── */}
+                    <div style={{height:'60px',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <div>
+                        <div className="font-orbitron font-bold text-white" style={{fontSize:'24px',lineHeight:'1.1'}}>Holder Analytics</div>
+                        <div style={{fontSize:'15px',marginTop:'3px',color:'rgba(255,255,255,0.6)'}}>The Grays — PTGC &amp; UFO Combined</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-white/40 text-base">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
-                        {holdersShareData&&(
-                          <div className="mt-2">
-                            <div className="text-white font-extrabold text-5xl">{fmt((holdersShareData.PTGC?.holders||0)+(holdersShareData.UFO?.holders||0))}</div>
-                            <div className="text-white/50 text-sm">combined holders</div>
-                          </div>
-                        )}
+                      <div style={{textAlign:'right'}}>
+                        <div style={{fontSize:'13px',color:'rgba(255,255,255,0.55)'}}>{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+                        {holdersShareData&&<>
+                          <div className="text-white font-extrabold" style={{fontSize:'34px',lineHeight:'1',marginTop:'1px'}}>{fmt((holdersShareData.PTGC?.holders||0)+(holdersShareData.UFO?.holders||0))}</div>
+                          <div style={{fontSize:'11px',color:'rgba(255,255,255,0.55)'}}>combined holders</div>
+                        </>}
                       </div>
                     </div>
-                    
+
+                    {/* ── GAP: 10px ── */}
+                    <div style={{height:'10px',flexShrink:0}}></div>
+
+                    {/* ── MAIN 2-COL GRID: fills remaining space ── */}
                     {holdersShareLoading||!holdersShareData?(
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="w-14 h-14 border-4 border-t-transparent border-white/30 rounded-full animate-spin mx-auto mb-4"></div>
-                          <div className="text-white/50 text-xl">Loading holder data for both tokens...</div>
+                      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <div style={{textAlign:'center'}}>
+                          <div className="w-12 h-12 border-4 border-t-transparent border-white/30 rounded-full animate-spin mx-auto mb-3"></div>
+                          <div className="text-white/40" style={{fontSize:'16px'}}>Loading holder data...</div>
                         </div>
                       </div>
                     ):(
-                      <div className="flex-1 grid grid-cols-2 gap-6">
-                        {/* PTGC Column */}
-                        {(()=>{
-                          const d=holdersShareData.PTGC;
+                      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1fr',gap:'18px',minHeight:0,overflow:'hidden'}}>
+
+                        {/* Reusable column renderer */}
+                        {[
+                          {tkn:'PTGC',d:holdersShareData.PTGC,clr:'#D9CA5D',bdr:'rgba(217,202,93,0.3)',bdrLight:'rgba(217,202,93,0.15)',bg:'rgba(217,202,93,0.05)',glow:'rgba(217,202,93,0.9)',chartRef:ptgcShareChartRef},
+                          {tkn:'UFO', d:holdersShareData.UFO, clr:'#7CFC00',bdr:'rgba(124,252,0,0.3)',  bdrLight:'rgba(124,252,0,0.15)',  bg:'rgba(124,252,0,0.05)',  glow:'rgba(124,252,0,0.9)',  chartRef:ufoShareChartRef}
+                        ].map(({tkn,d,clr,bdr,bdrLight,bg,glow,chartRef})=>{
                           const p=d.periods;
+                          const chg24h=p.current!=null&&p.d1Ago!=null?p.current-p.d1Ago:null;
+                          const mkRate=(dAgo,days)=>{
+                            const net=p.current!=null&&dAgo!=null?p.current-dAgo:null;
+                            const avg=net!=null?net/days:null;
+                            const pct=chg24h!=null&&avg!=null&&avg!==0?((chg24h-avg)/Math.abs(avg))*100:null;
+                            return{avg,pct,net};
+                          };
+                          const r7=mkRate(p.d7Ago,7);
+                          const r30=mkRate(p.d30Ago,30);
+                          const r90=mkRate(p.d90Ago,90);
                           return(
-                            <div className="rounded-2xl border border-[#D9CA5D]/30 bg-black/40 p-5 flex flex-col">
-                              {/* Token header with current count */}
-                              <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#D9CA5D]/20">
-                                <div className="flex items-center gap-4">
-                                  <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-20 h-20" style={{filter:'drop-shadow(0 0 20px rgba(217,202,93,1)) drop-shadow(0 0 40px rgba(217,202,93,0.6)) drop-shadow(0 0 60px rgba(217,202,93,0.3))'}}/>
-                                  <div className="text-[#D9CA5D] font-bold text-4xl font-orbitron">PTGC</div>
+                            <div key={tkn} style={{display:'flex',flexDirection:'column',gap:'9px',border:`1px solid ${bdr}`,borderRadius:'16px',background:'rgba(0,0,0,0.45)',padding:'14px 16px',overflow:'hidden',boxSizing:'border-box'}}>
+
+                              {/* ── TOKEN HEADER: ~76px ── */}
+                              <div style={{height:'76px',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                                  <img src={TOKENS[tkn].logo} alt={tkn} style={{width:'58px',height:'58px',filter:`drop-shadow(0 0 12px ${glow})`}}/>
+                                  <div className="font-orbitron font-bold" style={{color:clr,fontSize:'30px'}}>{tkn}</div>
                                 </div>
-                                <div className="text-right">
-                                  <div className="text-[#D9CA5D] font-extrabold text-5xl">{fmt(d.holders)}</div>
-                                  <div className="text-white/40 text-sm">current holders</div>
+                                <div style={{textAlign:'right'}}>
+                                  <div className="font-extrabold" style={{color:clr,fontSize:'40px',lineHeight:'1'}}>{fmt(d.holders)}</div>
+                                  <div className="text-white/35" style={{fontSize:'12px'}}>current holders</div>
+                                  {chg24h!=null&&(
+                                    <div className="font-bold" style={{fontSize:'14px',color:chg24h>=0?'#4ade80':'#f87171',marginTop:'2px'}}>
+                                      {chg24h>=0?'▲':'▼'} {chg24h>=0?'+':''}{fmt(chg24h)} today
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                              
-                              {/* Period counts row */}
-                              <div className="grid grid-cols-3 gap-3 mb-4">
-                                {[{l:'7D Ago',v:p.d7Ago},{l:'30D Ago',v:p.d30Ago},{l:'90D Ago',v:p.d90Ago}].map(({l,v})=>(
-                                  <div key={l} className="bg-black/50 border border-[#D9CA5D]/20 rounded-xl p-3 text-center">
-                                    <div className="text-white/40 text-sm uppercase mb-1">{l}</div>
-                                    <div className="text-white font-bold text-2xl">{v!==null?fmt(v):<span className="text-white/30 text-lg">—</span>}</div>
+
+                              {/* ── PERIOD BOXES: ~84px ── */}
+                              <div style={{height:'84px',flexShrink:0,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px'}}>
+                                {[{l:'7D AGO',v:p.d7Ago,chg:r7.net},{l:'30D AGO',v:p.d30Ago,chg:r30.net},{l:'90D AGO',v:p.d90Ago,chg:r90.net}].map(({l,v,chg})=>(
+                                  <div key={l} style={{background:'rgba(0,0,0,0.5)',border:`1px solid ${bdrLight}`,borderRadius:'10px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'6px 4px'}}>
+                                    <div style={{fontSize:'11px',letterSpacing:'0.05em',color:'rgba(255,255,255,0.55)',textTransform:'uppercase'}}>{l}</div>
+                                    {l==='90D AGO'&&v===null
+                                      ?<div style={{fontSize:'13px',marginTop:'3px',color:'rgba(255,255,255,0.45)',fontStyle:'italic'}}>Gathering...</div>
+                                      :<>
+                                        <div className="text-white font-bold" style={{fontSize:'26px',lineHeight:'1.1'}}>{v!=null?fmt(v):'—'}</div>
+                                        {chg!=null&&<div className="font-semibold" style={{fontSize:'14px',color:chg>=0?'#4ade80':'#f87171'}}>{chg>=0?'+':''}{fmt(chg)}</div>}
+                                      </>
+                                    }
                                   </div>
                                 ))}
                               </div>
-                              
-                              {/* Holder Growth */}
-                              <div className="bg-black/30 border border-[#D9CA5D]/20 rounded-xl p-4 mb-4 flex-1">
-                                <div className="text-white/50 text-sm uppercase mb-3 font-medium">Holder Growth</div>
-                                <div className="grid grid-cols-3 gap-3 text-center">
-                                  {[{l:'7D',past:p.d7Ago},{l:'30D',past:p.d30Ago},{l:'90D',past:p.d90Ago}].map(({l,past})=>{
-                                    const hasData=p.current!==null&&past!==null;
-                                    const growth=hasData?p.current-past:null;
-                                    return(
-                                      <div key={l}>
-                                        <div className="text-white/40 text-sm mb-1">{l}</div>
-                                        <div className={`text-3xl font-bold ${hasData?(growth>=0?'text-green-400':'text-red-400'):'text-white/30'}`}>
-                                          {hasData?(growth>=0?'+':'')+fmt(growth):'—'}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+
+                              {/* ── CHART: 200px fixed ── */}
+                              <div style={{height:'200px',flexShrink:0,background:'rgba(0,0,0,0.3)',border:`1px solid ${bdrLight}`,borderRadius:'10px',padding:'8px 10px 6px',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                                <div style={{fontSize:'10px',letterSpacing:'0.08em',marginBottom:'4px',flexShrink:0,color:'rgba(255,255,255,0.5)',textTransform:'uppercase'}}>30D Holder Trend</div>
+                                <div style={{flex:1,position:'relative',minHeight:0}}>
+                                  <canvas ref={chartRef} style={{width:'100%',height:'100%',display:'block'}}></canvas>
                                 </div>
                               </div>
-                              
-                              {/* Today vs Averages */}
-                              <div className="bg-black/30 border border-[#D9CA5D]/20 rounded-xl p-4 flex-1">
-                                <div className="text-white/50 text-sm uppercase mb-3 font-medium">Today vs Averages</div>
-                                <div className="grid grid-cols-3 gap-3 text-center">
-                                  {[{l:'7D Avg',avg:p.avg7d},{l:'30D Avg',avg:p.avg30d},{l:'90D Avg',avg:p.avg90d}].map(({l,avg})=>{
-                                    const hasData=p.current!==null&&avg!==null;
-                                    const change=hasData&&avg>0?((p.current-avg)/avg)*100:null;
-                                    return(
-                                      <div key={l}>
-                                        <div className="text-white/40 text-sm mb-1">{l}</div>
-                                        <div className={`text-3xl font-bold ${hasData&&change!==null?(change>=0?'text-green-400':'text-red-400'):'text-white/30'}`}>
-                                          {hasData&&change!==null?((change>=0?'\u25B2':'\u25BC')+' '+Math.abs(change).toFixed(1)+'%'):'—'}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+
+                              {/* ── TODAY VS DAILY RATE ── */}
+                              <div style={{flexShrink:0,background:'rgba(0,0,0,0.3)',border:`1px solid ${bdrLight}`,borderRadius:'10px',padding:'12px 14px'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                                  <div style={{fontSize:'11px',letterSpacing:'0.08em',fontWeight:'600',color:'rgba(255,255,255,0.6)',textTransform:'uppercase'}}>Today vs Daily Growth Rate</div>
+                                  <div style={{fontSize:'11px',color:'rgba(255,255,255,0.5)'}}>{chg24h!=null?`Today: ${chg24h>=0?'+':''}${fmt(chg24h)} holders`:'Today: —'}</div>
+                                </div>
+                                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',textAlign:'center'}}>
+                                  {[{l:'7D',r:r7,g:false},{l:'30D',r:r30,g:false},{l:'90D',r:r90,g:p.d90Ago===null}].map(({l,r,g})=>(
+                                    <div key={l} style={{background:bg,borderRadius:'8px',padding:'8px 4px'}}>
+                                      <div style={{fontSize:'13px',fontWeight:'600',color:'rgba(255,255,255,0.55)'}}>{l}</div>
+                                      {g
+                                        ?<div style={{fontSize:'13px',marginTop:'3px',color:'rgba(255,255,255,0.4)',fontStyle:'italic'}}>Gathering...</div>
+                                        :<>
+                                          {r.avg!=null&&<div style={{fontSize:'13px',fontWeight:'600',color:r.avg>=0?'rgba(74,222,128,0.7)':'rgba(248,113,113,0.7)'}}>{r.avg>=0?'+':''}{Math.abs(r.avg).toFixed(1)}/day avg</div>}
+                                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'2px',lineHeight:'1.1'}}>
+                                            <span style={{fontSize:'13px',fontWeight:'800',color:r.pct!=null?(r.pct>=0?'#4ade80':'#f87171'):'rgba(255,255,255,0.2)'}}>{r.pct!=null?(r.pct>=0?'▲':'▼'):''}</span>
+                                            <span style={{fontSize:'26px',fontWeight:'800',color:r.pct!=null?(r.pct>=0?'#4ade80':'#f87171'):'rgba(255,255,255,0.2)'}}>
+                                              {r.pct!=null?Math.abs(r.pct).toFixed(0)+'%':'—'}
+                                            </span>
+                                          </div>
+                                        </>
+                                      }
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
+
                             </div>
                           );
-                        })()}
-                        
-                        {/* UFO Column */}
-                        {(()=>{
-                          const d=holdersShareData.UFO;
-                          const p=d.periods;
-                          return(
-                            <div className="rounded-2xl border border-[#7CFC00]/30 bg-black/40 p-5 flex flex-col">
-                              {/* Token header with current count */}
-                              <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#7CFC00]/20">
-                                <div className="flex items-center gap-4">
-                                  <img src={TOKENS.UFO.logo} alt="UFO" className="w-20 h-20" style={{filter:'drop-shadow(0 0 20px rgba(124,252,0,1)) drop-shadow(0 0 40px rgba(124,252,0,0.6)) drop-shadow(0 0 60px rgba(124,252,0,0.3))'}}/>
-                                  <div className="text-[#7CFC00] font-bold text-4xl font-orbitron">UFO</div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-[#7CFC00] font-extrabold text-5xl">{fmt(d.holders)}</div>
-                                  <div className="text-white/40 text-sm">current holders</div>
-                                </div>
-                              </div>
-                              
-                              {/* Period counts row */}
-                              <div className="grid grid-cols-3 gap-3 mb-4">
-                                {[{l:'7D Ago',v:p.d7Ago},{l:'30D Ago',v:p.d30Ago},{l:'90D Ago',v:p.d90Ago}].map(({l,v})=>(
-                                  <div key={l} className="bg-black/50 border border-[#7CFC00]/20 rounded-xl p-3 text-center">
-                                    <div className="text-white/40 text-sm uppercase mb-1">{l}</div>
-                                    <div className="text-white font-bold text-2xl">{v!==null?fmt(v):<span className="text-white/30 text-lg">—</span>}</div>
-                                  </div>
-                                ))}
-                              </div>
-                              
-                              {/* Holder Growth */}
-                              <div className="bg-black/30 border border-[#7CFC00]/20 rounded-xl p-4 mb-4 flex-1">
-                                <div className="text-white/50 text-sm uppercase mb-3 font-medium">Holder Growth</div>
-                                <div className="grid grid-cols-3 gap-3 text-center">
-                                  {[{l:'7D',past:p.d7Ago},{l:'30D',past:p.d30Ago},{l:'90D',past:p.d90Ago}].map(({l,past})=>{
-                                    const hasData=p.current!==null&&past!==null;
-                                    const growth=hasData?p.current-past:null;
-                                    return(
-                                      <div key={l}>
-                                        <div className="text-white/40 text-sm mb-1">{l}</div>
-                                        <div className={`text-3xl font-bold ${hasData?(growth>=0?'text-green-400':'text-red-400'):'text-white/30'}`}>
-                                          {hasData?(growth>=0?'+':'')+fmt(growth):'—'}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                              
-                              {/* Today vs Averages */}
-                              <div className="bg-black/30 border border-[#7CFC00]/20 rounded-xl p-4 flex-1">
-                                <div className="text-white/50 text-sm uppercase mb-3 font-medium">Today vs Averages</div>
-                                <div className="grid grid-cols-3 gap-3 text-center">
-                                  {[{l:'7D Avg',avg:p.avg7d},{l:'30D Avg',avg:p.avg30d},{l:'90D Avg',avg:p.avg90d}].map(({l,avg})=>{
-                                    const hasData=p.current!==null&&avg!==null;
-                                    const change=hasData&&avg>0?((p.current-avg)/avg)*100:null;
-                                    return(
-                                      <div key={l}>
-                                        <div className="text-white/40 text-sm mb-1">{l}</div>
-                                        <div className={`text-3xl font-bold ${hasData&&change!==null?(change>=0?'text-green-400':'text-red-400'):'text-white/30'}`}>
-                                          {hasData&&change!==null?((change>=0?'\u25B2':'\u25BC')+' '+Math.abs(change).toFixed(1)+'%'):'—'}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        })}
                       </div>
                     )}
-                    
-                    {/* Footer */}
-                    <div className="flex justify-between items-center mt-auto pt-4 border-t border-white/10">
-                      <div className="text-white/30 text-sm">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
-                      <div className="text-white/30 text-sm font-medium">ptgc-ufo.com</div>
+
+                    {/* ── FOOTER: 22px ── */}
+                    <div style={{height:'22px',flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'flex-end',borderTop:'1px solid rgba(255,255,255,0.08)',marginTop:'10px',paddingTop:'6px'}}>
+                      <div style={{fontSize:'11px',color:'rgba(255,255,255,0.45)'}}>Data via PulseScan &amp; DexScreener</div>
+                      <div style={{fontSize:'11px',fontWeight:'500',color:'rgba(255,255,255,0.45)'}}>ptgc-ufo.com</div>
                     </div>
+
                   </div>
                 </div>
-                
+
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
                 </div>
