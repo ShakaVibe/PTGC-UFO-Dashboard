@@ -380,6 +380,29 @@
       }catch{return 0}
     };
     const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
+
+    // Fetch live 24H burn amount directly from blockchain using eth_getLogs
+    // Queries Transfer events to the burn address over the last ~24H of blocks
+    const fetchLive24hBurn=async(tokenAddress,decimals)=>{
+      try{
+        const blockRes=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+        if(!blockRes.result)return null;
+        const currentBlock=parseInt(blockRes.result,16);
+        const fromBlock=Math.max(0,currentBlock-8640); // ~24H at 10sec/block
+        const TRANSFER_SIG='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+        const BURN_TOPIC='0x0000000000000000000000000000000000000000000000000000000000000369';
+        const logsRes=await rpcFetch({
+          jsonrpc:'2.0',method:'eth_getLogs',
+          params:[{address:tokenAddress,fromBlock:'0x'+fromBlock.toString(16),toBlock:'latest',topics:[TRANSFER_SIG,null,BURN_TOPIC]}],
+          id:2
+        },15000);
+        if(!logsRes.result||!Array.isArray(logsRes.result))return null;
+        let total=0;
+        for(const log of logsRes.result){total+=Number(BigInt(log.data))/Math.pow(10,decimals);}
+        console.log(`Live 24H burn (${tokenAddress.slice(0,8)}...): ${total.toLocaleString()} from ${logsRes.result.length} txs`);
+        return total;
+      }catch(e){console.error('fetchLive24hBurn error:',e);return null;}
+    };
     
     // Burn history cache - loaded from pre-generated JSON file
     let burnHistoryCache=null;
@@ -1575,7 +1598,7 @@
       );
     };
 
-    const BurnModal=({open,close,token,burn,price,cfg})=>{
+    const BurnModal=({open,close,token,burn,price,cfg,live24hBurn})=>{
       const[hist,setHist]=useState({h12:null,h24:null,d7:null,d30:null});
       useEffect(()=>{
         if(!open)return;
@@ -1589,7 +1612,7 @@
       const maxSupply=cfg.totalSupply;
       const getPct=a=>maxSupply>0?(a/maxSupply)*100:0;
       const whaleProgress=getWhaleProgress(burn?.pct||0);
-      const boxes=[{l:'12H',v:hist.h12},{l:'24H',v:hist.h24},{l:'7D',v:hist.d7},{l:'30D',v:hist.d30}];
+      const boxes=[{l:'12H',v:hist.h12},{l:'24H',v:live24hBurn!==null?live24hBurn:hist.h24,live:live24hBurn!==null},{l:'7D',v:hist.d7},{l:'30D',v:hist.d30}];
       return(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
           <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-2xl w-full" onClick={e=>e.stopPropagation()}>
@@ -1612,7 +1635,7 @@
                 <div className="flex items-center justify-center gap-2 flex-wrap"><span className="text-3xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/80 text-lg font-bold">x{c.cnt}</span></span>)}</div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {boxes.map(({l,v})=>{
+                {boxes.map(({l,v,live})=>{
                   const isLoading=v===null;
                   const pct=!isLoading?getPct(v):0;
                   const c=!isLoading&&v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
@@ -2603,6 +2626,7 @@
       const[sortDir,setSortDir]=useState('desc');
       const[lastUpdate,setLastUpdate]=useState(new Date());
       const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0,d90:0});
+      const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
@@ -2924,6 +2948,7 @@
         setPtgcPrice(0);
         setHolderChange(null);
         setBurnPeriods({h12:0,h24:0,d7:0,d30:0,d90:0});
+        setLive24hBurn(null);
         setValueGenPeriod('7d');
         setValueGenShowTokens(false);
         setBurnShowTokens(false);
@@ -2951,6 +2976,9 @@
           
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          
+          // Fetch live 24H burn from blockchain in background (non-blocking)
+          fetchLive24hBurn(cfg.address,cfg.decimals).then(v=>{if(v!==null)setLive24hBurn(v);});
           
           // Update holder change with current holder count
           const hc=getHolderChange(token,h);
@@ -3257,11 +3285,11 @@
                 <div className="flex items-center gap-3 flex-wrap mb-3"><span className="text-3xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-3xl">{c.e}</span><span className="text-white/70 text-base font-bold">x{c.cnt}</span></span>)}</div>
                 <div className="flex-1"></div>
                 <div className="grid grid-cols-4 gap-2">
-                  {[{l:'24H',v:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v})=>{
+                  {[{l:'24H',v:live24hBurn!==null?live24hBurn:burnPeriods.h24,live:live24hBurn!==null},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v,live})=>{
                     const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
                     const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                     return(
-                      <div key={l} className="bg-black/30 border border-orange-500/30 rounded-lg px-2 py-2">
+                      <div key={l} className="bg-black/30 border border-orange-500/30 rounded-lg px-2 py-2 relative">
                         <div className="text-white font-bold text-sm mb-1">{l}</div>
                         <div className="text-2xl text-center mb-1">{c.e}{c.cnt>0&&<span className="text-white/70 text-sm font-bold ml-1">x{c.cnt}</span>}</div>
                         {burnShowTokens?(
