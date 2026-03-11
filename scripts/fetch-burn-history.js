@@ -354,12 +354,11 @@ function filterBuybackBurns(burns, lpPairAddress) {
  * Calculate period totals (12H, 24H, 7D, 30D)
  */
 function calculatePeriods(burns) {
-  // Use the newest burn's timestamp as the reference point instead of Date.now().
-  // Moralis has variable indexing lag on PulseChain - sometimes 12-24+ hours behind.
-  // Using Date.now() means h12/h24 windows show 0 whenever that lag exceeds the window.
-  // By anchoring to the newest indexed burn, periods reflect the most recent 24h of
-  // *indexed* data, which is what users actually want to see.
-  const now = burns.length > 0 ? burns[0].t : Date.now();
+  // Always use real current time so burn windows are accurate.
+  // Moralis may lag behind on indexing, but anchoring to the newest burn timestamp
+  // was causing burns to fall outside the 24H window when lag was low — the opposite
+  // of what we want. Real time ensures all recent burns are always captured correctly.
+  const now = Date.now();
   const h12 = 12 * 60 * 60 * 1000;
   const h24 = 24 * 60 * 60 * 1000;
   const d7 = 7 * 24 * 60 * 60 * 1000;
