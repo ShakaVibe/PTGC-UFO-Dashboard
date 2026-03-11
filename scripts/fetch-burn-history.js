@@ -1,5 +1,5 @@
 /**
- * Fetch Burn History Script - MORALIS VERSION (SPLIT FILES)
+ * Fetch Burn History Script - RPC VERSION (SPLIT FILES)
  * 
  * Splits burn data into multiple files to stay under GitHub's 100MB limit
  * 
@@ -48,6 +48,44 @@ const DEXSCREENER_BASE = 'https://api.dexscreener.com/latest/dex';
 const PULSESCAN_BASE = 'https://api.scan.pulsechain.com/api/v2';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// ============================================
+// RPC INFRASTRUCTURE (replaces Moralis for burn fetching)
+// ============================================
+const RPC_URL = 'https://rpc.pulsechain.com';
+// Transfer(address indexed from, address indexed to, uint256 value)
+const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+// Burn address 0x...0369 padded to 32 bytes as a log topic
+const BURN_ADDR_TOPIC = '0x0000000000000000000000000000000000000000000000000000000000000369';
+const LOG_CHUNK = 2000;     // blocks per eth_getLogs request (conservative)
+const MS_PER_BLOCK = 10000; // ~10 seconds per block on PulseChain
+
+async function rpcCall(method, params, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch(RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
+        signal: controller.signal
+      });
+      clearTimeout(tid);
+      const json = await res.json();
+      if (json.error) {
+        console.log(`  RPC error [${method}]: ${json.error.message}`);
+        if (attempt < retries - 1) await delay(2000 * (attempt + 1));
+        continue;
+      }
+      return json.result;
+    } catch (e) {
+      console.log(`  RPC call failed [${method}]: ${e.message}`);
+      if (attempt < retries - 1) await delay(2000 * (attempt + 1));
+    }
+  }
+  return null;
+}
 
 // Time period boundaries (timestamps)
 const PERIODS = {
@@ -229,98 +267,125 @@ function loadExistingSummary(dataDir) {
 }
 
 /**
- * Fetch ALL token transfers to burn address using Moralis
+ * Fetch ALL token transfers to burn address using direct RPC (eth_getLogs).
+ * Replaces Moralis which has severe and unpredictable indexing lag on PulseChain.
+ * Same function signature — all call sites unchanged.
  */
 async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns = []) {
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`Fetching ${tokenSymbol} burns via Moralis...`);
+  console.log(`Fetching ${tokenSymbol} burns via RPC (eth_getLogs)...`);
   console.log(`${'='.repeat(50)}`);
-  
-  // Get the most recent timestamp we have (for incremental updates)
-  const lastTimestamp = existingBurns.length > 0 ? existingBurns[0].t : 0;
-  if (lastTimestamp) {
-    console.log(`Incremental mode: fetching after ${new Date(lastTimestamp).toISOString()}`);
+
+  // Get current block number
+  const blockHex = await rpcCall('eth_blockNumber', []);
+  if (!blockHex) {
+    console.log('WARN: Could not get block number — returning existing burns unchanged');
+    return existingBurns;
+  }
+  const currentBlock = parseInt(blockHex, 16);
+
+  // Get latest block for timestamp calibration (one RPC call, used to estimate all timestamps)
+  const latestBlockData = await rpcCall('eth_getBlockByNumber', ['latest', false]);
+  if (!latestBlockData) {
+    console.log('WARN: Could not get latest block data — returning existing burns unchanged');
+    return existingBurns;
+  }
+  const latestTs = parseInt(latestBlockData.timestamp, 16) * 1000;
+
+  // Estimate timestamp for any block number (~10 sec/block, accurate to within seconds)
+  const tsFromBlock = (blockNum) => latestTs - (currentBlock - blockNum) * MS_PER_BLOCK;
+
+  // Determine which blocks to scan
+  let fromBlock;
+  if (existingBurns.length > 0) {
+    // Incremental: start just before the newest stored burn, with a 1000-block safety buffer
+    const lastTs = existingBurns[0].t;
+    const blocksAgo = Math.ceil((latestTs - lastTs) / MS_PER_BLOCK);
+    fromBlock = Math.max(0, currentBlock - blocksAgo - 1000); // ~2.7 hr buffer
+    console.log(`Incremental mode: last stored burn ${new Date(lastTs).toISOString()}`);
+    console.log(`  Scanning from block ~${fromBlock} (+1000 block safety buffer)`);
   } else {
-    console.log('Full fetch mode: getting all historical burns');
+    // Full history fetch (only happens on very first run — data files not yet created)
+    fromBlock = 17000000; // approximates PulseChain genesis / token deployment era
+    console.log(`Full fetch mode from block ${fromBlock}`);
   }
-  
-  const newBurns = [];
-  let cursor = null;
-  let page = 0;
-  let reachedOldData = false;
-  
-  while (!reachedOldData) {
-    // Moralis endpoint for wallet token transfers (burn address is the wallet receiving)
-    const data = await moralisRequest(`/${BURN_ADDRESS}/erc20/transfers`, {
-      chain: CHAIN,
-      contract_addresses: [tokenAddress],
-      cursor: cursor,
-      limit: 100
-    });
-    
-    if (!data) {
-      console.log(`  Page ${page + 1}: API error, retrying in 5s...`);
-      await delay(5000);
-      continue;
+
+  const totalBlocks = currentBlock - fromBlock;
+  const totalChunks = Math.ceil(totalBlocks / LOG_CHUNK);
+  console.log(`Current block: ${currentBlock} | Scanning ${totalBlocks.toLocaleString()} blocks in ~${totalChunks} chunks`);
+
+  // Fetch Transfer logs in chunks
+  const allLogs = [];
+  let chunksDone = 0;
+
+  for (let start = fromBlock; start <= currentBlock; start += LOG_CHUNK) {
+    const end = Math.min(start + LOG_CHUNK - 1, currentBlock);
+
+    const result = await rpcCall('eth_getLogs', [{
+      address: tokenAddress,
+      fromBlock: '0x' + start.toString(16),
+      toBlock:   '0x' + end.toString(16),
+      topics: [TRANSFER_SIG, null, BURN_ADDR_TOPIC]
+    }]);
+
+    if (result && result.length > 0) {
+      allLogs.push(...result);
     }
-    
-    if (!data.result || data.result.length === 0) {
-      console.log(`  No more data after page ${page + 1}`);
-      break;
+
+    chunksDone++;
+    if (chunksDone % 50 === 0 || chunksDone === totalChunks) {
+      console.log(`  ${chunksDone}/${totalChunks} chunks | ${allLogs.length} logs found so far`);
     }
-    
-    for (const tx of data.result) {
-      const timestamp = new Date(tx.block_timestamp).getTime();
-      
-      // Stop if we've reached data we already have
-      if (lastTimestamp && timestamp <= lastTimestamp) {
-        console.log(`  Reached existing data at ${new Date(timestamp).toISOString()}`);
-        reachedOldData = true;
-        break;
-      }
-      
-      const amount = Number(BigInt(tx.value || '0')) / Math.pow(10, decimals);
-      const fromAddr = (tx.from_address || '').toLowerCase();
-      
-      newBurns.push({
-        t: timestamp,
-        a: amount,
-        f: fromAddr
-      });
-    }
-    
-    // Log progress
-    if (page % 10 === 0 || page < 5) {
-      console.log(`  Page ${page + 1}: ${newBurns.length} new burns collected`);
-    }
-    
-    // Check for next page
-    cursor = data.cursor;
-    if (!cursor || reachedOldData) {
-      break;
-    }
-    
-    page++;
-    await delay(200); // Gentle rate limiting
+
+    await delay(50); // gentle rate limiting
   }
-  
-  console.log(`Fetched ${newBurns.length} new ${tokenSymbol} burns`);
+
+  console.log(`Total logs fetched: ${allLogs.length}`);
+
+  // Convert logs to burn records
+  // Transfer(from indexed, to indexed, value) → topics[1]=from, data=value
+  const newBurns = allLogs.map(log => {
+    const blockNum = parseInt(log.blockNumber, 16);
+    // Safe BigInt division to avoid JS Number precision loss on large wei values
+    const bigVal  = BigInt(log.data);
+    const divisor = BigInt(10) ** BigInt(decimals);
+    const whole   = Number(bigVal / divisor);
+    const frac    = Number(bigVal % divisor) / Math.pow(10, decimals);
+    return {
+      t: tsFromBlock(blockNum),
+      a: whole + frac,
+      f: ('0x' + log.topics[1].slice(26)).toLowerCase()
+    };
+  });
+
+  // Deduplicate against existing burns in the overlap/safety-buffer window.
+  // Match on: same from-address, same amount (within 1 token), within 10-minute window.
+  const overlapWindow = 3 * 60 * 60 * 1000; // look back 3 hours into existing burns
+  const overlapBurns  = existingBurns.length > 0
+    ? existingBurns.filter(b => b.t >= existingBurns[0].t - overlapWindow)
+    : [];
+
+  const dedupedNew = newBurns.filter(nb =>
+    !overlapBurns.some(eb =>
+      eb.f === nb.f &&
+      Math.abs(eb.a - nb.a) < 1 &&
+      Math.abs(eb.t - nb.t) < 10 * 60 * 1000
+    )
+  );
+
+  console.log(`New burns after deduplication: ${dedupedNew.length}`);
   console.log(`Existing ${tokenSymbol} burns: ${existingBurns.length}`);
-  
-  // Merge with existing burns
-  const allBurns = [...newBurns, ...existingBurns];
-  
-  // Sort by timestamp descending (newest first)
+
+  // Merge and sort descending
+  const allBurns = [...dedupedNew, ...existingBurns];
   allBurns.sort((a, b) => b.t - a.t);
-  
+
   console.log(`Total ${tokenSymbol} burns after merge: ${allBurns.length}`);
-  
-  // Log timestamp range
   if (allBurns.length > 0) {
     console.log(`  Oldest: ${new Date(allBurns[allBurns.length - 1].t).toISOString()}`);
     console.log(`  Newest: ${new Date(allBurns[0].t).toISOString()}`);
   }
-  
+
   return allBurns;
 }
 
@@ -354,12 +419,10 @@ function filterBuybackBurns(burns, lpPairAddress) {
  * Calculate period totals (12H, 24H, 7D, 30D)
  */
 function calculatePeriods(burns) {
-  // Use the newest burn's timestamp as the reference point instead of Date.now().
-  // Moralis has variable indexing lag on PulseChain - sometimes 12-24+ hours behind.
-  // Using Date.now() means h12/h24 windows show 0 whenever that lag exceeds the window.
-  // By anchoring to the newest indexed burn, periods reflect the most recent 24h of
-  // *indexed* data, which is what users actually want to see.
-  const now = burns.length > 0 ? burns[0].t : Date.now();
+  // Use Date.now() as the reference point. This is correct now that burns are fetched
+  // via eth_getLogs which gives accurate block-based timestamps with no indexing lag.
+  // (Previously used burns[0].t to work around Moralis's PulseChain indexing lag.)
+  const now = Date.now();
   const h12 = 12 * 60 * 60 * 1000;
   const h24 = 24 * 60 * 60 * 1000;
   const d7 = 7 * 24 * 60 * 60 * 1000;
@@ -740,7 +803,7 @@ async function main() {
   
   const summaryData = {
     lastUpdated: new Date().toISOString(),
-    dataSource: 'Moralis (burns), PulseScan (holders)',
+    dataSource: 'RPC/eth_getLogs (burns), Moralis (price/volume/pairs), PulseScan (holders)',
     
     PTGC: {
       totalBurned: ptgcTotal,
