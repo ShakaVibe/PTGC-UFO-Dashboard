@@ -68,9 +68,16 @@
       '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', // UFO/INC
       '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', // UFO/HEX
       '0xd3a87bda2238ee28b424d38991df1fbadd2be666', // UFO/EHEX
-      '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca'  // UFO/PTGC (also PTGC LP)
+      '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', // UFO/PTGC (also PTGC LP)
+      '0x975c7ab1dae5c97327ef7019587dffc66096f5d8', // PTGC/PRVX
+      '0x462187352e9c09ae4a5675dc8af50ce1c7a196a9'  // UFO/PRVX
     ];
     
+    // Hardcoded PTGC pairs that should always show (even if DexScreener doesn't return them)
+    const HARDCODED_PTGC_PAIRS = [
+      { address: '0x975c7aB1daE5c97327ef7019587DffC66096F5d8', quoteSymbol: 'PRVX', quoteName: 'ProveX', quoteAddress: '0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11', isRHCore: true, version: 'v2' }
+    ];
+
     // Hardcoded UFO pairs that should always show (even if DexScreener doesn't return them)
     // Note: PTGC is NOT an RH core, but we still want to show that pair
     const HARDCODED_UFO_PAIRS = [
@@ -79,6 +86,7 @@
       { address: '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', quoteSymbol: 'INC', quoteName: 'Incentive', quoteAddress: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', isRHCore: true, version: 'v2' },
       { address: '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', quoteSymbol: 'HEX', quoteName: 'HEX', quoteAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', isRHCore: true, version: 'v2' },
       { address: '0xd3a87bda2238ee28b424d38991df1fbadd2be666', quoteSymbol: 'EHEX', quoteName: 'HEX from Ethereum', quoteAddress: '0x57fde0a71132198BBeC939B98976993d8D89D225', isRHCore: true, version: 'v2' },
+      { address: '0x462187352e9c09AE4A5675dc8aF50CE1C7a196A9', quoteSymbol: 'PRVX', quoteName: 'ProveX', quoteAddress: '0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11', isRHCore: true, version: 'v2' },
       { address: '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', quoteSymbol: 'PTGC', quoteName: 'PTGC', quoteAddress: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', isRHCore: false, version: 'v2' }
     ];
     
@@ -258,6 +266,48 @@
           });
         }
         
+        // For PTGC token, add hardcoded pairs that DexScreener doesn't return
+        const isPTGC = addr.toLowerCase() === TOKENS.PTGC.address.toLowerCase();
+        if(isPTGC) {
+          let ptgcPrice = 0;
+          const existingPairs = Array.from(allPairsMap.values());
+          if(existingPairs.length > 0) {
+            const mainPairData = existingPairs.find(p => parseFloat(p.priceUsd) > 0) || existingPairs[0];
+            ptgcPrice = parseFloat(mainPairData.priceUsd) || 0;
+          }
+          const missingPtgcPairs = HARDCODED_PTGC_PAIRS.filter(hcPair => !allPairsMap.has(hcPair.address.toLowerCase()));
+          if(missingPtgcPairs.length > 0) {
+            console.log(`Fetching ${missingPtgcPairs.length} missing PTGC pairs from chain...`);
+            const chainResults = await Promise.all(missingPtgcPairs.map(async hcPair => {
+              try {
+                const chainData = await fetchLPFromChain(hcPair.address, TOKENS.PTGC.address, TOKENS.PTGC.decimals, ptgcPrice);
+                if(chainData) {
+                  return {
+                    pairAddress: hcPair.address,
+                    baseToken: { symbol: 'PTGC', address: TOKENS.PTGC.address },
+                    quoteToken: { symbol: hcPair.quoteSymbol, name: hcPair.quoteName, address: hcPair.quoteAddress },
+                    liquidity: { usd: chainData.liquidityUsd, base: chainData.tokenAmount },
+                    volume: { h24: 0 },
+                    priceUsd: String(ptgcPrice),
+                    txns: { h24: { buys: 0, sells: 0 } },
+                    dexId: 'pulsex',
+                    labels: hcPair.version ? [hcPair.version] : [],
+                    _fromChain: true,
+                    _rhCore: hcPair.isRHCore ? hcPair.quoteSymbol : null
+                  };
+                }
+              } catch(e) {
+                console.log(`Could not fetch PTGC pair ${hcPair.quoteSymbol}:`, e.message);
+              }
+              return null;
+            }));
+            chainResults.filter(Boolean).forEach(pair => {
+              allPairsMap.set(pair.pairAddress.toLowerCase(), pair);
+              console.log(`Added PTGC pair from chain: $${pair.liquidity.usd.toLocaleString()} liquidity`);
+            });
+          }
+        }
+
         // For UFO token, add hardcoded pairs that DexScreener doesn't return
         const isUFO = addr.toLowerCase() === TOKENS.UFO.address.toLowerCase();
         if(isUFO) {
@@ -2690,7 +2740,7 @@
       const[liquidityChange24h,setLiquidityChange24h]=useState(null);
       const[txnChange24h,setTxnChange24h]=useState(null);
       const[tokensInLPChange24h,setTokensInLPChange24h]=useState(null);
-      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
+      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
       // Load other token pairs when RH Cores modal opens
@@ -2717,7 +2767,8 @@
             PLSX:'0x95b303987a60c71504d99aa1b13b4da07b0790ab',
             INC:'0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
             HEX:'0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
-            EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225'
+            EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225',
+            PRVX:'0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11'
           };
           
           // Fetch DexScreener data for current prices and 24h change
@@ -4570,7 +4621,7 @@
                         <div className="text-white/50 text-sm mt-1">The Grays — Proudly supporting Richard Heart and the PulseChain ecosystem</div>
                       </div>
                       {(()=>{
-                        const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
+                        const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
                         const currentPairs=data?.pairs||[];
                         const otherPairs=otherTokenPairs||[];
                         const ptgcPairs=token==='PTGC'?currentPairs:otherPairs;
@@ -4596,7 +4647,7 @@
                     </div>
                     
                     {(()=>{
-                      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX'];
+                      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
                       const currentPairs=data?.pairs||[];
                       const otherPairs=otherTokenPairs||[];
                       
@@ -4608,7 +4659,8 @@
                         PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
                         INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
                         HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
-                        EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png'
+                        EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png',
+                        PRVX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11.png'
                       };
                       
                       const getPairData=(pairs,core)=>{
@@ -4682,7 +4734,7 @@
                     <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
                       <div className="text-white/30 text-sm">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
                       <div className="text-white/30 text-sm font-medium">ptgc-ufo.com</div>
-                      <div className="text-white/30 text-sm">RH Cores: WPLS • PLSX • INC • HEX • EHEX</div>
+                      <div className="text-white/30 text-sm">RH Cores: WPLS • PLSX • INC • HEX • EHEX • PRVX</div>
                     </div>
                   </div>
                 </div>
@@ -5059,10 +5111,11 @@
                               PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
                               INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
                               HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
-                              EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png'
+                              EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png',
+                              PRVX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11.png'
                             };
                             const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
-                            const cores=['WPLS','PLSX','INC','HEX','EHEX'];
+                            const cores=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
                             return cores.map(core=>{
                               const p=corePrices?.[core];
                               const price=p?.price||0;
@@ -5152,7 +5205,7 @@
                     <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
                       <div className="text-white/30 text-xs">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
                       <div className="text-white/30 text-xs font-medium">ptgc-ufo.com</div>
-                      <div className="text-white/30 text-xs">RH Cores: WPLS • PLSX • INC • HEX • EHEX</div>
+                      <div className="text-white/30 text-xs">RH Cores: WPLS • PLSX • INC • HEX • EHEX • PRVX</div>
                     </div>
                   </div>
                 </div>
