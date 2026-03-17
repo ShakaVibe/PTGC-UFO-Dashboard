@@ -20,6 +20,10 @@
     ::-webkit-scrollbar{width:8px}
     ::-webkit-scrollbar-track{background:#1a1a1a}
     ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+    .buyer-dist-wallets::-webkit-scrollbar{width:6px}
+    .buyer-dist-wallets::-webkit-scrollbar-track{background:#1a1a1a;border-radius:3px}
+    .buyer-dist-wallets::-webkit-scrollbar-thumb{background:#D9CA5D;border-radius:3px}
+    .buyer-dist-wallets::-webkit-scrollbar-thumb:hover{background:#f0e070}
     @keyframes fire{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
     .animate-fire{animation:fire 0.5s ease-in-out infinite}
@@ -39,7 +43,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const {useState,useEffect,useMemo}=React;
+    const {useState,useEffect,useMemo,useRef}=React;
     
     const TOKENS={
       PTGC:{name:'PTGC',address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D9CA5D',decimals:18,mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',pulseScanUrl:'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93',totalSupply:333333333333,taxRate:0.05,hasDAO:true,
@@ -5250,6 +5254,255 @@
     };
     
     // Affiliates Dashboard Page
+    // Module-level helper (used by BuyerDistributionModal and AffiliatesPage)
+    const PTGC_SUPPLY_GLOBAL=333333333333;
+    const getCreatureForPtgc=(ptgcAmount)=>{
+      if(!ptgcAmount||ptgcAmount<=0)return null;
+      const pct=(ptgcAmount/PTGC_SUPPLY_GLOBAL)*100;
+      for(const c of BURN_C){
+        if(pct>=c.p){
+          const cnt=c.p>0?Math.floor(pct/c.p):1;
+          return{emoji:c.e,name:c.n,count:Math.max(1,cnt)};
+        }
+      }
+      return{emoji:'🐚',name:'Shell',count:1};
+    };
+
+    // ===== BUYER DISTRIBUTION MODAL =====
+    const BuyerDistributionModal=({allTx,referrerDetails,onClose})=>{
+      const[metric,setMetric]=useState('ptgc');
+      const[copiedWallet,setCopiedWallet]=useState(null);
+      const[walletMap,setWalletMap]=useState({});
+      const[fetchProgress,setFetchProgress]=useState(0);
+      const[fetchTotal,setFetchTotal]=useState(0);
+      const[fetchDone,setFetchDone]=useState(false);
+      const chartRef=useRef(null);
+      const chartInstanceRef=useRef(null);
+
+      const COLORS=['#818cf8','#34d399','#f472b6','#fb923c','#60a5fa','#a78bfa','#4ade80','#fbbf24','#f87171','#38bdf8','#e879f9','#2dd4bf','#fb7185','#a3e635','#22d3ee'];
+
+      // Fetch buyer (from) address for each tx via RPC eth_getTransactionByHash
+      useEffect(()=>{
+        const txsWithHash=allTx.filter(tx=>tx.txHash);
+        if(!txsWithHash.length){setFetchDone(true);return;}
+        setFetchTotal(txsWithHash.length);
+        let done=0;
+        const map={};
+        // Process in batches of 5 to avoid flooding RPC
+        const BATCH=5;
+        const processBatch=async(batch)=>{
+          await Promise.all(batch.map(async tx=>{
+            try{
+              const res=await rpcFetch({jsonrpc:'2.0',method:'eth_getTransactionByHash',params:[tx.txHash],id:1},8000);
+              const fromAddr=res?.result?.from;
+              if(fromAddr){
+                const addr=fromAddr.toLowerCase();
+                if(!map[addr])map[addr]={wallet:fromAddr,ptgc:0,usd:0,buys:0};
+                map[addr].ptgc+=(tx.ptgcAmount||0);
+                map[addr].usd+=(tx.usdAmount||0);
+                map[addr].buys+=1;
+              }
+            }catch(e){/* skip failed lookups */}
+            done++;
+            setFetchProgress(done);
+          }));
+        };
+        (async()=>{
+          for(let i=0;i<txsWithHash.length;i+=BATCH){
+            await processBatch(txsWithHash.slice(i,i+BATCH));
+            setWalletMap({...map});
+          }
+          setFetchDone(true);
+        })();
+      },[]);
+
+      const walletData=Object.values(walletMap);
+
+      const totals={
+        ptgc:walletData.reduce((s,w)=>s+w.ptgc,0),
+        usd:walletData.reduce((s,w)=>s+w.usd,0),
+        buys:walletData.reduce((s,w)=>s+w.buys,0),
+      };
+
+      const sortedWallets=useMemo(()=>{
+        const getV=(w)=>metric==='ptgc'?w.ptgc:metric==='usd'?w.usd:w.buys;
+        return[...walletData].sort((a,b)=>getV(b)-getV(a));
+      },[walletData,metric]);
+
+      const getVal=(w)=>metric==='ptgc'?w.ptgc:metric==='usd'?w.usd:w.buys;
+      const totalVal=metric==='ptgc'?totals.ptgc:metric==='usd'?totals.usd:totals.buys;
+
+      // Trophy logic (same as referrer card header)
+      const trophyMap={Whale:'logos/ptgc/trophy_whale_gold.png',Shark:'logos/ptgc/trophy_shark_silver.png',Dolphin:'logos/ptgc/trophy_dolphin_gold.png'};
+      const creature=referrerDetails?getCreatureForPtgc(referrerDetails.totalPtgc):null;
+      const trophyImg=creature?trophyMap[creature.name]:null;
+
+      // CopyBtn inline for header wallet
+      const[headerCopied,setHeaderCopied]=useState(false);
+
+      // Chart
+      useEffect(()=>{
+        if(!chartRef.current||sortedWallets.length===0)return;
+        if(chartInstanceRef.current)chartInstanceRef.current.destroy();
+        const getV=(w)=>metric==='ptgc'?w.ptgc:metric==='usd'?w.usd:w.buys;
+        const tot=sortedWallets.reduce((s,w)=>s+getV(w),0);
+        const ctx=chartRef.current.getContext('2d');
+        chartInstanceRef.current=new Chart(ctx,{
+          type:'pie',
+          data:{
+            labels:sortedWallets.map(w=>`${w.wallet.slice(0,6)}...${w.wallet.slice(-4)}`),
+            datasets:[{
+              data:sortedWallets.map(w=>getV(w)),
+              backgroundColor:COLORS.slice(0,Math.min(sortedWallets.length,COLORS.length)),
+              borderWidth:2,borderColor:'#111'
+            }]
+          },
+          options:{
+            responsive:false,animation:{duration:400},
+            plugins:{
+              legend:{display:false},
+              tooltip:{callbacks:{label:(ctx)=>{
+                const w=sortedWallets[ctx.dataIndex];
+                const pct=tot>0?((getV(w)/tot)*100).toFixed(1):'0';
+                const valStr=metric==='ptgc'?fmtAbbr(getV(w))+' PTGC':metric==='usd'?fmtDollar(getV(w)):getV(w)+' buys';
+                return` ${pct}% — ${valStr}`;
+              }}}
+            }
+          }
+        });
+        return()=>{if(chartInstanceRef.current){chartInstanceRef.current.destroy();chartInstanceRef.current=null;}};
+      },[sortedWallets,metric]);
+
+      const progressPct=fetchTotal>0?Math.round((fetchProgress/fetchTotal)*100):0;
+
+      return(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80" style={{backdropFilter:'blur(6px)'}} onClick={onClose}>
+          <div className="bg-[#111] border border-[#D9CA5D]/30 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+
+            {/* Header — matches referrer card style */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-16 h-16 flex-shrink-0"/>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex-shrink-0">
+                    <h2 className="text-[26px] font-bold text-white leading-tight">{referrerDetails?.username||'—'}</h2>
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-gray-500 text-[10px]">{referrerDetails?.wallet?`${referrerDetails.wallet.slice(0,6)}...${referrerDetails.wallet.slice(-4)}`:'—'}</code>
+                      {referrerDetails?.wallet&&(
+                        <button onClick={(e)=>{e.stopPropagation();navigator.clipboard.writeText(referrerDetails.wallet);setHeaderCopied(true);setTimeout(()=>setHeaderCopied(false),1500);}} className="text-gray-500 hover:text-white transition inline-flex items-center" title="Copy wallet">
+                          {headerCopied?<svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {trophyImg&&(
+                    <div className="flex-shrink-0" title={`${creature.name} x${creature.count}`}>
+                      <img src={trophyImg} alt={creature.name} className="h-[55px] w-auto" style={{filter:'drop-shadow(0 0 6px rgba(217,202,93,0.4))'}}/>
+                    </div>
+                  )}
+                  <div className="flex-1 text-right">
+                    <div className="inline-flex flex-col items-center px-4 py-2 rounded-lg" style={{background:'linear-gradient(135deg,rgba(139,92,246,0.25),rgba(109,40,217,0.2))',border:'1px solid rgba(139,92,246,0.45)'}}>
+                      <span className="text-purple-300 font-bold text-[15px] leading-tight whitespace-nowrap">Buyer Distribution</span>
+                      <span className="text-purple-400/70 font-semibold text-[11px] leading-tight whitespace-nowrap">PTGC Affiliate Program</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl transition leading-none ml-4 flex-shrink-0">×</button>
+            </div>
+
+            {/* Fetch progress */}
+            {!fetchDone&&(
+              <div className="mx-4 mt-4 bg-black/40 border border-white/10 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white/70 text-sm">Fetching buyer wallets from chain...</span>
+                  <span className="text-[#D9CA5D] font-bold text-sm">{fetchProgress}/{fetchTotal}</span>
+                </div>
+                <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-[#D9CA5D] to-yellow-400 rounded-full transition-all duration-300" style={{width:`${progressPct}%`}}/>
+                </div>
+                <div className="text-gray-500 text-xs mt-1 text-center">{progressPct}% complete — partial results shown below</div>
+              </div>
+            )}
+
+            {/* Summary Bar */}
+            {(fetchDone||walletData.length>0)&&(
+              <div className="mx-4 mt-4 bg-black/40 border border-white/10 rounded-xl p-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <div className="text-3xl font-bold text-[#D9CA5D]">
+                      {metric==='ptgc'?`${fmtAbbr(totals.ptgc)} PTGC`:metric==='usd'?fmtDollar(totals.usd):`${totals.buys} buys`}
+                    </div>
+                    <div className="text-gray-400 text-base mt-0.5">
+                      {metric==='ptgc'?'total PTGC volume':metric==='usd'?'total USD volume':'total transactions'}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-white font-bold text-2xl">{sortedWallets.length} unique buyer wallet{sortedWallets.length!==1?'s':''}</div>
+                    <div className="text-gray-400 text-base mt-0.5">{fmtDollar(totals.usd)} / {fmtAbbr(totals.ptgc)} PTGC external</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Metric Toggle */}
+            <div className="flex gap-2 mx-4 mt-3">
+              {[{k:'ptgc',label:'PTGC'},{k:'usd',label:'USD'},{k:'buys',label:'Buy Count'}].map(({k,label})=>(
+                <button key={k} onClick={()=>setMetric(k)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${metric===k?'bg-[#D9CA5D] text-black shadow-lg':'bg-white/10 text-white/60 hover:bg-white/20'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chart + Wallet List */}
+            {sortedWallets.length>0?(
+              <div className="flex gap-4 p-4 items-start">
+                <div className="flex-shrink-0">
+                  <canvas ref={chartRef} width="190" height="190"/>
+                </div>
+                <div className="flex-1 space-y-1.5 overflow-y-auto buyer-dist-wallets" style={{maxHeight:'240px'}}>
+                  {sortedWallets.map((w,i)=>{
+                    const val=getVal(w);
+                    const pct=totalVal>0?((val/totalVal)*100).toFixed(1):'0.0';
+                    return(
+                      <div key={w.wallet} className="flex items-center justify-between px-3 py-2.5 bg-black/30 border border-white/5 rounded-lg hover:bg-white/5 transition-all group">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{backgroundColor:COLORS[i%COLORS.length]}}/>
+                          <code className="text-gray-300 text-xs font-mono truncate">{w.wallet.slice(0,8)}...{w.wallet.slice(-4)}</code>
+                          <button
+                            onClick={(e)=>{e.stopPropagation();navigator.clipboard.writeText(w.wallet);setCopiedWallet(w.wallet);setTimeout(()=>setCopiedWallet(null),1500);}}
+                            className="text-gray-500 hover:text-[#D9CA5D] transition flex-shrink-0" title="Copy wallet address"
+                          >
+                            {copiedWallet===w.wallet
+                              ?<svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                              :<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            }
+                          </button>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-3 flex items-baseline gap-2">
+                          <div className="text-[#D9CA5D] font-bold text-lg">{pct}%</div>
+                          <div className="text-gray-300 text-base font-semibold">
+                            {metric==='ptgc'?fmtAbbr(w.ptgc)+' PTGC':metric==='usd'?fmtDollar(w.usd):w.buys+' buy'+(w.buys!==1?'s':'')}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ):(
+              fetchDone&&<div className="p-8 text-center text-white/40">No transaction hashes found to look up buyer wallets.</div>
+            )}
+
+            <div className="px-4 pb-4 pt-1">
+              <button onClick={onClose} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition font-medium">Close</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const AffiliatesPage=({onBack})=>{
       const[data,setData]=useState(null);
       const[loading,setLoading]=useState(true);
@@ -5275,6 +5528,7 @@
       const[recentActivityExpanded,setRecentActivityExpanded]=useState(false);
       const[commSortCol,setCommSortCol]=useState('ptgc');
       const[commSortDir,setCommSortDir]=useState('desc');
+      const[showBuyerDist,setShowBuyerDist]=useState(false);
       
       // Current month key - USE UTC TIME
       const currentMonth=new Date().toISOString().slice(0,7);
@@ -5400,19 +5654,6 @@
       
       const truncateWallet=(w)=>w?`${w.slice(0,6)}...${w.slice(-4)}`:'—';
       
-      // Calculate sea creature for PTGC amount (based on % of total supply)
-      const PTGC_SUPPLY=333333333333;
-      const getCreatureForPtgc=(ptgcAmount)=>{
-        if(!ptgcAmount||ptgcAmount<=0)return null;
-        const pct=(ptgcAmount/PTGC_SUPPLY)*100;
-        for(const c of BURN_C){
-          if(pct>=c.p){
-            const cnt=c.p>0?Math.floor(pct/c.p):1;
-            return{emoji:c.e,name:c.n,count:Math.max(1,cnt)};
-          }
-        }
-        return{emoji:'🐚',name:'Shell',count:1};
-      };
       
       // Copy icon SVG component
       const CopyIcon=({className="w-3.5 h-3.5"})=>(
@@ -5697,7 +5938,8 @@
             });
             
             return(
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);}}>
+              <>
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}}>
                 <div className="bg-[#111] border border-[#D9CA5D]/30 rounded-2xl max-w-3xl w-full max-h-[90vh] shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
                   <div className="overflow-y-auto flex-1">
                   {/* Header */}
@@ -5747,7 +5989,7 @@
                         <span className="text-purple-300 font-semibold text-sm">{details.username}'s Referral Link</span>
                         <span className="text-purple-400/60 text-xs">Click to copy</span>
                       </button>
-                      <button onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);}} className="text-gray-400 hover:text-white text-2xl">×</button>
+                      <button onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} className="text-gray-400 hover:text-white text-2xl">×</button>
                     </div>
                   </div>
                   
@@ -5861,7 +6103,20 @@
                   
                   {/* Transaction History - Grouped by Month */}
                   <div className="p-4 border-t border-white/10">
-                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>📊</span> Transaction History ({allTx.length})</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-white flex items-center gap-2"><span>📊</span> Transaction History ({allTx.length})</h3>
+                      {allTx.length>0&&(
+                        <button
+                          onClick={(e)=>{e.stopPropagation();setShowBuyerDist(true);}}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                          style={{background:'linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.2))',border:'1px solid rgba(99,102,241,0.45)',color:'#a5b4fc',boxShadow:'0 0 12px rgba(99,102,241,0.15)'}}
+                          onMouseEnter={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(99,102,241,0.38),rgba(139,92,246,0.3))';e.currentTarget.style.boxShadow='0 0 20px rgba(99,102,241,0.3)';}}
+                          onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(99,102,241,0.25),rgba(139,92,246,0.2))';e.currentTarget.style.boxShadow='0 0 12px rgba(99,102,241,0.15)';}}
+                        >
+                          <span>🫧</span> Buyer Distribution
+                        </button>
+                      )}
+                    </div>
                     {allTx.length>0?(()=>{
                       // Group transactions by month
                       const txByMonth={};
@@ -6034,10 +6289,12 @@
                   {/* Footer - outside scroll area */}
                   <div className="flex items-center justify-between px-5 py-5 border-t border-white/10">
                     <div className="text-[#39FF14] text-lg font-semibold" style={{textShadow:'0 0 10px rgba(57,255,20,0.5)'}}>Member since: {formatDate(details.addedDate)}</div>
-                    <button onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);}} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
+                    <button onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
                   </div>
                 </div>
               </div>
+              {showBuyerDist&&<BuyerDistributionModal allTx={allTx} referrerDetails={details} onClose={()=>setShowBuyerDist(false)}/>}
+              </>
             );
           })()}
           
@@ -6046,19 +6303,7 @@
             const medal=(i)=>i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
             const lbMonth=leaderboardMonth||currentMonth;
             
-            // Calculate sea creature for PTGC amount (based on % of total supply)
-            const PTGC_SUPPLY=333333333333;
-            const getCreatureForPtgc=(ptgcAmount)=>{
-              if(!ptgcAmount||ptgcAmount<=0)return null;
-              const pct=(ptgcAmount/PTGC_SUPPLY)*100;
-              for(const c of BURN_C){
-                if(pct>=c.p){
-                  const cnt=c.p>0?Math.floor(pct/c.p):1;
-                  return{emoji:c.e,name:c.n,count:Math.max(1,cnt)};
-                }
-              }
-              return{emoji:'🐚',name:'Shell',count:1};
-            };
+            // Calculate sea creature for PTGC amount (based on % of total supply) - uses module-level getCreatureForPtgc
             
             // All-time leaderboards - aggregate from ALL monthly logs for true lifetime totals
             const allTimeAggregated={};
@@ -6371,7 +6616,7 @@
                 </div>
                 <div className="text-center">
                   <div className="text-[#D9CA5D]/60 text-base uppercase">Sea Creatures</div>
-                  <div className="text-2xl font-bold flex items-center justify-center gap-1.5">{(()=>{const pct=((stats?.allTimePtgc||0)/PTGC_SUPPLY)*100;const creatures=getBurnC(pct).slice(0,3);return creatures.length>0?creatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span>{c.e}</span><span className="text-sm font-bold text-[#D9CA5D]/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>;})()}</div>
+                  <div className="text-2xl font-bold flex items-center justify-center gap-1.5">{(()=>{const pct=((stats?.allTimePtgc||0)/PTGC_SUPPLY_GLOBAL)*100;const creatures=getBurnC(pct).slice(0,3);return creatures.length>0?creatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span>{c.e}</span><span className="text-sm font-bold text-[#D9CA5D]/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>;})()}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-[#D9CA5D]/60 text-base uppercase">USD Value</div>
@@ -6419,7 +6664,7 @@
                 </div>
                 <div className="text-center">
                   <div className="text-green-400/60 text-base uppercase">Sea Creatures</div>
-                  <div className="text-2xl font-bold flex items-center justify-center gap-1.5">{(()=>{const pct=((stats?.periodPtgc||0)/PTGC_SUPPLY)*100;const creatures=getBurnC(pct).slice(0,3);return creatures.length>0?creatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span>{c.e}</span><span className="text-sm font-bold text-green-400/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>;})()}</div>
+                  <div className="text-2xl font-bold flex items-center justify-center gap-1.5">{(()=>{const pct=((stats?.periodPtgc||0)/PTGC_SUPPLY_GLOBAL)*100;const creatures=getBurnC(pct).slice(0,3);return creatures.length>0?creatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span>{c.e}</span><span className="text-sm font-bold text-green-400/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>;})()}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-green-400/60 text-base uppercase">USD Value</div>
