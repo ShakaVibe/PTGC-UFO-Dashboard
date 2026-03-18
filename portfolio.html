@@ -279,6 +279,88 @@
       };
     };
     
+    // ===== Portfolio Leagues Modal =====
+    const PortfolioLeaguesModal=({token,price,close})=>{
+      const isPTGC=token==='PTGC';
+      const pc=isPTGC?'#D9CA5D':'#7CFC00';
+      const supply=isPTGC?333333333333:999999999051;
+      const logo=isPTGC?TOKENS.PTGC.logo:TOKENS.UFO.logo;
+      const now=new Date();
+      const date=`${now.getMonth()+1}-${now.getDate()}-${String(now.getFullYear()).slice(-2)}`;
+      const tiers=[
+        {name:'Poseidon',emoji:'\u{1F531}',pct:0.10},
+        {name:'Whale',emoji:'\u{1F40B}',pct:0.01},
+        {name:'Shark',emoji:'\u{1F988}',pct:0.001},
+        {name:'Dolphin',emoji:'\u{1F42C}',pct:0.0001},
+        {name:'Squid',emoji:'\u{1F991}',pct:0.00001},
+        {name:'Turtle',emoji:'\u{1F422}',pct:0.000001},
+        {name:'Shrimp',emoji:'\u{1F990}',pct:0.0000001},
+        {name:'Shell',emoji:'\u{1F41A}',pct:0.00000001},
+      ];
+      const formatTokenPrice=(p)=>{
+        if(!p||p===0)return'\u2014';
+        if(isPTGC){
+          if(p>=1)return'$'+p.toFixed(2);
+          return'$'+p.toFixed(6);
+        }else{
+          if(p>=1)return'$'+p.toFixed(2);
+          if(p>=0.01)return'$'+p.toFixed(4);
+          const s=p.toExponential(4);
+          const[m,e]=s.split('e');
+          const exp=Math.abs(parseInt(e));
+          return<span>$0.0<sub style={{fontSize:'0.6em'}}>{exp-1}</sub>{parseFloat(m).toFixed(4).replace('.','').slice(0,4)}</span>;
+        }
+      };
+      const formatTablePrice=(val)=>{
+        if(!val||isNaN(val)||val===0)return'\u2014';
+        if(val>=1)return'$'+Math.floor(val).toLocaleString();
+        return'$'+val.toFixed(2);
+      };
+      return(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80" style={{backdropFilter:'blur(8px)'}} onClick={close}>
+          <div className="bg-[#0a0a0a] border-2 rounded-2xl max-w-lg w-full overflow-hidden" style={{borderColor:pc}} onClick={e=>e.stopPropagation()}>
+            <div className="p-6 text-center" style={{background:`linear-gradient(180deg, ${pc}20 0%, transparent 100%)`}}>
+              <div className="flex justify-center mb-4">
+                <div className="w-28 h-28 rounded-full flex items-center justify-center" style={{background:`${pc}20`,border:`4px solid ${pc}`}}>
+                  <img src={logo} alt={token} className="w-24 h-24 object-contain"/>
+                </div>
+              </div>
+              <div className="font-orbitron text-2xl font-bold mb-1" style={{color:pc}}>{token} LEAGUES</div>
+              <div className="text-white/50 text-base">Price {date}: <span className="font-bold" style={{color:pc}}>{formatTokenPrice(price)}</span></div>
+            </div>
+            <div className="px-6 pb-2">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-sm uppercase border-b border-white/10">
+                    <th className="text-left pb-2 text-white/40"></th>
+                    <th className="text-left pb-2 text-white/40"></th>
+                    <th className="text-right pb-2" style={{color:pc}}>Tokens</th>
+                    <th className="text-right pb-2" style={{color:pc}}>USD Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tiers.map((tier,i)=>{
+                    const threshold=supply*tier.pct;
+                    return(
+                      <tr key={i} className="border-t border-white/10">
+                        <td className="py-2 text-2xl">{tier.emoji}</td>
+                        <td className="py-2 text-lg font-semibold text-white">{tier.name}</td>
+                        <td className="py-2 text-right text-base text-white/70">{fmtAbbr(threshold)}</td>
+                        <td className="py-2 text-right text-base text-green-400 font-bold">{formatTablePrice(threshold*price)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-6 pt-3">
+              <button onClick={close} className="w-full py-3 rounded-lg font-bold text-lg text-black transition-colors" style={{background:pc}}>Close</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const PortfolioPage=({onBack})=>{
       const[wallets,setWallets]=useState(()=>{
         try{const s=localStorage.getItem(PORTFOLIO_STORAGE_KEY);return s?JSON.parse(s):[];}catch{return[]}
@@ -308,6 +390,8 @@
       const[showWalletBreakdown,setShowWalletBreakdown]=useState(false);
       const[moonMathActive,setMoonMathActive]=useState(false);
       const[customPrices,setCustomPrices]=useState({ptgc:'',ufo:'',pls:''});
+      const[showPtgcLeagues,setShowPtgcLeagues]=useState(false);
+      const[showUfoLeagues,setShowUfoLeagues]=useState(false);
       
       const ATH_PRICES={ptgc:0.00133,ufo:0.000113,pls:0.00029};
       
@@ -864,6 +948,9 @@
                             </div>
                           );
                         })()}
+                        <div className="flex justify-end mt-2">
+                          <button onClick={()=>setShowPtgcLeagues(true)} className="px-3 py-1 rounded-lg text-sm font-bold text-purple-300 border border-purple-500/50 bg-purple-500/20 hover:bg-purple-500/30 transition-colors">Leagues</button>
+                        </div>
                       </div>
                     </div>
                     {/* Lifetime Earned - Three Boxes */}
@@ -1020,6 +1107,9 @@
                             </div>
                           );
                         })()}
+                        <div className="flex justify-end mt-2">
+                          <button onClick={()=>setShowUfoLeagues(true)} className="px-3 py-1 rounded-lg text-sm font-bold text-purple-300 border border-purple-500/50 bg-purple-500/20 hover:bg-purple-500/30 transition-colors">Leagues</button>
+                        </div>
                       </div>
                     </div>
                     {/* Lifetime Earned - Two Boxes */}
@@ -1287,6 +1377,16 @@
                 </div>
               </div>
             </div>
+          )}
+          
+          {/* PTGC Leagues Modal */}
+          {showPtgcLeagues&&(
+            <PortfolioLeaguesModal token="PTGC" price={dp.ptgc||prices.ptgc} close={()=>setShowPtgcLeagues(false)}/>
+          )}
+          
+          {/* UFO Leagues Modal */}
+          {showUfoLeagues&&(
+            <PortfolioLeaguesModal token="UFO" price={dp.ufo||prices.ufo} close={()=>setShowUfoLeagues(false)}/>
           )}
           
           {/* Footer */}
