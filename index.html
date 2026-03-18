@@ -2707,6 +2707,9 @@
       const[priceModalPeriod,setPriceModalPeriod]=useState('24h');
       const[corePrices,setCorePrices]=useState(null);
       const[showCombinedKPI,setShowCombinedKPI]=useState(false);
+      const[showCombinedBurnModal,setShowCombinedBurnModal]=useState(false);
+      const[combinedBurnLoading,setCombinedBurnLoading]=useState(false);
+      const[combinedBurnOtherData,setCombinedBurnOtherData]=useState(null); // {burn, burnPeriods, price}
       const[showCombinedLeaguesModal,setShowCombinedLeaguesModal]=useState(false);
       const[showHoldersShareModal,setShowHoldersShareModal]=useState(false);
       const[holdersShareData,setHoldersShareData]=useState(null);
@@ -3792,26 +3795,53 @@
                     <img src={COMBINED_LOGO} alt="Combined" className="h-20 mb-2" style={{transform:'scale(2)'}}/>
                     <h3 className="text-xl font-bold text-white">Combined</h3>
                   </div>
+                  {/* Row 1: Logos */}
                   <button onClick={()=>{setSocialReturn(true);setShowCombinedLogosModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[#D9CA5D]/20 to-[#7CFC00]/20 border border-white/30 text-white hover:from-[#D9CA5D]/30 hover:to-[#7CFC00]/30 transition-all text-left">
                     <div className="font-bold">🖼️ Combined Logos</div>
                     <div className="text-xs text-white/50">Download official logos</div>
                   </button>
+                  {/* Row 2: Burn Stats */}
+                  <button onClick={()=>{
+                    setSocialReturn(true);
+                    setShowCombinedBurnModal(true);
+                    if(!combinedBurnOtherData&&!combinedBurnLoading){
+                      setCombinedBurnLoading(true);
+                      const otherToken=token==='PTGC'?'UFO':'PTGC';
+                      const otherCfg=TOKENS[otherToken];
+                      Promise.all([
+                        fetchBurn(otherCfg.address,otherCfg.decimals),
+                        fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${otherCfg.mainPair}`).then(r=>r.json()).then(d=>parseFloat(d.pair?.priceUsd)||0).catch(()=>0)
+                      ]).then(([burnData,price])=>{
+                        const bp=getBurnPeriods(otherToken);
+                        setCombinedBurnOtherData({burn:burnData,burnPeriods:bp,price});
+                        setCombinedBurnLoading(false);
+                      }).catch(()=>setCombinedBurnLoading(false));
+                    }
+                  }} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500/20 to-orange-600/20 border border-orange-400/30 text-orange-300 hover:from-orange-500/30 hover:to-orange-600/30 transition-all text-left">
+                    <div className="font-bold">🔥 Combined Burn Stats</div>
+                    <div className="text-xs text-white/50">Both tokens burn history & totals</div>
+                  </button>
+                  {/* Row 3: Value Generated → Combined KPI closest match */}
                   <button onClick={()=>{setSocialReturn(true);setShowCombinedKPI(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">📋 Combined KPI Report</div>
                     <div className="text-xs text-white/50">Both tokens side-by-side</div>
                   </button>
+                  {/* Row 4: Token Allocation → RH Core Liquidity */}
                   <button onClick={()=>{setSocialReturn(true);setShowRHCoresShareModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">💎 RH Core Liquidity</div>
                     <div className="text-xs text-white/50">LP breakdown by RH cores</div>
                   </button>
+                  {/* Row 5: DAO / PTGC Burned → Leagues */}
                   <button onClick={()=>{setSocialReturn(true);setShowCombinedLeaguesModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-purple-500/20 to-purple-600/20 border border-purple-400/30 text-purple-300 hover:from-purple-500/30 hover:to-purple-600/30 transition-all text-left">
                     <div className="font-bold">🏆 PTGC & UFO Leagues</div>
                     <div className="text-xs text-white/50">Combined tier price table</div>
                   </button>
+                  {/* Row 6: KPI Report → Holders */}
                   <button onClick={()=>{setSocialReturn(true);setShowHoldersShareModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-cyan-500/20 to-cyan-600/20 border border-cyan-400/30 text-cyan-300 hover:from-cyan-500/30 hover:to-cyan-600/30 transition-all text-left">
                     <div className="font-bold">👥 Holders</div>
                     <div className="text-xs text-white/50">Holder analytics for both tokens</div>
                   </button>
+                  {/* Row 7: Affiliates → Grays & Cores */}
                   <button onClick={()=>{setSocialReturn(true);setShowPriceWithCoresModal(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">💰 The Grays & The Cores</div>
                     <div className="text-xs text-white/50">24Hr price comparison</div>
@@ -4105,6 +4135,140 @@
             </div>
           )}
           
+          {/* Combined Burn Stats Modal */}
+          {showCombinedBurnModal&&(()=>{
+            const isPTGCActive=token==='PTGC';
+            const ptgcBurn=isPTGCActive?burn:combinedBurnOtherData?.burn||{total:0,pct:0,supply:0};
+            const ptgcPeriods=isPTGCActive?burnPeriods:combinedBurnOtherData?.burnPeriods||{h24:0,d7:0,d30:0,d90:0};
+            const ptgcPriceV=isPTGCActive?(data?.price||0):(combinedBurnOtherData?.price||0);
+            const ufoBurn=isPTGCActive?combinedBurnOtherData?.burn||{total:0,pct:0,supply:0}:burn;
+            const ufoPeriods=isPTGCActive?combinedBurnOtherData?.burnPeriods||{h24:0,d7:0,d30:0,d90:0}:burnPeriods;
+            const ufoPriceV=isPTGCActive?(combinedBurnOtherData?.price||0):(data?.price||0);
+            const ptgcUSD=(ptgcBurn.total||0)*ptgcPriceV;
+            const ufoUSD=(ufoBurn.total||0)*ufoPriceV;
+            const combinedUSD=ptgcUSD+ufoUSD;
+            const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+            const getC=(val,supply)=>{const pct=supply>0?(val/supply)*100:0;return val>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};};
+            // Leagues fonts: Orbitron = titles/labels only, Rajdhani = all numbers & data
+            const OB="'Orbitron',monospace";
+            const RJ="'Rajdhani',sans-serif";
+
+            const TokenBlock=({logo,name,totalAmt,usdVal,supplyPct,periods,supply,price,accent,rgb})=>{
+              const rows=[{label:'24H',val:periods.h24||0},{label:'7D',val:periods.d7||0},{label:'30D',val:periods.d30||0},{label:'90D',val:periods.d90||0}];
+              return(
+                <div style={{borderRadius:'12px',padding:'16px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`,position:'relative'}}>
+
+                  {/* Supply % badge — top right, Rajdhani numbers */}
+                  <div style={{position:'absolute',top:'12px',right:'14px',display:'flex',flexDirection:'column',alignItems:'center',gap:'10px'}}>
+                    <div style={{background:`linear-gradient(135deg,rgba(${rgb},0.22),rgba(${rgb},0.1))`,border:`1.5px solid rgba(${rgb},0.55)`,borderRadius:'20px',padding:'5px 13px',boxShadow:`0 0 14px rgba(${rgb},0.28)`,display:'flex',alignItems:'center',gap:'5px'}}>
+                      <span style={{fontFamily:RJ,fontSize:'17px',fontWeight:800,color:accent,letterSpacing:'0.5px'}}>{supplyPct.toFixed(2)}%</span>
+                      <span style={{fontFamily:OB,fontSize:'10px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>burned</span>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
+                      <span style={{fontSize:'20px',lineHeight:1}}>{'\u{1F40B}'}</span>
+                      <span style={{fontFamily:RJ,fontSize:'17px',fontWeight:800,color:accent}}>x{supplyPct.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Token summary — Rajdhani for all numbers */}
+                  <div style={{display:'flex',alignItems:'center',gap:'16px',marginBottom:'14px',paddingRight:'145px'}}>
+                    <img src={logo} alt={name} style={{width:'56px',height:'56px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 16px rgba(${rgb},0.3)`}}/>
+                    <div>
+                      <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'nowrap'}}>
+                        {/* Hero USD — Rajdhani like Leagues USD column */}
+                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'34px',color:'#4ade80',lineHeight:1,whiteSpace:'nowrap'}}>{fmtUSD(usdVal)}</span>
+                        <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',whiteSpace:'nowrap'}}>USD Burned</span>
+                      </div>
+                      <div style={{marginTop:'4px'}}>
+                        <span style={{fontFamily:RJ,fontSize:'18px',fontWeight:700,color:accent}}>{fmtAbbr(totalAmt)} {name}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Period rows — Orbitron labels, Rajdhani numbers */}
+                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                    {rows.map(({label,val})=>{
+                      const c=getC(val,supply);
+                      const usdAmt=val*price;
+                      return(
+                        <div key={label} style={{display:'flex',alignItems:'center',padding:'7px 12px',borderRadius:'8px',background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.15)`,gap:'10px'}}>
+                          {/* Period label — Orbitron, title treatment */}
+                          <span style={{width:'38px',fontFamily:OB,fontSize:'13px',fontWeight:700,letterSpacing:'1px',color:accent,textTransform:'uppercase',flexShrink:0}}>{label}</span>
+                          <span style={{width:'1px',height:'24px',background:`rgba(${rgb},0.3)`,flexShrink:0}}/>
+                          {/* Creature + multiplier — Rajdhani for xN */}
+                          <div style={{display:'flex',alignItems:'center',gap:'3px',width:'72px',flexShrink:0}}>
+                            <span style={{fontSize:'26px',lineHeight:1}}>{c.e}</span>
+                            <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:800,color:accent,lineHeight:1}}>x{c.cnt}</span>
+                          </div>
+                          {/* Dotted fill */}
+                          <div style={{flex:1,borderBottom:`1px dashed rgba(${rgb},0.2)`,alignSelf:'center'}}/>
+                          {/* USD — Rajdhani bold like Leagues */}
+                          <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:700,color:'#4ade80',flexShrink:0,marginRight:'16px'}}>{fmtUSD(usdAmt)}</span>
+                          {/* Token count — Rajdhani semibold like Leagues token column */}
+                          <span style={{width:'105px',textAlign:'right',fontFamily:RJ,fontSize:'16px',fontWeight:600,color:`rgba(${rgb},0.6)`,flexShrink:0}}>{fmtAbbr(val)} {name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            };
+
+            return(
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)}>
+                <div className="relative" onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
+
+                  <div id="combined-burn-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
+                    <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(217,202,93,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
+                    <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
+                    <div style={{position:'absolute',inset:0,borderRadius:'16px',border:'2px solid transparent',backgroundImage:'linear-gradient(#0a0900,#0a0900),linear-gradient(135deg,#D9CA5D,#7CFC00)',backgroundOrigin:'border-box',backgroundClip:'padding-box,border-box',pointerEvents:'none'}}/>
+
+                    <div style={{position:'relative',display:'flex',flexDirection:'column',padding:'18px 20px',gap:'12px',boxSizing:'border-box'}}>
+
+                      {/* Header — Orbitron for title, Rajdhani for subtitle */}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                          <span style={{fontFamily:OB,fontWeight:700,fontSize:'18px',color:'rgba(255,255,255,0.78)'}}>PTGC + UFO</span>
+                          <span style={{width:'1px',height:'18px',background:'rgba(255,255,255,0.15)'}}/>
+                          <span style={{fontFamily:RJ,fontSize:'18px',fontWeight:700,color:'#fb923c',letterSpacing:'0.5px'}}>{'\u{1F525}'} Combined Burn Stats</span>
+                        </div>
+                        <span style={{fontFamily:RJ,fontSize:'14px',color:'rgba(255,255,255,0.35)',fontWeight:600}}>{today}</span>
+                      </div>
+
+                      <TokenBlock logo={TOKENS.PTGC.logo} name="PTGC" totalAmt={ptgcBurn.total||0} usdVal={ptgcUSD} supplyPct={ptgcBurn.pct||0} periods={ptgcPeriods} supply={TOKENS.PTGC.totalSupply} price={ptgcPriceV} accent="#D9CA5D" rgb="217,202,93"/>
+                      <TokenBlock logo={TOKENS.UFO.logo} name="UFO" totalAmt={ufoBurn.total||0} usdVal={ufoUSD} supplyPct={ufoBurn.pct||0} periods={ufoPeriods} supply={TOKENS.UFO.totalSupply} price={ufoPriceV} accent="#7CFC00" rgb="124,252,0"/>
+
+                      {/* Combined total — Rajdhani for the big number */}
+                      <div style={{borderRadius:'12px',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(110deg,rgba(217,202,93,0.1),rgba(124,252,0,0.1))',border:'1px solid rgba(255,255,255,0.15)'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                          <span style={{fontSize:'26px'}}>{'\u{1F525}'}</span>
+                          <div>
+                            <div style={{fontFamily:OB,fontSize:'11px',fontWeight:700,letterSpacing:'1.5px',color:'rgba(255,255,255,0.7)',textTransform:'uppercase'}}>Total USD Value Burned</div>
+                            <div style={{fontFamily:RJ,fontSize:'14px',color:'rgba(255,255,255,0.35)',marginTop:'1px',fontWeight:600}}>PTGC + UFO Combined</div>
+                          </div>
+                        </div>
+                        {/* Big total — Rajdhani like Leagues numbers */}
+                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'32px',background:'linear-gradient(90deg,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>{fmtUSD(combinedUSD)}</span>
+                        <span style={{fontFamily:OB,fontSize:'11px',fontWeight:600,color:'rgba(255,255,255,0.55)'}}>ptgc-ufo.com</span>
+                      </div>
+
+                    </div>
+
+                    {combinedBurnLoading&&(
+                      <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.75)',borderRadius:'16px'}}>
+                        <span style={{fontFamily:RJ,color:'rgba(255,255,255,0.6)',fontSize:'18px',fontWeight:600}}>Loading data...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-center mt-4 text-white/50 text-sm">Right-click the image and "Save Image As" or take a screenshot</div>
+                </div>
+              </div>
+            );
+          })()}
+
+
           {/* Value Generated Share Modal - Twitter optimized */}
           {showValueGenShareModal&&(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
