@@ -2710,6 +2710,10 @@
       const[showCombinedBurnModal,setShowCombinedBurnModal]=useState(false);
       const[combinedBurnLoading,setCombinedBurnLoading]=useState(false);
       const[combinedBurnOtherData,setCombinedBurnOtherData]=useState(null); // {burn, burnPeriods, price}
+      const[showCombinedValueGenModal,setShowCombinedValueGenModal]=useState(false);
+      const[combinedValueGenLoading,setCombinedValueGenLoading]=useState(false);
+      const[combinedValueGenOtherData,setCombinedValueGenOtherData]=useState(null); // {vol24h,vol7d,vol30d,vol90d,price}
+      const[combinedValueGenPeriod,setCombinedValueGenPeriod]=useState('90d');
       const[showCombinedLeaguesModal,setShowCombinedLeaguesModal]=useState(false);
       const[showHoldersShareModal,setShowHoldersShareModal]=useState(false);
       const[holdersShareData,setHoldersShareData]=useState(null);
@@ -3821,7 +3825,32 @@
                     <div className="font-bold">🔥 Combined Burn Stats</div>
                     <div className="text-xs text-white/50">Both tokens burn history & totals</div>
                   </button>
-                  {/* Row 3: Value Generated → Combined KPI closest match */}
+                  {/* Row 3: Value Generated */}
+                  <button onClick={()=>{
+                    setSocialReturn(true);
+                    setShowCombinedValueGenModal(true);
+                    if(!combinedValueGenOtherData&&!combinedValueGenLoading){
+                      setCombinedValueGenLoading(true);
+                      const otherToken=token==='PTGC'?'UFO':'PTGC';
+                      const otherCfg=TOKENS[otherToken];
+                      fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${otherCfg.mainPair}`)
+                        .then(r=>r.json())
+                        .then(d=>{
+                          const vol24h=parseFloat(d.pair?.volume?.h24)||0;
+                          const price=parseFloat(d.pair?.priceUsd)||0;
+                          const otherVol7d=coingeckoDataCache?.[otherToken]?.volume?.vol7d||0;
+                          const otherVol30d=coingeckoDataCache?.[otherToken]?.volume?.vol30d||0;
+                          const otherVol90d=coingeckoDataCache?.[otherToken]?.volume?.vol90d||0;
+                          setCombinedValueGenOtherData({vol24h,vol7d:otherVol7d,vol30d:otherVol30d,vol90d:otherVol90d,price});
+                          setCombinedValueGenLoading(false);
+                        })
+                        .catch(()=>setCombinedValueGenLoading(false));
+                    }
+                  }} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-400/30 text-emerald-300 hover:from-emerald-500/30 hover:to-emerald-600/30 transition-all text-left">
+                    <div className="font-bold">💰 Combined Value Generated</div>
+                    <div className="text-xs text-white/50">Tax distribution for both tokens</div>
+                  </button>
+                  {/* Row 4: KPI Report */}
                   <button onClick={()=>{setSocialReturn(true);setShowCombinedKPI(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
                     <div className="font-bold">📋 Combined KPI Report</div>
                     <div className="text-xs text-white/50">Both tokens side-by-side</div>
@@ -4256,6 +4285,145 @@
                     </div>
 
                     {combinedBurnLoading&&(
+                      <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.75)',borderRadius:'16px'}}>
+                        <span style={{fontFamily:RJ,color:'rgba(255,255,255,0.6)',fontSize:'18px',fontWeight:600}}>Loading data...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-center mt-4 text-white/50 text-sm">Right-click the image and "Save Image As" or take a screenshot</div>
+                </div>
+              </div>
+            );
+          })()}
+
+
+          {/* Combined Value Generated Modal */}
+          {showCombinedValueGenModal&&(()=>{
+            const isPTGCActive=token==='PTGC';
+            const OB="'Orbitron',monospace";
+            const RJ="'Rajdhani',sans-serif";
+            const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+            const ptgcCfg=TOKENS.PTGC;
+            const ufoCfg=TOKENS.UFO;
+            const periodLabels={'24h':'24 Hour','7d':'7 Day','30d':'30 Day','90d':'90 Day'};
+
+            const currVols={
+              '24h':volumeByPeriod.vol24h||0,
+              '7d':volumeByPeriod.vol7d||0,
+              '30d':volumeByPeriod.vol30d||0,
+              '90d':volumeByPeriod.vol90d||0
+            };
+            const otherVols={
+              '24h':combinedValueGenOtherData?.vol24h||0,
+              '7d':combinedValueGenOtherData?.vol7d||0,
+              '30d':combinedValueGenOtherData?.vol30d||0,
+              '90d':combinedValueGenOtherData?.vol90d||0
+            };
+
+            const ptgcVols=isPTGCActive?currVols:otherVols;
+            const ufoVols=isPTGCActive?otherVols:currVols;
+
+            const ptgcVol=ptgcVols[combinedValueGenPeriod]||0;
+            const ufoVol=ufoVols[combinedValueGenPeriod]||0;
+            const ptgcTotal=ptgcVol*ptgcCfg.taxRate;
+            const ufoTotal=ufoVol*ufoCfg.taxRate;
+            const combinedTotal=ptgcTotal+ufoTotal;
+
+            const FeeBlock=({tokenCfg,vol,accent,rgb})=>{
+              const totalGen=vol*tokenCfg.taxRate;
+              return(
+                <div style={{borderRadius:'12px',padding:'14px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'12px'}}>
+                    {/* Left: logo + hero amount */}
+                    <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
+                      <img src={tokenCfg.logo} alt={tokenCfg.name} style={{width:'64px',height:'64px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 20px rgba(${rgb},0.4)`}}/>
+                      <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'wrap'}}>
+                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'38px',color:'#4ade80',lineHeight:1}}>{fmtUSD(totalGen)}</span>
+                        <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Value Generated</span>
+                      </div>
+                    </div>
+                    {/* Right: token name + vol, right-justified */}
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontFamily:OB,fontSize:'13px',fontWeight:700,color:accent,letterSpacing:'0.5px'}}>{tokenCfg.name}</div>
+                      <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {fmtUSD(vol)}</div>
+                    </div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.taxBreakdown.length},1fr)`,gap:'6px'}}>
+                    {tokenCfg.taxBreakdown.map((item,i)=>{
+                      const dollarVal=vol*(item.pct/100);
+                      return(
+                        <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'8px 6px',textAlign:'center'}}>
+                          <div style={{fontSize:'18px',marginBottom:'3px'}}>{item.emoji}</div>
+                          <div style={{fontFamily:OB,fontSize:'9px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:'3px',lineHeight:1.2}}>{item.name}</div>
+                          <div style={{fontFamily:RJ,fontWeight:700,fontSize:'19px',color:'#4ade80'}}>{fmtUSD(dollarVal)}</div>
+                          <div style={{fontFamily:RJ,fontSize:'14px',color:`rgba(${rgb},0.55)`,fontWeight:500,marginTop:'1px'}}>{item.pct}%</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            };
+
+            const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
+
+            return(
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
+                <div className="relative" onClick={e=>e.stopPropagation()} style={{maxHeight:'90vh',overflowY:'auto'}}>
+                  <button onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
+
+                  {/* Period pill selector — above card, outside screenshot */}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',marginBottom:'22px'}}>
+                    <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',color:'rgba(255,255,255,0.4)',fontWeight:600,marginRight:'4px'}}>Period:</span>
+                    <div style={{display:'flex',gap:'4px',background:'rgba(0,0,0,0.5)',borderRadius:'20px',padding:'3px',border:'1px solid rgba(255,255,255,0.1)'}}>
+                      {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([val,label])=>(
+                        <button key={val} onClick={()=>setCombinedValueGenPeriod(val)} style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',fontWeight:700,padding:'5px 14px',borderRadius:'16px',border:'none',cursor:'pointer',transition:'all 0.18s',background:combinedValueGenPeriod===val?'linear-gradient(135deg,rgba(217,202,93,0.45),rgba(124,252,0,0.45))':'transparent',color:combinedValueGenPeriod===val?'#fff':'rgba(255,255,255,0.4)',boxShadow:combinedValueGenPeriod===val?'0 0 12px rgba(124,252,0,0.2)':'none',outline:'none'}}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div id="combined-valuegen-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
+                    <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(217,202,93,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
+                    <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
+                    <div style={{position:'absolute',inset:0,borderRadius:'16px',border:'2px solid transparent',backgroundImage:'linear-gradient(#0a0900,#0a0900),linear-gradient(135deg,#D9CA5D,#7CFC00)',backgroundOrigin:'border-box',backgroundClip:'padding-box,border-box',pointerEvents:'none'}}/>
+
+                    <div style={{position:'relative',display:'flex',flexDirection:'column',padding:'18px 20px',gap:'12px',boxSizing:'border-box'}}>
+
+                      {/* Header — dynamic title, no period selector */}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                          <span style={{fontFamily:OB,fontWeight:700,fontSize:'17px',color:'rgba(255,255,255,0.9)',whiteSpace:'nowrap'}}>PTGC + UFO</span>
+                          <span style={{width:'1px',height:'20px',background:'rgba(255,255,255,0.15)',flexShrink:0}}/>
+                          <span style={{fontFamily:RJ,fontSize:'21px',fontWeight:700,color:'#4ade80',letterSpacing:'0.3px',whiteSpace:'nowrap'}}>{'\u{1F4B0}'} Value Generated — {periodTitles[combinedValueGenPeriod]}</span>
+                        </div>
+                        <span style={{fontFamily:RJ,fontSize:'13px',color:'rgba(255,255,255,0.35)',fontWeight:600,flexShrink:0,marginLeft:'10px'}}>{today}</span>
+                      </div>
+
+                      {/* PTGC Block */}
+                      <FeeBlock tokenCfg={ptgcCfg} vol={ptgcVol} accent="#D9CA5D" rgb="217,202,93"/>
+
+                      {/* UFO Block */}
+                      <FeeBlock tokenCfg={ufoCfg} vol={ufoVol} accent="#7CFC00" rgb="124,252,0"/>
+
+                      {/* Combined total bar */}
+                      <div style={{borderRadius:'12px',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(110deg,rgba(217,202,93,0.1),rgba(124,252,0,0.1))',border:'1px solid rgba(255,255,255,0.15)'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                          <span style={{fontSize:'24px'}}>{'\u{1F4B0}'}</span>
+                          <div>
+                            <div style={{fontFamily:OB,fontSize:'11px',fontWeight:700,letterSpacing:'1.5px',color:'rgba(255,255,255,0.7)',textTransform:'uppercase'}}>Total Value Generated</div>
+                            <div style={{fontFamily:RJ,fontSize:'13px',color:'rgba(255,255,255,0.35)',marginTop:'1px',fontWeight:600}}>PTGC + UFO Combined</div>
+                          </div>
+                        </div>
+                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'40px',background:'linear-gradient(90deg,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>{fmtUSD(combinedTotal)}</span>
+                        <span style={{fontFamily:OB,fontSize:'11px',fontWeight:600,color:'rgba(255,255,255,0.55)'}}>ptgc-ufo.com</span>
+                      </div>
+
+                    </div>
+
+                    {combinedValueGenLoading&&(
                       <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.75)',borderRadius:'16px'}}>
                         <span style={{fontFamily:RJ,color:'rgba(255,255,255,0.6)',fontSize:'18px',fontWeight:600}}>Loading data...</span>
                       </div>
