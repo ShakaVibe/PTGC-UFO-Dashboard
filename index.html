@@ -1796,7 +1796,7 @@
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
           <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl w-full">{loading?<><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/></>}</div></div>
-          <footer className="text-center py-4 border-t border-white/10"><p className="text-white/30 text-xs">Data accuracy cannot be guaranteed. Not financial advice. DYOR.</p></footer>
+          <footer className="text-center py-4 border-t border-white/10"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
         </div>
       );
     };
@@ -4368,6 +4368,27 @@
 
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
 
+            const buildTgMessage=()=>`📊 *New Dashboard Feature Dropped\\!*
+
+Our Founder, Xen, asked for it\\.\\.\\. and what the Captain wants, the Captain gets\\. 🫡
+
+💰 *Combined Value Generated* is now live on the Socials page\\!
+
+See exactly how much value PTGC \\+ UFO have generated together — broken down by token, by fee category \\(DAO, Holders, Stakers, Burns, LP\\), and across your choice of time period: 24H / 7D / 30D / 90D\\.
+
+📱 Head to the *Socials* tab → *Combined* column → *💰 Combined Value Generated*
+
+Screenshot it\\. Share it\\. Show the world what these two tokens are building\\. 🚀
+
+📊 ptgc\\-ufo\\.com`;
+
+            const[tgCopied,setTgCopied]=useState(false);
+            const copyTgMsg=()=>{
+              navigator.clipboard.writeText(buildTgMessage());
+              setTgCopied(true);
+              setTimeout(()=>setTgCopied(false),2500);
+            };
+
             return(
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
                 <div className="relative" onClick={e=>e.stopPropagation()} style={{maxHeight:'90vh',overflowY:'auto'}}>
@@ -4430,7 +4451,19 @@
                     )}
                   </div>
 
-                  <div className="text-center mt-4 text-white/50 text-sm">Right-click the image and "Save Image As" or take a screenshot</div>
+                  {/* Footer row: screenshot tip + Telegram copy button */}
+                  <div className="flex items-center justify-between mt-4 gap-4">
+                    <div className="text-white/40 text-sm">Right-click → "Save Image As" or take a screenshot</div>
+                    <button
+                      onClick={copyTgMsg}
+                      style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 18px',borderRadius:'10px',border:'1px solid rgba(255,255,255,0.15)',background:tgCopied?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.06)',cursor:'pointer',transition:'all 0.2s',flexShrink:0}}
+                    >
+                      <span style={{fontSize:'18px'}}>{tgCopied?'\u2705':'\u{1F4E2}'}</span>
+                      <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'14px',fontWeight:700,color:tgCopied?'#4ade80':'rgba(255,255,255,0.75)',whiteSpace:'nowrap'}}>
+                        {tgCopied?'Copied!':'Copy Telegram Announcement'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -5579,7 +5612,7 @@
             />
           )}
           
-          <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data accuracy cannot be guaranteed. Not financial advice. DYOR.</p></footer>
+          <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
           
         </div>
       );
@@ -7206,31 +7239,40 @@
     const DisclaimerModal=({onAccept})=>{
       return(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95">
-          <div className="bg-[#111] border border-yellow-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+          <div className="bg-[#111] border border-yellow-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl" style={{maxHeight:'90vh',overflowY:'auto'}}>
             <div className="text-center mb-6">
               <div className="text-4xl mb-3">⚠️</div>
               <h2 className="text-2xl font-bold text-yellow-400 font-orbitron">Disclaimer</h2>
+              <p className="text-white/40 text-xs mt-2">Please read before using this dashboard</p>
             </div>
             
             <div className="space-y-4 text-white/80 text-sm mb-6">
               <p>
                 <span className="text-yellow-400 font-semibold">Community Project:</span> This dashboard is built by and for the community. It is not an official product and is not affiliated with or endorsed by any token team or project.
               </p>
-              
+
               <p>
-                <span className="text-yellow-400 font-semibold">No Guarantees:</span> While we strive for accuracy, we cannot guarantee that all data displayed is correct, complete, or up-to-date. Data is sourced from third-party APIs and blockchain queries which may contain errors or delays.
+                <span className="text-yellow-400 font-semibold">Data May Be Incorrect:</span> All figures — including prices, volumes, holder counts, burn amounts, liquidity values, and fee distributions — are sourced from third-party APIs and on-chain queries. This data may be delayed, incomplete, or inaccurate. We cannot guarantee it reflects the true current state of the blockchain.
               </p>
-              
+
               <p>
-                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, legal, or tax advice. Always do your own research (DYOR) before making any investment decisions.
+                <span className="text-yellow-400 font-semibold">Calculators & Projections Are Estimates Only:</span> Any calculators, projected values, or period estimates (7D, 30D, 90D) displayed on this dashboard are mathematical approximations based on available data. They are provided for illustrative purposes only and should not be relied upon for financial planning or decision-making. Actual results will vary.
               </p>
-              
+
               <p>
-                <span className="text-yellow-400 font-semibold">No Liability:</span> The creators of this dashboard accept no responsibility or liability for any losses, damages, or decisions made based on information displayed here.
+                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, legal, or tax advice. Do not make any investment or financial decision based solely on information shown here. Always do your own research (DYOR) and consult a qualified professional before investing.
               </p>
-              
+
               <p>
-                <span className="text-yellow-400 font-semibold">Use at Your Own Risk:</span> By using this dashboard, you acknowledge that you understand these risks and agree to use it at your own discretion.
+                <span className="text-yellow-400 font-semibold">No Liability:</span> The creators of this dashboard accept no responsibility or liability for any losses, damages, or decisions made based on information displayed here — including but not limited to incorrect data, failed transactions, or market movements.
+              </p>
+
+              <p>
+                <span className="text-yellow-400 font-semibold">Crypto Risk:</span> Cryptocurrency investments are highly speculative and volatile. You may lose some or all of your investment. Never invest more than you can afford to lose.
+              </p>
+
+              <p>
+                <span className="text-yellow-400 font-semibold">Use at Your Own Risk:</span> By using this dashboard, you acknowledge that you understand and accept all of the above, and agree to use it entirely at your own discretion.
               </p>
             </div>
             
@@ -7242,7 +7284,7 @@
                 I Understand & Accept
               </button>
               <p className="text-white/40 text-xs text-center">
-                By clicking above, you agree to these terms. This message will not appear again.
+                By clicking above, you acknowledge these terms. This message will not appear again on this device.
               </p>
             </div>
           </div>
