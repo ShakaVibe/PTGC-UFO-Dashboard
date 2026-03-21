@@ -379,6 +379,560 @@
       {symbol:'EHEX',name:'HEX from Ethereum',address:'0x57fde0a71132198BBeC939B98976993d8D89D225'}
     ];
     
+
+    // ============================================
+    // LV ANALYSER — constants, helpers, component
+    // ============================================
+    const LV_RH_CORE_ADDRESSES = {
+      WPLS: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27',
+      PLSX: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab',
+      INC:  '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d',
+      HEX:  '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
+      EHEX: '0x57fde0a71132198BBeC939B98976993d8D89D225'
+    };
+    const LV_RH_CORE_SET = new Set(Object.values(LV_RH_CORE_ADDRESSES).map(a => a.toLowerCase()));
+    const LV_RH_CORE_PAIRS = new Set([
+      '0x975c7ab1dae5c97327ef7019587dffc66096f5d8', // PTGC/PRVX
+      '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', // UFO/PRVC
+    ]);
+    const LV_RH_CORE_SYMBOLS = new Set(['PRVX', 'PRVC']);
+    const LV_TOKEN_CFG = {
+      PTGC: { name:'PTGC', address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93', logo:'06_PTGC_V1_transparent_bg.png', colorHex:'#D9CA5D', colorRgb:'217,202,93' },
+      UFO:  { name:'UFO',  address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', logo:'07_Ufo_transparent.png',          colorHex:'#7CFC00', colorRgb:'124,252,0'  }
+    };
+    // Public repo — fetch directly, no proxy needed
+    const LV_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/lv-snapshots.json';
+
+    const lvFmtDollar = (n, dec=0) => {
+      if (n==null||isNaN(n)) return '—';
+      if (n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
+      if (n>=1e3) return '$'+(n/1e3).toFixed(1)+'K';
+      return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+    };
+    const lvFmtDollarFull = (n) => {
+      if (n==null||isNaN(n)) return '—';
+      return '$'+Math.round(n).toLocaleString('en-US');
+    };
+    const lvFmtPct = (n, dec=1) => {
+      if (n==null||isNaN(n)) return '—';
+      const sign=n>0?'+':''; const abs=Math.abs(n);
+      const formatted=abs>=1000?Math.round(abs).toLocaleString('en-US'):abs.toFixed(dec);
+      return sign+(n<0?'-':'')+formatted+'%';
+    };
+    const lvFmtRatio = (n) => (n==null||isNaN(n)||n===0)?'—':n.toFixed(4);
+
+    const lvIsPairCore = (pair, tokenAddress) => {
+      const pairAddr = pair.pairAddress?.toLowerCase();
+      if (pairAddr && LV_RH_CORE_PAIRS.has(pairAddr)) return true;
+      const baseAddr = pair.baseToken?.address?.toLowerCase();
+      const quoteAddr = pair.quoteToken?.address?.toLowerCase();
+      const tokenAddr = tokenAddress.toLowerCase();
+      const ptgcAddr = LV_TOKEN_CFG.PTGC.address.toLowerCase();
+      const ufoAddr  = LV_TOKEN_CFG.UFO.address.toLowerCase();
+      const otherAddr = baseAddr===tokenAddr ? quoteAddr : baseAddr;
+      const otherSymbol = (baseAddr===tokenAddr ? pair.quoteToken?.symbol : pair.baseToken?.symbol)?.toUpperCase();
+      if (otherSymbol && LV_RH_CORE_SYMBOLS.has(otherSymbol)) return true;
+      if ((otherAddr===ptgcAddr||otherAddr===ufoAddr) && otherAddr!==tokenAddr) return false;
+      return LV_RH_CORE_SET.has(otherAddr);
+    };
+
+    const lvFetchTokenPairs = async (tokenAddress) => {
+      try {
+        const [tokensRes, pairsRes] = await Promise.all([
+          fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`),
+          fetch(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${tokenAddress}`)
+        ]);
+        const tokensData = await tokensRes.json();
+        let pairsData = []; try { pairsData = await pairsRes.json(); } catch(e) {}
+        const map = new Map();
+        if (tokensData.pairs) tokensData.pairs.forEach(p => map.set(p.pairAddress?.toLowerCase(), p));
+        if (Array.isArray(pairsData)) pairsData.forEach(p => { if (p.pairAddress && !map.has(p.pairAddress.toLowerCase())) map.set(p.pairAddress.toLowerCase(), p); });
+        return Array.from(map.values());
+      } catch(e) { console.error('lvFetchTokenPairs error:', e); return []; }
+    };
+
+    const lvProcessPairs = (pairs, tokenAddress) => {
+      const tokenAddr = tokenAddress.toLowerCase();
+      let coreLiquidity=0, totalLiquidity=0, coreVolume=0, totalVolume=0, price=0;
+      const pairDetails = [];
+      pairs.forEach(p => {
+        const liq=p.liquidity?.usd||0, vol=p.volume?.h24||0;
+        const isCore=lvIsPairCore(p, tokenAddress);
+        totalLiquidity+=liq; totalVolume+=vol;
+        if (isCore) { coreLiquidity+=liq; coreVolume+=vol; }
+        if (!price && parseFloat(p.priceUsd)>0) price=parseFloat(p.priceUsd);
+        const baseAddr=p.baseToken?.address?.toLowerCase();
+        const quoteSymbol=baseAddr===tokenAddr?(p.quoteToken?.symbol||'?'):(p.baseToken?.symbol||'?');
+        pairDetails.push({address:p.pairAddress?.toLowerCase(),quote:quoteSymbol,liquidity:liq,volume:vol,isCore});
+      });
+      pairDetails.sort((a,b)=>b.liquidity-a.liquidity);
+      return {price,coreLiquidity,totalLiquidity,coreVolume,totalVolume,pairs:pairDetails};
+    };
+
+    const LVAnalyserTab = () => {
+      const [loading, setLoading] = React.useState(true);
+      const [liveData, setLiveData] = React.useState({PTGC:null,UFO:null});
+      const [dailyData, setDailyData] = React.useState([]);
+      const [timeframe, setTimeframe] = React.useState(30);
+      const [customLiqPct, setCustomLiqPct] = React.useState('');
+      const [xInputVal, setXInputVal] = React.useState('');
+      const [error, setError] = React.useState(null);
+      const [liqMode, setLiqMode] = React.useState('all');
+      const [volPeriod, setVolPeriod] = React.useState('d7');
+      const [vgScenario, setVgScenario] = React.useState('median');
+      const lvrChartRef = React.useRef(null);
+      const lvrChartInst = React.useRef(null);
+      const volChartRef = React.useRef(null);
+      const volChartInst = React.useRef(null);
+
+      const fetchLiveData = async () => {
+        try {
+          const [ptgcPairs, ufoPairs] = await Promise.all([
+            lvFetchTokenPairs(LV_TOKEN_CFG.PTGC.address),
+            lvFetchTokenPairs(LV_TOKEN_CFG.UFO.address)
+          ]);
+          const d = { PTGC: lvProcessPairs(ptgcPairs, LV_TOKEN_CFG.PTGC.address), UFO: lvProcessPairs(ufoPairs, LV_TOKEN_CFG.UFO.address) };
+          setLiveData(d); return d;
+        } catch(e) { setError('Failed to fetch live data'); return null; }
+      };
+
+      const fetchHistory = async () => {
+        try {
+          const res = await fetch(LV_HISTORY_URL + '?t=' + Date.now());
+          if (!res.ok) return [];
+          const raw = await res.json();
+          const snapshots = Array.isArray(raw) ? raw : (raw?.snapshots || []);
+          return snapshots.map(s => ({...s, date: s.date||(s.timestamp?s.timestamp.split('T')[0]:null)})).filter(s=>s.date);
+        } catch(e) { return []; }
+      };
+
+      const buildDailyData = (snapshots) => {
+        const byDate = {};
+        snapshots.forEach(s => { const d=s.date; if (!byDate[d]) byDate[d]=[]; byDate[d].push(s); });
+        return Object.entries(byDate).map(([date, snaps]) => {
+          const avg=(arr,fn)=>{const v=arr.map(fn).filter(x=>x!=null&&!isNaN(x));return v.length>0?v.reduce((a,b)=>a+b,0)/v.length:0;};
+          return { date,
+            PTGC:{price:avg(snaps,s=>s.PTGC?.price),coreLiquidity:avg(snaps,s=>s.PTGC?.coreLiquidity),totalLiquidity:avg(snaps,s=>s.PTGC?.totalLiquidity),coreVolume:avg(snaps,s=>s.PTGC?.coreVolume),totalVolume:avg(snaps,s=>s.PTGC?.totalVolume)},
+            UFO: {price:avg(snaps,s=>s.UFO?.price), coreLiquidity:avg(snaps,s=>s.UFO?.coreLiquidity), totalLiquidity:avg(snaps,s=>s.UFO?.totalLiquidity), coreVolume:avg(snaps,s=>s.UFO?.coreVolume), totalVolume:avg(snaps,s=>s.UFO?.totalVolume)}
+          };
+        }).sort((a,b)=>a.date.localeCompare(b.date));
+      };
+
+      React.useEffect(() => {
+        const load = async () => {
+          setLoading(true);
+          const [live, hist] = await Promise.all([fetchLiveData(), fetchHistory()]);
+          if (hist.length>0) setDailyData(buildDailyData(hist));
+          setLoading(false);
+        };
+        load();
+      }, []);
+
+      const getMetrics = (d) => {
+        if (!d) return null;
+        return {...d, coreLVR:d.coreLiquidity>0?d.coreVolume/d.coreLiquidity:0, totalLVR:d.totalLiquidity>0?d.totalVolume/d.totalLiquidity:0, coreVolumeShare:d.totalVolume>0?(d.coreVolume/d.totalVolume)*100:0, coreLiquidityShare:d.totalLiquidity>0?(d.coreLiquidity/d.totalLiquidity)*100:0};
+      };
+
+      const ptgcMetrics = getMetrics(liveData.PTGC);
+      const ufoMetrics  = getMetrics(liveData.UFO);
+      const filteredDaily = dailyData.slice(-timeframe);
+      const liqKey = liqMode==='cores'?'coreLiquidity':'totalLiquidity';
+      const volKey = liqMode==='cores'?'coreVolume':'totalVolume';
+      const liveLiq = (m) => liqMode==='cores'?m?.coreLiquidity:m?.totalLiquidity;
+      const liveVol = (m) => liqMode==='cores'?m?.coreVolume:m?.totalVolume;
+
+      const getPeriodVol = (token, days) => {
+        const recent=dailyData.slice(-days); if (!recent.length) return null;
+        return {core:recent.reduce((s,d)=>s+(d[token]?.coreVolume||0),0), total:recent.reduce((s,d)=>s+(d[token]?.totalVolume||0),0), days:recent.length};
+      };
+      const ptgcPeriodVol = volPeriod==='h24'?null:getPeriodVol('PTGC',volPeriod==='d7'?7:30);
+      const ufoPeriodVol  = volPeriod==='h24'?null:getPeriodVol('UFO', volPeriod==='d7'?7:30);
+
+      // LVR chart
+      React.useEffect(() => {
+        if (!lvrChartRef.current||filteredDaily.length<2) return;
+        if (lvrChartInst.current) lvrChartInst.current.destroy();
+        const modeLabel=liqMode==='cores'?'RH Core':'All';
+        const labels=filteredDaily.map(d=>new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+        lvrChartInst.current=new Chart(lvrChartRef.current,{type:'line',data:{labels,datasets:[
+          {label:`PTGC ${modeLabel} L/V Ratio`,data:filteredDaily.map(d=>{const l=d.PTGC?.[liqKey]||0,v=d.PTGC?.[volKey]||0;return l>0?v/l:0;}),borderColor:'#D9CA5D',backgroundColor:'rgba(217,202,93,0.08)',borderWidth:2.5,fill:true,tension:0.3,pointRadius:filteredDaily.length>60?0:3,pointBackgroundColor:'#D9CA5D'},
+          {label:`UFO ${modeLabel} L/V Ratio`, data:filteredDaily.map(d=>{const l=d.UFO?.[liqKey]||0,v=d.UFO?.[volKey]||0;return l>0?v/l:0;}),borderColor:'#7CFC00',backgroundColor:'rgba(124,252,0,0.08)',borderWidth:2.5,fill:true,tension:0.3,pointRadius:filteredDaily.length>60?0:3,pointBackgroundColor:'#7CFC00'}
+        ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#d1d5db',font:{family:'Rajdhani',size:13},usePointStyle:true}},tooltip:{backgroundColor:'rgba(0,0,0,0.9)',borderColor:'#333',borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)}`}}},scales:{x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#9ca3af',font:{family:'Rajdhani',size:13},maxRotation:45}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#9ca3af',font:{family:'Rajdhani',size:13},callback:v=>v.toFixed(3)}}}}});
+      }, [filteredDaily, liqMode]);
+
+      // Vol+Liq chart
+      React.useEffect(() => {
+        if (!volChartRef.current||filteredDaily.length<2) return;
+        if (volChartInst.current) volChartInst.current.destroy();
+        const modeLabel=liqMode==='cores'?'RH Core':'All';
+        const labels=filteredDaily.map(d=>new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+        volChartInst.current=new Chart(volChartRef.current,{type:'bar',data:{labels,datasets:[
+          {label:`PTGC ${modeLabel} Vol`,data:filteredDaily.map(d=>d.PTGC?.[volKey]||0),backgroundColor:'rgba(217,202,93,0.5)',borderColor:'#D9CA5D',borderWidth:1,yAxisID:'y',order:2},
+          {label:`UFO ${modeLabel} Vol`, data:filteredDaily.map(d=>d.UFO?.[volKey]||0), backgroundColor:'rgba(124,252,0,0.4)', borderColor:'#7CFC00',borderWidth:1,yAxisID:'y',order:2},
+          {label:`PTGC ${modeLabel} Liq`,data:filteredDaily.map(d=>d.PTGC?.[liqKey]||0),type:'line',borderColor:'#D9CA5D',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3,yAxisID:'y1',order:1,pointStyle:'line'},
+          {label:`UFO ${modeLabel} Liq`, data:filteredDaily.map(d=>d.UFO?.[liqKey]||0), type:'line',borderColor:'#7CFC00',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3,yAxisID:'y1',order:1,pointStyle:'line'}
+        ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#d1d5db',font:{family:'Rajdhani',size:13},usePointStyle:true}},tooltip:{backgroundColor:'rgba(0,0,0,0.9)',borderColor:'#333',borderWidth:1,callbacks:{label:ctx=>`${ctx.dataset.label}: $${Number(ctx.parsed.y).toLocaleString()}`}}},scales:{x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#9ca3af',font:{family:'Rajdhani',size:13},maxRotation:45}},y:{position:'left',title:{display:true,text:`${modeLabel} Volume ($)`,color:'#9ca3af',font:{family:'Rajdhani',size:13}},grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#9ca3af',font:{family:'Rajdhani',size:13},callback:v=>v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+v}},y1:{position:'right',title:{display:true,text:`${modeLabel} Liquidity ($)`,color:'#9ca3af',font:{family:'Rajdhani',size:13}},grid:{display:false},ticks:{color:'#9ca3af',font:{family:'Rajdhani',size:13},callback:v=>v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+v}}}}});
+      }, [filteredDaily, liqMode]);
+
+      React.useEffect(() => () => { if (lvrChartInst.current) lvrChartInst.current.destroy(); if (volChartInst.current) volChartInst.current.destroy(); }, []);
+
+      // TokenColumn sub-component
+      const TokenColumn = ({token, metrics, color, rgb, logo, periodVol}) => {
+        if (!metrics) return null;
+        const glow=`drop-shadow(0 0 15px rgba(${rgb},0.8)) drop-shadow(0 0 35px rgba(${rgb},0.4))`;
+        const displayCoreVol=volPeriod==='h24'?metrics.coreVolume:(periodVol?.core??metrics.coreVolume);
+        const displayTotalVol=volPeriod==='h24'?metrics.totalVolume:(periodVol?.total??metrics.totalVolume);
+        const volAvailable=volPeriod==='h24'||periodVol!=null;
+        const coreVolShare=displayTotalVol>0?(displayCoreVol/displayTotalVol)*100:0;
+        const periodLabel=volPeriod==='h24'?'24H':volPeriod==='d7'?'7D':'30D';
+        const sortedPairs=[...(metrics.pairs||[])].filter(p=>p.liquidity>0||p.volume>0).sort((a,b)=>a.isCore!==b.isCore?(a.isCore?-1:1):b.liquidity-a.liquidity);
+        const periodBtns=[{key:'h24',label:'24H'},{key:'d7',label:'7D'},{key:'d30',label:'30D'}];
+        return (
+          <div className="bg-gradient-to-b from-white/[0.04] via-[#111]/80 to-[#111]/80 border-[3px] rounded-2xl overflow-hidden" style={{borderColor:`rgba(${rgb},0.4)`}}>
+            <div className="px-4 py-2.5 border-b flex items-center gap-3" style={{borderColor:`rgba(${rgb},0.1)`}}>
+              <img src={logo} alt={token} className="w-8 h-8" style={{filter:glow}}/>
+              <div className="font-orbitron text-xl font-bold" style={{color}}>{token}</div>
+              <div className="text-white/30 text-sm ml-1">Liquidity & Volume</div>
+              <div className="ml-auto flex items-center gap-0.5 bg-black/40 border border-white/10 rounded-md p-0.5">
+                {periodBtns.map(({key,label})=>(
+                  <button key={key} onClick={()=>setVolPeriod(key)} className={`px-2 py-0.5 rounded text-xs font-bold transition-all ${volPeriod===key?'text-black':'text-white/30 hover:text-white/50'}`} style={volPeriod===key?{background:color}:{}}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="p-3 space-y-1.5">
+              <div className="bg-black/30 border border-orange-500/15 rounded-lg px-3 py-2 flex items-center gap-3">
+                <span className="text-orange-400 text-sm font-bold uppercase whitespace-nowrap">💧 Liquidity</span>
+                <div className="flex-1 grid grid-cols-2 gap-2">
+                  <div className="flex items-baseline gap-1.5"><span className="text-white/30 text-sm">Cores</span><span className="text-orange-300 font-bold text-xl">{lvFmtDollarFull(metrics.coreLiquidity)}</span></div>
+                  <div className="flex items-baseline gap-1.5"><span className="text-white/30 text-sm">All</span><span className="text-white/40 font-bold text-xl">{lvFmtDollarFull(metrics.totalLiquidity)}</span></div>
+                </div>
+              </div>
+              <div className="bg-black/30 border rounded-lg px-3 py-2 flex items-center gap-3" style={{borderColor:`rgba(${rgb},0.15)`}}>
+                <span className="text-sm font-bold uppercase whitespace-nowrap" style={{color}}>📊 Volume <span className="text-white/25 normal-case font-normal">{periodLabel}</span></span>
+                {!volAvailable?(<span className="text-white/30 text-sm ml-auto">Not enough data</span>):(
+                  <div className="flex-1 grid grid-cols-2 gap-2">
+                    <div className="flex items-baseline gap-1.5"><span className="text-white/30 text-sm">Cores</span><span className="font-bold text-xl" style={{color}}>{lvFmtDollarFull(displayCoreVol)}</span></div>
+                    <div className="flex items-baseline gap-1.5"><span className="text-white/30 text-sm">All</span><span className="text-white/40 font-bold text-xl">{lvFmtDollarFull(displayTotalVol)}</span></div>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="bg-black/30 border rounded-lg px-3 py-2" style={{borderColor:`rgba(${rgb},0.15)`}}><div className="text-white/40 text-sm uppercase mb-0.5">Core L/V Ratio</div><div className="font-bold text-xl" style={{color}}>{lvFmtRatio(metrics.coreLVR)}</div></div>
+                <div className="bg-black/30 border border-white/10 rounded-lg px-3 py-2"><div className="text-white/40 text-sm uppercase mb-0.5">All Pairs L/V Ratio</div><div className="font-bold text-xl" style={{color,opacity:0.6}}>{lvFmtRatio(metrics.totalLVR)}</div></div>
+                <div className="bg-black/30 border border-purple-500/20 rounded-lg px-3 py-2"><div className="text-white/40 text-sm uppercase mb-0.5">Vol from Cores</div><div className="text-purple-400 font-bold text-xl">{volAvailable?lvFmtPct(coreVolShare,0).replace('+',''):'—'}</div></div>
+                <div className="bg-black/30 border border-purple-500/15 rounded-lg px-3 py-2"><div className="text-white/40 text-sm uppercase mb-0.5">Liq in Cores</div><div className="text-purple-400/70 font-bold text-xl">{lvFmtPct(metrics.coreLiquidityShare,0).replace('+','')}</div></div>
+              </div>
+              <details className="group">
+                <summary className="flex items-center gap-2 text-white/40 hover:text-white/60 transition-colors text-sm font-bold uppercase cursor-pointer py-1.5">
+                  <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+                  {token} Pairs
+                </summary>
+                <div className="mt-2 bg-black/20 border border-white/5 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead><tr className="border-b border-white/10"><th className="text-left text-white/40 font-bold px-3 py-2.5 text-sm uppercase">Pair</th><th className="text-left text-white/40 font-bold px-3 py-2.5 text-sm uppercase">Type</th><th className="text-right text-white/40 font-bold px-3 py-2.5 text-sm uppercase">Liq</th><th className="text-right text-white/40 font-bold px-3 py-2.5 text-sm uppercase">Vol 24H</th><th className="text-right text-white/40 font-bold px-3 py-2.5 text-sm uppercase">LVR</th></tr></thead>
+                    <tbody>
+                      {sortedPairs.map((pair,i)=>(
+                        <tr key={i} className={`border-b border-white/5 hover:bg-white/[0.02] ${pair.isCore?'bg-orange-500/[0.03]':''}`}>
+                          <td className="px-3 py-2.5"><span className="font-bold text-white/70 text-sm">{token}/{pair.quote}</span></td>
+                          <td className="px-3 py-2.5"><span className={`px-2 py-0.5 rounded text-xs font-bold ${pair.isCore?'bg-orange-500/20 text-orange-400':'bg-white/5 text-white/30'}`}>{pair.isCore?'CORE':'OTHER'}</span></td>
+                          <td className="px-3 py-2.5 text-right text-white/60 text-sm">{lvFmtDollar(pair.liquidity)}</td>
+                          <td className="px-3 py-2.5 text-right text-white/60 text-sm">{lvFmtDollar(pair.volume)}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-sm" style={{color}}>{pair.liquidity>0?lvFmtRatio(pair.volume/pair.liquidity):'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </div>
+          </div>
+        );
+      };
+
+      if (loading) return (
+        <div className="flex items-center justify-center py-32">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[#D9CA5D]/30 border-t-transparent animate-spin"></div>
+            <p className="text-white/40 text-base">Analysing liquidity & volume...</p>
+          </div>
+        </div>
+      );
+
+      return (
+        <div>
+
+
+          {/* Weekly projections + history */}
+          {dailyData.length>=7&&(()=>{
+            const getISOWeek=(dateStr)=>{const d=new Date(dateStr);const day=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-day);const ys=new Date(Date.UTC(d.getUTCFullYear(),0,1));return `${d.getUTCFullYear()}-W${String(Math.ceil((((d-ys)/86400000)+1)/7)).padStart(2,'0')}`};
+            const weekMap={};
+            dailyData.forEach(d=>{const wk=getISOWeek(d.date);if(!weekMap[wk])weekMap[wk]=[];weekMap[wk].push(d);});
+            const weeks=Object.entries(weekMap).sort(([a],[b])=>a.localeCompare(b)).map(([wk,days])=>{
+              const avgLiq=(t)=>days.reduce((s,d)=>s+(d[t]?.[liqKey]||0),0)/days.length;
+              const totalVol=(t)=>days.reduce((s,d)=>s+(d[t]?.[volKey]||0),0);
+              const ptgcLiq=avgLiq('PTGC'),ptgcVol=totalVol('PTGC'),ufoLiq=avgLiq('UFO'),ufoVol=totalVol('UFO');
+              return {wk,firstDate:days[0].date,lastDate:days[days.length-1].date,isPartial:days.length<7,days:days.length,PTGC:{liq:ptgcLiq,vol:ptgcVol,lvr:ptgcLiq>0?ptgcVol/ptgcLiq:0},UFO:{liq:ufoLiq,vol:ufoVol,lvr:ufoLiq>0?ufoVol/ufoLiq:0}};
+            });
+            const completeWeeks=weeks.filter(w=>!w.isPartial);
+            const pctile=(arr,p)=>{if(arr.length===1)return arr[0];const idx=p*(arr.length-1);const lo=Math.floor(idx),hi=Math.ceil(idx);return lo===hi?arr[lo]:arr[lo]+(arr[hi]-arr[lo])*(idx-lo);};
+            const getWeeklyStats=(token)=>{const lvrs=completeWeeks.map(w=>w[token].lvr).filter(v=>v>0).sort((a,b)=>a-b);if(!lvrs.length)return null;return{conservative:pctile(lvrs,0.25),median:pctile(lvrs,0.50),strong:pctile(lvrs,0.75),peak:lvrs[lvrs.length-1],count:lvrs.length};};
+            const ptgcWS=getWeeklyStats('PTGC'),ufoWS=getWeeklyStats('UFO');
+            const liqChangePct=parseFloat(customLiqPct)||0;
+            const scenarioLiq=(cur)=>cur*(1+liqChangePct/100);
+            const projectWeeklyVol=(stats,key,cur)=>(!stats||!cur)?null:scenarioLiq(cur)*stats[key];
+            const refWeek=completeWeeks.length>0?completeWeeks[completeWeeks.length-1]:weeks[weeks.length-1];
+            const fmtWeekLabel=(w)=>new Date(w.firstDate).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+            const scenarioRows=[{label:'Conservative',key:'conservative',note:'Bottom 25% of weeks',color:'text-white/50'},{label:'Median week',key:'median',note:'Typical week',color:'text-white/70'},{label:'Strong week',key:'strong',note:'Top 25% of weeks',color:'text-yellow-400'},{label:'Peak week',key:'peak',note:'Best week on record',color:'text-green-400',highlight:true}];
+            const ptgcMedianVol=projectWeeklyVol(ptgcWS,'median',liveLiq(ptgcMetrics));
+            const ufoMedianVol=projectWeeklyVol(ufoWS,'median',liveLiq(ufoMetrics));
+            const ptgcRef=refWeek?.PTGC?.vol,ufoRef=refWeek?.UFO?.vol;
+            const ptgcMedianPct=ptgcMedianVol&&ptgcRef?((ptgcMedianVol-ptgcRef)/ptgcRef)*100:null;
+            const ufoMedianPct=ufoMedianVol&&ufoRef?((ufoMedianVol-ufoRef)/ufoRef)*100:null;
+            const hasInput=liqChangePct!==0;
+            return (
+              <>
+                {(ptgcWS||ufoWS)&&(
+                  <div className="bg-gradient-to-b from-[#D9CA5D]/10 via-[#111]/80 to-[#111]/80 border-[3px] border-[#D9CA5D]/40 rounded-2xl overflow-hidden mb-6">
+                    <div className="p-5 border-b border-[#D9CA5D]/10">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col justify-center">
+                          <div className="flex items-center gap-3 mb-3"><span className="text-2xl">🔮</span><div className="font-orbitron text-xl font-bold text-[#D9CA5D]">LIQUIDITY IMPACT ON VOLUME</div></div>
+                          <div className="rounded-xl border-2 border-[#D9CA5D]/50 bg-black/40 px-4 py-3 flex flex-col gap-1">
+                            <span className="text-[#D9CA5D]/60 text-xs font-bold uppercase tracking-widest">Liquidity Change</span>
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <div className="flex items-center gap-1 bg-black/50 border border-[#D9CA5D]/20 rounded-lg px-3 py-2">
+                                <input type="text" inputMode="decimal" value={xInputVal} onChange={e=>{setXInputVal(e.target.value);const x=parseFloat(e.target.value);if(!isNaN(x)&&x>=1)setCustomLiqPct(String(((x-1)*100).toFixed(1)));else setCustomLiqPct('');}} placeholder="1.00" className="bg-transparent border-none outline-none text-white text-xl font-bold w-16 placeholder-white/20 text-center"/>
+                                <span className="text-[#D9CA5D] text-xl font-bold">X</span>
+                              </div>
+                              <span className="text-white/20 text-sm">or</span>
+                              <div className="flex items-center gap-1 bg-black/50 border border-[#D9CA5D]/40 rounded-lg px-3 py-2">
+                                <input type="text" inputMode="decimal" value={customLiqPct} onChange={e=>{setCustomLiqPct(e.target.value);const p=parseFloat(e.target.value);setXInputVal(!isNaN(p)&&p>0?(1+p/100).toFixed(2):'');}} placeholder="0" className="bg-transparent border-none outline-none text-white text-xl font-bold w-16 placeholder-white/20 text-center"/>
+                                <span className="text-[#D9CA5D] text-xl font-bold">%</span>
+                              </div>
+                              {hasInput&&<span className="text-white/70 text-xs">→ PTGC {lvFmtDollar(scenarioLiq(liveLiq(ptgcMetrics)||0))} · UFO {lvFmtDollar(scenarioLiq(liveLiq(ufoMetrics)||0))}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col border-l border-white/10 pl-4 justify-center">
+                          <div className="text-white/30 text-xs font-bold uppercase tracking-widest text-center mb-3">Median Week</div>
+                          <div className="flex items-center justify-center gap-4">
+                            {ptgcWS&&(<div className="flex items-center gap-3"><img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-16 h-16 flex-shrink-0" style={{filter:'drop-shadow(0 0 12px rgba(217,202,93,0.7))'}}/><div className="flex flex-col items-start justify-center"><div className="font-orbitron font-bold text-base text-[#D9CA5D]/60 uppercase tracking-wider mb-0.5">PTGC</div><div className="font-orbitron font-bold text-2xl text-[#D9CA5D] leading-none">{hasInput&&ptgcMedianPct!==null?lvFmtPct(ptgcMedianPct,0):'—'}</div><div className="text-[#D9CA5D]/50 text-xs font-bold uppercase tracking-wide mt-0.5">Volume</div></div></div>)}
+                            {ufoWS&&(<div className="flex items-center gap-3 border-l border-white/10 pl-4"><img src="07_Ufo_transparent.png" alt="UFO" className="w-16 h-16 flex-shrink-0" style={{filter:'drop-shadow(0 0 12px rgba(124,252,0,0.7))'}}/><div className="flex flex-col items-start justify-center"><div className="font-orbitron font-bold text-base text-[#7CFC00]/60 uppercase tracking-wider mb-0.5">UFO</div><div className="font-orbitron font-bold text-2xl text-[#7CFC00] leading-none">{hasInput&&ufoMedianPct!==null?lvFmtPct(ufoMedianPct,0):'—'}</div><div className="text-[#7CFC00]/50 text-xs font-bold uppercase tracking-wide mt-0.5">Volume</div></div></div>)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <div className="grid grid-cols-2 gap-3">
+                        {ptgcWS&&(()=>{const bl=liveLiq(ptgcMetrics)||0;return(
+                          <div className="rounded-xl overflow-hidden border-2 border-[#D9CA5D]/40">
+                            <div className="bg-[#D9CA5D]/10 px-4 py-3 border-b border-[#D9CA5D]/30"><span className="font-orbitron font-bold text-2xl text-[#D9CA5D]">PTGC</span></div>
+                            <table className="w-full"><thead><tr className="border-b border-[#D9CA5D]/10 bg-[#D9CA5D]/5"><th className="text-left text-white/40 font-bold px-4 py-2.5 text-sm uppercase">Scenario</th><th className="text-right text-[#D9CA5D]/40 font-bold px-3 py-2.5 text-sm uppercase">L/V Ratio</th><th className="text-right text-[#D9CA5D]/60 font-bold px-4 py-2.5 text-sm uppercase">Weekly Vol</th>{hasInput&&<th className="text-right text-[#D9CA5D] font-bold px-4 py-2.5 text-sm uppercase border-l border-[#D9CA5D]/30">Projected →</th>}</tr></thead>
+                            <tbody>{scenarioRows.map(({label,key,note,color,highlight})=>{const bv=bl*ptgcWS[key];const pv=hasInput?scenarioLiq(bl)*ptgcWS[key]:null;const vp=pv&&ptgcRef?(((pv-ptgcRef)/ptgcRef)*100):null;return(<tr key={key} className={`border-b border-[#D9CA5D]/5 ${highlight?'bg-[#D9CA5D]/5':'hover:bg-[#D9CA5D]/[0.02]'}`}><td className="px-4 py-3.5"><div className={`font-bold text-base ${color}`}>{label}</div><div className="text-white/40 text-sm">{note}</div></td><td className="px-3 py-3.5 text-right font-mono text-[#D9CA5D]/40 text-sm">{ptgcWS[key]?.toFixed(4)}</td><td className="px-4 py-3.5 text-right"><div className="font-bold text-xl text-white/50">{lvFmtDollar(bv)}</div></td>{hasInput&&(<td className="px-4 py-3.5 text-right border-l border-[#D9CA5D]/20"><div className={`font-bold text-xl ${highlight?'text-[#D9CA5D]':'text-[#D9CA5D]/80'}`}>{pv?lvFmtDollar(pv):'—'}</div>{vp!==null&&<div className={`text-sm font-bold ${vp>=0?'text-green-400/80':'text-red-400/80'}`}>{lvFmtPct(vp,0)}</div>}</td>)}</tr>);})}</tbody>
+                            </table>
+                          </div>
+                        );})()}
+                        {ufoWS&&(()=>{const bl=liveLiq(ufoMetrics)||0;return(
+                          <div className="rounded-xl overflow-hidden border-2 border-[#7CFC00]/40">
+                            <div className="bg-[#7CFC00]/10 px-4 py-3 border-b border-[#7CFC00]/30"><span className="font-orbitron font-bold text-2xl text-[#7CFC00]">UFO</span></div>
+                            <table className="w-full"><thead><tr className="border-b border-[#7CFC00]/10 bg-[#7CFC00]/5"><th className="text-left text-white/40 font-bold px-4 py-2.5 text-sm uppercase">Scenario</th><th className="text-right text-[#7CFC00]/40 font-bold px-3 py-2.5 text-sm uppercase">L/V Ratio</th><th className="text-right text-[#7CFC00]/60 font-bold px-4 py-2.5 text-sm uppercase">Weekly Vol</th>{hasInput&&<th className="text-right text-[#7CFC00] font-bold px-4 py-2.5 text-sm uppercase border-l border-[#7CFC00]/30">Projected →</th>}</tr></thead>
+                            <tbody>{scenarioRows.map(({label,key,note,color,highlight})=>{const bv=bl*ufoWS[key];const pv=hasInput?scenarioLiq(bl)*ufoWS[key]:null;const vp=pv&&ufoRef?(((pv-ufoRef)/ufoRef)*100):null;return(<tr key={key} className={`border-b border-[#7CFC00]/5 ${highlight?'bg-[#7CFC00]/5':'hover:bg-[#7CFC00]/[0.02]'}`}><td className="px-4 py-3.5"><div className={`font-bold text-base ${color}`}>{label}</div><div className="text-white/40 text-sm">{note}</div></td><td className="px-3 py-3.5 text-right font-mono text-[#7CFC00]/40 text-sm">{ufoWS[key]?.toFixed(4)}</td><td className="px-4 py-3.5 text-right"><div className="font-bold text-xl text-white/50">{lvFmtDollar(bv)}</div></td>{hasInput&&(<td className="px-4 py-3.5 text-right border-l border-[#7CFC00]/20"><div className={`font-bold text-xl ${highlight?'text-[#7CFC00]':'text-[#7CFC00]/80'}`}>{pv?lvFmtDollar(pv):'—'}</div>{vp!==null&&<div className={`text-sm font-bold ${vp>=0?'text-green-400/80':'text-red-400/80'}`}>{lvFmtPct(vp,0)}</div>}</td>)}</tr>);})}</tbody>
+                            </table>
+                          </div>
+                        );})()}
+                      </div>
+                      <div className="mt-4 flex items-center justify-between flex-wrap gap-2">
+                        <div className="text-white/50 text-xs">⚠ Projected volume = scenario L/V Ratio × adjusted liquidity. Past patterns do not guarantee future results.</div>
+                        {dailyData.length>0&&dailyData[0]?.date&&<div className="text-white/50 text-xs">Data from {new Date(dailyData[0].date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · {completeWeeks.length} complete {completeWeeks.length===1?'week':'weeks'}</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ===== VALUE GENERATED ===== */}
+                {(ptgcWS||ufoWS)&&(()=>{
+                  const ptgcCfg=TOKENS.PTGC, ufoCfg=TOKENS.UFO;
+                  const ptgcLiq=liveLiq(ptgcMetrics)||0, ufoLiq=liveLiq(ufoMetrics)||0;
+                  const ptgcWeeklyVol=(hasInput?scenarioLiq(ptgcLiq):ptgcLiq)*(ptgcWS?.[vgScenario]||0);
+                  const ufoWeeklyVol=(hasInput?scenarioLiq(ufoLiq):ufoLiq)*(ufoWS?.[vgScenario]||0);
+                  const ptgcTotal=ptgcWeeklyVol*ptgcCfg.taxRate;
+                  const ufoTotal=ufoWeeklyVol*ufoCfg.taxRate;
+                  const WEEKS_PER_MONTH=4.33;
+                  const scenBtns=[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}];
+                  const TokenVG=({cfg,weeklyVol,totalGen,color,rgb})=>{
+                    const breakdown=cfg.taxBreakdown;
+                    const logo=cfg.name==='PTGC'?'06_PTGC_V1_transparent_bg.png':'07_Ufo_transparent.png';
+                    return(
+                      <div className="rounded-xl overflow-hidden border-2" style={{borderColor:`rgba(${rgb},0.35)`}}>
+                        <div className="px-4 py-3 border-b flex items-center gap-3" style={{borderColor:`rgba(${rgb},0.15)`,background:`rgba(${rgb},0.08)`}}>
+                          <img src={logo} alt={cfg.name} className="w-14 h-14 flex-shrink-0" style={{filter:`drop-shadow(0 0 10px rgba(${rgb},0.8))`}}/>
+                          <span className="font-orbitron font-bold text-3xl" style={{color}}>{cfg.name}</span>
+                          <span className="text-white/50 text-sm ml-1">{(cfg.taxRate*100)}% fee</span>
+                          <div className="ml-auto text-right">
+                            <div className="flex items-baseline gap-2 justify-end">
+                              <div className="font-bold text-3xl text-green-400">{lvFmtDollarFull(totalGen)}</div>
+                              <div className="text-green-400/50 text-sm font-bold">/Week</div>
+                            </div>
+                            <div className="text-green-400/60 text-base font-bold mt-0.5">{lvFmtDollarFull(totalGen*WEEKS_PER_MONTH)} <span className="text-green-400/35 text-sm font-normal">/mo</span></div>
+                          </div>
+                        </div>
+                        <div className="p-3">
+                          <div className="text-white/50 text-sm mb-2">from <span className="text-white/75 font-bold text-base">{lvFmtDollar(weeklyVol)}</span> <span className="text-white/40">weekly volume{hasInput?' (projected)':''}</span></div>
+                          <div className={`grid gap-2`} style={{gridTemplateColumns:`repeat(${breakdown.length},1fr)`}}>
+                            {breakdown.map((item,i)=>{
+                              const val=weeklyVol*(item.pct/100);
+                              return(
+                                <div key={i} className="bg-black/30 border border-white/8 rounded-lg px-2 py-2 text-center">
+                                  <div className="text-lg mb-0.5">{item.emoji}</div>
+                                  <div className="text-white/40 text-xs font-bold uppercase leading-tight mb-1">{item.name}</div>
+                                  <div className="font-bold text-xl text-white/85">{lvFmtDollar(val)}</div>
+                                  <div className="text-white/25 text-xs">{item.pct}%</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  };
+                  return(
+                    <div className="mb-8">
+                      <div className="flex items-center gap-4 mb-4 flex-wrap">
+                        <div className="font-orbitron font-bold text-xl text-white/80">💰 VALUE GENERATED</div>
+                        <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-lg p-1">
+                          {scenBtns.map(({key,label})=>{
+                            const active=vgScenario===key;
+                            const btnColor=key==='conservative'?'rgba(255,255,255,0.5)':key==='median'?'#D9CA5D':key==='strong'?'#facc15':'#4ade80';
+                            return(
+                              <button key={key} onClick={()=>setVgScenario(key)}
+                                className="px-3 py-1.5 rounded text-sm font-bold transition-all"
+                                style={active?{background:btnColor,color:'#000'}:{color:'rgba(255,255,255,0.35)'}}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {hasInput&&<span className="text-white/25 text-xs">using projected liquidity</span>}
+                        {completeWeeks.length<8&&(
+                          <span className="text-yellow-500/50 text-xs">⚠ Based on {completeWeeks.length} complete week{completeWeeks.length===1?'':'s'} — scenarios become more accurate with more history</span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {ptgcWS&&<TokenVG cfg={ptgcCfg} weeklyVol={ptgcWeeklyVol} totalGen={ptgcTotal} color="#D9CA5D" rgb="217,202,93"/>}
+                        {ufoWS&&<TokenVG cfg={ufoCfg} weeklyVol={ufoWeeklyVol} totalGen={ufoTotal} color="#7CFC00" rgb="124,252,0"/>}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <details className="group mb-8">
+                  <summary className="flex items-center gap-3 cursor-pointer list-none mb-3 select-none">
+                    <div className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                      <svg className="w-4 h-4 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="url(#lvGradStroke)" viewBox="0 0 24 24">
+                        <defs><linearGradient id="lvGradStroke" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#D9CA5D"/><stop offset="100%" stopColor="#7CFC00"/></linearGradient></defs>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                      </svg>
+                      <h3 className="font-orbitron text-base font-bold uppercase tracking-wider" style={{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Weekly History</h3>
+                    </div>
+                    <span className="text-white/20 text-xs">{completeWeeks.length} complete weeks · click to expand</span>
+                  </summary>
+                  <div>
+                    {['PTGC','UFO'].map(tok=>{const col=tok==='PTGC'?'#D9CA5D':'#7CFC00';const ws=tok==='PTGC'?ptgcWS:ufoWS;return(
+                      <div key={tok} className="mb-4 bg-[#111]/80 border border-white/10 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2"><span className="font-orbitron font-bold text-base" style={{color:col}}>{tok}</span><span className="text-white/30 text-sm">avg liq · weekly vol · weekly LVR</span></div>
+                        <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-white/5"><th className="text-left text-white/30 font-bold px-4 py-2 text-sm uppercase">Week of</th><th className="text-right text-white/30 font-bold px-4 py-2 text-sm uppercase">Avg Liquidity</th><th className="text-right text-white/30 font-bold px-4 py-2 text-sm uppercase">Weekly Volume</th><th className="text-right text-white/30 font-bold px-4 py-2 text-sm uppercase">Weekly LVR</th><th className="text-right text-white/30 font-bold px-4 py-2 text-sm uppercase">Days</th></tr></thead>
+                        <tbody>{weeks.map((w,i)=>{const d=w[tok];const isLast=i===weeks.length-1;const lvrColor=d.lvr>=(ws?.strong||0)?'text-green-400':d.lvr>=(ws?.median||0)?'text-yellow-400':'text-white/40';return(<tr key={w.wk} className={`border-b border-white/5 ${isLast?'bg-white/[0.02]':'hover:bg-white/[0.02]'}`}><td className="px-4 py-2.5"><span className="text-white/70 text-base font-bold">{fmtWeekLabel(w)}</span>{w.isPartial&&<span className="ml-2 text-white/25 text-sm">partial</span>}</td><td className="px-4 py-2.5 text-right text-white/50 text-base">{lvFmtDollar(d.liq)}</td><td className="px-4 py-2.5 text-right font-bold text-base" style={{color:col}}>{lvFmtDollar(d.vol)}</td><td className="px-4 py-2.5 text-right"><span className={`font-mono font-bold text-base ${lvrColor}`}>{d.lvr>0?d.lvr.toFixed(4):'—'}</span></td><td className="px-4 py-2.5 text-right text-white/30 text-sm">{w.days}</td></tr>);})}</tbody></table></div>
+                      </div>
+                    );})}
+                  </div>
+                </details>
+              </>
+            );
+          })()}
+
+          {/* Liquidity And Volume collapsible */}
+          <details className="group mb-6">
+            <summary className="flex items-center gap-3 cursor-pointer list-none mb-4 select-none">
+              <div className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                <svg className="w-4 h-4 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="url(#lvGradStroke2)" viewBox="0 0 24 24">
+                  <defs><linearGradient id="lvGradStroke2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#D9CA5D"/><stop offset="100%" stopColor="#7CFC00"/></linearGradient></defs>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                </svg>
+                <h3 className="font-orbitron text-base font-bold uppercase tracking-wider" style={{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Liquidity And Volume</h3>
+              </div>
+              <span className="text-white/20 text-xs">live pair data · click to expand</span>
+            </summary>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-2">
+              <TokenColumn token="PTGC" metrics={ptgcMetrics} color="#D9CA5D" rgb="217,202,93" logo="06_PTGC_V1_transparent_bg.png" periodVol={ptgcPeriodVol}/>
+              <TokenColumn token="UFO"  metrics={ufoMetrics}  color="#7CFC00" rgb="124,252,0"  logo="07_Ufo_transparent.png"         periodVol={ufoPeriodVol}/>
+            </div>
+          </details>
+
+          {/* LV Charts collapsible */}
+          <details className="group mb-6">
+            <summary className="flex items-center gap-3 cursor-pointer list-none mb-4 select-none">
+              <div className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                <svg className="w-4 h-4 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="url(#lvGradStroke3)" viewBox="0 0 24 24">
+                  <defs><linearGradient id="lvGradStroke3" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#D9CA5D"/><stop offset="100%" stopColor="#7CFC00"/></linearGradient></defs>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                </svg>
+                <h3 className="font-orbitron text-base font-bold uppercase tracking-wider" style={{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>LV Charts</h3>
+              </div>
+              <span className="text-white/20 text-xs">historical charts · click to expand</span>
+            </summary>
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-white/40 text-sm font-bold uppercase tracking-wider whitespace-nowrap">View Mode:</span>
+                <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-lg p-1">
+                  <button onClick={()=>setLiqMode('all')} className={`px-5 py-2 rounded-md text-sm font-bold transition-all ${liqMode==='all'?'bg-[#D9CA5D]/20 text-[#D9CA5D] border border-[#D9CA5D]/30':'text-white/30 hover:text-white/50'}`}>All Liquidity</button>
+                  <button onClick={()=>setLiqMode('cores')} className={`px-5 py-2 rounded-md text-sm font-bold transition-all ${liqMode==='cores'?'bg-orange-500/30 text-orange-300 border border-orange-500/40':'text-white/30 hover:text-white/50'}`}>RH Cores Only</button>
+                </div>
+                <span className="text-white/20 text-xs">{liqMode==='all'?'All pairs included':'Only RH Core pairs (WPLS, PLSX, HEX, INC, eHEX, PRVX)'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-white/40 text-sm font-bold uppercase tracking-wider">Timeframe:</span>
+                {[7,14,30,60,90].map(d=>(
+                  <button key={d} onClick={()=>setTimeframe(d)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all border ${timeframe!==d?'text-white/40 hover:text-white/60 bg-black/30 border-white/10 hover:border-white/20':'text-black border-transparent'}`} style={timeframe===d?{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)'}:{}}>{d}D</button>
+                ))}
+              </div>
+            </div>
+            {filteredDaily.length>=2?(
+              <div className="space-y-4">
+                {filteredDaily.length<timeframe&&<div className="flex items-center gap-2 px-1"><span className="text-yellow-500/60 text-sm">📡</span><span className="text-white/30 text-sm">Showing {filteredDaily.length} days — still gathering data for the full {timeframe}d window</span></div>}
+                <div className="bg-[#111]/80 border border-white/10 rounded-2xl p-5"><h3 className="text-white/50 text-base uppercase font-bold mb-4">Liquidity to Volume Ratio — PTGC & UFO ({liqMode==='cores'?'RH Cores':'All Liquidity'})</h3><div style={{height:'300px'}}><canvas ref={lvrChartRef}></canvas></div></div>
+                <div className="bg-[#111]/80 border border-white/10 rounded-2xl p-5"><h3 className="text-white/50 text-base uppercase font-bold mb-4">Volume & Liquidity — PTGC & UFO ({liqMode==='cores'?'RH Cores':'All Liquidity'})</h3><div style={{height:'300px'}}><canvas ref={volChartRef}></canvas></div></div>
+              </div>
+            ):(
+              <div className="bg-[#111]/80 border-2 border-white/20 rounded-2xl p-12 text-center">
+                <span className="text-4xl mb-4 block">📡</span>
+                <h3 className="font-orbitron font-bold text-white/60 text-xl mb-2">Collecting Data</h3>
+                <p className="text-white/40 text-base max-w-md mx-auto">Historical data is captured 4 times daily. Charts appear once there are at least 2 days of data. Live metrics above show today's snapshot.</p>
+              </div>
+            )}
+          </details>
+
+          <div className="mt-8 text-center py-4 border-t border-white/5">
+            <p className="text-white/30 text-sm">Data captured 4x daily (00:05, 06:05, 12:05, 18:05 UTC) • DexScreener API</p>
+            <p className="text-white/20 text-sm mt-1">Charts require 2+ days of historical data</p>
+          </div>
+
+          {/* Disclaimer */}
+          <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-5 mt-4 mb-6">
+            <div className="flex items-start gap-3">
+              <span className="text-yellow-500/60 text-lg mt-0.5">⚠️</span>
+              <div className="text-white/35 text-sm leading-relaxed">
+                <span className="text-yellow-500/60 font-bold uppercase text-sm">Disclaimer — Estimates Only</span>
+                <p className="mt-1.5">This tool provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. All projections are hypothetical and based on a limited historical dataset. They do <strong className="text-white/50">not</strong> constitute financial, investment, or legal advice of any kind.</p>
+                <p className="mt-1.5">LVR scenarios (Conservative, Median, Strong, Peak) are derived from <strong className="text-white/50">complete calendar weeks only</strong>. With fewer than 8 weeks of data, these percentiles are interpolated between a small number of real observations and should be treated as rough directional estimates, not statistically robust benchmarks. Accuracy improves significantly as more weekly data accumulates.</p>
+                <p className="mt-1.5">Volume and liquidity figures are sourced from DexScreener and captured 4× daily. <strong className="text-white/50">Past volume patterns do not guarantee future results.</strong> Real-world trading volume can drop or spike dramatically based on market sentiment, whale activity, broader crypto conditions, and many other factors entirely outside this model.</p>
+                <p className="mt-1.5">Value Generated projections assume constant fee rates and steady volume — neither of which is guaranteed. <strong className="text-white/50">Always do your own research (DYOR)</strong> and never make investment decisions based solely on projections from any calculator tool. The creators of this tool accept no responsibility or liability for any losses incurred.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     const CalculatorsTab=({token,cfg,data,burn,pls,theme,stakingData,volumeByPeriod,totalUFOShareRate,stakingPairs,onBack})=>{
       const[calcTab,setCalcTab]=useState('xmult');
       const isGold=cfg.color==='gold';
@@ -2645,6 +3199,20 @@
             </div>
             );
           })()}          
+          {/* ====== LV ANALYSER TAB ====== */}
+          {calcTab==='lv'&&(
+            <LVAnalyserTab />
+          )}
+
+          {/* Secret dot — hidden entry point for LV Analyser */}
+          {calcTab!=='lv'&&(
+            <button
+              onClick={()=>setCalcTab('lv')}
+              title=""
+              style={{position:'fixed',bottom:'18px',right:'18px',width:'8px',height:'8px',borderRadius:'50%',background:'rgba(255,255,255,0.10)',border:'none',cursor:'pointer',padding:0,zIndex:50}}
+            />
+          )}
+
           <div className="mt-10 text-center">
             <button onClick={onBack} className="px-6 py-2.5 rounded-lg border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all text-base">
               {'\u2190'} Back to Dashboard
