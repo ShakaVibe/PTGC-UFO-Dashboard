@@ -480,6 +480,9 @@
       const [liqMode, setLiqMode] = React.useState('all');
       const [volPeriod, setVolPeriod] = React.useState('d7');
       const [vgScenario, setVgScenario] = React.useState('median');
+      const [vgPeriod, setVgPeriod] = React.useState('7d');
+      const [showVGShareModal, setShowVGShareModal] = React.useState(false);
+      const [vgShareErr, setVgShareErr] = React.useState(false);
       const lvrChartRef = React.useRef(null);
       const lvrChartInst = React.useRef(null);
       const volChartRef = React.useRef(null);
@@ -755,11 +758,20 @@
                   const ptgcLiq=liveLiq(ptgcMetrics)||0, ufoLiq=liveLiq(ufoMetrics)||0;
                   const ptgcWeeklyVol=(hasInput?scenarioLiq(ptgcLiq):ptgcLiq)*(ptgcWS?.[vgScenario]||0);
                   const ufoWeeklyVol=(hasInput?scenarioLiq(ufoLiq):ufoLiq)*(ufoWS?.[vgScenario]||0);
-                  const ptgcTotal=ptgcWeeklyVol*ptgcCfg.taxRate;
-                  const ufoTotal=ufoWeeklyVol*ufoCfg.taxRate;
                   const WEEKS_PER_MONTH=4.33;
+                  // Period scaling — all internal math is weekly; scale for display
+                  const vgMult=vgPeriod==='24h'?1/7:vgPeriod==='30d'?WEEKS_PER_MONTH:1;
+                  const vgPeriodLabel=vgPeriod==='24h'?'Daily':vgPeriod==='30d'?'Monthly':'Weekly';
+                  const vgMainSuffix=vgPeriod==='24h'?'/Day':vgPeriod==='30d'?'/Month':'/Week';
+                  const vgSecLabel=vgPeriod==='7d'?'/mo':'/Week';
+                  const vgSecMult=vgPeriod==='24h'?7:vgPeriod==='30d'?1/WEEKS_PER_MONTH:WEEKS_PER_MONTH;
+                  const ptgcDisplayVol=ptgcWeeklyVol*vgMult;
+                  const ufoDisplayVol=ufoWeeklyVol*vgMult;
+                  const ptgcDisplayTotal=ptgcDisplayVol*ptgcCfg.taxRate;
+                  const ufoDisplayTotal=ufoDisplayVol*ufoCfg.taxRate;
                   const scenBtns=[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}];
-                  const TokenVG=({cfg,weeklyVol,totalGen,color,rgb})=>{
+                  const periodBtns=[{key:'24h',label:'24HR'},{key:'7d',label:'7D'},{key:'30d',label:'30D'}];
+                  const TokenVG=({cfg,displayVol,displayTotal,color,rgb})=>{
                     const breakdown=cfg.taxBreakdown;
                     const logo=cfg.name==='PTGC'?'06_PTGC_V1_transparent_bg.png':'07_Ufo_transparent.png';
                     return(
@@ -770,23 +782,27 @@
                           <span className="text-white/50 text-sm ml-1">{(cfg.taxRate*100)}% fee</span>
                           <div className="ml-auto text-right">
                             <div className="flex items-baseline gap-2 justify-end">
-                              <div className="font-bold text-3xl text-green-400">{lvFmtDollarFull(totalGen)}</div>
-                              <div className="text-green-400/50 text-sm font-bold">/Week</div>
+                              <div className="font-bold text-3xl text-green-400">{lvFmtDollarFull(displayTotal)}</div>
+                              <div className="text-green-400/50 text-sm font-bold">{vgMainSuffix}</div>
                             </div>
-                            <div className="text-green-400/60 text-base font-bold mt-0.5">{lvFmtDollarFull(totalGen*WEEKS_PER_MONTH)} <span className="text-green-400/35 text-sm font-normal">/mo</span></div>
+                            <div className="text-green-400/60 text-base font-bold mt-0.5">{lvFmtDollarFull(displayTotal*vgSecMult)} <span className="text-green-400/35 text-sm font-normal">{vgSecLabel}</span></div>
                           </div>
                         </div>
                         <div className="p-3">
-                          <div className="text-white/50 text-sm mb-2">from <span className="text-white/75 font-bold text-base">{lvFmtDollar(weeklyVol)}</span> <span className="text-white/40">weekly volume{hasInput?' (projected)':''}</span></div>
+                          <div className="text-white/50 text-sm mb-2">
+                            from <span className="text-white/75 font-bold text-base">{lvFmtDollar(displayVol)}</span>
+                            {' '}<span className="font-orbitron font-bold text-sm uppercase tracking-wider" style={{color}}>{vgPeriodLabel}</span>
+                            <span className="text-white/40"> volume{hasInput?' (projected)':''}</span>
+                          </div>
                           <div className={`grid gap-2`} style={{gridTemplateColumns:`repeat(${breakdown.length},1fr)`}}>
                             {breakdown.map((item,i)=>{
-                              const val=weeklyVol*(item.pct/100);
+                              const val=displayVol*(item.pct/100);
                               return(
                                 <div key={i} className="bg-black/30 border border-white/8 rounded-lg px-2 py-2 text-center">
                                   <div className="text-lg mb-0.5">{item.emoji}</div>
                                   <div className="text-white/40 text-xs font-bold uppercase leading-tight mb-1">{item.name}</div>
                                   <div className="font-bold text-xl text-white/85">{lvFmtDollar(val)}</div>
-                                  <div className="text-white/25 text-xs">{item.pct}%</div>
+                                  <div className="text-white/50 text-xs">{item.pct}%</div>
                                 </div>
                               );
                             })}
@@ -796,9 +812,10 @@
                     );
                   };
                   return(
+                    <>
                     <div className="mb-8">
                       <div className="flex items-center gap-4 mb-4 flex-wrap">
-                        <div className="font-orbitron font-bold text-xl text-white/80">💰 VALUE GENERATED</div>
+                        <div className="font-orbitron font-bold text-xl text-white/80">💰 VALUE GENERATED <span className="text-white/50" style={{fontSize:'0.55em',fontWeight:600}}>(Estimated)</span></div>
                         <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-lg p-1">
                           {scenBtns.map(({key,label})=>{
                             const active=vgScenario===key;
@@ -812,16 +829,178 @@
                             );
                           })}
                         </div>
-                        {hasInput&&<span className="text-white/25 text-xs">using projected liquidity</span>}
+                        <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-lg p-1">
+                          {periodBtns.map(({key,label})=>{
+                            const active=vgPeriod===key;
+                            return(
+                              <button key={key} onClick={()=>setVgPeriod(key)}
+                                className="px-3 py-1.5 rounded text-sm font-bold transition-all"
+                                style={active?{background:'linear-gradient(135deg,rgba(217,202,93,0.35),rgba(124,252,0,0.35))',border:'1px solid rgba(255,255,255,0.3)',color:'white',boxShadow:'0 0 8px rgba(217,202,93,0.15)'}:{color:'rgba(255,255,255,0.35)'}}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button onClick={()=>{if(!hasInput){setVgShareErr(true);return;}setVgShareErr(false);setShowVGShareModal(true);}} className="px-3 py-1.5 rounded-lg text-lg transition-all" style={{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.2)',color:'rgba(255,255,255,0.7)',lineHeight:1}} title="Share" onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.color='white'}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.color='rgba(255,255,255,0.7)'}}>📷</button>
+                        <span className="ml-auto"></span>
                         {completeWeeks.length<8&&(
-                          <span className="text-yellow-500/50 text-xs">⚠ Based on {completeWeeks.length} complete week{completeWeeks.length===1?'':'s'} — scenarios become more accurate with more history</span>
+                          <span className="text-yellow-500/70 text-xs">⚠ Based on {completeWeeks.length} complete week{completeWeeks.length===1?'':'s'} — scenarios become more accurate with more history</span>
                         )}
                       </div>
+                      {vgShareErr&&!hasInput&&(
+                        <div className="mb-3 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm font-bold">
+                          ⚠ To generate a share image, first enter a liquidity multiplier (X or %) in the <span className="text-white/70 font-bold">Liquidity Change</span> box above — this sets the projection scenario.
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {ptgcWS&&<TokenVG cfg={ptgcCfg} weeklyVol={ptgcWeeklyVol} totalGen={ptgcTotal} color="#D9CA5D" rgb="217,202,93"/>}
-                        {ufoWS&&<TokenVG cfg={ufoCfg} weeklyVol={ufoWeeklyVol} totalGen={ufoTotal} color="#7CFC00" rgb="124,252,0"/>}
+                        {ptgcWS&&<TokenVG cfg={ptgcCfg} displayVol={ptgcDisplayVol} displayTotal={ptgcDisplayTotal} color="#D9CA5D" rgb="217,202,93"/>}
+                        {ufoWS&&<TokenVG cfg={ufoCfg} displayVol={ufoDisplayVol} displayTotal={ufoDisplayTotal} color="#7CFC00" rgb="124,252,0"/>}
                       </div>
                     </div>
+
+                    {/* ===== VG SHARE MODAL ===== */}
+                    {showVGShareModal&&(()=>{
+                      const sc=Math.min(1,(window.innerWidth-40)/1200,(window.innerHeight-120)/720);
+                      return(
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black" onClick={()=>setShowVGShareModal(false)}>
+                        <div className="text-white/50 text-sm absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 px-4 py-2 rounded-lg z-10 whitespace-nowrap">Click anywhere to close · Screenshot to save</div>
+                        {/* Outer wrapper sized to SCALED dimensions so flex centering works */}
+                        <div style={{width:`${1200*sc}px`,height:`${720*sc}px`,position:'relative',flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                          <button onClick={()=>setShowVGShareModal(false)} className="text-white/60 hover:text-white text-xl font-bold" style={{position:'absolute',top:`${-40*sc}px`,right:0}}>✕ Close</button>
+                          <div style={{transform:`scale(${sc})`,transformOrigin:'top left',position:'absolute',top:0,left:0}}>
+
+                          {(()=>{
+                            const xNum=parseFloat(xInputVal)||0;
+                            const scenLabel=vgScenario.charAt(0).toUpperCase()+vgScenario.slice(1);
+                            const periodLabel=vgPeriod==='24h'?'Daily':vgPeriod==='7d'?'Weekly':'Monthly';
+                            const mainSuffix=vgPeriod==='24h'?'/Day':vgPeriod==='7d'?'/Week':'/Month';
+                            const secMult=vgPeriod==='24h'?7:vgPeriod==='30d'?(1/4.33):4.33;
+                            const secLabel=vgPeriod==='7d'?'/mo':'/Week';
+                            const xLabel=xNum>=1?xNum.toFixed(0)+'x Liquidity':'Liquidity Increase';
+                            const narrativeLine=`Applying ${scenLabel.toLowerCase()} historical L/V ratios to a ${xLabel.toLowerCase()} scenario — here's the ${periodLabel.toLowerCase()} fee revenue our ecosystem could generate.`;
+                            const OB="'Orbitron',monospace";
+                            const RJ="'Rajdhani',sans-serif";
+                            const pCoreLiq=ptgcMetrics?.coreLiquidity||0;
+                            const pAllLiq=ptgcMetrics?.totalLiquidity||0;
+                            const pCoreProj=scenarioLiq(pCoreLiq);
+                            const pAllProj=scenarioLiq(pAllLiq);
+                            const pCurrentVol=ptgcLiq*(ptgcWS?.[vgScenario]||0)*vgMult;
+                            const pLVR=ptgcWS?.[vgScenario]||0;
+                            const uCoreLiq=ufoMetrics?.coreLiquidity||0;
+                            const uAllLiq=ufoMetrics?.totalLiquidity||0;
+                            const uCoreProj=scenarioLiq(uCoreLiq);
+                            const uAllProj=scenarioLiq(uAllLiq);
+                            const uCurrentVol=ufoLiq*(ufoWS?.[vgScenario]||0)*vgMult;
+                            const uLVR=ufoWS?.[vgScenario]||0;
+                            const MRow=({label,before,after,col,rgb,isLVR,lvrLabel})=>(
+                              <div style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.18)`,borderRadius:'7px',padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                <span style={{fontFamily:OB,fontSize:'10.5px',color:'rgba(255,255,255,0.38)',fontWeight:700,textTransform:'uppercase',letterSpacing:'1px'}}>{label}</span>
+                                {isLVR?(<span style={{fontFamily:RJ,fontSize:'19px',fontWeight:800,color:col}}>{lvrLabel} · {before}</span>):(
+                                  <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                                    <span style={{fontFamily:RJ,fontSize:'18px',fontWeight:700,color:'rgba(255,255,255,0.42)'}}>{before}</span>
+                                    <span style={{color:col,fontWeight:900,fontSize:'16px'}}>→</span>
+                                    <span style={{fontFamily:RJ,fontSize:'21px',fontWeight:800,color:col}}>{after}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                            const FeeCard=({cfg2,col,rgb,projVol,displayTotal,logo})=>{
+                              const bd=cfg2.taxBreakdown;
+                              return(
+                                <div style={{borderRadius:'12px',overflow:'hidden',border:`2px solid rgba(${rgb},0.35)`,background:'#0a0a0a'}}>
+                                  <div style={{padding:'12px 16px',borderBottom:`1px solid rgba(${rgb},0.15)`,background:`rgba(${rgb},0.08)`,display:'flex',alignItems:'center',gap:'12px'}}>
+                                    <img src={logo} alt={cfg2.name} style={{width:'56px',height:'56px',flexShrink:0,filter:`drop-shadow(0 0 10px rgba(${rgb},0.8))`}}/>
+                                    <span style={{fontFamily:OB,fontWeight:700,fontSize:'30px',color:col}}>{cfg2.name}</span>
+                                    <span style={{fontSize:'14px',color:'rgba(255,255,255,0.5)',marginLeft:'4px'}}>{cfg2.taxRate*100}% fee</span>
+                                    <div style={{marginLeft:'auto',textAlign:'right'}}>
+                                      <div style={{display:'flex',alignItems:'baseline',gap:'8px',justifyContent:'flex-end'}}>
+                                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'30px',color:'#4ade80'}}>{lvFmtDollarFull(displayTotal)}</span>
+                                        <span style={{fontSize:'14px',color:'rgba(74,222,128,0.5)',fontWeight:700}}>{mainSuffix}</span>
+                                      </div>
+                                      <div style={{fontFamily:RJ,fontSize:'16px',color:'rgba(74,222,128,0.6)',fontWeight:700}}>{lvFmtDollarFull(displayTotal*secMult)} <span style={{fontWeight:400,color:'rgba(74,222,128,0.35)',fontSize:'14px'}}>{secLabel}</span></div>
+                                    </div>
+                                  </div>
+                                  <div style={{padding:'12px'}}>
+                                    <div style={{fontSize:'14px',color:'rgba(255,255,255,0.5)',marginBottom:'8px'}}>
+                                      from{' '}<span style={{color:'rgba(255,255,255,0.75)',fontWeight:700,fontSize:'16px'}}>{lvFmtDollar(projVol)}</span>
+                                      {' '}<span style={{fontFamily:OB,fontWeight:700,fontSize:'14px',color:col,letterSpacing:'1px'}}>{periodLabel.toUpperCase()}</span>
+                                      <span style={{color:'rgba(255,255,255,0.4)'}}> volume (projected)</span>
+                                    </div>
+                                    <div style={{display:'grid',gridTemplateColumns:`repeat(${bd.length},1fr)`,gap:'8px'}}>
+                                      {bd.map((item,i)=>{
+                                        const val=projVol*(item.pct/100);
+                                        return(
+                                          <div key={i} style={{background:'#0d0d0d',border:'2px solid rgba(255,255,255,0.7)',borderRadius:'8px',padding:'8px',textAlign:'center'}}>
+                                            <div style={{fontSize:'18px',marginBottom:'2px'}}>{item.emoji}</div>
+                                            <div style={{fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',lineHeight:1.2,marginBottom:'4px'}}>{item.name}</div>
+                                            <div style={{fontFamily:RJ,fontWeight:700,fontSize:'20px',color:'rgba(255,255,255,0.85)'}}>{lvFmtDollar(val)}</div>
+                                            <div style={{fontSize:'10px',color:'rgba(255,255,255,0.5)',marginTop:'2px'}}>{item.pct}%</div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            };
+                            return(
+                              <div id="vg-share-card" style={{
+                                width:'1200px',height:'720px',
+                                background:'radial-gradient(ellipse at 20% 0%, rgba(217,202,93,0.2) 0%, transparent 50%), radial-gradient(ellipse at 80% 0%, rgba(124,252,0,0.2) 0%, transparent 50%), linear-gradient(180deg,#0e0e0e 0%,#080808 100%)',
+                                fontFamily:RJ,overflow:'hidden',border:'2px solid rgba(255,255,255,0.1)',borderRadius:'16px',
+                                display:'flex',flexDirection:'column',padding:'20px 26px',boxSizing:'border-box',position:'relative'
+                              }}>
+                                <div style={{position:'absolute',left:'50%',top:'5%',width:'1px',height:'90%',background:'linear-gradient(180deg,transparent,rgba(255,255,255,0.07) 30%,rgba(255,255,255,0.07) 70%,transparent)',transform:'translateX(-50%)',pointerEvents:'none'}}></div>
+                                {/* TITLE */}
+                                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px',flexShrink:0}}>
+                                  <span style={{fontFamily:OB,fontWeight:900,fontSize:'18px',color:'rgba(255,255,255,0.9)',letterSpacing:'2px'}}>🔮 LIQUIDITY IMPACT ON VOLUME</span>
+                                  <span style={{fontSize:'13px',color:'rgba(255,255,255,0.35)'}}>{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                                </div>
+                                {/* NARRATIVE + X BADGE */}
+                                <div style={{marginBottom:'12px',flexShrink:0,padding:'10px 14px',background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:'7px',display:'flex',alignItems:'center',gap:'12px'}}>
+                                  <p style={{margin:0,flex:1,fontSize:'17px',color:'white',lineHeight:1.45,fontWeight:700}}>{narrativeLine}</p>
+                                  <div style={{flexShrink:0,padding:'7px 16px',borderRadius:'8px',background:'linear-gradient(135deg,#D9CA5D,#7CFC00)',boxShadow:'0 0 20px rgba(217,202,93,0.4), 0 0 40px rgba(124,252,0,0.2)',whiteSpace:'nowrap'}}>
+                                    <span style={{fontFamily:OB,fontWeight:900,fontSize:'20px',color:'#000',letterSpacing:'1px'}}>{xNum>=1?xNum.toFixed(0)+'x':''} Liquidity</span>
+                                  </div>
+                                </div>
+                                {/* FEE CARDS — hero section */}
+                                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'12px',flexShrink:0}}>
+                                  {ptgcWS&&<FeeCard cfg2={ptgcCfg} col="#D9CA5D" rgb="217,202,93" projVol={ptgcDisplayVol} displayTotal={ptgcDisplayTotal} logo="06_PTGC_V1_transparent_bg.png"/>}
+                                  {ufoWS&&<FeeCard cfg2={ufoCfg} col="#7CFC00" rgb="124,252,0" projVol={ufoDisplayVol} displayTotal={ufoDisplayTotal} logo="07_Ufo_transparent.png"/>}
+                                </div>
+                                {/* SUPPORTING DATA DIVIDER */}
+                                <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px',flexShrink:0}}>
+                                  <span style={{fontFamily:OB,fontWeight:900,fontSize:'13px',color:'rgba(255,255,255,0.55)',letterSpacing:'2px'}}>📊 LIQUIDITY & VOLUME IMPACT</span>
+                                  <div style={{flex:1,height:'1px',background:'rgba(255,255,255,0.1)'}}></div>
+                                </div>
+                                {/* METRIC BOXES */}
+                                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',flexShrink:0}}>
+                                  <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                                    <MRow label="RH Core Liquidity" before={lvFmtDollar(pCoreLiq)} after={lvFmtDollar(pCoreProj)} col="#D9CA5D" rgb="217,202,93"/>
+                                    <MRow label="All Liquidity" before={lvFmtDollar(pAllLiq)} after={lvFmtDollar(pAllProj)} col="rgba(217,202,93,0.7)" rgb="217,202,93"/>
+                                    <MRow label={`${periodLabel} Volume`} before={lvFmtDollar(pCurrentVol)} after={lvFmtDollar(ptgcDisplayVol)} col="#4ade80" rgb="74,222,128"/>
+                                    <MRow label="PTGC L/V Ratio" before={pLVR.toFixed(4)} col="#D9CA5D" rgb="217,202,93" isLVR={true} lvrLabel={scenLabel}/>
+                                  </div>
+                                  <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                                    <MRow label="RH Core Liquidity" before={lvFmtDollar(uCoreLiq)} after={lvFmtDollar(uCoreProj)} col="#7CFC00" rgb="124,252,0"/>
+                                    <MRow label="All Liquidity" before={lvFmtDollar(uAllLiq)} after={lvFmtDollar(uAllProj)} col="rgba(124,252,0,0.7)" rgb="124,252,0"/>
+                                    <MRow label={`${periodLabel} Volume`} before={lvFmtDollar(uCurrentVol)} after={lvFmtDollar(ufoDisplayVol)} col="#4ade80" rgb="74,222,128"/>
+                                    <MRow label="UFO L/V Ratio" before={uLVR.toFixed(4)} col="#7CFC00" rgb="124,252,0" isLVR={true} lvrLabel={scenLabel}/>
+                                  </div>
+                                </div>
+                                {/* DISCLAIMER — pinned to bottom */}
+                                <div style={{position:'absolute',bottom:'11px',left:'26px',right:'26px',textAlign:'center'}}>
+                                  <span style={{fontSize:'11px',color:'rgba(255,255,255,0.5)',letterSpacing:'0.3px'}}>Estimated projections only · Not financial advice · Past L/V ratios do not guarantee future results · ptgc-ufo.com</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          </div>
+                        </div>
+                      </div>
+                      );
+                    })()}
+                    </>
                   );
                 })()}
 
