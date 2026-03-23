@@ -487,25 +487,25 @@
       if(!holderHistoryCacheNew?.snapshots || holderHistoryCacheNew.snapshots.length < 2) return null;
       
       const snapshots = holderHistoryCacheNew.snapshots;
-      const now = Date.now();
-      const targetTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
       
       // Get the NEWEST snapshot (not live data - to keep sources consistent)
       const newest = snapshots[snapshots.length - 1];
       const newestTime = new Date(newest.timestamp).getTime();
+      const newestDate = newest.timestamp.slice(0, 10); // "YYYY-MM-DD"
       
-      // Find the snapshot closest to 24 hours before the newest snapshot
+      // Find the snapshot closest to 24 hours before the newest snapshot,
+      // but must be on a different calendar date (prevents same-day comparisons)
       const target24hAgo = newestTime - (24 * 60 * 60 * 1000);
       let pastSnapshot = null;
       let closestDiff = Infinity;
       
       for (const snap of snapshots) {
+        const snapDate = snap.timestamp.slice(0, 10);
+        if (snapDate === newestDate) continue; // skip same-day snapshots
         const snapTime = new Date(snap.timestamp).getTime();
-        // Must be older than newest by at least 12 hours
-        if (snapTime >= newestTime - (12 * 60 * 60 * 1000)) continue;
-        
+        if (snapTime >= newestTime) continue; // must be older
         const diff = Math.abs(snapTime - target24hAgo);
-        if (diff < closestDiff) {
+        if (diff < closestDiff && snap[token] > 0) {
           closestDiff = diff;
           pastSnapshot = snap;
         }
