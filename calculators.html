@@ -1650,17 +1650,27 @@
           {/* Calculator Nav - glass/glow style like Buy button */}
           <div className="flex justify-center mb-10">
             <div className="inline-flex gap-2">
-              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'}].map(b=>{
+              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact',isNew:true}].map(b=>{
                 const active=calcTab===b.id;
                 return(
                   <button key={b.id} onClick={()=>setCalcTab(b.id)} className="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110" style={{
                     padding:'10px 24px',
-                    background:active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:'rgba(255,255,255,0.03)',
-                    border:active?`1px solid ${glowColor}0.6)`:'1px solid rgba(255,255,255,0.08)',
-                    boxShadow:active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:'none',
-                    color:active?'white':'rgba(255,255,255,0.35)'
+                    background:active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:b.isNew?'rgba(124,252,0,0.06)':'rgba(255,255,255,0.03)',
+                    border:active?`1px solid ${glowColor}0.6)`:b.isNew?'1px solid rgba(124,252,0,0.25)':'1px solid rgba(255,255,255,0.08)',
+                    boxShadow:active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:b.isNew?'0 0 14px rgba(124,252,0,0.08)':'none',
+                    color:active?'white':b.isNew?'rgba(124,252,0,0.7)':'rgba(255,255,255,0.35)'
                   }}>
                     {b.label}
+                    {b.isNew&&!active&&(
+                      <span style={{
+                        position:'absolute',top:'-1px',right:'-1px',
+                        background:'linear-gradient(135deg,#7CFC00,#4ade80)',
+                        color:'#000',fontSize:'9px',fontWeight:900,
+                        padding:'2px 6px',borderRadius:'0 10px 0 6px',
+                        letterSpacing:'0.08em',lineHeight:1.4,
+                        fontFamily:"'Orbitron',monospace"
+                      }}>NEW</span>
+                    )}
                   </button>
                 );
               })}
@@ -3383,14 +3393,7 @@
             <LVAnalyserTab />
           )}
 
-          {/* Secret dot — hidden entry point for LV Analyser */}
-          {calcTab!=='lv'&&(
-            <button
-              onClick={()=>setCalcTab('lv')}
-              title=""
-              style={{position:'fixed',bottom:'18px',right:'18px',width:'8px',height:'8px',borderRadius:'50%',background:'rgba(255,255,255,0.10)',border:'none',cursor:'pointer',padding:0,zIndex:50}}
-            />
-          )}
+
 
           <div className="mt-10 text-center">
             <button onClick={onBack} className="px-6 py-2.5 rounded-lg border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all text-base">
