@@ -2,12 +2,18 @@ name: Fetch CoinGecko Data
 
 on:
   schedule:
-    # Run every hour (fetch takes ~2-3 min now, hourly gives plenty of breathing room)
+    # Run every hour
     - cron: '0 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 permissions:
   contents: write
+
+# KEY FIX: Prevent concurrent runs from overlapping and sharing the API key simultaneously.
+# If a new run is triggered while one is already running, the new one waits.
+concurrency:
+  group: fetch-coingecko-data
+  cancel-in-progress: false
 
 jobs:
   fetch-data:
