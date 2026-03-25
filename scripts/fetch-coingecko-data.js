@@ -388,12 +388,46 @@ async function main() {
   // Fetch RH Core price changes
   const rhCoreData = await fetchRHCorePriceChanges();
 
-  // Append snapshots
-  liquidityHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.liquidity, UFO: tokenData.UFO.liquidity });
-  transactionHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.transactions, UFO: tokenData.UFO.transactions });
+  // ─── SAFETY VALIDATION ────────────────────────────────────────────────────
+  // If either token came back with 0 pools and $0 liquidity, the CoinGecko
+  // calls failed (likely rate limited). Do NOT save corrupted data — exit
+  // cleanly so existing history files stay untouched.
+  const ptgcValid = tokenData.PTGC.poolCount > 0 || tokenData.PTGC.liquidity > 0;
+  const ufoValid  = tokenData.UFO.poolCount  > 0 || tokenData.UFO.liquidity  > 0;
 
-  if (tokenData.PTGC.tokensInLP !== null || tokenData.UFO.tokensInLP !== null) {
-    tokensInLPHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.tokensInLP, UFO: tokenData.UFO.tokensInLP });
+  if (!ptgcValid && !ufoValid) {
+    console.error('\n⛔ VALIDATION FAILED: Both PTGC and UFO returned 0 pools and $0 liquidity.');
+    console.error('   This indicates CoinGecko API calls failed (rate limited or quota exhausted).');
+    console.error('   Skipping all file saves to protect existing data. Will retry next run.');
+    process.exit(1);
+  }
+
+  if (!ptgcValid) {
+    console.warn('\n⚠ WARNING: PTGC returned 0 pools / $0 liquidity — skipping PTGC data, keeping previous.');
+  }
+  if (!ufoValid) {
+    console.warn('\n⚠ WARNING: UFO returned 0 pools / $0 liquidity — skipping UFO data, keeping previous.');
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Append snapshots — only if data is valid
+  if (ptgcValid && ufoValid) {
+    liquidityHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.liquidity, UFO: tokenData.UFO.liquidity });
+    transactionHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.transactions, UFO: tokenData.UFO.transactions });
+  } else if (ptgcValid) {
+    liquidityHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.liquidity });
+    transactionHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.transactions });
+  } else if (ufoValid) {
+    liquidityHistory.snapshots.push({ timestamp, UFO: tokenData.UFO.liquidity });
+    transactionHistory.snapshots.push({ timestamp, UFO: tokenData.UFO.transactions });
+  }
+
+  if ((ptgcValid && tokenData.PTGC.tokensInLP !== null) || (ufoValid && tokenData.UFO.tokensInLP !== null)) {
+    tokensInLPHistory.snapshots.push({
+      timestamp,
+      ...(ptgcValid && tokenData.PTGC.tokensInLP !== null ? { PTGC: tokenData.PTGC.tokensInLP } : {}),
+      ...(ufoValid  && tokenData.UFO.tokensInLP  !== null ? { UFO:  tokenData.UFO.tokensInLP  } : {})
+    });
   }
 
   // Trim to last 500 snapshots
