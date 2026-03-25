@@ -25,9 +25,9 @@ const CONFIG = {
   baseUrl:       'https://pro-api.coingecko.com/api/v3',
   network:       'pulsechain',
   outputDir:     './data',
-  cgDelay:       1200,   // ms before every CoinGecko call (proactive rate-limit prevention)
+  cgDelay:       2000,   // ms before every CoinGecko call (proactive rate-limit prevention)
   freeDelay:     500,    // ms before free API calls
-  retries:       2,      // max retries on failure
+  retries:       3,      // max retries on failure
   rateLimitWait: 30000,  // ms to wait if a 429 still occurs
 
   tokens: {
