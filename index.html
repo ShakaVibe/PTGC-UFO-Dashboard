@@ -5247,19 +5247,20 @@
               {icon:'0️⃣',label:'To 3 Zeros',x:calcPX(0.001)},
               {img:pennyImg,label:'To a Penny',x:calcPX(0.01)},
             ];
+            const fmtLiq=(v)=>{if(!v)return'—';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(0)+'K';return'$'+Math.floor(v);};
             const cats=[
-              {label:'PRICE',catCol:'#4ade80',tiles:priceTiles},
-              {label:'MARKET CAP',catCol:'#fb923c',tiles:[
+              {label:'PRICE',catCol:'#4ade80',currentEl:()=><PriceEl p={price} style={{fontFamily:RJ,fontSize:'24px',fontWeight:700,color:'rgba(255,255,255,0.85)'}}/>,tiles:priceTiles},
+              {label:'MARKET CAP',catCol:'#fb923c',currentEl:()=><span style={{fontFamily:RJ,fontSize:'24px',fontWeight:700,color:'rgba(255,255,255,0.85)'}}>{fmtMC(mcap)}</span>,tiles:[
                 {icon:'📊',label:'$25 Million',x:calcMCX(25e6)},
                 {icon:'💎',label:'$100 Million',x:calcMCX(100e6)},
                 {icon:'🚀',label:'$1 Billion',x:calcMCX(1e9)},
               ]},
-              {label:'LIQUIDITY',catCol:'#60A5FA',tiles:[
+              {label:'LIQUIDITY',catCol:'#60A5FA',currentEl:()=><span style={{fontFamily:RJ,fontSize:'24px',fontWeight:700,color:'rgba(255,255,255,0.85)'}}>{fmtLiq(liq)}</span>,tiles:[
                 {icon:'💧',label:'$10 Million',x:calcLX(10e6)},
                 {icon:'🌊',label:'$25 Million',x:calcLX(25e6)},
                 {icon:'🏦',label:'$100 Million',x:calcLX(100e6)},
               ]},
-              {label:'HOLDERS',catCol:'#a78bfa',tiles:[
+              {label:'HOLDERS',catCol:'#a78bfa',currentEl:()=><span style={{fontFamily:RJ,fontSize:'24px',fontWeight:700,color:'rgba(255,255,255,0.85)'}}>{fmt(holders)||'—'}</span>,tiles:[
                 {icon:'👥',label:'15 Thousand',x:calcHX(15000)},
                 {icon:'🏙️',label:'20 Thousand',x:calcHX(20000)},
                 {icon:'🌍',label:'25 Thousand',x:calcHX(25000)},
@@ -5283,15 +5284,15 @@
                             <img src={cfg.logo} alt={token} style={{width:'58px',height:'58px'}}/>
                           </div>
                           {/* Name + TARGETS label + address */}
-                          <div style={{flexShrink:0,marginRight:'28px'}}>
+                          <div style={{flexShrink:0,marginRight:'0px'}}>
                             <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
                               <div style={{fontFamily:OB,fontSize:'36px',fontWeight:900,color:col,lineHeight:1,textShadow:`0 0 20px rgba(${rgb},0.6)`}}>{token}</div>
                               <div style={{fontFamily:OB,fontSize:'23px',fontWeight:700,color:col,letterSpacing:'3px',textTransform:'uppercase',lineHeight:1}}>🎯 TARGETS</div>
                             </div>
                             <div style={{fontFamily:'monospace',fontSize:'11px',color:'rgba(255,255,255,0.28)',marginTop:'4px'}}>{cfg.address.slice(0,8)}...{cfg.address.slice(-4)}</div>
                           </div>
-                          {/* Divider */}
-                          <div style={{width:'1px',height:'44px',background:'rgba(255,255,255,0.12)',marginRight:'28px',flexShrink:0}}/>
+                          {/* Spacer pushes stats to the right */}
+                          <div style={{flex:1}}/>
                           {/* Price + change */}
                           <div style={{flexShrink:0,marginRight:'28px'}}>
                             <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
@@ -5299,11 +5300,6 @@
                               <span style={{fontFamily:RJ,fontSize:'19px',fontWeight:700,color:priceUp?'#4ade80':'#f87171'}}>{priceUp?'▲':'▼'}{Math.abs(data?.change||0).toFixed(2)}%</span>
                             </div>
                             <div style={{fontFamily:RJ,fontSize:'12px',color:'#ffffff',marginTop:'2px'}}>Price (24H)</div>
-                          </div>
-                          {/* Market Cap */}
-                          <div style={{flexShrink:0,marginRight:'28px'}}>
-                            <div style={{fontFamily:RJ,fontSize:'26px',fontWeight:700,color:col}}>{fmtMC(mcap)}</div>
-                            <div style={{fontFamily:RJ,fontSize:'12px',color:'#ffffff',marginTop:'2px'}}>Market Cap</div>
                           </div>
                           {/* Divider */}
                           <div style={{width:'1px',height:'44px',background:'rgba(255,255,255,0.12)',marginRight:'28px',flexShrink:0}}/>
@@ -5315,12 +5311,12 @@
                           {/* Divider between PLS and Holders */}
                           <div style={{width:'1px',height:'44px',background:'rgba(255,255,255,0.12)',marginRight:'28px',flexShrink:0}}/>
                           {/* Holders */}
-                          <div style={{flexShrink:0}}>
+                          <div style={{flexShrink:0,marginRight:'28px'}}>
                             <div style={{fontFamily:RJ,fontSize:'26px',fontWeight:700,color:col}}>{fmt(holders)||'—'}</div>
                             <div style={{fontFamily:RJ,fontSize:'12px',color:'#ffffff',marginTop:'2px'}}>Holders</div>
                           </div>
-                          {/* Spacer */}
-                          <div style={{flex:1}}/>
+                          {/* Divider before date */}
+                          <div style={{width:'1px',height:'44px',background:'rgba(255,255,255,0.12)',marginRight:'28px',flexShrink:0}}/>
                           {/* Date + site */}
                           <div style={{textAlign:'right',flexShrink:0}}>
                             <div style={{fontFamily:RJ,fontSize:'13px',color:'rgba(255,255,255,0.35)'}}>{today}</div>
@@ -5330,25 +5326,28 @@
 
                         {/* BODY — 4 category columns */}
                         <div style={{flex:1,padding:'12px 14px',background:'rgba(0,0,0,0.5)',display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}>
-                          {cats.map(({label,catCol,tiles},ci)=>(
+                          {cats.map(({label,catCol,currentEl,tiles},ci)=>(
                             <div key={ci} style={{display:'flex',flexDirection:'column',gap:'7px'}}>
                               {/* Category header */}
-                              <div style={{fontFamily:OB,fontSize:'15px',fontWeight:900,color:catCol,textTransform:'uppercase',letterSpacing:'1.5px',textAlign:'center',paddingBottom:'4px',borderBottom:`2px solid ${catCol}44`}}>{label}</div>
+                              <div style={{textAlign:'center',paddingBottom:'6px',borderBottom:`2px solid ${catCol}44`}}>
+                                <div style={{fontFamily:OB,fontSize:'15px',fontWeight:900,color:catCol,textTransform:'uppercase',letterSpacing:'1.5px',lineHeight:1,marginBottom:'5px'}}>{label}</div>
+                                <div style={{lineHeight:1,fontSize:'24px',fontWeight:700}}>{currentEl()}</div>
+                              </div>
                               {/* 3 stacked tiles */}
                               {tiles.map(({icon,img,label:tl,x},ti)=>{
                                 const done=!x;
                                 const xStr=done?null:fmtX(x);
-                                const vfs=xStr?xStr.length>=6?'30px':xStr.length>=4?'38px':'48px':'22px';
+                                const vfs=xStr?xStr.length>=6?'28px':xStr.length>=4?'34px':'44px':'20px';
                                 return(
-                                  <div key={ti} style={{flex:1,position:'relative',background:'rgba(0,0,0,0.4)',border:`2px solid ${catCol}55`,borderRadius:'10px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 6px',overflow:'hidden',boxShadow:`0 0 10px ${catCol}18`}}>
+                                  <div key={ti} style={{flex:1,position:'relative',background:'rgba(0,0,0,0.4)',border:`2px solid ${catCol}55`,borderRadius:'10px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'6px 6px',overflow:'hidden',boxShadow:`0 0 10px ${catCol}18`}}>
                                     {img?(
-                                      <img src={img} alt={tl} style={{width:'42px',height:'42px',borderRadius:'50%',objectFit:'cover',marginBottom:'5px'}}/>
+                                      <img src={img} alt={tl} style={{width:'34px',height:'34px',borderRadius:'50%',objectFit:'cover',marginBottom:'3px'}}/>
                                     ):(
-                                      <div style={{fontSize:'28px',lineHeight:1,marginBottom:'4px'}}>{icon}</div>
+                                      <div style={{fontSize:'24px',lineHeight:1,marginBottom:'2px'}}>{icon}</div>
                                     )}
-                                    <div style={{fontFamily:OB,fontSize:'14px',fontWeight:700,color:catCol,textTransform:'uppercase',letterSpacing:'0.5px',textAlign:'center',marginBottom:'5px',lineHeight:1.2}}>{tl}</div>
+                                    <div style={{fontFamily:OB,fontSize:'13px',fontWeight:700,color:catCol,textTransform:'uppercase',letterSpacing:'0.5px',textAlign:'center',marginBottom:'3px',lineHeight:1.2}}>{tl}</div>
                                     {done?(
-                                      <div style={{fontFamily:RJ,fontSize:'20px',fontWeight:700,color:'rgba(255,255,255,0.3)',lineHeight:1,textAlign:'center'}}>✓</div>
+                                      <div style={{fontFamily:RJ,fontSize:'18px',fontWeight:700,color:'rgba(255,255,255,0.3)',lineHeight:1,textAlign:'center'}}>✓</div>
                                     ):(
                                       <div style={{fontFamily:RJ,fontSize:vfs,fontWeight:700,color:col,lineHeight:1,textAlign:'center'}}>{xStr}</div>
                                     )}
