@@ -523,11 +523,25 @@
       return null;
     };
     
+    const UFO_PTGC_BURNS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/ufo-ptgc-burns.json';
+
     const fetchBurnHistory=async()=>{
       if(burnHistoryCache&&(Date.now()-burnHistoryCacheTime)<BURN_CACHE_TTL)return burnHistoryCache;
       try{
-        const r=await fetch(BURN_HISTORY_URL+'?t='+Date.now());
+        const [r,r2]=await Promise.all([
+          fetch(BURN_HISTORY_URL+'?t='+Date.now()),
+          fetch(UFO_PTGC_BURNS_URL+'?t='+Date.now())
+        ]);
         burnHistoryCache=await r.json();
+        try{
+          const ufoPtgcData=await r2.json();
+          if(ufoPtgcData?.PTGCbyUFO){
+            burnHistoryCache.PTGCbyUFO=ufoPtgcData.PTGCbyUFO;
+            console.log('PTGCbyUFO loaded from ufo-ptgc-burns.json, last updated:',ufoPtgcData.lastUpdated);
+          }
+        }catch(e2){
+          console.warn('Could not load ufo-ptgc-burns.json, using fallback:',e2);
+        }
         burnHistoryCacheTime=Date.now();
         console.log('Burn history loaded, last updated:',burnHistoryCache.lastUpdated);
         return burnHistoryCache;
