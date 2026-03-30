@@ -5541,10 +5541,18 @@
                       </div>
                       <div style={{textAlign:'right'}}>
                         <div style={{fontSize:'13px',color:'rgba(255,255,255,0.55)'}}>{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
-                        {holdersShareData&&<>
-                          <div className="text-white font-extrabold" style={{fontSize:'34px',lineHeight:'1',marginTop:'1px'}}>{fmt((holdersShareData.PTGC?.holders||0)+(holdersShareData.UFO?.holders||0))}</div>
-                          <div style={{fontSize:'11px',color:'rgba(255,255,255,0.55)'}}>combined holders</div>
-                        </>}
+                        {holdersShareData&&(()=>{
+                          const ptgcGrowth=(holdersShareData.PTGC?.holders||0)-(holdersShareData.PTGC?.periods?.d30Ago||holdersShareData.PTGC?.holders||0);
+                          const ufoGrowth=(holdersShareData.UFO?.holders||0)-(holdersShareData.UFO?.periods?.d30Ago||holdersShareData.UFO?.holders||0);
+                          const total30dGrowth=ptgcGrowth+ufoGrowth;
+                          const hasData=holdersShareData.PTGC?.periods?.d30Ago&&holdersShareData.UFO?.periods?.d30Ago;
+                          return hasData?(
+                            <>
+                              <div className="font-extrabold" style={{fontSize:'34px',lineHeight:'1',marginTop:'1px',color:total30dGrowth>=0?'#4ade80':'#f87171'}}>{total30dGrowth>=0?'+':''}{fmt(total30dGrowth)}</div>
+                              <div style={{fontSize:'11px',color:'rgba(255,255,255,0.55)'}}>new holders (30D)</div>
+                            </>
+                          ):null;
+                        })()}
                       </div>
                     </div>
 
