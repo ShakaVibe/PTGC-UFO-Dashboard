@@ -179,6 +179,8 @@
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
+    const WETH_ADDRESS='0x02dcdD04e3F455D838cd1249292C58f3B79e3C3C'.toLowerCase();
+    const ETH_LOGO='data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI1MCIgZmlsbD0iIzYyN0VFQSIvPjxwb2x5Z29uIHBvaW50cz0iNTAsMTIgMjcsNTIgNTAsNDMiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMSkiLz48cG9seWdvbiBwb2ludHM9IjUwLDEyIDczLDUyIDUwLDQzIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjI3LDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjczLDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMikiLz48cG9seWdvbiBwb2ludHM9IjUwLDYwIDI3LDU2IDUwLDg4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDEpIi8+PHBvbHlnb24gcG9pbnRzPSI1MCw2MCA3Myw1NiA1MCw4OCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjYpIi8+PC9zdmc+';
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     // Get highest tier creature with count for period burns
@@ -1740,7 +1742,7 @@
       return(
         <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 hover:border-opacity-60`}>
           <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
-            <div className="col-span-1 flex justify-center">{!logoErr&&logo?<img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center font-bold">{other?.symbol?.[0]}</div>}</div>
+            <div className="col-span-1 flex justify-center">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} className="w-10 h-10 rounded-full"/>:(!logoErr&&logo?<img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center font-bold">{other?.symbol?.[0]}</div>)}</div>
             <div className="col-span-2"><div className={`font-semibold ${theme.text}`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div><div className="text-gray-500 text-sm">{pair.dexId ? pair.dexId.charAt(0).toUpperCase() + pair.dexId.slice(1) : 'PulseX'}{pair.labels?.length > 0 ? ` ${pair.labels[0]}` : ''}</div></div>
             <div className="col-span-2 text-right"><div className="text-white text-xs">Volume</div><div className="text-white font-semibold">{fmtUSD(vol)}</div></div>
             <div className="col-span-2 text-right"><div className="text-white text-xs">Liquidity</div><div className="text-white">{fmtUSD(liq)}</div></div>
@@ -1750,7 +1752,7 @@
             <div className="col-span-2 flex justify-end gap-2"><button onClick={()=>setDet(!det)} className="text-lg hover:scale-110">{'\u2139\uFE0F'}</button><a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">{'\u{1F4C8}'}</a><a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" className="text-lg hover:scale-110">{'\u{1F4CA}'}</a></div>
           </div>
           <div className="sm:hidden">
-            <div className="flex items-center gap-3 mb-2">{!logoErr&&logo?<img src={logo} className="w-8 h-8 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up?'text-green-400':'text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
+            <div className="flex items-center gap-3 mb-2">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} className="w-8 h-8 rounded-full"/>:(!logoErr&&logo?<img src={logo} className="w-8 h-8 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>)}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up?'text-green-400':'text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
             <div className="grid grid-cols-4 gap-2 text-center text-xs"><div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div><div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div><div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div><div><div className="text-gray-400">V/L</div><div className="text-white">{ratio}</div></div></div>
           </div>
           {det&&(
@@ -3981,7 +3983,7 @@
                       return(
                         <div key={pair.pairAddress||i} className={`${theme.card} border ${theme.border} rounded-lg p-3`}>
                           <div className="flex items-center gap-3">
-                            <img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={e=>e.target.style.display='none'}/>
+                            {other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} className="w-10 h-10 rounded-full"/>:<img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={e=>e.target.style.display='none'}/>}
                             <div className="flex-1">
                               <div className={`font-semibold ${theme.text}`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div>
                               <div className="text-gray-500 text-xs">{pair.rhCore} pair</div>
