@@ -52,6 +52,7 @@ const KNOWN_ROUTERS = {
 };
 
 const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
+const PULSESCAN_BASE = 'https://api.scan.pulsechain.com/api';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
@@ -79,6 +80,31 @@ async function moralisRequest(endpoint, params = {}) {
     return await response.json();
   } catch (error) {
     console.log(`  API Error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Make PulseScan API request (no auth required — it's the public chain explorer)
+ */
+async function pulsescanRequest(params = {}) {
+  const url = new URL(PULSESCAN_BASE);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+  });
+  
+  try {
+    const response = await fetch(url.toString(), {
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.log(`  PulseScan Error: ${error.message}`);
     return null;
   }
 }
@@ -221,103 +247,95 @@ async function fetchWalletTransactions(walletAddress, walletName, existingTxns =
 }
 
 /**
- * Fetch all token transfers for a wallet using Moralis
+ * Fetch all token transfers for a wallet via PulseScan API.
  *
- * NOTE: We intentionally do a FULL fetch here (no from_block) rather than
- * incremental. Moralis's /erc20/transfers endpoint has been observed to
- * silently return empty results for high from_block values on PulseChain,
- * causing the cursor to stick indefinitely. A full fetch of ~1200 historical
- * transfers is ~12 paginated calls — cheap, reliable, and self-healing.
- * The existing-data merge at the end preserves any entries Moralis may have
- * dropped in previous fetches.
+ * Why PulseScan instead of Moralis: as of April 2026, Moralis's /erc20/transfers
+ * endpoint has stopped reliably indexing PulseChain Transfer events — the newest
+ * data Moralis returns for our wallets is months old. PulseScan is PulseChain's
+ * canonical block explorer and returns every Transfer event authoritatively.
+ *
+ * Normal transaction fetching (above) still uses Moralis since that endpoint
+ * remains current.
  */
 async function fetchWalletTokenTransfers(walletAddress, walletName, existingTransfers = []) {
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`Fetching ${walletName} token transfers via Moralis...`);
+  console.log(`Fetching ${walletName} token transfers via PulseScan...`);
   console.log(`Wallet: ${walletAddress}`);
   console.log(`${'='.repeat(50)}`);
   
-  console.log(`Full fetch mode (incremental disabled for tokens — see script comment)`);
+  console.log(`Data source: PulseScan API (Moralis ERC20 indexing is behind by months)`);
   console.log(`Existing entries loaded from disk: ${existingTransfers.length}`);
   
   const newTransfers = [];
-  let cursor = null;
-  let page = 0;
+  let page = 1;
+  const pageSize = 10000; // PulseScan allows up to 10k per page
   
   while (true) {
-    // Moralis endpoint for wallet token transfers.
-    // Deliberately NOT passing from_block — we rely on dedupe for efficiency
-    // and on full pagination for correctness.
-    const params = {
-      chain: CHAIN,
-      cursor: cursor,
-      limit: 100,
-      order: 'DESC',        // newest first, so we see recent data early in logs
-      disable_total: 'true' // performance: skip total count calculation
-    };
-    
-    const data = await moralisRequest(`/${walletAddress}/erc20/transfers`, params);
+    const data = await pulsescanRequest({
+      module: 'account',
+      action: 'tokentx',
+      address: walletAddress,
+      startblock: 0,
+      endblock: 99999999,
+      sort: 'desc',
+      page: page,
+      offset: pageSize
+    });
     
     if (!data) {
-      console.log(`  Page ${page + 1}: API error, retrying in 5s...`);
+      console.log(`  Page ${page}: request failed, retrying in 5s...`);
       await delay(5000);
       continue;
     }
     
-    if (!data.result || data.result.length === 0) {
-      console.log(`  No more data after page ${page + 1}`);
+    // PulseScan returns { status, message, result } — result is array on success,
+    // or a string message like "No transactions found" when empty.
+    if (!Array.isArray(data.result) || data.result.length === 0) {
+      console.log(`  Page ${page}: no more data (${data.message || 'empty'})`);
       break;
     }
     
     for (const tx of data.result) {
-      // Get token info from known tokens or use what Moralis provides
-      const tokenAddr = tx.address?.toLowerCase() || '';
+      const tokenAddr = (tx.contractAddress || '').toLowerCase();
       const knownToken = KNOWN_TOKENS[tokenAddr];
       
-      // Convert Moralis format to PulseScan-compatible format
       const formattedTx = {
-        hash: tx.transaction_hash,
-        blockNumber: tx.block_number,
-        timeStamp: Math.floor(new Date(tx.block_timestamp).getTime() / 1000).toString(),
-        from: tx.from_address,
-        to: tx.to_address,
+        hash: tx.hash,
+        blockNumber: tx.blockNumber,
+        timeStamp: tx.timeStamp,
+        from: (tx.from || '').toLowerCase(),
+        to: (tx.to || '').toLowerCase(),
         value: tx.value || '0',
-        contractAddress: tx.address,
-        tokenName: knownToken?.name || tx.token_name || '',
-        tokenSymbol: knownToken?.symbol || tx.token_symbol || '',
-        tokenDecimal: (knownToken?.decimals || tx.token_decimals || 18).toString(),
-        // Moralis-specific
-        possible_spam: tx.possible_spam || false,
-        verified_contract: tx.verified_contract || false
+        contractAddress: tx.contractAddress,
+        tokenName: knownToken?.name || tx.tokenName || '',
+        tokenSymbol: knownToken?.symbol || tx.tokenSymbol || '',
+        tokenDecimal: (knownToken?.decimals || tx.tokenDecimal || 18).toString(),
+        possible_spam: false,      // PulseScan doesn't flag spam
+        verified_contract: false    // Not provided by PulseScan
       };
       
       newTransfers.push(formattedTx);
     }
     
-    // Log progress with newest block in this page
-    if (page % 10 === 0 || page < 5) {
-      const newest = data.result[0];
-      const newestBlock = newest?.block_number || '?';
-      const newestDate = newest?.block_timestamp ? new Date(newest.block_timestamp).toISOString().slice(0, 10) : '?';
-      console.log(`  Page ${page + 1}: ${newTransfers.length} total fetched (newest on page: block ${newestBlock}, ${newestDate})`);
-    }
+    const newest = data.result[0];
+    const newestBlock = newest?.blockNumber || '?';
+    const newestDate = newest?.timeStamp 
+      ? new Date(Number(newest.timeStamp) * 1000).toISOString().slice(0, 10) 
+      : '?';
+    console.log(`  Page ${page}: ${newTransfers.length} total fetched (newest on page: block ${newestBlock}, ${newestDate})`);
     
-    // Check for next page
-    cursor = data.cursor;
-    if (!cursor) {
-      break;
-    }
+    // Got less than a full page → we've reached the end
+    if (data.result.length < pageSize) break;
     
     page++;
-    await delay(200); // Gentle rate limiting
+    await delay(300); // Gentle rate limiting for PulseScan
   }
   
-  console.log(`Fetched ${newTransfers.length} total token transfers from Moralis`);
+  console.log(`Fetched ${newTransfers.length} total token transfers from PulseScan`);
   console.log(`Existing local entries: ${existingTransfers.length}`);
   
-  // Merge: new-first (authoritative), then existing entries that weren't in the new fetch.
-  // This preserves any historical data Moralis may have stopped returning, while taking
-  // the latest values for anything that IS in the fresh fetch.
+  // Merge: new first (authoritative), then existing entries not in new fetch.
+  // Preserves any data PulseScan might somehow drop; normally new covers everything.
   const getKey = (tx) => `${tx.hash}-${tx.contractAddress}-${tx.from}-${tx.to}-${tx.value}`;
   const seenKeys = new Set();
   const allTransfers = [];
@@ -340,14 +358,13 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
     }
   }
   
-  // Sort by timestamp descending (newest first)
   allTransfers.sort((a, b) => Number(b.timeStamp) - Number(a.timeStamp));
   
-  // Sanity check: warn loudly if it looks like the fetch missed recent activity
+  // Sanity check: warn loudly if fetch missed recent activity
   const newestTs = allTransfers.length > 0 ? Number(allTransfers[0].timeStamp) : 0;
   const ageHours = (Date.now() / 1000 - newestTs) / 3600;
   if (ageHours > 48 && allTransfers.length > 0) {
-    console.log(`  ⚠️  WARNING: newest token transfer is ${ageHours.toFixed(1)}h old — Moralis may be missing recent data for this wallet`);
+    console.log(`  ⚠️  WARNING: newest token transfer is ${ageHours.toFixed(1)}h old — PulseScan may have an indexing issue`);
   }
   
   console.log(`Merge result: ${allTransfers.length} total (${preservedCount} preserved from existing, not in fresh fetch)`);
