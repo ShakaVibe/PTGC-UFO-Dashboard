@@ -680,8 +680,17 @@
               ];
             }
           } 
-          // 6. LP ADD (backup detection via LP token received or multiple tokens out)
-          else if (lpTokenReceived || tokensOut.length >= 2) {
+          // 6. LP ADD (backup detection via LP token received or multiple DISTINCT tokens out)
+          // Note: we check unique contract addresses, not transfer count — a multi-leg
+          // swap sends the same token in multiple transfers and must not be misread as LP add.
+          else if (lpTokenReceived || (
+            new Set(
+              tokensOut
+                .filter(t => !isLPToken(t) && t.to?.toLowerCase() !== DEAD_ADDRESS)
+                .map(t => (t.contractAddress || '').toLowerCase())
+                .filter(Boolean)
+            ).size >= 2
+          )) {
             type = 'lp_add';
             icon = '💧';
             
