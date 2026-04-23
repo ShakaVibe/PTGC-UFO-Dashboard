@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "Fetch Treasury Transactions"
+      - "Fetch UFO PTGC Burns"
+      - "Fetch CoinGecko Data"
+      - "Update Burn and Holder History"
+      - "Update Metrics History"
+      - "LV Snapshot"
+    types: [completed]
 
 permissions:
   contents: read
@@ -16,6 +25,9 @@ concurrency:
 
 jobs:
   deploy:
+    # When triggered by workflow_run, only deploy if the upstream fetch succeeded.
+    # For push / workflow_dispatch triggers, this condition passes trivially.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -23,15 +35,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
-      
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
-      
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
