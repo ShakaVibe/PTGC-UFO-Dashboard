@@ -82,6 +82,25 @@
       '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
     };
     
+    // Extract the output token of a V3-style multicall by looking for
+    // `sweepToken(token, amountMin, recipient)` or `unwrapWETH9(amountMin, recipient)`
+    // inside the transaction input data. Returns { symbol, addr, decimals } or null.
+    const extractMulticallOutput = (inputData) => {
+      if (!inputData) return null;
+      const clean = inputData.toLowerCase().replace(/^0x/, '');
+      // unwrapWETH9 (selector 49404b7c) means the output was unwrapped to native PLS
+      if (clean.includes('49404b7c')) {
+        return { symbol: 'PLS', addr: null, decimals: 18 };
+      }
+      // sweepToken (df2ab5bb) + 32-byte token address (12 zero bytes + 20 byte addr)
+      const match = clean.match(/df2ab5bb0{24}([0-9a-f]{40})/);
+      if (!match) return null;
+      const addr = '0x' + match[1];
+      const known = KNOWN_TOKENS[addr];
+      if (known) return { symbol: known.symbol, addr, decimals: known.decimals };
+      return { symbol: addr.slice(0, 6) + '...' + addr.slice(-4), addr, decimals: 18 };
+    };
+    
     // Data file paths
     const DATA_BASE_URL = 'data/';
     
@@ -745,49 +764,63 @@
               details = [{ label: 'Sent', value: `${fmtAbbr(value)} PLS` }];
             }
           } else if (isMulticallFn && value > 0) {
-            // MULTICALL with PLS value: almost certainly a swap where the output
-            // was unwrapped to PLS via internal tx, or forwarded elsewhere.
-            // (The value>0 + tokensIn>0 case is already handled above.)
+            // MULTICALL with PLS value: swap from PLS. Try to extract the output
+            // token from the multicall's inner sweepToken / unwrapWETH9 call.
             type = 'swap';
             icon = '🔄';
             amount = value;
             amountSymbol = 'PLS';
-            const routerName = KNOWN_ROUTERS[toAddr] || 'DEX router';
-            description = `Swapped ${fmtAbbr(value)} PLS via ${routerName}`;
-            details = [
-              { label: 'Sent', value: `${fmtAbbr(value)} PLS` },
-              { label: 'Via', value: routerName }
-            ];
+            const out = extractMulticallOutput(tx.input);
+            if (out) {
+              description = `Swapped ${fmtAbbr(value)} PLS → ${out.symbol}`;
+              details = [
+                { label: 'Sent', value: `${fmtAbbr(value)} PLS` },
+                { label: 'Received', value: out.symbol }
+              ];
+            } else {
+              description = `Swapped ${fmtAbbr(value)} PLS`;
+              details = [
+                { label: 'Sent', value: `${fmtAbbr(value)} PLS` }
+              ];
+            }
           } else if (isMulticallFn && tokensOut.length > 0) {
-            // MULTICALL with token out but no detected token in:
-            // likely a token→PLS swap where output was unwrapped via internal tx.
+            // MULTICALL with a token sent out: token-based swap.
             type = 'swap';
             icon = '🔄';
             const outToken = tokensOut[0];
             const outAddr = outToken.contractAddress?.toLowerCase() || '';
-            const outSym = outToken.tokenSymbol || KNOWN_TOKENS[outAddr]?.symbol || 'Token';
-            const outDec = Number(outToken.tokenDecimal) || KNOWN_TOKENS[outAddr]?.decimals || 18;
-            const outAmt = Number(outToken.value) / Math.pow(10, outDec);
-            amount = outAmt;
-            amountSymbol = outSym;
-            const routerName = KNOWN_ROUTERS[toAddr] || 'DEX router';
-            description = `Swapped ${fmtAbbr(outAmt)} ${outSym} via ${routerName}`;
-            details = [
-              { label: 'Sent', value: `${fmtAbbr(outAmt)} ${outSym}` },
-              { label: 'Via', value: routerName }
-            ];
+            const inSym = outToken.tokenSymbol || KNOWN_TOKENS[outAddr]?.symbol || 'Token';
+            const inDec = Number(outToken.tokenDecimal) || KNOWN_TOKENS[outAddr]?.decimals || 18;
+            const inAmt = Number(outToken.value) / Math.pow(10, inDec);
+            amount = inAmt;
+            amountSymbol = inSym;
+            const out = extractMulticallOutput(tx.input);
+            if (out && out.symbol !== inSym) {
+              description = `Swapped ${fmtAbbr(inAmt)} ${inSym} → ${out.symbol}`;
+              details = [
+                { label: 'Sent', value: `${fmtAbbr(inAmt)} ${inSym}` },
+                { label: 'Received', value: out.symbol }
+              ];
+            } else {
+              description = `Swapped ${fmtAbbr(inAmt)} ${inSym}`;
+              details = [
+                { label: 'Sent', value: `${fmtAbbr(inAmt)} ${inSym}` }
+              ];
+            }
           } else if (isMulticallFn) {
-            // MULTICALL with nothing detectable (val=0, no token movements in/out of our wallet):
-            // likely a fee collection, position modification, or bundled approval.
-            // Show as a neutral router interaction — honest about not knowing, but
-            // better than exposing raw 'multicall(uint256,bytes[])' to the user.
-            type = 'transfer';
-            icon = '📝';
-            const routerName = KNOWN_ROUTERS[toAddr] || 'DEX router';
-            description = `Router interaction (${routerName})`;
+            // MULTICALL with no PLS and no visible token movement from our wallet.
+            // Try to at least identify the output — if we can, show it as a swap
+            // with an unknown input. If we can't identify anything, skip entirely
+            // (these are typically bundled approvals, fee collection, or complex
+            // internal prep that would just clutter the ledger).
+            const out = extractMulticallOutput(tx.input);
+            if (!out) return;
+            type = 'swap';
+            icon = '🔄';
+            amountSymbol = out.symbol;
+            description = `Swapped → ${out.symbol}`;
             details = [
-              { label: 'Router', value: routerName },
-              { label: 'Contract', value: `${toAddr.slice(0, 6)}...${toAddr.slice(-4)}`, fullValue: toAddr }
+              { label: 'Received', value: out.symbol }
             ];
           } else if (tokensOut.length > 0) {
             type = 'transfer';
