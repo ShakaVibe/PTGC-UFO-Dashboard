@@ -53,6 +53,7 @@
       '0x57fde0a71132198bbec939b98976993d8d89d225': { symbol: 'EHEX', name: 'eHEX', decimals: 8 },
       '0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b': { symbol: 'USDC', name: 'USD Coin', decimals: 6 },
       '0xefaeee334f0fd1712f9a8cc375f427d9cdd40d73': { symbol: 'USDT', name: 'Tether', decimals: 6 },
+      '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07': { symbol: 'USDC', name: 'USD Coin (bridged)', decimals: 6 },
       '0x6b175474e89094c44da98b954eedeac495271d0f': { symbol: 'DAI', name: 'DAI', decimals: 18 },
       '0x39207d2e2feef178fbda8083914554c59d9f8c00': { symbol: 'UNITY', name: 'Unity', decimals: 18 },
     };
@@ -82,23 +83,58 @@
       '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
     };
     
-    // Extract the output token of a V3-style multicall by looking for
-    // `sweepToken(token, amountMin, recipient)` or `unwrapWETH9(amountMin, recipient)`
-    // inside the transaction input data. Returns { symbol, addr, decimals } or null.
+    // Extract the output token of a V3-style multicall by looking for (in priority):
+    //   1. `unwrapWETH9` — output is native PLS
+    //   2. `sweepToken(token, ...)` — output is the token argument
+    //   3. Last known-token address referenced in the input (handles path-based swaps
+    //      like WPLS→HEX→PTGC where the output is the final hop)
+    // Returns { symbol, addr, decimals } or null.
     const extractMulticallOutput = (inputData) => {
       if (!inputData) return null;
       const clean = inputData.toLowerCase().replace(/^0x/, '');
-      // unwrapWETH9 (selector 49404b7c) means the output was unwrapped to native PLS
       if (clean.includes('49404b7c')) {
         return { symbol: 'PLS', addr: null, decimals: 18 };
       }
-      // sweepToken (df2ab5bb) + 32-byte token address (12 zero bytes + 20 byte addr)
-      const match = clean.match(/df2ab5bb0{24}([0-9a-f]{40})/);
-      if (!match) return null;
-      const addr = '0x' + match[1];
-      const known = KNOWN_TOKENS[addr];
-      if (known) return { symbol: known.symbol, addr, decimals: known.decimals };
-      return { symbol: addr.slice(0, 6) + '...' + addr.slice(-4), addr, decimals: 18 };
+      const sweep = clean.match(/df2ab5bb0{24}([0-9a-f]{40})/);
+      if (sweep) {
+        const addr = '0x' + sweep[1];
+        const k = KNOWN_TOKENS[addr];
+        if (k) return { symbol: k.symbol, addr, decimals: k.decimals };
+        return { symbol: addr.slice(0,6)+'...'+addr.slice(-4), addr, decimals: 18 };
+      }
+      // Path-scan fallback: find the LAST known-token address, 32-byte-aligned
+      // (12 zero bytes + 20 byte address). Excludes WPLS if any non-WPLS match
+      // exists, since WPLS is almost always the input for PLS-funded swaps.
+      let lastPos = -1, lastMatch = null;
+      let lastWplsPos = -1, lastWplsMatch = null;
+      for (const [addr, meta] of Object.entries(KNOWN_TOKENS)) {
+        const pat = '0'.repeat(24) + addr.slice(2);
+        let from = 0, pos = -1;
+        while (true) {
+          const f = clean.indexOf(pat, from);
+          if (f < 0) break;
+          if (f % 64 === 0) pos = f;  // aligned to 32-byte word boundary
+          from = f + 1;
+        }
+        if (pos < 0) continue;
+        const entry = { symbol: meta.symbol, addr, decimals: meta.decimals };
+        if (meta.symbol === 'WPLS') {
+          if (pos > lastWplsPos) { lastWplsPos = pos; lastWplsMatch = entry; }
+        } else {
+          if (pos > lastPos) { lastPos = pos; lastMatch = entry; }
+        }
+      }
+      return lastMatch || lastWplsMatch;
+    };
+    
+    // Decode a direct ERC20 transfer(address,uint256) call input.
+    // Returns { recipient, amount } (amount as BigInt) or null.
+    const decodeDirectTransfer = (inputData) => {
+      if (!inputData) return null;
+      const clean = inputData.toLowerCase().replace(/^0x/, '');
+      const m = clean.match(/^a9059cbb0{24}([0-9a-f]{40})([0-9a-f]{64})/);
+      if (!m) return null;
+      return { recipient: '0x' + m[1], amount: BigInt('0x' + m[2]) };
     };
     
     // Data file paths
@@ -469,8 +505,42 @@
             return;
           }
           
+          // Direct ERC20 transfer() call: our wallet called TOKEN.transfer(to, amt).
+          // Decode straight from input bytes — doesn't depend on token-transfer file.
+          // Handles PTGC burns (to dead address) and plain token sends uniformly.
+          const directTx = (selector === 'a9059cbb') ? decodeDirectTransfer(tx.input) : null;
+          if (directTx) {
+            const tokenAddr = toAddr;
+            const known = KNOWN_TOKENS[tokenAddr];
+            const sym = known?.symbol || (tokenAddr.slice(0, 6) + '...' + tokenAddr.slice(-4));
+            const dec = known?.decimals || 18;
+            const amt = Number(directTx.amount) / Math.pow(10, dec);
+            const recip = directTx.recipient.toLowerCase();
+            
+            if (recip === DEAD_ADDRESS) {
+              type = 'burn';
+              icon = '🔥';
+              amount = amt;
+              amountSymbol = sym;
+              description = `Burned ${fmtAbbr(amt)} ${sym}`;
+              details = [
+                { label: 'Amount', value: `${fmtAbbr(amt)} ${sym}` },
+                { label: 'To', value: '🔥 Dead Address' }
+              ];
+            } else {
+              type = 'transfer';
+              icon = '📤';
+              amount = amt;
+              amountSymbol = sym;
+              description = `Sent ${fmtAbbr(amt)} ${sym}`;
+              details = [
+                { label: 'Amount', value: `${fmtAbbr(amt)} ${sym}` },
+                { label: 'To', value: `${recip.slice(0, 6)}...${recip.slice(-4)}`, fullValue: recip }
+              ];
+            }
+          }
           // 1. LP ADD (by function selector - highest priority)
-          if (isAddLiquidityFn) {
+          else if (isAddLiquidityFn) {
             type = 'lp_add';
             icon = '💧';
             
