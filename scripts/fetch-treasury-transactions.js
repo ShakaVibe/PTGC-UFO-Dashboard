@@ -222,6 +222,14 @@ async function fetchWalletTransactions(walletAddress, walletName, existingTxns =
 
 /**
  * Fetch all token transfers for a wallet using Moralis
+ *
+ * NOTE: We intentionally do a FULL fetch here (no from_block) rather than
+ * incremental. Moralis's /erc20/transfers endpoint has been observed to
+ * silently return empty results for high from_block values on PulseChain,
+ * causing the cursor to stick indefinitely. A full fetch of ~1200 historical
+ * transfers is ~12 paginated calls — cheap, reliable, and self-healing.
+ * The existing-data merge at the end preserves any entries Moralis may have
+ * dropped in previous fetches.
  */
 async function fetchWalletTokenTransfers(walletAddress, walletName, existingTransfers = []) {
   console.log(`\n${'='.repeat(50)}`);
@@ -229,33 +237,24 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
   console.log(`Wallet: ${walletAddress}`);
   console.log(`${'='.repeat(50)}`);
   
-  // Get the most recent block we have (for incremental updates)
-  const lastBlock = existingTransfers.length > 0 
-    ? Math.max(...existingTransfers.map(tx => Number(tx.blockNumber) || 0))
-    : 0;
-  
-  if (lastBlock) {
-    console.log(`Incremental mode: fetching after block ${lastBlock}`);
-  } else {
-    console.log('Full fetch mode: getting all historical token transfers');
-  }
+  console.log(`Full fetch mode (incremental disabled for tokens — see script comment)`);
+  console.log(`Existing entries loaded from disk: ${existingTransfers.length}`);
   
   const newTransfers = [];
   let cursor = null;
   let page = 0;
   
   while (true) {
-    // Moralis endpoint for wallet token transfers
+    // Moralis endpoint for wallet token transfers.
+    // Deliberately NOT passing from_block — we rely on dedupe for efficiency
+    // and on full pagination for correctness.
     const params = {
       chain: CHAIN,
       cursor: cursor,
-      limit: 100
+      limit: 100,
+      order: 'DESC',        // newest first, so we see recent data early in logs
+      disable_total: 'true' // performance: skip total count calculation
     };
-    
-    // Only set from_block for incremental updates
-    if (lastBlock > 0) {
-      params.from_block = lastBlock + 1;
-    }
     
     const data = await moralisRequest(`/${walletAddress}/erc20/transfers`, params);
     
@@ -295,9 +294,12 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
       newTransfers.push(formattedTx);
     }
     
-    // Log progress
+    // Log progress with newest block in this page
     if (page % 10 === 0 || page < 5) {
-      console.log(`  Page ${page + 1}: ${newTransfers.length} new token transfers collected`);
+      const newest = data.result[0];
+      const newestBlock = newest?.block_number || '?';
+      const newestDate = newest?.block_timestamp ? new Date(newest.block_timestamp).toISOString().slice(0, 10) : '?';
+      console.log(`  Page ${page + 1}: ${newTransfers.length} total fetched (newest on page: block ${newestBlock}, ${newestDate})`);
     }
     
     // Check for next page
@@ -310,10 +312,12 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
     await delay(200); // Gentle rate limiting
   }
   
-  console.log(`Fetched ${newTransfers.length} new token transfers for ${walletName}`);
-  console.log(`Existing token transfers: ${existingTransfers.length}`);
+  console.log(`Fetched ${newTransfers.length} total token transfers from Moralis`);
+  console.log(`Existing local entries: ${existingTransfers.length}`);
   
-  // Merge with existing (dedupe by hash + contractAddress + from + to + value to handle multiple transfers per tx)
+  // Merge: new-first (authoritative), then existing entries that weren't in the new fetch.
+  // This preserves any historical data Moralis may have stopped returning, while taking
+  // the latest values for anything that IS in the fresh fetch.
   const getKey = (tx) => `${tx.hash}-${tx.contractAddress}-${tx.from}-${tx.to}-${tx.value}`;
   const seenKeys = new Set();
   const allTransfers = [];
@@ -326,18 +330,27 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
     }
   }
   
+  let preservedCount = 0;
   for (const tx of existingTransfers) {
     const key = getKey(tx);
     if (!seenKeys.has(key)) {
       seenKeys.add(key);
       allTransfers.push(tx);
+      preservedCount++;
     }
   }
   
   // Sort by timestamp descending (newest first)
   allTransfers.sort((a, b) => Number(b.timeStamp) - Number(a.timeStamp));
   
-  console.log(`Total token transfers after merge: ${allTransfers.length}`);
+  // Sanity check: warn loudly if it looks like the fetch missed recent activity
+  const newestTs = allTransfers.length > 0 ? Number(allTransfers[0].timeStamp) : 0;
+  const ageHours = (Date.now() / 1000 - newestTs) / 3600;
+  if (ageHours > 48 && allTransfers.length > 0) {
+    console.log(`  ⚠️  WARNING: newest token transfer is ${ageHours.toFixed(1)}h old — Moralis may be missing recent data for this wallet`);
+  }
+  
+  console.log(`Merge result: ${allTransfers.length} total (${preservedCount} preserved from existing, not in fresh fetch)`);
   
   return allTransfers;
 }
