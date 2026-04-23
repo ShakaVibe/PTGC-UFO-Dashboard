@@ -78,6 +78,7 @@
     const KNOWN_ROUTERS = {
       '0x165c3410fc91b0e65d87e89d8bcadd85c9e6dbf1': 'PulseX V1 Router',
       '0x98bf93ebf5c380c0e6ae8e192a7e2ae08edacc3a': 'PulseX V2 Router',
+      '0xda9aba4eacf54e0273f56dffee6b8f1e20b23bba': 'PulseX V3 Router',
       '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
     };
     
@@ -368,6 +369,7 @@
             '5c11d795': 'swapExactTokensForTokensSupportingFeeOnTransferTokens',
             'b6f9de95': 'swapExactETHForTokensSupportingFeeOnTransferTokens',
             '791ac947': 'swapExactTokensForETHSupportingFeeOnTransferTokens',
+            '5ae401dc': 'multicall',
             'baa2abde': 'removeLiquidity',
             '02751cec': 'removeLiquidityETH',
             'af2979eb': 'removeLiquidityETHSupportingFeeOnTransferTokens',
@@ -387,6 +389,7 @@
           const isRemoveLiquidityFn = fnName.includes('removeliquidity') || selector.startsWith('baa2abde') || selector.startsWith('02751cec');
           const isApproveFn = fnName.includes('approve') || selector === '095ea7b3';
           const isSwapFn = fnName.includes('swap') || ['38ed1739', '7ff36ab5', '18cbafe5', '8803dbee', 'fb3bdb41', '4a25d94a', '5c11d795', 'b6f9de95', '791ac947'].includes(selector);
+          const isMulticallFn = selector === '5ae401dc' || fnName.startsWith('multicall');
           
           // Debug: Log potential LP transactions
           if (tokensOut.length >= 2 || tokensIn.length >= 2 || isAddLiquidityFn || lpTokenReceived) {
@@ -741,6 +744,51 @@
               description = `Swapped ${fmtAbbr(value)} PLS`;
               details = [{ label: 'Sent', value: `${fmtAbbr(value)} PLS` }];
             }
+          } else if (isMulticallFn && value > 0) {
+            // MULTICALL with PLS value: almost certainly a swap where the output
+            // was unwrapped to PLS via internal tx, or forwarded elsewhere.
+            // (The value>0 + tokensIn>0 case is already handled above.)
+            type = 'swap';
+            icon = '🔄';
+            amount = value;
+            amountSymbol = 'PLS';
+            const routerName = KNOWN_ROUTERS[toAddr] || 'DEX router';
+            description = `Swapped ${fmtAbbr(value)} PLS via ${routerName}`;
+            details = [
+              { label: 'Sent', value: `${fmtAbbr(value)} PLS` },
+              { label: 'Via', value: routerName }
+            ];
+          } else if (isMulticallFn && tokensOut.length > 0) {
+            // MULTICALL with token out but no detected token in:
+            // likely a token→PLS swap where output was unwrapped via internal tx.
+            type = 'swap';
+            icon = '🔄';
+            const outToken = tokensOut[0];
+            const outAddr = outToken.contractAddress?.toLowerCase() || '';
+            const outSym = outToken.tokenSymbol || KNOWN_TOKENS[outAddr]?.symbol || 'Token';
+            const outDec = Number(outToken.tokenDecimal) || KNOWN_TOKENS[outAddr]?.decimals || 18;
+            const outAmt = Number(outToken.value) / Math.pow(10, outDec);
+            amount = outAmt;
+            amountSymbol = outSym;
+            const routerName = KNOWN_ROUTERS[toAddr] || 'DEX router';
+            description = `Swapped ${fmtAbbr(outAmt)} ${outSym} via ${routerName}`;
+            details = [
+              { label: 'Sent', value: `${fmtAbbr(outAmt)} ${outSym}` },
+              { label: 'Via', value: routerName }
+            ];
+          } else if (isMulticallFn) {
+            // MULTICALL with nothing detectable (val=0, no token movements in/out of our wallet):
+            // likely a fee collection, position modification, or bundled approval.
+            // Show as a neutral router interaction — honest about not knowing, but
+            // better than exposing raw 'multicall(uint256,bytes[])' to the user.
+            type = 'transfer';
+            icon = '📝';
+            const routerName = KNOWN_ROUTERS[toAddr] || 'DEX router';
+            description = `Router interaction (${routerName})`;
+            details = [
+              { label: 'Router', value: routerName },
+              { label: 'Contract', value: `${toAddr.slice(0, 6)}...${toAddr.slice(-4)}`, fullValue: toAddr }
+            ];
           } else if (tokensOut.length > 0) {
             type = 'transfer';
             icon = '📤';
