@@ -938,10 +938,25 @@
         });
         console.log('Management wallet total USD:',managementTotalUSD);
         
-        // 6. Calculate totals
+        // 6. Fetch PTGC balance in treasury wallet (excluded from managementValue, included in totalValue)
+        let ptgcBalance=0,ptgcPrice=0,ptgcUSD=0;
+        try{
+          const ptgcPriceP=fetchTokenPrice(TOKENS.PTGC.address);
+          const ptgcData='0x70a08231000000000000000000000000'+managementWallet.slice(2).toLowerCase();
+          const ptgcBalP=rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:TOKENS.PTGC.address,data:ptgcData},'latest'],id:7});
+          const[ptgcPriceRes,ptgcBalRes]=await Promise.all([ptgcPriceP,ptgcBalP]);
+          ptgcPrice=ptgcPriceRes||0;
+          if(ptgcBalRes.result&&ptgcBalRes.result!=='0x'&&ptgcBalRes.result!=='0x0'){
+            ptgcBalance=Number(BigInt(ptgcBalRes.result))/Math.pow(10,TOKENS.PTGC.decimals);
+            ptgcUSD=ptgcBalance*ptgcPrice;
+          }
+          console.log(`Treasury PTGC: ${ptgcBalance.toLocaleString()} @ $${ptgcPrice} = $${ptgcUSD.toLocaleString()}`);
+        }catch(e){console.error('PTGC balance fetch error:',e)}
+        
+        // 7. Calculate totals (PTGC included in totalValue but not managementValue)
         const availableUSD=availablePLS*plsPrice;
         const pendingUSD=lockedAmountPLS*plsPrice;
-        const totalValue=availableUSD+pendingUSD+managementTotalUSD;
+        const totalValue=availableUSD+pendingUSD+managementTotalUSD+ptgcUSD;
         
         console.log('Total DAO value:',totalValue);
         
@@ -953,6 +968,9 @@
           pendingCount,
           managementValue:managementTotalUSD,
           managementTokens,
+          ptgcBalance,
+          ptgcPrice,
+          ptgcUSD,
           totalValue
         };
       }catch(e){
@@ -2705,6 +2723,7 @@
       const[daoData,setDaoData]=useState(null);
       const[daoLoading,setDaoLoading]=useState(true);
       const[showMgmtTokens,setShowMgmtTokens]=useState(false);
+      const[showTotalBreakdown,setShowTotalBreakdown]=useState(false);
       const[stakingData,setStakingData]=useState({totalInContract:0,staked:0,stakedPct:0,locked:0,lockedPct:0});
       const[holderTiers,setHolderTiers]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
       const[copied,setCopied]=useState(false);
@@ -3613,9 +3632,50 @@
                             </div>
                           )}
                         </div>
-                        <div className="bg-black/20 border border-blue-500/30 rounded-lg px-3 py-2">
+                        <div className="bg-black/20 border border-blue-500/30 rounded-lg px-3 py-2 relative">
                           <div className="text-white/60 text-sm uppercase flex items-center gap-1 mb-1">{'\u{1F4CA}'} Total DAO Value</div>
-                          <div className={`text-2xl font-bold text-green-400`}>{fmtUSD(daoData?.totalValue||0)}</div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-2xl font-bold text-green-400`}>{fmtUSD(daoData?.totalValue||0)}</span>
+                            <button onClick={()=>setShowTotalBreakdown(!showTotalBreakdown)} className="text-white/40 hover:text-white/70 transition-colors text-sm">
+                              {'\u{24D8}'}
+                            </button>
+                          </div>
+                          {showTotalBreakdown&&daoData&&(
+                            <div className="absolute top-full right-0 mt-2 z-50 bg-[#1a1a1a] border border-white/20 rounded-lg p-3 shadow-xl min-w-[280px]">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-white/70 text-xs font-bold uppercase">Total Value Breakdown</span>
+                                <button onClick={()=>setShowTotalBreakdown(false)} className="text-white/40 hover:text-white text-sm">{'\u2715'}</button>
+                              </div>
+                              <div className="space-y-1.5 text-sm">
+                                <div className="flex justify-between gap-3 text-white/60">
+                                  <span className="font-medium">{'\u{1F4B0}'} Available for Proposals</span>
+                                  <span className="text-green-400">{fmtUSD(daoData.availableUSD||0)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3 text-white/60">
+                                  <span className="font-medium">{'\u{23F3}'} Pending in Proposals</span>
+                                  <span className="text-green-400">{fmtUSD(daoData.pendingUSD||0)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3 text-white/60">
+                                  <span className="font-medium">{'\u{1F3E6}'} Ready to Deploy</span>
+                                  <span className="text-green-400">{fmtUSD(daoData.managementValue||0)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3 text-white/60">
+                                  <span className="font-medium">
+                                    <img src={TOKENS.PTGC.logo} alt="PTGC" className="inline w-4 h-4 mr-1 align-text-bottom"/>
+                                    PTGC in Treasury
+                                  </span>
+                                  <div className="text-right">
+                                    <span className="text-white/50 text-xs">{fmtAbbr(daoData.ptgcBalance||0)}</span>
+                                    <span className="text-green-400 ml-2">{fmtUSD(daoData.ptgcUSD||0)}</span>
+                                  </div>
+                                </div>
+                                <div className="flex justify-between gap-3 pt-2 mt-1 border-t border-white/10">
+                                  <span className="font-bold text-white/80">Total</span>
+                                  <span className="text-green-400 font-bold">{fmtUSD(daoData.totalValue||0)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
