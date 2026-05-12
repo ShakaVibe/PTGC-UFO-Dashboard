@@ -44,27 +44,30 @@
     /* Affiliate stats rows: collapse the 8-col fixed layout to 2-col on mobile */
     @media (max-width:640px){.affiliate-stats-row{grid-template-columns:repeat(2,1fr)!important;gap:0.5rem 0.75rem!important}.affiliate-stats-row .stat-emoji{font-size:1.5rem!important}.affiliate-stats-row .stat-label{font-size:0.65rem!important}.affiliate-stats-row .stat-value{font-size:1rem!important}}
   
-    /* Share card mobile scaling — wrapper reserves scaled-down space,
-       inner div uses transform:scale to visually fit. The inner div keeps
-       its original pixel dimensions so html2canvas captures correctly. */
-    .ssc-wrap{overflow:hidden;flex-shrink:0;display:block;line-height:0;font-size:0}
-    .ssc-wrap > *{transform-origin:top left;line-height:normal;font-size:initial}
-    .ssc-600x314{width:min(600px,calc(100vw - 24px));height:calc(min(600px,100vw - 24px) * 314 / 600)}
-    .ssc-600x314 > *{width:600px;height:314px;transform:scale(calc(min(600px,100vw - 24px) / 600))}
-    .ssc-600x340{width:min(600px,calc(100vw - 24px));height:calc(min(600px,100vw - 24px) * 340 / 600)}
-    .ssc-600x340 > *{width:600px;height:340px;transform:scale(calc(min(600px,100vw - 24px) / 600))}
-    .ssc-600auto{width:min(600px,calc(100vw - 24px))}
-    .ssc-600auto > *{width:600px;transform:scale(calc(min(600px,100vw - 24px) / 600))}
-    .ssc-900x471{width:min(900px,calc(100vw - 24px));height:calc(min(900px,100vw - 24px) * 471 / 900)}
-    .ssc-900x471 > *{width:900px;height:471px;transform:scale(calc(min(900px,100vw - 24px) / 900))}
-    .ssc-1200x675{width:min(1200px,calc(100vw - 24px));height:calc(min(1200px,100vw - 24px) * 675 / 1200)}
-    .ssc-1200x675 > *{width:1200px;height:675px;transform:scale(calc(min(1200px,100vw - 24px) / 1200))}
-    .ssc-800x1000{width:min(800px,calc(100vw - 24px));height:calc(min(800px,100vw - 24px) * 1000 / 800)}
-    .ssc-800x1000 > *{width:800px;height:1000px;transform:scale(calc(min(800px,100vw - 24px) / 800))}
-    .ssc-640x360{width:min(640px,calc(100vw - 24px));height:calc(min(640px,100vw - 24px) * 360 / 640)}
-    .ssc-640x360 > *{width:640px;height:360px;transform:scale(calc(min(640px,100vw - 24px) / 640))}
-    .ssc-960x540{width:min(960px,calc(100vw - 24px));height:calc(min(960px,100vw - 24px) * 540 / 960)}
-    .ssc-960x540 > *{width:960px;height:540px;transform:scale(calc(min(960px,100vw - 24px) / 960))}
+    /* Share card mobile scaling — uses CSS zoom (which scales the layout box,
+       not just the visual). Works on Chrome/Safari (since forever) and
+       Firefox 126+ (May 2024). Falls back to transform:scale on older browsers.
+       The inner card keeps its original pixel dimensions for proper screenshots. */
+    .ssc-wrap{flex-shrink:0;max-width:100%}
+    @media (max-width:680px){
+      .ssc-w600{zoom:calc((100vw - 24px) / 600px)}
+      .ssc-w800{zoom:calc((100vw - 24px) / 800px)}
+      .ssc-w900{zoom:calc((100vw - 24px) / 900px)}
+      .ssc-w1200{zoom:calc((100vw - 24px) / 1200px)}
+      .ssc-w640{zoom:calc((100vw - 24px) / 640px)}
+      .ssc-w960{zoom:calc((100vw - 24px) / 960px)}
+    }
+    /* Fallback for browsers without zoom support (very rare in 2026) */
+    @supports not (zoom:1){
+      @media (max-width:680px){
+        .ssc-w600{transform:scale(calc((100vw - 24px) / 600px));transform-origin:top left}
+        .ssc-w800{transform:scale(calc((100vw - 24px) / 800px));transform-origin:top left}
+        .ssc-w900{transform:scale(calc((100vw - 24px) / 900px));transform-origin:top left}
+        .ssc-w1200{transform:scale(calc((100vw - 24px) / 1200px));transform-origin:top left}
+        .ssc-w640{transform:scale(calc((100vw - 24px) / 640px));transform-origin:top left}
+        .ssc-w960{transform:scale(calc((100vw - 24px) / 960px));transform-origin:top left}
+      }
+    }
   </style>
 </head>
 <body>
@@ -2316,7 +2319,7 @@
             <button onClick={close} className="absolute -top-12 right-0 sm:-top-14 sm:-right-14 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600">✕</button>
             
             {/* Vertical container 800x1000 */}
-            <div className="ssc-wrap ssc-800x1000 border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
+            <div className="ssc-wrap ssc-w800 border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
               <div className="w-[800px] h-[1000px] bg-[#0a0a0a] p-6 flex flex-col" style={{background:'linear-gradient(180deg, #0a0a0a 0%, #151515 50%, #0a0a0a 100%)'}}>
                 {/* Header - Title Only */}
                 <div className="text-center mb-4">
@@ -4385,7 +4388,7 @@
                 <button onClick={()=>closeModalAndReturn(setShowBurnShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 (1.91:1 ratio, scales to 1200x628) */}
-                <div className="ssc-wrap ssc-600x314">
+                <div className="ssc-wrap ssc-w600">
                 <div id="burn-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 ${theme.border} rounded-xl p-5 flex flex-col`}>
                     
@@ -4544,7 +4547,7 @@
                 <div className="relative" onClick={e=>e.stopPropagation()}>
                   <button onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
 
-                  <div className="ssc-wrap ssc-600auto">
+                  <div className="ssc-wrap ssc-w600">
                   <div id="combined-burn-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
@@ -4683,7 +4686,7 @@
                     </div>
                   </div>
 
-                  <div className="ssc-wrap ssc-600auto">
+                  <div className="ssc-wrap ssc-w600">
                   <div id="combined-valuegen-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
@@ -4747,7 +4750,7 @@
                 <button onClick={()=>closeModalAndReturn(setShowValueGenShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div className="ssc-wrap ssc-600x314">
+                <div className="ssc-wrap ssc-w600">
                 <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-emerald-500/50 rounded-xl p-5 flex flex-col`}>
                     
@@ -4864,7 +4867,7 @@
                 <button onClick={()=>closeModalAndReturn(setShowAllocationShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div className="ssc-wrap ssc-600x314">
+                <div className="ssc-wrap ssc-w600">
                 <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-purple-500/50 rounded-xl p-4 flex flex-col`}>
                     
@@ -4934,7 +4937,7 @@
                 <button onClick={()=>closeModalAndReturn(setShowDAOShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div className="ssc-wrap ssc-600x340">
+                <div className="ssc-wrap ssc-w600">
                 <div id="dao-share-card" className="w-[600px] h-[340px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-4 border-blue-500/80 rounded-xl pt-5 px-5 pb-9 flex flex-col relative`} style={{boxShadow:"0 0 30px rgba(59,130,246,0.3),inset 0 0 30px rgba(0,0,0,0.5)"}}>
                     
@@ -5062,7 +5065,7 @@
                 <button onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {affiliateShareLoading||!affiliateShareData?(
-                  <div className="ssc-wrap ssc-900x471">
+                  <div className="ssc-wrap ssc-w900">
                   <div className="w-[900px] h-[471px] rounded-xl bg-[#111] border-2 border-[#D4AF37]/30 flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-14 h-14 border-4 border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin mx-auto mb-3"></div>
@@ -5110,7 +5113,7 @@
                       </select>
                     </div>
                     
-                    <div className="ssc-wrap ssc-900x471">
+                    <div className="ssc-wrap ssc-w900">
                 <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
                       {(()=>{
                         const PSUPPLY=333333333333;
@@ -5252,7 +5255,7 @@
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
-                <div className="ssc-wrap ssc-1200x675">
+                <div className="ssc-wrap ssc-w1200">
                 <div 
                   id="rhcores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -5824,7 +5827,7 @@
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowHoldersShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
 
-                <div className="ssc-wrap ssc-1200x675">
+                <div className="ssc-wrap ssc-w1200">
                 <div
                   id="holders-share-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -6034,7 +6037,7 @@
                   </div>
                 </div>
                 
-                <div className={`ssc-wrap ${priceModalMobileMode ? 'ssc-640x360' : 'ssc-960x540'}`}>
+                <div className={`ssc-wrap ${priceModalMobileMode ? 'ssc-w640' : 'ssc-w960'}`}>
                 <div 
                   id="price-cores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
