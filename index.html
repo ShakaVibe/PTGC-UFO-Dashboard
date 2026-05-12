@@ -44,30 +44,8 @@
     /* Affiliate stats rows: collapse the 8-col fixed layout to 2-col on mobile */
     @media (max-width:640px){.affiliate-stats-row{grid-template-columns:repeat(2,1fr)!important;gap:0.5rem 0.75rem!important}.affiliate-stats-row .stat-emoji{font-size:1.5rem!important}.affiliate-stats-row .stat-label{font-size:0.65rem!important}.affiliate-stats-row .stat-value{font-size:1rem!important}}
   
-    /* Share card mobile scaling — uses CSS zoom (which scales the layout box,
-       not just the visual). Works on Chrome/Safari (since forever) and
-       Firefox 126+ (May 2024). Falls back to transform:scale on older browsers.
-       The inner card keeps its original pixel dimensions for proper screenshots. */
-    .ssc-wrap{flex-shrink:0;max-width:100%}
-    @media (max-width:680px){
-      .ssc-w600{zoom:calc((100vw - 24px) / 600px)}
-      .ssc-w800{zoom:calc((100vw - 24px) / 800px)}
-      .ssc-w900{zoom:calc((100vw - 24px) / 900px)}
-      .ssc-w1200{zoom:calc((100vw - 24px) / 1200px)}
-      .ssc-w640{zoom:calc((100vw - 24px) / 640px)}
-      .ssc-w960{zoom:calc((100vw - 24px) / 960px)}
-    }
-    /* Fallback for browsers without zoom support (very rare in 2026) */
-    @supports not (zoom:1){
-      @media (max-width:680px){
-        .ssc-w600{transform:scale(calc((100vw - 24px) / 600px));transform-origin:top left}
-        .ssc-w800{transform:scale(calc((100vw - 24px) / 800px));transform-origin:top left}
-        .ssc-w900{transform:scale(calc((100vw - 24px) / 900px));transform-origin:top left}
-        .ssc-w1200{transform:scale(calc((100vw - 24px) / 1200px));transform-origin:top left}
-        .ssc-w640{transform:scale(calc((100vw - 24px) / 640px));transform-origin:top left}
-        .ssc-w960{transform:scale(calc((100vw - 24px) / 960px));transform-origin:top left}
-      }
-    }
+    /* Share card mobile scaling — JS-based via inline style={{zoom}}.
+       See "computeShareScale" pattern in each modal IIFE. */
   </style>
 </head>
 <body>
@@ -2250,6 +2228,8 @@
     const CombinedLeaguesModal=({open,close})=>{
       const[prices,setPrices]=useState({ptgc:0,ufo:0});
       const[loading,setLoading]=useState(true);
+      // Tall card - portrait-preferred. Scale to fit portrait orientation perfectly.
+      const sc=Math.min(1,(Math.min(window.innerWidth,window.innerHeight)-32)/800,(Math.max(window.innerWidth,window.innerHeight)-100)/1000);
       
       useEffect(()=>{
         if(!open)return;
@@ -2316,10 +2296,11 @@
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={close}>
           <div className="relative flex flex-col items-center" onClick={e=>e.stopPropagation()}>
             {/* X button moved way out of screenshot area */}
-            <button onClick={close} className="absolute -top-12 right-0 sm:-top-14 sm:-right-14 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600">✕</button>
+            <button onClick={close} style={{position:'absolute',top:`${-40*sc}px`,right:0,width:'40px',height:'40px',borderRadius:'50%',background:'rgba(31,41,55,0.9)',color:'white',fontSize:'18px',fontWeight:'bold',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #4b5563',cursor:'pointer',zIndex:60}}>✕</button>
             
             {/* Vertical container 800x1000 */}
-            <div className="ssc-wrap ssc-w800 border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
+            <div style={{zoom:sc}}>
+            <div className="border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
               <div className="w-[800px] h-[1000px] bg-[#0a0a0a] p-6 flex flex-col" style={{background:'linear-gradient(180deg, #0a0a0a 0%, #151515 50%, #0a0a0a 100%)'}}>
                 {/* Header - Title Only */}
                 <div className="text-center mb-4">
@@ -2394,6 +2375,7 @@
                   <div className="text-white/40 text-lg">Based on starting supply</div>
                 </div>
               </div>
+            </div>
             </div>
             
             <div className="text-center mt-4 text-white/50 text-sm">
@@ -4382,13 +4364,15 @@
           />
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
-          {showBurnShareModal&&(
+          {showBurnShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/314);
+            return(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowBurnShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowBurnShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 (1.91:1 ratio, scales to 1200x628) */}
-                <div className="ssc-wrap ssc-w600">
+                <div style={{zoom: sc}}>
                 <div id="burn-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 ${theme.border} rounded-xl p-5 flex flex-col`}>
                     
@@ -4461,10 +4445,12 @@
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
           
           {/* Combined Burn Stats Modal */}
           {showCombinedBurnModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/500);
             const isPTGCActive=token==='PTGC';
             const ptgcBurn=isPTGCActive?burn:combinedBurnOtherData?.burn||{total:0,pct:0,supply:0};
             const ptgcPeriods=isPTGCActive?burnPeriods:combinedBurnOtherData?.burnPeriods||{h24:0,d7:0,d30:0,d90:0};
@@ -4543,11 +4529,11 @@
             };
 
             return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)}>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)}>
                 <div className="relative" onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
+                  <button onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)} style={{position:'absolute',top:`${-30*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer',padding:'4px 0'}}>{'\u2715'} Close</button>
 
-                  <div className="ssc-wrap ssc-w600">
+                  <div style={{zoom:sc}}>
                   <div id="combined-burn-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
@@ -4601,6 +4587,7 @@
 
           {/* Combined Value Generated Modal */}
           {showCombinedValueGenModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/500);
             const isPTGCActive=token==='PTGC';
             const OB="'Orbitron',monospace";
             const RJ="'Rajdhani',sans-serif";
@@ -4670,9 +4657,9 @@
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
 
             return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
-                <div className="relative" onClick={e=>e.stopPropagation()} style={{maxHeight:'90vh',overflowY:'auto'}}>
-                  <button onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
+                <div className="relative" onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)} style={{position:'absolute',top:`${-30*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer',padding:'4px 0'}}>{'\u2715'} Close</button>
 
                   {/* Period pill selector — above card, outside screenshot */}
                   <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',marginBottom:'22px'}}>
@@ -4686,7 +4673,7 @@
                     </div>
                   </div>
 
-                  <div className="ssc-wrap ssc-w600">
+                  <div style={{zoom:sc}}>
                   <div id="combined-valuegen-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
@@ -4744,13 +4731,15 @@
 
 
           {/* Value Generated Share Modal - Twitter optimized */}
-          {showValueGenShareModal&&(
+          {showValueGenShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/314);
+            return(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowValueGenShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div className="ssc-wrap ssc-w600">
+                <div style={{zoom: sc}}>
                 <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-emerald-500/50 rounded-xl p-5 flex flex-col`}>
                     
@@ -4858,16 +4847,19 @@
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
           
           {/* Token Allocation Share Modal - Twitter optimized */}
-          {showAllocationShareModal&&(
+          {showAllocationShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/314);
+            return(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowAllocationShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowAllocationShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div className="ssc-wrap ssc-w600">
+                <div style={{zoom: sc}}>
                 <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-purple-500/50 rounded-xl p-4 flex flex-col`}>
                     
@@ -4928,16 +4920,19 @@
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
           
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
-          {showDAOShareModal&&(
+          {showDAOShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/340);
+            return(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowDAOShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowDAOShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div className="ssc-wrap ssc-w600">
+                <div style={{zoom: sc}}>
                 <div id="dao-share-card" className="w-[600px] h-[340px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-4 border-blue-500/80 rounded-xl pt-5 px-5 pb-9 flex flex-col relative`} style={{boxShadow:"0 0 30px rgba(59,130,246,0.3),inset 0 0 30px rgba(0,0,0,0.5)"}}>
                     
@@ -5056,16 +5051,19 @@
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
           
           {/* Affiliate Program Share Modal - Twitter optimized */}
-          {showAffiliateShareModal&&(
+          {showAffiliateShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/900,(Math.min(window.innerWidth,window.innerHeight)-100)/471);
+            return(
             <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] bg-black overflow-y-auto" onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {affiliateShareLoading||!affiliateShareData?(
-                  <div className="ssc-wrap ssc-w900">
+                  <div style={{zoom: sc}}>
                   <div className="w-[900px] h-[471px] rounded-xl bg-[#111] border-2 border-[#D4AF37]/30 flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-14 h-14 border-4 border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin mx-auto mb-3"></div>
@@ -5113,7 +5111,7 @@
                       </select>
                     </div>
                     
-                    <div className="ssc-wrap ssc-w900">
+                    <div style={{zoom: sc}}>
                 <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
                       {(()=>{
                         const PSUPPLY=333333333333;
@@ -5231,7 +5229,8 @@
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
           
           {/* Combined KPI Modal - triggers Twitter mode */}
           {showCombinedKPI&&(
@@ -5250,12 +5249,14 @@
           )}
           
           {/* RH Cores Liquidity Share Modal */}
-          {showRHCoresShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)}>
+          {showRHCoresShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/1200,(Math.min(window.innerWidth,window.innerHeight)-100)/675);
+            return(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+                <button onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)} style={{position:'absolute',top:`${-30*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer',padding:'4px 0'}}>✕ Close</button>
                 
-                <div className="ssc-wrap ssc-w1200">
+                <div style={{zoom:sc}}>
                 <div 
                   id="rhcores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -5401,7 +5402,8 @@
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
           
           {/* PTGC Logos Modal */}
           {showPTGCLogosModal&&(
@@ -5822,12 +5824,14 @@
           )}
           
           {/* Combined Holders Share Modal */}
-          {showHoldersShareModal&&(
+          {showHoldersShareModal&&(()=>{
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/1200,(Math.min(window.innerWidth,window.innerHeight)-100)/675);
+            return(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowHoldersShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowHoldersShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
 
-                <div className="ssc-wrap ssc-w1200">
+                <div style={{zoom: sc}}>
                 <div
                   id="holders-share-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -5985,11 +5989,16 @@
                 </div>
               </div>
             </div>
-          )}
+          );
+          })()}
           
           {/* Price with RH Cores Modal */}
-          {showPriceWithCoresModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)}>
+          {showPriceWithCoresModal&&(()=>{
+            const cardW=priceModalMobileMode?640:960;
+            const cardH=priceModalMobileMode?360:540;
+            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/cardW,(Math.min(window.innerWidth,window.innerHeight)-100)/cardH);
+            return(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <div className="flex flex-col items-center gap-3 mb-3">
                   {/* Desktop/Mobile Toggle */}
@@ -6037,7 +6046,7 @@
                   </div>
                 </div>
                 
-                <div className={`ssc-wrap ${priceModalMobileMode ? 'ssc-w640' : 'ssc-w960'}`}>
+                <div style={{zoom:sc}}>
                 <div 
                   id="price-cores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -6189,7 +6198,8 @@
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
           
           {showLiquidityModal && (
             <LiquidityModal
