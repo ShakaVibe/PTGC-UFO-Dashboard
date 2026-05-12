@@ -40,21 +40,31 @@
     .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
     .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
   
-    /* Mobile scaling for fixed-size share cards. Uses CSS zoom (changes layout box) 
-       with transform fallback. zoom works on Chrome, Safari, Firefox 126+, Edge. */
-    @media (max-width:680px){
-      .share-card-mobile-scale.w600{zoom:calc((100vw - 32px) / 600)}
-      .share-card-mobile-scale.w800{zoom:calc((100vw - 40px) / 800)}
-    }
-    @supports not (zoom: 1) {
-      @media (max-width:680px){
-        .share-card-mobile-scale.w600{transform:scale(calc((100vw - 32px) / 600));transform-origin:top left;margin-bottom:-200px}
-        .share-card-mobile-scale.w800{transform:scale(calc((100vw - 40px) / 800));transform-origin:top left;margin-bottom:-600px}
-      }
-    }
   
     /* Affiliate stats rows: collapse the 8-col fixed layout to 2-col on mobile */
     @media (max-width:640px){.affiliate-stats-row{grid-template-columns:repeat(2,1fr)!important;gap:0.5rem 0.75rem!important}.affiliate-stats-row .stat-emoji{font-size:1.5rem!important}.affiliate-stats-row .stat-label{font-size:0.65rem!important}.affiliate-stats-row .stat-value{font-size:1rem!important}}
+  
+    /* Share card mobile scaling — wrapper reserves scaled-down space,
+       inner div uses transform:scale to visually fit. The inner div keeps
+       its original pixel dimensions so html2canvas captures correctly. */
+    .ssc-wrap{overflow:hidden;flex-shrink:0;display:block;line-height:0;font-size:0}
+    .ssc-wrap > *{transform-origin:top left;line-height:normal;font-size:initial}
+    .ssc-600x314{width:min(600px,calc(100vw - 24px));height:calc(min(600px,100vw - 24px) * 314 / 600)}
+    .ssc-600x314 > *{width:600px;height:314px;transform:scale(calc(min(600px,100vw - 24px) / 600))}
+    .ssc-600x340{width:min(600px,calc(100vw - 24px));height:calc(min(600px,100vw - 24px) * 340 / 600)}
+    .ssc-600x340 > *{width:600px;height:340px;transform:scale(calc(min(600px,100vw - 24px) / 600))}
+    .ssc-600auto{width:min(600px,calc(100vw - 24px))}
+    .ssc-600auto > *{width:600px;transform:scale(calc(min(600px,100vw - 24px) / 600))}
+    .ssc-900x471{width:min(900px,calc(100vw - 24px));height:calc(min(900px,100vw - 24px) * 471 / 900)}
+    .ssc-900x471 > *{width:900px;height:471px;transform:scale(calc(min(900px,100vw - 24px) / 900))}
+    .ssc-1200x675{width:min(1200px,calc(100vw - 24px));height:calc(min(1200px,100vw - 24px) * 675 / 1200)}
+    .ssc-1200x675 > *{width:1200px;height:675px;transform:scale(calc(min(1200px,100vw - 24px) / 1200))}
+    .ssc-800x1000{width:min(800px,calc(100vw - 24px));height:calc(min(800px,100vw - 24px) * 1000 / 800)}
+    .ssc-800x1000 > *{width:800px;height:1000px;transform:scale(calc(min(800px,100vw - 24px) / 800))}
+    .ssc-640x360{width:min(640px,calc(100vw - 24px));height:calc(min(640px,100vw - 24px) * 360 / 640)}
+    .ssc-640x360 > *{width:640px;height:360px;transform:scale(calc(min(640px,100vw - 24px) / 640))}
+    .ssc-960x540{width:min(960px,calc(100vw - 24px));height:calc(min(960px,100vw - 24px) * 540 / 960)}
+    .ssc-960x540 > *{width:960px;height:540px;transform:scale(calc(min(960px,100vw - 24px) / 960))}
   </style>
 </head>
 <body>
@@ -2306,7 +2316,7 @@
             <button onClick={close} className="absolute -top-12 right-0 sm:-top-14 sm:-right-14 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600">✕</button>
             
             {/* Vertical container 800x1000 */}
-            <div className="share-card-mobile-scale w800 border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
+            <div className="ssc-wrap ssc-800x1000 border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
               <div className="w-[800px] h-[1000px] bg-[#0a0a0a] p-6 flex flex-col" style={{background:'linear-gradient(180deg, #0a0a0a 0%, #151515 50%, #0a0a0a 100%)'}}>
                 {/* Header - Title Only */}
                 <div className="text-center mb-4">
@@ -4370,12 +4380,13 @@
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
           {showBurnShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowBurnShareModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowBurnShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowBurnShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 (1.91:1 ratio, scales to 1200x628) */}
-                <div id="burn-share-card" className="share-card-mobile-scale w600 w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
+                <div className="ssc-wrap ssc-600x314">
+                <div id="burn-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 ${theme.border} rounded-xl p-5 flex flex-col`}>
                     
                     {/* Header row - logo, name/title, date */}
@@ -4439,6 +4450,7 @@
                       <span className="text-white/30 text-xs">ptgc-ufo.com</span>
                     </div>
                   </div>
+                </div>
                 </div>
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
@@ -4528,11 +4540,12 @@
             };
 
             return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)}>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)}>
                 <div className="relative" onClick={e=>e.stopPropagation()}>
                   <button onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
 
-                  <div id="combined-burn-card" className="share-card-mobile-scale w600" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
+                  <div className="ssc-wrap ssc-600auto">
+                  <div id="combined-burn-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',inset:0,borderRadius:'16px',border:'2px solid transparent',backgroundImage:'linear-gradient(#0a0900,#0a0900),linear-gradient(135deg,#D4AF37,#7CFC00)',backgroundOrigin:'border-box',backgroundClip:'padding-box,border-box',pointerEvents:'none'}}/>
@@ -4573,6 +4586,7 @@
                         <span style={{fontFamily:RJ,color:'rgba(255,255,255,0.6)',fontSize:'18px',fontWeight:600}}>Loading data...</span>
                       </div>
                     )}
+                  </div>
                   </div>
 
                   <div className="text-center mt-4 text-white/50 text-sm">Right-click the image and "Save Image As" or take a screenshot</div>
@@ -4653,7 +4667,7 @@
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
 
             return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
                 <div className="relative" onClick={e=>e.stopPropagation()} style={{maxHeight:'90vh',overflowY:'auto'}}>
                   <button onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">{'\u2715'} Close</button>
 
@@ -4669,7 +4683,8 @@
                     </div>
                   </div>
 
-                  <div id="combined-valuegen-card" className="share-card-mobile-scale w600" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
+                  <div className="ssc-wrap ssc-600auto">
+                  <div id="combined-valuegen-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',inset:0,borderRadius:'16px',border:'2px solid transparent',backgroundImage:'linear-gradient(#0a0900,#0a0900),linear-gradient(135deg,#D4AF37,#7CFC00)',backgroundOrigin:'border-box',backgroundClip:'padding-box,border-box',pointerEvents:'none'}}/>
@@ -4713,6 +4728,7 @@
                       </div>
                     )}
                   </div>
+                  </div>
 
                   {/* Footer */}
                   <div className="mt-4">
@@ -4726,12 +4742,13 @@
 
           {/* Value Generated Share Modal - Twitter optimized */}
           {showValueGenShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowValueGenShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div id="valuegen-share-card" className="share-card-mobile-scale w600 w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
+                <div className="ssc-wrap ssc-600x314">
+                <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-emerald-500/50 rounded-xl p-5 flex flex-col`}>
                     
                     {/* Header row */}
@@ -4831,6 +4848,7 @@
                     </div>
                   </div>
                 </div>
+                </div>
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Right-click the image and "Save Image As" or take a screenshot
@@ -4841,12 +4859,13 @@
           
           {/* Token Allocation Share Modal - Twitter optimized */}
           {showAllocationShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowAllocationShareModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowAllocationShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowAllocationShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div id="allocation-share-card" className="share-card-mobile-scale w600 w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
+                <div className="ssc-wrap ssc-600x314">
+                <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-purple-500/50 rounded-xl p-4 flex flex-col`}>
                     
                     {/* Header row */}
@@ -4899,6 +4918,7 @@
                     </div>
                   </div>
                 </div>
+                </div>
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Right-click the image and "Save Image As" or take a screenshot
@@ -4909,12 +4929,13 @@
           
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
           {showDAOShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowDAOShareModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowDAOShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowDAOShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {/* Twitter Card - 600x314 */}
-                <div id="dao-share-card" className="share-card-mobile-scale w600 w-[600px] h-[340px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
+                <div className="ssc-wrap ssc-600x340">
+                <div id="dao-share-card" className="w-[600px] h-[340px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-4 border-blue-500/80 rounded-xl pt-5 px-5 pb-9 flex flex-col relative`} style={{boxShadow:"0 0 30px rgba(59,130,246,0.3),inset 0 0 30px rgba(0,0,0,0.5)"}}>
                     
                     {/* Header row */}
@@ -5025,6 +5046,7 @@
                     </div>
                   </div>
                 </div>
+                </div>
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Right-click the image and "Save Image As" or take a screenshot
@@ -5035,16 +5057,18 @@
           
           {/* Affiliate Program Share Modal - Twitter optimized */}
           {showAffiliateShareModal&&(
-            <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] bg-black" onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)}>
+            <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] bg-black overflow-y-auto" onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
                 {affiliateShareLoading||!affiliateShareData?(
+                  <div className="ssc-wrap ssc-900x471">
                   <div className="w-[900px] h-[471px] rounded-xl bg-[#111] border-2 border-[#D4AF37]/30 flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-14 h-14 border-4 border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin mx-auto mb-3"></div>
                       <p className="text-[#D4AF37] font-orbitron text-base">Loading Affiliate Data...</p>
                     </div>
+                  </div>
                   </div>
                 ):(()=>{
                   const ad=affiliateShareData;
@@ -5086,7 +5110,8 @@
                       </select>
                     </div>
                     
-                    <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
+                    <div className="ssc-wrap ssc-900x471">
+                <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
                       {(()=>{
                         const PSUPPLY=333333333333;
                         const moPct=PSUPPLY>0?((moPtgc||0)/PSUPPLY)*100:0;
@@ -5193,6 +5218,7 @@
                         );
                       })()}
                     </div>
+                </div>
                     </React.Fragment>
                   );
                 })()}
@@ -5222,10 +5248,11 @@
           
           {/* RH Cores Liquidity Share Modal */}
           {showRHCoresShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
                 
+                <div className="ssc-wrap ssc-1200x675">
                 <div 
                   id="rhcores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -5364,6 +5391,7 @@
                     </div>
                   </div>
                 </div>
+                </div>
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
@@ -5374,7 +5402,7 @@
           
           {/* PTGC Logos Modal */}
           {showPTGCLogosModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)}>
               <div className="relative bg-black/95 border border-[#D4AF37]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
@@ -5411,7 +5439,7 @@
           
           {/* UFO Logos Modal */}
           {showUFOLogosModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowUFOLogosModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowUFOLogosModal)}>
               <div className="relative bg-black/95 border border-[#7CFC00]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowUFOLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
@@ -5447,7 +5475,7 @@
           
           {/* Combined Logos Modal */}
           {showCombinedLogosModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)}>
               <div className="relative bg-black/95 border border-white/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
@@ -5792,10 +5820,11 @@
           
           {/* Combined Holders Share Modal */}
           {showHoldersShareModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowHoldersShareModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowHoldersShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowHoldersShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
 
+                <div className="ssc-wrap ssc-1200x675">
                 <div
                   id="holders-share-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -5946,6 +5975,7 @@
 
                   </div>
                 </div>
+                </div>
 
                 <div className="text-center mt-4 text-white/50 text-sm">
                   Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
@@ -5956,7 +5986,7 @@
           
           {/* Price with RH Cores Modal */}
           {showPriceWithCoresModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90" onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <div className="flex flex-col items-center gap-3 mb-3">
                   {/* Desktop/Mobile Toggle */}
@@ -6004,6 +6034,7 @@
                   </div>
                 </div>
                 
+                <div className={`ssc-wrap ${priceModalMobileMode ? 'ssc-640x360' : 'ssc-960x540'}`}>
                 <div 
                   id="price-cores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -6145,6 +6176,7 @@
                       <div className="text-white/30 text-xs">RH Cores: WPLS • PLSX • INC • HEX • EHEX • PRVX</div>
                     </div>
                   </div>
+                </div>
                 </div>
                 
                 <div className="text-center mt-4 text-white/50 text-sm">
