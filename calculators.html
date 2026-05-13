@@ -1226,7 +1226,7 @@
           const netOrganic = grossInjection - sellsAmount;
           const weeklyVol = L_after * lvRatio;
           const annualVol = weeklyVol * 52;
-          const annualCode = includeCode ? annualVol * 0.05 * (buybackPct / 100) : 0;
+          const annualCode = includeCode ? annualVol * cfg.taxRate * (buybackPct / 100) : 0;
           const totalNet = netOrganic + annualCode;
           const ratio = L_after > 0 ? (1 + 2 * totalNet / L_after) : 0;
           const newP = ratio > 0 ? P_after * ratio * ratio : 0;
@@ -1267,7 +1267,7 @@
       const totalNetOrg = yearsWith.reduce((a, y) => a + y.netOrganic, 0);
       const totalCodeAll = yearsWith.reduce((a, y) => a + y.annualCode, 0);
       const captureRate = 100 - sellPct;
-      const codeRateOfVol = 5 * buybackPct / 100;
+      const codeRateOfVol = cfg.taxRate * buybackPct;
       const mcap = currentPrice * supply;
       const lpRatioPct = mcap > 0 ? (currentLP / mcap) * 100 : 0;
       const weeklyVolNow = currentLP * lvRatio;
@@ -1641,7 +1641,7 @@
                 </div>
 
                 <div className="mb-5">
-                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Code Buyback % of 5% Trade Fee</label>
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Code Buyback % of {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
                   <div className="mb-2"><Slider value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
                     {[0,25,40,50,75,100].map(v => <Pill key={v} active={buybackPct===v} onClick={()=>setBuybackPct(v)}>{v}%</Pill>)}
@@ -1867,6 +1867,19 @@
             <span className={`${theme.text} font-bold`}>Model:</span> AMM v2 constant-product (x&middot;y=k) on a balanced pool. Each year applies LP X factor first (paired-side appreciation), then nets organic flows + annual code buyback into the pool.
             <br />
             <span className={`${theme.text} font-bold`}>Formula:</span> <span className="font-mono">P_new = P &times; (1 + 2&middot;NetBuy / LP)&sup2; &nbsp;&middot;&nbsp; LP_new = LP + 2&middot;NetBuy</span>
+          </div>
+
+          {/* Disclaimer */}
+          <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-5">
+            <div className="flex items-start gap-3">
+              <span className="text-yellow-500/60 text-lg mt-0.5">{'\u26A0\uFE0F'}</span>
+              <div className="text-white/35 text-sm leading-relaxed">
+                <span className="text-yellow-500/60 font-bold uppercase text-xs">Disclaimer &mdash; Not Financial Advice</span>
+                <p className="mt-1.5">This calculator is provided <strong className="text-white/50">strictly for entertainment and educational purposes only</strong>. The 10-year projections shown are highly simplified, hypothetical scenarios based on a constant-product AMM model and a chain of compounding user-defined assumptions. They do <strong className="text-white/50">not</strong> constitute financial, investment, tax, or legal advice of any kind.</p>
+                <p className="mt-1.5">The model assumes constant annual LP growth, constant new-user growth, constant average price-injection per user, constant sell-pressure percentages, and a steady code-buyback rate derived from {cfg.name}&apos;s <strong className="text-white/50">{(cfg.taxRate * 100).toFixed(0)}% trade fee</strong> &mdash; none of which is guaranteed to hold over a single year, let alone ten. Real-world prices are influenced by <strong className="text-white/50">countless factors not modeled here</strong>, including market sentiment, liquidity depth, macroeconomic conditions, regulatory changes, smart-contract risks, impermanent loss, whale activity, exchange listings, and overall crypto market cycles.</p>
+                <p className="mt-1.5">These projections are <strong className="text-white/50">extremely rough estimates meant for exploration and discussion</strong>, not investment planning. Past performance does not guarantee future results. You could lose some or all of your investment. <strong className="text-white/50">Always do your own research (DYOR)</strong> and consult with a qualified financial advisor before making any investment decisions. The creators of this tool accept no responsibility or liability for any losses incurred.</p>
+              </div>
+            </div>
           </div>
 
         </div>
