@@ -1113,11 +1113,50 @@
     };
 
     // ===== GROWTH PROJECTION CALCULATOR (hidden — dot trigger) =====
-    const GrowthProjectionTab = ({ cfg, theme }) => {
+    const GrowthProjectionTab = (props) => {
+      // Internal token toggle — independent of the page's selected token
+      const [growthToken, setGrowthToken] = React.useState(props.cfg.name);
+      const cfg = TOKENS[growthToken]; // shadow incoming prop
       const isGold = cfg.color === 'gold';
       const glowColor = isGold ? 'rgba(217,202,93,' : 'rgba(124,252,0,';
+      const theme = {
+        text: isGold ? 'text-[#D9CA5D]' : 'text-[#7CFC00]',
+        border: isGold ? 'border-[#D9CA5D]/30' : 'border-[#7CFC00]/30',
+        bg: isGold ? 'bg-[#D9CA5D]' : 'bg-[#7CFC00]',
+      };
 
-      // State — mirrors original `state` object exactly
+      // Live data for both tokens — pre-fetched once on mount so switching is instant
+      const [allData, setAllData] = React.useState({ PTGC: null, UFO: null });
+      React.useEffect(() => {
+        const loadOne = async (tk) => {
+          const c = TOKENS[tk];
+          try {
+            const [pairs, burn] = await Promise.all([
+              lvFetchTokenPairs(c.address),
+              fetchBurn(c.address, c.decimals),
+            ]);
+            const processed = lvProcessPairs(pairs, c.address);
+            const circulating = c.totalSupply - (burn?.total || 0);
+            return {
+              price: processed?.price || 0,
+              totalLP: processed?.totalLiquidity || 0,
+              supply: circulating,
+              mcap: (processed?.price || 0) * circulating,
+            };
+          } catch (e) {
+            console.error('Growth calc fetch error for ' + tk + ':', e);
+            return { price: 0, totalLP: 0, supply: 0, mcap: 0 };
+          }
+        };
+        (async () => {
+          const [ptgcD, ufoD] = await Promise.all([loadOne('PTGC'), loadOne('UFO')]);
+          setAllData({ PTGC: ptgcD, UFO: ufoD });
+        })();
+      }, []);
+      const liveData = allData[growthToken];
+      const loadingLive = liveData === null;
+
+      // Scenario state — mirrors original `state` object (minus baseline state)
       const [lpYear0, setLpYear0] = React.useState(10);
       const [lpAnnual, setLpAnnual] = React.useState(50);
       const [usersYear0, setUsersYear0] = React.useState(2000);
@@ -1126,11 +1165,12 @@
       const [sellPct, setSellPct] = React.useState(50);
       const [buybackPct, setBuybackPct] = React.useState(50);
       const [lvRatio, setLvRatio] = React.useState(0.0944);
-      const [currentPrice, setCurrentPrice] = React.useState(0.0000952);
-      const [currentLP, setCurrentLP] = React.useState(2390000);
-      const [supply, setSupply] = React.useState(289000000000);
       const [scaleMode, setScaleMode] = React.useState('linear');
-      const [baselineOpen, setBaselineOpen] = React.useState(false);
+
+      // Baseline values — derived from liveData (no longer user-editable)
+      const currentPrice = liveData?.price || 0;
+      const currentLP = liveData?.totalLP || 0;
+      const supply = liveData?.supply || 0;
 
       // ===== Format Helpers (IDENTICAL to original) =====
       const fmt$ = (v) => {
@@ -1455,6 +1495,60 @@
       // ===== JSX =====
       return (
         <div className="space-y-6">
+          {/* Token selector + live data summary */}
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+            <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between">
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Token</span>
+              <span className="text-white/30 text-[10px] font-bold uppercase tracking-widest">
+                {loadingLive ? 'Fetching live data\u2026' : 'Live'}
+                {!loadingLive && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 ml-1.5 align-middle animate-pulse"></span>}
+              </span>
+            </div>
+            <div className="p-5 sm:p-6">
+              {/* Token buttons */}
+              <div className="flex justify-center gap-3 mb-5">
+                {['PTGC', 'UFO'].map(tk => {
+                  const tCfg = TOKENS[tk];
+                  const tIsGold = tCfg.color === 'gold';
+                  const tGlow = tIsGold ? 'rgba(217,202,93,' : 'rgba(124,252,0,';
+                  const active = growthToken === tk;
+                  return (
+                    <button key={tk} onClick={() => setGrowthToken(tk)}
+                      className="flex items-center gap-2.5 px-6 py-3 rounded-xl font-orbitron font-bold transition-all hover:brightness-110"
+                      style={{
+                        background: active ? `linear-gradient(135deg, ${tGlow}0.45), ${tGlow}0.2))` : 'rgba(255,255,255,0.03)',
+                        border: active ? `1px solid ${tGlow}0.6)` : '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: active ? `0 0 20px ${tGlow}0.25), inset 0 1px 0 rgba(255,255,255,0.15)` : 'none',
+                        color: active ? 'white' : 'rgba(255,255,255,0.4)',
+                      }}>
+                      <img src={tCfg.logo} alt={tk} className="w-6 h-6"
+                        style={{ filter: `drop-shadow(0 0 4px ${tGlow}${active ? '0.5)' : '0.2)'})`, opacity: active ? 1 : 0.5 }}
+                        onError={e => { e.target.style.display = 'none'; }} />
+                      <span className="text-base tracking-widest">{tk}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Live data summary - 4 tiles */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Current ' + cfg.name + ' Price', val: fmtPrice(currentPrice), cls: theme.text },
+                  { label: 'Current Total LP', val: fmt$(currentLP), cls: 'text-green-400' },
+                  { label: 'Circulating Supply', val: fmtUsers(supply), cls: 'text-white/90' },
+                  { label: 'Current MCap', val: fmt$(currentPrice * supply), cls: 'text-blue-400' },
+                ].map(t => (
+                  <div key={t.label} className="bg-black/40 border border-white/5 rounded-lg px-4 py-3 text-center">
+                    <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1.5">{t.label}</div>
+                    <div className={`font-mono text-base font-bold ${t.cls}`}>
+                      {loadingLive ? <span className="text-white/30 text-sm">{'Loading\u2026'}</span> : t.val}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Scenario strip */}
           <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl px-6 py-3 text-center`}>
             <div className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-1">Current Scenario</div>
@@ -1474,7 +1568,7 @@
               <span className="text-white/30 text-[10px] font-bold uppercase tracking-widest">10-Year Modeling</span>
             </div>
 
-            <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
 
               {/* === LP GROWTH CARD === */}
               <div className="bg-black/30 border border-white/10 rounded-xl p-5">
@@ -1568,37 +1662,6 @@
                 </div>
               </div>
 
-              {/* === BASELINE CARD (collapsible) === */}
-              <div className="bg-black/30 border border-white/10 rounded-xl p-5">
-                <button onClick={()=>setBaselineOpen(o=>!o)} className="w-full flex items-center justify-between mb-4">
-                  <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Baseline \u00b7 Current State</div>
-                  <span className="text-white/40 text-xs transition-transform" style={{ transform: baselineOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>{'\u25BC'}</span>
-                </button>
-
-                {baselineOpen && (
-                  <div className="space-y-4 mb-4">
-                    <div>
-                      <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Current {cfg.name} Price</label>
-                      <NumInput value={currentPrice} onChange={setCurrentPrice} prefix="$" step="0.0000001" />
-                    </div>
-                    <div>
-                      <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Current {cfg.name} LP ($ value)</label>
-                      <NumInput value={currentLP} onChange={setCurrentLP} prefix="$" step="100000" />
-                    </div>
-                    <div>
-                      <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">{cfg.name} Supply</label>
-                      <NumInput value={supply} onChange={setSupply} step="1000000000" />
-                    </div>
-                  </div>
-                )}
-
-                <div className={`pt-3 ${baselineOpen ? 'border-t border-white/5' : ''}`}>
-                  <StatLine label="Current MCap" value={fmt$(mcap)} cls="text-blue-400" />
-                  <StatLine label="Current LP / MCap" value={lpRatioPct.toFixed(2) + '%'} />
-                  <StatLine label="Weekly volume now" value={fmt$(weeklyVolNow)} />
-                </div>
-              </div>
-
             </div>
           </div>
 
@@ -1662,7 +1725,7 @@
 
           <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
             <div className="px-6 py-3 border-b border-white/[0.06]">
-              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Detailed Projection \u00b7 All values in USD</span>
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Detailed Projection &middot; All values in USD</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -1728,7 +1791,7 @@
           {/* LP trajectory (wide) */}
           <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
             <div className="px-6 py-3 border-b border-white/[0.06]">
-              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">LP Size Over Time \u00b7 Factor-Only vs Full Model</span>
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">LP Size Over Time &middot; Factor-Only vs Full Model</span>
             </div>
             <div className="p-4" style={{height:'340px'}}>
               <canvas ref={lpChartRef}></canvas>
@@ -1754,7 +1817,7 @@
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
               <div className="px-6 py-3 border-b border-white/[0.06]">
-                <span className="text-white/60 text-sm font-bold uppercase tracking-widest">User Adoption \u00b7 New & Cumulative</span>
+                <span className="text-white/60 text-sm font-bold uppercase tracking-widest">User Adoption &middot; New & Cumulative</span>
               </div>
               <div className="p-4" style={{height:'280px'}}>
                 <canvas ref={usersChartRef}></canvas>
@@ -1776,7 +1839,7 @@
 
             <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
               <div className="px-6 py-3 border-b border-white/[0.06]">
-                <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Annual Buy Pressure \u00b7 Organic vs Code</span>
+                <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Annual Buy Pressure &middot; Organic vs Code</span>
               </div>
               <div className="p-4" style={{height:'280px'}}>
                 <canvas ref={buyChartRef}></canvas>
