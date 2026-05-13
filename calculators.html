@@ -1112,6 +1112,704 @@
       );
     };
 
+    // ===== GROWTH PROJECTION CALCULATOR (hidden — dot trigger) =====
+    const GrowthProjectionTab = ({ cfg, theme }) => {
+      const isGold = cfg.color === 'gold';
+      const glowColor = isGold ? 'rgba(217,202,93,' : 'rgba(124,252,0,';
+
+      // State — mirrors original `state` object exactly
+      const [lpYear0, setLpYear0] = React.useState(10);
+      const [lpAnnual, setLpAnnual] = React.useState(50);
+      const [usersYear0, setUsersYear0] = React.useState(2000);
+      const [injection, setInjection] = React.useState(5000);
+      const [userGrowth, setUserGrowth] = React.useState(100);
+      const [sellPct, setSellPct] = React.useState(50);
+      const [buybackPct, setBuybackPct] = React.useState(50);
+      const [lvRatio, setLvRatio] = React.useState(0.0944);
+      const [currentPrice, setCurrentPrice] = React.useState(0.0000952);
+      const [currentLP, setCurrentLP] = React.useState(2390000);
+      const [supply, setSupply] = React.useState(289000000000);
+      const [scaleMode, setScaleMode] = React.useState('linear');
+      const [baselineOpen, setBaselineOpen] = React.useState(false);
+
+      // ===== Format Helpers (IDENTICAL to original) =====
+      const fmt$ = (v) => {
+        if (!isFinite(v)) return '\u2014';
+        const sign = v < 0 ? '-' : '';
+        v = Math.abs(v);
+        if (v >= 1e12) return sign + '$' + (v / 1e12).toFixed(2) + 'T';
+        if (v >= 1e9) return sign + '$' + (v / 1e9).toFixed(2) + 'B';
+        if (v >= 1e6) return sign + '$' + (v / 1e6).toFixed(2) + 'M';
+        if (v >= 1e3) return sign + '$' + (v / 1e3).toFixed(1) + 'K';
+        return sign + '$' + v.toFixed(2);
+      };
+      const fmtPrice = (v) => {
+        if (!isFinite(v) || v <= 0) return '\u2014';
+        if (v >= 100) return '$' + v.toFixed(2);
+        if (v >= 1) return '$' + v.toFixed(4);
+        if (v >= 0.01) return '$' + v.toFixed(5);
+        if (v >= 0.0001) return '$' + v.toFixed(6);
+        if (v >= 0.000001) return '$' + v.toFixed(7);
+        return '$' + v.toExponential(3);
+      };
+      const fmtMult = (v) => {
+        if (!isFinite(v)) return '\u2014';
+        if (v >= 1000) return v.toFixed(0) + 'x';
+        if (v >= 100) return v.toFixed(1) + 'x';
+        if (v >= 10) return v.toFixed(1) + 'x';
+        return v.toFixed(2) + 'x';
+      };
+      const fmtUsers = (v) => {
+        if (!isFinite(v) || v < 0) return '\u2014';
+        if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+        if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+        if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+        return Math.round(v).toLocaleString();
+      };
+      const fmtScenarioLabel = (lv) => {
+        const map = { 0.0922: 'Conservative', 0.0944: 'Median', 0.1285: 'Strong', 0.2537: 'Peak' };
+        return map[lv] || lv.toFixed(4);
+      };
+
+      // ===== Math (IDENTICAL to original — projectYears + lpOnlyTrajectory) =====
+      const projectYears = (includeCode) => {
+        const years = [];
+        let P = currentPrice;
+        let L = currentLP;
+        for (let y = 0; y <= 10; y++) {
+          let lpMult = (y === 0) ? lpYear0 : (1 + lpAnnual / 100);
+          let P_after = P * lpMult;
+          let L_after = L * lpMult;
+          const users = usersYear0 * Math.pow(1 + userGrowth / 100, y);
+          const grossInjection = users * injection;
+          const sellsAmount = grossInjection * (sellPct / 100);
+          const netOrganic = grossInjection - sellsAmount;
+          const weeklyVol = L_after * lvRatio;
+          const annualVol = weeklyVol * 52;
+          const annualCode = includeCode ? annualVol * 0.05 * (buybackPct / 100) : 0;
+          const totalNet = netOrganic + annualCode;
+          const ratio = L_after > 0 ? (1 + 2 * totalNet / L_after) : 0;
+          const newP = ratio > 0 ? P_after * ratio * ratio : 0;
+          const newL = Math.max(L_after + 2 * totalNet, 0);
+          years.push({
+            year: y, priceStart: P, priceEnd: newP, lpStart: L, lpEnd: newL,
+            users, grossInjection, netOrganic, sellsAmount,
+            weeklyVol, annualVol, annualCode, totalNet,
+          });
+          P = newP;
+          L = newL;
+        }
+        return years;
+      };
+      const lpOnlyTrajectory = () => {
+        const out = [currentLP];
+        let lp = currentLP;
+        for (let y = 0; y <= 10; y++) {
+          const mult = (y === 0) ? lpYear0 : (1 + lpAnnual / 100);
+          lp *= mult;
+          out.push(lp);
+        }
+        return out;
+      };
+
+      // ===== Computed =====
+      const yearsWith = projectYears(true);
+      const yearsWithout = projectYears(false);
+      const lpOnly = lpOnlyTrajectory();
+      const y0 = yearsWith[0];
+
+      // Card stats (matching original updateCardStats output)
+      const y10LpOnly = lpOnly[lpOnly.length - 1];
+      const y10LpFull = yearsWith[10].lpEnd;
+      const y10Users = usersYear0 * Math.pow(1 + userGrowth / 100, 10);
+      let totalUsersAll = 0;
+      for (let y = 0; y <= 10; y++) totalUsersAll += usersYear0 * Math.pow(1 + userGrowth / 100, y);
+      const totalNetOrg = yearsWith.reduce((a, y) => a + y.netOrganic, 0);
+      const totalCodeAll = yearsWith.reduce((a, y) => a + y.annualCode, 0);
+      const captureRate = 100 - sellPct;
+      const codeRateOfVol = 5 * buybackPct / 100;
+      const mcap = currentPrice * supply;
+      const lpRatioPct = mcap > 0 ? (currentLP / mcap) * 100 : 0;
+      const weeklyVolNow = currentLP * lvRatio;
+
+      // Component-chart numbers (matching original renderComponentNumbers)
+      const userY5 = usersYear0 * Math.pow(1 + userGrowth / 100, 5);
+
+      // ===== Chart refs =====
+      const priceChartRef = React.useRef(null);
+      const priceChartInst = React.useRef(null);
+      const lpChartRef = React.useRef(null);
+      const lpChartInst = React.useRef(null);
+      const usersChartRef = React.useRef(null);
+      const usersChartInst = React.useRef(null);
+      const buyChartRef = React.useRef(null);
+      const buyChartInst = React.useRef(null);
+
+      // ===== Small chart options (IDENTICAL to original smallChartOptions) =====
+      const smallChartOptions = (yLabel, fmt, useLog) => ({
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#f0f0f0',
+              font: { family: "'Rajdhani', sans-serif", size: 11, weight: '600' },
+              padding: 10,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+            },
+          },
+          tooltip: {
+            backgroundColor: '#0d111d',
+            borderColor: isGold ? '#D9CA5D' : '#7CFC00',
+            borderWidth: 1,
+            titleColor: isGold ? '#D9CA5D' : '#7CFC00',
+            titleFont: { family: "'Rajdhani', sans-serif", size: 13, weight: '700' },
+            bodyColor: '#f0f0f0',
+            bodyFont: { family: "'JetBrains Mono', monospace", size: 11 },
+            padding: 10,
+            callbacks: {
+              label: function (ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y); },
+            },
+          },
+        },
+        scales: {
+          y: {
+            type: useLog ? 'logarithmic' : 'linear',
+            ticks: { color: '#8a92a6', callback: function (val) { return fmt(val); }, font: { family: "'JetBrains Mono', monospace", size: 10 } },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            title: { display: true, text: yLabel, color: '#8a92a6', font: { family: "'Rajdhani', sans-serif", size: 11, weight: '600' } },
+          },
+          x: {
+            ticks: { color: '#8a92a6', font: { family: "'JetBrains Mono', monospace", size: 10 } },
+            grid: { color: 'rgba(255,255,255,0.03)' },
+          },
+        },
+      });
+
+      // ===== LP chart =====
+      React.useEffect(() => {
+        if (!lpChartRef.current) return;
+        if (lpChartInst.current) lpChartInst.current.destroy();
+        const labelsFull = ['Now', 'Y0', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'Y7', 'Y8', 'Y9', 'Y10'];
+        const lpFullData = [currentLP, ...yearsWith.map(y => y.lpEnd)];
+        const accent = isGold ? '#D9CA5D' : '#7CFC00';
+        const accentDim = isGold ? '#c4a838' : '#4ade80';
+        lpChartInst.current = new Chart(lpChartRef.current.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: labelsFull,
+            datasets: [
+              { label: 'LP \u00b7 Full Model (with flows)', data: lpFullData, borderColor: accent, backgroundColor: isGold ? 'rgba(217,202,93,0.15)' : 'rgba(124,252,0,0.15)', fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: accent, pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 3 },
+              { label: 'LP \u00b7 Factor Only (your assumption)', data: lpOnly, borderColor: accentDim, backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: accentDim, pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 2, borderDash: [6, 5] },
+            ],
+          },
+          options: smallChartOptions('LP Size ($)', fmt$, scaleMode === 'log'),
+        });
+        return () => { if (lpChartInst.current) { lpChartInst.current.destroy(); lpChartInst.current = null; } };
+      }, [currentLP, lpYear0, lpAnnual, usersYear0, injection, userGrowth, sellPct, buybackPct, lvRatio, currentPrice, supply, scaleMode, isGold]);
+
+      // ===== Users chart =====
+      React.useEffect(() => {
+        if (!usersChartRef.current) return;
+        if (usersChartInst.current) usersChartInst.current.destroy();
+        const labelsYears = ['Y0', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'Y7', 'Y8', 'Y9', 'Y10'];
+        const newUsers = [];
+        const cumUsers = [];
+        let cum = 0;
+        for (let y = 0; y <= 10; y++) {
+          const u = usersYear0 * Math.pow(1 + userGrowth / 100, y);
+          newUsers.push(u);
+          cum += u;
+          cumUsers.push(cum);
+        }
+        const accent = isGold ? '#D9CA5D' : '#7CFC00';
+        usersChartInst.current = new Chart(usersChartRef.current.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: labelsYears,
+            datasets: [
+              { label: 'New Users / Year', data: newUsers, borderColor: '#4ade80', backgroundColor: 'rgba(74, 222, 128, 0.12)', fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#4ade80', pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 2.5 },
+              { label: 'Cumulative Users', data: cumUsers, borderColor: accent, backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: accent, pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 2, borderDash: [6, 5] },
+            ],
+          },
+          options: smallChartOptions('Users', fmtUsers, scaleMode === 'log'),
+        });
+        return () => { if (usersChartInst.current) { usersChartInst.current.destroy(); usersChartInst.current = null; } };
+      }, [usersYear0, userGrowth, scaleMode, isGold]);
+
+      // ===== Buy pressure chart =====
+      React.useEffect(() => {
+        if (!buyChartRef.current) return;
+        if (buyChartInst.current) buyChartInst.current.destroy();
+        const labelsYears = ['Y0', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'Y7', 'Y8', 'Y9', 'Y10'];
+        const isLog = scaleMode === 'log';
+        const organicData = yearsWith.map(y => (isLog && y.netOrganic <= 0) ? null : y.netOrganic);
+        const codeData = yearsWith.map(y => (isLog && y.annualCode <= 0) ? null : y.annualCode);
+        const accent = isGold ? '#D9CA5D' : '#7CFC00';
+        buyChartInst.current = new Chart(buyChartRef.current.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: labelsYears,
+            datasets: [
+              { label: 'Organic Net Buy / Yr', data: organicData, borderColor: accent, backgroundColor: isGold ? 'rgba(217,202,93,0.12)' : 'rgba(124,252,0,0.12)', fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: accent, pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 2.5 },
+              { label: 'Code Buyback / Yr', data: codeData, borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.12)', fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#60a5fa', pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 2.5 },
+            ],
+          },
+          options: smallChartOptions('Annual Buy ($)', fmt$, scaleMode === 'log'),
+        });
+        return () => { if (buyChartInst.current) { buyChartInst.current.destroy(); buyChartInst.current = null; } };
+      }, [currentLP, lpYear0, lpAnnual, usersYear0, injection, userGrowth, sellPct, buybackPct, lvRatio, currentPrice, supply, scaleMode, isGold]);
+
+      // ===== Main 10-Year price chart =====
+      React.useEffect(() => {
+        if (!priceChartRef.current) return;
+        if (priceChartInst.current) priceChartInst.current.destroy();
+        const labels = ['Now', ...yearsWith.map(y => 'Y' + y.year)];
+        const dataWith = [currentPrice, ...yearsWith.map(y => y.priceEnd)];
+        const dataWithout = [currentPrice, ...yearsWithout.map(y => y.priceEnd)];
+        const accent = isGold ? '#D9CA5D' : '#7CFC00';
+        priceChartInst.current = new Chart(priceChartRef.current.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'With Code Buyback', data: dataWith, borderColor: accent, backgroundColor: isGold ? 'rgba(217,202,93,0.12)' : 'rgba(124,252,0,0.12)', fill: true, tension: 0.3, pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: accent, pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 3 },
+              { label: 'Organic Only (no code)', data: dataWithout, borderColor: '#4ade80', backgroundColor: 'rgba(74,222,128,0.04)', fill: false, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#4ade80', pointBorderColor: '#06080f', pointBorderWidth: 2, borderWidth: 2, borderDash: [6, 5] },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { labels: { color: '#f0f0f0', font: { family: "'Rajdhani', sans-serif", size: 13, weight: '600' }, padding: 16, usePointStyle: true, pointStyle: 'circle' } },
+              tooltip: {
+                backgroundColor: '#0d111d', borderColor: accent, borderWidth: 1, titleColor: accent,
+                titleFont: { family: "'Rajdhani', sans-serif", size: 14, weight: '700' },
+                bodyColor: '#f0f0f0', bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
+                padding: 12,
+                callbacks: { label: function (ctx) { return ctx.dataset.label + ': ' + fmtPrice(ctx.parsed.y); } },
+              },
+            },
+            scales: {
+              y: {
+                type: scaleMode === 'log' ? 'logarithmic' : 'linear',
+                ticks: { color: '#8a92a6', callback: function (val) { return fmtPrice(val); }, font: { family: "'JetBrains Mono', monospace", size: 11 } },
+                grid: { color: 'rgba(255,255,255,0.04)' },
+                title: { display: true, text: scaleMode === 'log' ? cfg.name + ' Price (log scale)' : cfg.name + ' Price', color: '#8a92a6', font: { family: "'Rajdhani', sans-serif", size: 12, weight: '600' } },
+              },
+              x: { ticks: { color: '#8a92a6', font: { family: "'JetBrains Mono', monospace", size: 11 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+            },
+          },
+        });
+        return () => { if (priceChartInst.current) { priceChartInst.current.destroy(); priceChartInst.current = null; } };
+      }, [currentLP, lpYear0, lpAnnual, usersYear0, injection, userGrowth, sellPct, buybackPct, lvRatio, currentPrice, supply, scaleMode, isGold]);
+
+      // ===== Reusable styled pieces =====
+      const Pill = ({ active, onClick, children }) => (
+        <button onClick={onClick} className="px-3 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap" style={{
+          background: active ? `${glowColor}0.2)` : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${active ? glowColor + '0.5)' : 'rgba(255,255,255,0.08)'}`,
+          color: active ? 'white' : 'rgba(255,255,255,0.4)',
+          boxShadow: active ? `0 0 10px ${glowColor}0.15)` : 'none',
+          fontFamily: "'Orbitron', monospace",
+          letterSpacing: '0.05em',
+        }}>{children}</button>
+      );
+
+      const NumInput = ({ value, onChange, suffix, prefix, step, min }) => (
+        <div className="relative">
+          {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{prefix}</span>}
+          <input type="number" value={value} step={step} min={min}
+            onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
+            className={`w-full ${prefix ? 'pl-7' : 'pl-3'} ${suffix ? 'pr-8' : 'pr-3'} py-2.5 rounded-lg bg-black/50 text-white text-base font-bold font-mono focus:outline-none transition`}
+            style={{ border: `1px solid ${glowColor}0.25)` }} />
+          {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{suffix}</span>}
+        </div>
+      );
+
+      const Slider = ({ value, onChange, min, max, step, suffix }) => (
+        <div className="flex items-center gap-3">
+          <input type="range" min={min} max={max} step={step} value={value}
+            onChange={e => onChange(parseFloat(e.target.value))}
+            className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+            style={{ background: `linear-gradient(to right, ${glowColor}0.6) 0%, ${glowColor}0.6) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) 100%)`, accentColor: isGold ? '#D9CA5D' : '#7CFC00' }} />
+          <span className="text-white/70 font-mono text-xs min-w-[3.5em] text-right">{value}{suffix}</span>
+        </div>
+      );
+
+      // Stat line for inside cards
+      const StatLine = ({ label, value, cls }) => (
+        <div className="flex justify-between items-center py-1">
+          <span className="text-white/40 text-xs">{label}</span>
+          <span className={`font-mono text-xs font-bold ${cls || 'text-white/80'}`}>{value}</span>
+        </div>
+      );
+
+      // Scenario strip text bits
+      const accentSpan = (s) => <span className={theme.text + ' font-bold'}>{s}</span>;
+
+      // ===== JSX =====
+      return (
+        <div className="space-y-6">
+          {/* Scenario strip */}
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl px-6 py-3 text-center`}>
+            <div className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-1">Current Scenario</div>
+            <div className="text-white/70 text-sm">
+              {accentSpan(lpYear0 + 'x')} Y0 LP &middot; {accentSpan('+' + lpAnnual + '%')}/yr ongoing &middot; {accentSpan(usersYear0.toLocaleString())} users &times; {accentSpan('+' + userGrowth + '%')}/yr &middot; {accentSpan(sellPct + '%')} sells &middot; {accentSpan(buybackPct + '%')} code buyback &middot; {accentSpan(fmtScenarioLabel(lvRatio))} volume
+            </div>
+          </div>
+
+          {/* Main Calculator Card - BOLD border with inputs grid */}
+          <div className="rounded-2xl overflow-hidden" style={{
+            border: `4px solid ${glowColor}0.85)`,
+            boxShadow: `0 0 25px ${glowColor}0.15), inset 0 0 25px ${glowColor}0.05)`,
+            background: `linear-gradient(180deg, ${glowColor}0.08) 0%, rgba(17,17,17,0.9) 40%, rgba(17,17,17,0.95) 100%)`,
+          }}>
+            <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between">
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Growth Projection Calculator</span>
+              <span className="text-white/30 text-[10px] font-bold uppercase tracking-widest">10-Year Modeling</span>
+            </div>
+
+            <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {/* === LP GROWTH CARD === */}
+              <div className="bg-black/30 border border-white/10 rounded-xl p-5">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-4">LP Growth</div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Year 0 LP Multiplier</label>
+                  <div className="mb-2"><NumInput value={lpYear0} onChange={setLpYear0} suffix="x" step="0.5" min="0.1" /></div>
+                  <div className="mb-2"><Slider value={lpYear0} onChange={setLpYear0} min={0} max={100} step={1} suffix="x" /></div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[2,5,10,25,50,100].map(v => <Pill key={v} active={lpYear0===v} onClick={()=>setLpYear0(v)}>{v}x</Pill>)}
+                  </div>
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Ongoing Annual LP Growth (after Y0)</label>
+                  <div className="mb-2"><NumInput value={lpAnnual} onChange={setLpAnnual} suffix="%" step="5" min="0" /></div>
+                  <div className="mb-2"><Slider value={lpAnnual} onChange={setLpAnnual} min={0} max={300} step={1} suffix="%" /></div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[0,25,50,100,200,300].map(v => <Pill key={v} active={lpAnnual===v} onClick={()=>setLpAnnual(v)}>{v}%</Pill>)}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/5">
+                  <StatLine label="Y10 LP \u00b7 factor only" value={fmt$(y10LpOnly)} />
+                  <StatLine label="Total LP multiplier" value={fmtMult(y10LpOnly / currentLP)} />
+                  <StatLine label="Y10 LP \u00b7 full model" value={fmt$(y10LpFull)} cls="text-green-400" />
+                </div>
+              </div>
+
+              {/* === USER ADOPTION CARD === */}
+              <div className="bg-black/30 border border-white/10 rounded-xl p-5">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-4">User Adoption</div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">New Users in Year 0</label>
+                  <NumInput value={usersYear0} onChange={setUsersYear0} step="100" min="0" />
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Avg Price Injection per User</label>
+                  <NumInput value={injection} onChange={setInjection} prefix="$" step="500" min="0" />
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Annual User Growth %</label>
+                  <div className="mb-2"><Slider value={userGrowth} onChange={setUserGrowth} min={0} max={400} step={1} suffix="%" /></div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[{v:0,l:'0% Flat'},{v:25,l:'25%'},{v:50,l:'50%'},{v:100,l:'100%'},{v:200,l:'200%'},{v:300,l:'300%'},{v:400,l:'400%'}].map(o => <Pill key={o.v} active={userGrowth===o.v} onClick={()=>setUserGrowth(o.v)}>{o.l}</Pill>)}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/5">
+                  <StatLine label="Y10 new users" value={fmtUsers(y10Users)} />
+                  <StatLine label="Total users \u00b7 Y0\u2013Y10" value={fmtUsers(totalUsersAll)} />
+                  <StatLine label="Total net organic 10yr" value={fmt$(totalNetOrg)} cls="text-green-400" />
+                </div>
+              </div>
+
+              {/* === PRESSURE SETTINGS CARD === */}
+              <div className="bg-black/30 border border-white/10 rounded-xl p-5">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-4">Pressure Settings</div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Sell Pressure %</label>
+                  <div className="mb-2"><Slider value={sellPct} onChange={setSellPct} min={0} max={150} step={1} suffix="%" /></div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[0,25,50,75,90,95,125,150].map(v => <Pill key={v} active={sellPct===v} onClick={()=>setSellPct(v)}>{v}%</Pill>)}
+                  </div>
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Code Buyback % of 5% Trade Fee</label>
+                  <div className="mb-2"><Slider value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" /></div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[0,25,40,50,75,100].map(v => <Pill key={v} active={buybackPct===v} onClick={()=>setBuybackPct(v)}>{v}%</Pill>)}
+                  </div>
+                </div>
+
+                <div className="mb-5">
+                  <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Volume Scenario (L/V Ratio)</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[{v:0.0922,l:'Conservative'},{v:0.0944,l:'Median'},{v:0.1285,l:'Strong'},{v:0.2537,l:'Peak'}].map(o => <Pill key={o.v} active={lvRatio===o.v} onClick={()=>setLvRatio(o.v)}>{o.l}</Pill>)}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/5">
+                  <StatLine label="Net buy capture" value={captureRate + '% of gross'} cls="text-green-400" />
+                  <StatLine label="Code buy rate \u00b7 % of vol" value={codeRateOfVol.toFixed(2) + '% of vol'} cls="text-blue-400" />
+                  <StatLine label="Total code buy 10yr" value={fmt$(totalCodeAll)} cls="text-blue-400" />
+                </div>
+              </div>
+
+              {/* === BASELINE CARD (collapsible) === */}
+              <div className="bg-black/30 border border-white/10 rounded-xl p-5">
+                <button onClick={()=>setBaselineOpen(o=>!o)} className="w-full flex items-center justify-between mb-4">
+                  <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Baseline \u00b7 Current State</div>
+                  <span className="text-white/40 text-xs transition-transform" style={{ transform: baselineOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>{'\u25BC'}</span>
+                </button>
+
+                {baselineOpen && (
+                  <div className="space-y-4 mb-4">
+                    <div>
+                      <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Current {cfg.name} Price</label>
+                      <NumInput value={currentPrice} onChange={setCurrentPrice} prefix="$" step="0.0000001" />
+                    </div>
+                    <div>
+                      <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">Current {cfg.name} LP ($ value)</label>
+                      <NumInput value={currentLP} onChange={setCurrentLP} prefix="$" step="100000" />
+                    </div>
+                    <div>
+                      <label className="text-white/70 text-xs uppercase tracking-wide font-bold block mb-2">{cfg.name} Supply</label>
+                      <NumInput value={supply} onChange={setSupply} step="1000000000" />
+                    </div>
+                  </div>
+                )}
+
+                <div className={`pt-3 ${baselineOpen ? 'border-t border-white/5' : ''}`}>
+                  <StatLine label="Current MCap" value={fmt$(mcap)} cls="text-blue-400" />
+                  <StatLine label="Current LP / MCap" value={lpRatioPct.toFixed(2) + '%'} />
+                  <StatLine label="Weekly volume now" value={fmt$(weeklyVolNow)} />
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Year 0 Snapshot */}
+          <div className="text-center pt-2">
+            <h3 className="text-xl font-bold text-white font-orbitron tracking-widest">YEAR 0 SNAPSHOT</h3>
+            <div className="w-16 h-0.5 mx-auto mt-1.5 rounded-full" style={{background:`linear-gradient(90deg,transparent,${glowColor}0.8),transparent)`}}></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl p-6`}>
+              <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1">{cfg.name} at Year 0</div>
+              <div className="text-white/30 text-xs mb-3">After LP X factor + organic + code buyback</div>
+              <div className={`text-4xl sm:text-5xl font-bold font-orbitron ${theme.text}`} style={{textShadow:`0 0 24px ${glowColor}0.3)`}}>{fmtPrice(y0.priceEnd)}</div>
+              <div className="mt-3 flex items-center gap-3 text-xs">
+                <span className={`${theme.text} font-bold font-mono`}>{fmtMult(y0.priceEnd / currentPrice)} Potential</span>
+                <span className="text-white/20">|</span>
+                <span className="text-white/50">MCap: <span className="text-white/80 font-mono">{fmt$(y0.priceEnd * supply)}</span></span>
+              </div>
+            </div>
+
+            <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl p-6`}>
+              <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1">{cfg.name} LP at Year 0</div>
+              <div className="text-white/30 text-xs mb-3">Liquidity pool size after all flows</div>
+              <div className="text-4xl sm:text-5xl font-bold font-orbitron text-green-400" style={{textShadow:'0 0 24px rgba(74,222,128,0.3)'}}>{fmt$(y0.lpEnd)}</div>
+              <div className="mt-3 flex items-center gap-3 text-xs">
+                <span className="text-green-400 font-bold font-mono">{fmtMult(y0.lpEnd / currentLP)} LP Growth</span>
+                <span className="text-white/20">|</span>
+                <span className="text-white/50">Weekly Vol: <span className="text-white/80 font-mono">{fmt$(y0.weeklyVol)}</span></span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4-stat row */}
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+            <div className="grid grid-cols-2 md:grid-cols-4">
+              <div className="px-4 py-4 border-r border-white/5 text-center">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1">Code Buy / Yr</div>
+                <div className="text-xl font-bold font-mono text-green-400">{fmt$(y0.annualCode)}</div>
+              </div>
+              <div className="px-4 py-4 md:border-r border-white/5 text-center">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1">Net Organic / Yr</div>
+                <div className={`text-xl font-bold font-mono ${theme.text}`}>{fmt$(y0.netOrganic)}</div>
+              </div>
+              <div className="px-4 py-4 border-r border-white/5 text-center border-t md:border-t-0">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1">Total Buy / Yr</div>
+                <div className="text-xl font-bold font-mono text-blue-400">{fmt$(y0.totalNet)}</div>
+              </div>
+              <div className="px-4 py-4 text-center border-t md:border-t-0">
+                <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-1">Sells / Yr</div>
+                <div className="text-xl font-bold font-mono text-orange-400">{fmt$(y0.sellsAmount)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Year-by-Year Breakdown table */}
+          <div className="text-center pt-4">
+            <h3 className="text-xl font-bold text-white font-orbitron tracking-widest">YEAR-BY-YEAR BREAKDOWN</h3>
+            <div className="w-16 h-0.5 mx-auto mt-1.5 rounded-full" style={{background:`linear-gradient(90deg,transparent,${glowColor}0.8),transparent)`}}></div>
+          </div>
+
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+            <div className="px-6 py-3 border-b border-white/[0.06]">
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Detailed Projection \u00b7 All values in USD</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    {['Year', cfg.name + ' Price', 'Price Xs', 'MCap', 'LP Size', 'Daily Vol', 'Weekly Vol', 'Code Buy / Yr', 'Organic / Yr', 'Total Buy / Yr'].map(h => (
+                      <th key={h} className="px-3 py-3 text-right text-white/40 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap first:text-left">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {yearsWith.map(y => (
+                    <tr key={y.year} className="border-b border-white/5 hover:bg-white/[0.02] transition">
+                      <td className="px-3 py-2.5 text-left text-white/70 font-bold font-mono whitespace-nowrap">Y{y.year}</td>
+                      <td className={`px-3 py-2.5 text-right ${theme.text} font-bold font-mono whitespace-nowrap`}>{fmtPrice(y.priceEnd)}</td>
+                      <td className="px-3 py-2.5 text-right text-green-400 font-mono whitespace-nowrap">{fmtMult(y.priceEnd / currentPrice)}</td>
+                      <td className="px-3 py-2.5 text-right text-blue-400 font-mono whitespace-nowrap">{fmt$(y.priceEnd * supply)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.lpEnd)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.weeklyVol / 7)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.weeklyVol)}</td>
+                      <td className="px-3 py-2.5 text-right text-green-400 font-mono whitespace-nowrap">{fmt$(y.annualCode)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.netOrganic)}</td>
+                      <td className="px-3 py-2.5 text-right text-green-400 font-bold font-mono whitespace-nowrap">{fmt$(y.totalNet)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Scale toggle */}
+          <div className="flex justify-center items-center gap-3">
+            <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Chart Scale</span>
+            <div className="inline-flex gap-1">
+              {['linear','log'].map(m => (
+                <Pill key={m} active={scaleMode===m} onClick={()=>setScaleMode(m)}>{m === 'linear' ? 'Linear' : 'Log'}</Pill>
+              ))}
+            </div>
+          </div>
+
+          {/* 10-Year Price Trajectory */}
+          <div className="text-center pt-2">
+            <h3 className="text-xl font-bold text-white font-orbitron tracking-widest">10-YEAR PRICE TRAJECTORY</h3>
+            <div className="w-16 h-0.5 mx-auto mt-1.5 rounded-full" style={{background:`linear-gradient(90deg,transparent,${glowColor}0.8),transparent)`}}></div>
+          </div>
+
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+            <div className="px-6 py-3 border-b border-white/[0.06]">
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">{cfg.name} Price Over Time \u00b7 With vs Without Code Buyback</span>
+            </div>
+            <div className="p-4" style={{height:'420px'}}>
+              <canvas ref={priceChartRef}></canvas>
+            </div>
+          </div>
+
+          {/* Growth Components */}
+          <div className="text-center pt-4">
+            <h3 className="text-xl font-bold text-white font-orbitron tracking-widest">GROWTH COMPONENTS</h3>
+            <div className="w-16 h-0.5 mx-auto mt-1.5 rounded-full" style={{background:`linear-gradient(90deg,transparent,${glowColor}0.8),transparent)`}}></div>
+            <p className="text-white/35 text-xs mt-2">10-Year Trajectories</p>
+          </div>
+
+          {/* LP trajectory (wide) */}
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+            <div className="px-6 py-3 border-b border-white/[0.06]">
+              <span className="text-white/60 text-sm font-bold uppercase tracking-widest">LP Size Over Time \u00b7 Factor-Only vs Full Model</span>
+            </div>
+            <div className="p-4" style={{height:'340px'}}>
+              <canvas ref={lpChartRef}></canvas>
+            </div>
+            <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+              {[
+                {label:'Now', val: lpOnly[0]},
+                {label:'After Y0 LP X', val: lpOnly[1]},
+                {label:'Y3', val: lpOnly[4]},
+                {label:'Y5', val: lpOnly[6]},
+                {label:'Y10 \u00b7 Factor', val: lpOnly[11]},
+                {label:'Y10 \u00b7 Full', val: yearsWith[10].lpEnd, cls:'text-green-400'},
+              ].map(m => (
+                <div key={m.label} className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-center">
+                  <div className="text-white/30 text-[9px] font-bold uppercase tracking-widest mb-1">{m.label}</div>
+                  <div className={`font-mono text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmt$(m.val)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Users + Buy side-by-side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+              <div className="px-6 py-3 border-b border-white/[0.06]">
+                <span className="text-white/60 text-sm font-bold uppercase tracking-widest">User Adoption \u00b7 New & Cumulative</span>
+              </div>
+              <div className="p-4" style={{height:'280px'}}>
+                <canvas ref={usersChartRef}></canvas>
+              </div>
+              <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  {label:'Y0 New', val: usersYear0},
+                  {label:'Y5 New', val: userY5},
+                  {label:'Y10 New', val: y10Users},
+                  {label:'Total Y0\u2013Y10', val: totalUsersAll, cls:'text-green-400'},
+                ].map(m => (
+                  <div key={m.label} className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-center">
+                    <div className="text-white/30 text-[9px] font-bold uppercase tracking-widest mb-1">{m.label}</div>
+                    <div className={`font-mono text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmtUsers(m.val)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+              <div className="px-6 py-3 border-b border-white/[0.06]">
+                <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Annual Buy Pressure \u00b7 Organic vs Code</span>
+              </div>
+              <div className="p-4" style={{height:'280px'}}>
+                <canvas ref={buyChartRef}></canvas>
+              </div>
+              <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  {label:'Y0 Organic', val: y0.netOrganic},
+                  {label:'Y0 Code', val: y0.annualCode, cls:'text-blue-400'},
+                  {label:'Y10 Organic', val: yearsWith[10].netOrganic},
+                  {label:'Y10 Code', val: yearsWith[10].annualCode, cls:'text-blue-400'},
+                  {label:'Total Organic 10yr', val: totalNetOrg, cls:'text-green-400'},
+                  {label:'Total Code 10yr', val: totalCodeAll, cls:'text-blue-400'},
+                ].map(m => (
+                  <div key={m.label} className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-center">
+                    <div className="text-white/30 text-[9px] font-bold uppercase tracking-widest mb-1">{m.label}</div>
+                    <div className={`font-mono text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmt$(m.val)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Footnote */}
+          <div className="bg-black/30 border border-white/5 rounded-xl px-5 py-4 text-white/40 text-xs leading-relaxed">
+            <span className={`${theme.text} font-bold`}>Model:</span> AMM v2 constant-product (x&middot;y=k) on a balanced pool. Each year applies LP X factor first (paired-side appreciation), then nets organic flows + annual code buyback into the pool.
+            <br />
+            <span className={`${theme.text} font-bold`}>Formula:</span> <span className="font-mono">P_new = P &times; (1 + 2&middot;NetBuy / LP)&sup2; &nbsp;&middot;&nbsp; LP_new = LP + 2&middot;NetBuy</span>
+          </div>
+
+        </div>
+      );
+    };
+
     const CalculatorsTab=({token,cfg,data,burn,pls,theme,stakingData,volumeByPeriod,totalUFOShareRate,stakingPairs,onBack})=>{
       const[calcTab,setCalcTab]=useState('xmult');
       const isGold=cfg.color==='gold';
@@ -1674,6 +2372,21 @@
                   </button>
                 );
               })}
+              {/* Hidden growth-projection trigger — faint dot, no label */}
+              <button
+                onClick={()=>setCalcTab('growth')}
+                aria-label="hidden"
+                title=""
+                className="self-center transition-opacity"
+                style={{
+                  width:'7px',height:'7px',borderRadius:'50%',
+                  marginLeft:'6px',
+                  background: calcTab==='growth' ? `${glowColor}0.7)` : 'rgba(255,255,255,0.10)',
+                  border: calcTab==='growth' ? `1px solid ${glowColor}0.9)` : '1px solid rgba(255,255,255,0.15)',
+                  boxShadow: calcTab==='growth' ? `0 0 8px ${glowColor}0.5)` : 'none',
+                  padding:0, cursor:'pointer', flexShrink:0,
+                }}
+              />
             </div>
           </div>
           
@@ -3391,6 +4104,11 @@
           {/* ====== LV ANALYSER TAB ====== */}
           {calcTab==='lv'&&(
             <LVAnalyserTab />
+          )}
+
+          {/* ====== GROWTH PROJECTION (hidden, dot-triggered) ====== */}
+          {calcTab==='growth'&&(
+            <GrowthProjectionTab cfg={cfg} theme={theme} />
           )}
 
 
