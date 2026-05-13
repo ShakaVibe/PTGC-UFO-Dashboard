@@ -21,6 +21,7 @@
   .buy-btn{position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease}
   .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
   .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
+  .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
   /* Chart page specific */
   .chart-card{border:4px solid rgba(217,202,93,0.3);border-radius:20px;padding:24px 20px;background:rgba(0,0,0,0.3);box-shadow:0 0 40px rgba(217,202,93,0.06);margin-bottom:24px}
   .range-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
@@ -125,57 +126,110 @@
   <!-- ═══════════════════════════════════════════════════════
        HEADER — exact replica of Dashboard / Calculators
        ═══════════════════════════════════════════════════════ -->
-  <header class="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
-    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
-      <div class="flex items-center justify-between flex-wrap gap-3">
-        <div class="flex items-center gap-4 sm:gap-6">
-          <a href="#" onclick="navTo('dashboard');return false" class="text-white/40 hover:text-white/70 flex flex-col items-center leading-none transition-colors no-underline" style="cursor:pointer">
-            <span class="text-xl">&#8592;</span>
-            <span class="text-[9px] uppercase">Home</span>
-          </a>
-          <img id="headerLogo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC" class="w-20 h-20 sm:w-24 sm:h-24"/>
-          <div>
-            <span id="headerTokenName" class="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold text-[#D9CA5D]">PTGC</span>
-            <div class="flex items-center gap-1">
-              <span id="headerAddress" class="text-white/40 text-xs font-mono">0x9453...DE93</span>
-              <button onclick="copyAddr()" class="text-white/40 hover:text-white/70 text-xs" id="copyBtn">&#128203;</button>
-            </div>
-          </div>
-          <div id="priceBox" class="bg-[#D9CA5D]/5 border border-[#D9CA5D]/30 rounded-xl px-5 py-3 flex items-center gap-3">
-            <span id="headerPrice" class="text-3xl sm:text-4xl font-bold text-[#D9CA5D]">&mdash;</span>
-            <span id="headerChange" class="text-3xl font-bold text-green-400">&#9650;0.00%</span>
-          </div>
-          <div id="statsBox" class="bg-[#D9CA5D]/5 border border-[#D9CA5D]/30 rounded-xl px-4 py-2 flex items-center gap-3">
-            <div class="text-center"><div class="text-white text-xs uppercase leading-tight">PLS Ratio</div><div id="headerPlsRatio" class="text-2xl sm:text-3xl font-bold text-[#D9CA5D]">&mdash;</div></div>
-            <div class="w-px self-stretch bg-white/15"></div>
-            <div class="text-center"><div class="text-white text-xs uppercase leading-tight">X's to ATH</div><div id="headerXtoATH" class="text-2xl sm:text-3xl font-bold text-[#D9CA5D]">&mdash;</div></div>
-            <div class="w-px self-stretch bg-white/15"></div>
-            <div class="text-center"><div class="text-white text-xs uppercase leading-tight">X's to a Penny</div><div id="headerXtoPenny" class="text-2xl sm:text-3xl font-bold text-[#D9CA5D]">&mdash;</div></div>
+  <header class="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+
+      <!-- Row 1: ONE continuous data strip — packed, no justify-between. Stats use flex-1 to absorb slack. -->
+      <div class="flex items-center gap-2 sm:gap-3 lg:gap-5 flex-wrap">
+
+        <!-- Back arrow — minimal, no pill -->
+        <a href="#" onclick="navTo('dashboard');return false" class="group flex items-center text-white/40 hover:text-white transition-colors p-1 -ml-1 shrink-0 no-underline" style="cursor:pointer">
+          <span class="text-xl">&#8592;</span>
+        </a>
+
+        <!-- Logo with subtle halo -->
+        <div class="relative shrink-0">
+          <div id="headerLogoHalo" class="absolute inset-0 rounded-full blur-xl opacity-30 scale-110" style="background:radial-gradient(circle, #D4AF37 0%, transparent 60%)"></div>
+          <img id="headerLogo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC" class="relative w-14 h-14 sm:w-20 sm:h-20 lg:w-24 lg:h-24"/>
+        </div>
+
+        <!-- Token name + address -->
+        <div class="shrink-0">
+          <div id="headerTokenName" class="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold leading-none tracking-wide metallic-gold">PTGC</div>
+          <div class="flex items-center gap-1.5 mt-2">
+            <span id="headerAddress" class="text-white/40 text-xs font-mono tabular-nums">0x9453...DE93</span>
+            <button onclick="copyAddr()" class="text-white/40 hover:text-white/80 transition-colors text-xs" id="copyBtn">&#128203;</button>
           </div>
         </div>
-        <div class="flex items-center gap-2">
-          <a id="buyBtn" href="https://goptgc.com/#/ptgc-onboarding" target="_blank" rel="noopener noreferrer" class="buy-btn flex items-center gap-2 px-5 py-2 rounded-xl" style="background:linear-gradient(135deg,rgba(217,202,93,0.35),rgba(217,202,93,0.15));border:1px solid rgba(217,202,93,0.5);box-shadow:0 0 20px rgba(217,202,93,0.2),inset 0 1px 0 rgba(255,255,255,0.15)">
-            <img id="buyLogo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC" class="w-10 h-10"/>
-            <span id="buyLabel" class="font-orbitron font-bold text-base text-[#D9CA5D]">BUY</span>
+
+        <!-- hairline divider -->
+        <div class="hidden md:block w-px self-stretch bg-white/10 mx-1"></div>
+
+        <!-- Price + change (stacked) -->
+        <div class="shrink-0">
+          <div id="headerPrice" class="font-bold leading-none tabular-nums text-2xl sm:text-3xl lg:text-4xl metallic-gold">&mdash;</div>
+          <div id="headerChange" class="mt-2 text-xs sm:text-sm lg:text-base font-bold tabular-nums text-emerald-400">&uarr; 0.00%</div>
+        </div>
+
+        <!-- hairline divider -->
+        <div class="hidden lg:block w-px self-stretch bg-white/10 mx-1"></div>
+
+        <!-- Stats — flex-1 absorbs slack into spacing instead of leaving a void -->
+        <div class="hidden lg:flex items-center flex-1 min-w-0 justify-around gap-4">
+          <div class="flex flex-col items-start gap-0.5">
+            <span class="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
+            <span id="headerPlsRatio" class="text-3xl font-bold tabular-nums leading-none metallic-gold">&mdash;</span>
+          </div>
+          <div class="flex flex-col items-start gap-0.5">
+            <span class="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH</span>
+            <span id="headerXtoATH" class="text-3xl font-bold tabular-nums leading-none metallic-gold">&mdash;</span>
+          </div>
+          <div class="flex flex-col items-start gap-0.5">
+            <span class="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny</span>
+            <span id="headerXtoPenny" class="text-3xl font-bold tabular-nums leading-none metallic-gold">&mdash;</span>
+          </div>
+        </div>
+
+        <!-- hairline divider -->
+        <div class="hidden lg:block w-px self-stretch bg-white/10 mx-1"></div>
+
+        <!-- Actions — packed right next to stats, no gap created by justify-between -->
+        <div class="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
+          <a id="buyBtn" href="https://goptgc.com/#/ptgc-onboarding" target="_blank" rel="noopener noreferrer" class="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl" style="background:linear-gradient(135deg,rgba(212,175,55,0.35),rgba(212,175,55,0.15));border:1px solid rgba(212,175,55,0.5);box-shadow:0 0 20px rgba(212,175,55,0.2),inset 0 1px 0 rgba(255,255,255,0.15)">
+            <img id="buyLogo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC" class="w-7 h-7 sm:w-9 sm:h-9"/>
+            <span id="buyLabel" class="font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] metallic-gold">BUY</span>
           </a>
-          <button onclick="switchToken()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all">
-            <img id="switchLogo" src="07_Ufo_transparent.png" alt="Switch" class="w-8 h-8"/>
-            <span class="text-white/70 text-sm font-medium">Switch</span>
+          <button onclick="switchToken()" class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+            <img id="switchLogo" src="07_Ufo_transparent.png" alt="Switch" class="w-6 h-6 sm:w-8 sm:h-8"/>
+            <span class="text-white/70 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em]">Switch</span>
           </button>
         </div>
       </div>
-      <!-- Page Navigation -->
-      <div class="flex justify-end -mt-1 -mb-3">
-        <div class="flex items-center gap-1">
-          <a href="#" onclick="navTo('dashboard');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Dashboard</a>
-          <a href="#" onclick="navTo('kpi');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">KPI Report</a>
-          <a href="#" onclick="navTo('social');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Social</a>
-          <a href="./calculators.html" onclick="try{localStorage.setItem('ptgc_last_token',currentHdrToken)}catch(e){}" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/30 text-[#D9CA5D] hover:bg-white/5 no-underline">Calculators</a>
-          <span class="px-3 py-1 text-sm rounded font-medium bg-[#D9CA5D] text-black">Charts</span>
-          <a href="#" onclick="window.location.href='portfolio.html?from='+currentHdrToken;return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10 no-underline"><span style="background:linear-gradient(to right,#D9CA5D,#7CFC00);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Portfolio</span></a>
-          <a href="#" onclick="navTo('affiliates');return false" class="px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20 no-underline">Affiliates</a>
+
+      <!-- Stats fallback for small screens (since they're hidden in row 1 below lg) -->
+      <div class="lg:hidden flex items-center gap-x-5 gap-y-2 mt-3 flex-wrap">
+        <div class="flex items-baseline gap-2">
+          <span class="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
+          <span id="headerPlsRatioMobile" class="text-base font-bold tabular-nums" style="color:#D4AF37">&mdash;</span>
+        </div>
+        <div class="w-px h-4 bg-white/15"></div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH</span>
+          <span id="headerXtoATHMobile" class="text-base font-bold tabular-nums" style="color:#D4AF37">&mdash;</span>
+        </div>
+        <div class="w-px h-4 bg-white/15"></div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny</span>
+          <span id="headerXtoPennyMobile" class="text-base font-bold tabular-nums" style="color:#D4AF37">&mdash;</span>
         </div>
       </div>
+
+      <!-- Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator. -->
+      <div class="flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-wrap overflow-x-auto">
+        <a href="#" onclick="navTo('dashboard');return false" class="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Dashboard</a>
+        <a href="#" onclick="navTo('kpi');return false" class="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">KPI Report</a>
+        <a href="#" onclick="navTo('social');return false" class="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Socials</a>
+        <a href="./calculators.html" onclick="try{localStorage.setItem('ptgc_last_token',currentHdrToken)}catch(e){}" class="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Calculators</a>
+        <span id="navCharts" class="relative px-3.5 py-3 text-sm font-semibold shrink-0" style="color:#D4AF37">
+          Charts
+          <div id="navChartsIndicator" class="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style="background:#D4AF37"></div>
+        </span>
+        <a href="#" onclick="window.location.href='portfolio.html?from='+currentHdrToken;return false" class="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0 no-underline">
+          <span style="background:linear-gradient(to right,#D4AF37,#7CFC00);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Portfolio</span>
+        </a>
+        <a href="#" onclick="navTo('affiliates');return false" class="px-3.5 py-3 text-sm font-semibold text-purple-300 hover:text-purple-200 transition-colors shrink-0 no-underline">Affiliates</a>
+      </div>
+
     </div>
   </header>
 
@@ -350,7 +404,7 @@
 const HDR_TOKENS = {
   PTGC: {
     name: 'PTGC', address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93',
-    logo: '06_PTGC_V1_transparent_bg.png', colorHex: '#D9CA5D', color: 'gold',
+    logo: '06_PTGC_V1_transparent_bg.png', colorHex: '#D4AF37', color: 'gold',
     pair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
     buyUrl: 'https://goptgc.com/#/ptgc-onboarding', ath: 0.00133
   },
@@ -410,41 +464,59 @@ function applyHeaderTheme() {
   const isGold = t.color === 'gold';
   const c = t.colorHex;
 
+  // Logo + halo
   document.getElementById('headerLogo').src = t.logo;
   document.getElementById('headerLogo').alt = t.name;
-  document.getElementById('headerTokenName').textContent = t.name;
-  document.getElementById('headerTokenName').className = `font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold text-[${c}]`;
-  document.getElementById('headerTokenName').style.color = c;
-  document.getElementById('headerAddress').textContent = t.address.slice(0, 6) + '...' + t.address.slice(-4);
+  document.getElementById('headerLogoHalo').style.background = `radial-gradient(circle, ${c} 0%, transparent 60%)`;
 
-  // Price & stats box borders
-  ['priceBox', 'statsBox'].forEach(id => {
+  // Token name + address
+  const nameEl = document.getElementById('headerTokenName');
+  nameEl.textContent = t.name;
+
+  // Gold-gradient elements: token name + price + the 3 desktop stat values + BUY label.
+  // PTGC uses the metallic-gold class; UFO uses solid green via inline color.
+  const goldEls = ['headerTokenName', 'headerPrice', 'headerPlsRatio', 'headerXtoATH', 'headerXtoPenny', 'buyLabel'];
+  goldEls.forEach(id => {
     const el = document.getElementById(id);
-    el.style.borderColor = c + '4D';
-    el.style.background = c + '0D';
+    if (!el) return;
+    if (isGold) {
+      el.classList.add('metallic-gold');
+      el.style.color = '';
+    } else {
+      el.classList.remove('metallic-gold');
+      el.style.color = c;
+    }
   });
 
-  // Text colors in price/stats
-  ['headerPrice', 'headerPlsRatio', 'headerXtoATH', 'headerXtoPenny'].forEach(id => {
-    document.getElementById(id).style.color = c;
+  document.getElementById('headerAddress').textContent = t.address.slice(0, 6) + '...' + t.address.slice(-4);
+
+  // Mobile fallback stats — always solid colour (the metallic gradient is intended for larger type)
+  ['headerPlsRatioMobile', 'headerXtoATHMobile', 'headerXtoPennyMobile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.color = c;
   });
 
   // BUY button
   const buyBtn = document.getElementById('buyBtn');
   buyBtn.href = t.buyUrl;
   document.getElementById('buyLogo').src = t.logo;
-  document.getElementById('buyLabel').style.color = c;
   buyBtn.style.background = isGold
-    ? 'linear-gradient(135deg,rgba(217,202,93,0.35),rgba(217,202,93,0.15))'
+    ? 'linear-gradient(135deg,rgba(212,175,55,0.35),rgba(212,175,55,0.15))'
     : 'linear-gradient(135deg,rgba(124,252,0,0.35),rgba(124,252,0,0.15))';
   buyBtn.style.border = isGold
-    ? '1px solid rgba(217,202,93,0.5)' : '1px solid rgba(124,252,0,0.5)';
+    ? '1px solid rgba(212,175,55,0.5)' : '1px solid rgba(124,252,0,0.5)';
   buyBtn.style.boxShadow = isGold
-    ? '0 0 20px rgba(217,202,93,0.2),inset 0 1px 0 rgba(255,255,255,0.15)'
+    ? '0 0 20px rgba(212,175,55,0.2),inset 0 1px 0 rgba(255,255,255,0.15)'
     : '0 0 20px rgba(124,252,0,0.2),inset 0 1px 0 rgba(255,255,255,0.15)';
 
   // Switch button shows other token
   document.getElementById('switchLogo').src = HDR_TOKENS[other].logo;
+
+  // Charts nav indicator — token accent
+  const navCharts = document.getElementById('navCharts');
+  if (navCharts) navCharts.style.color = c;
+  const indicator = document.getElementById('navChartsIndicator');
+  if (indicator) indicator.style.background = c;
 }
 
 /* Header data — non-blocking, with stale-while-revalidate from sessionStorage */
@@ -507,26 +579,38 @@ function applyHeaderValues(data, t) {
   const up = chg >= 0;
 
   document.getElementById('headerPrice').textContent = fmtPrice(price);
-  const chgEl = document.getElementById('headerChange');
-  chgEl.textContent = (up ? '\u25B2' : '\u25BC') + Math.abs(chg).toFixed(2) + '%';
-  chgEl.className = `text-3xl font-bold ${up ? 'text-green-400' : 'text-red-400'}`;
 
+  const chgEl = document.getElementById('headerChange');
+  chgEl.textContent = (up ? '\u2191' : '\u2193') + ' ' + Math.abs(chg).toFixed(2) + '%';
+  chgEl.className = `mt-2 text-xs sm:text-sm lg:text-base font-bold tabular-nums ${up ? 'text-emerald-400' : 'text-rose-400'}`;
+
+  // PLS Ratio (desktop + mobile)
   document.getElementById('headerPlsRatio').textContent = plsRatio;
+  const plsMobile = document.getElementById('headerPlsRatioMobile');
+  if (plsMobile) plsMobile.textContent = plsRatio;
 
   // X's to ATH — show "AT ATH" if at or above ATH
+  const xathEl = document.getElementById('headerXtoATH');
+  const xathMobileEl = document.getElementById('headerXtoATHMobile');
   if (atATH) {
-    document.getElementById('headerXtoATH').textContent = 'AT ATH';
-    document.getElementById('headerXtoATH').style.fontSize = '16px';
+    xathEl.textContent = 'AT ATH';
+    xathEl.style.fontSize = '16px';
+    if (xathMobileEl) { xathMobileEl.textContent = 'AT ATH'; xathMobileEl.style.fontSize = '12px'; }
   } else {
-    document.getElementById('headerXtoATH').textContent = fmtX(xToATH);
-    document.getElementById('headerXtoATH').style.fontSize = '';
+    xathEl.textContent = fmtX(xToATH);
+    xathEl.style.fontSize = '';
+    if (xathMobileEl) { xathMobileEl.textContent = fmtX(xToATH); xathMobileEl.style.fontSize = ''; }
   }
 
   // X's to Penny — show checkmark if above a penny
+  const xpEl = document.getElementById('headerXtoPenny');
+  const xpMobileEl = document.getElementById('headerXtoPennyMobile');
   if (abovePenny) {
-    document.getElementById('headerXtoPenny').textContent = '\u2713';
+    xpEl.textContent = '\u2713';
+    if (xpMobileEl) xpMobileEl.textContent = '\u2713';
   } else {
-    document.getElementById('headerXtoPenny').textContent = fmtX(xToPenny);
+    xpEl.textContent = fmtX(xToPenny);
+    if (xpMobileEl) xpMobileEl.textContent = fmtX(xToPenny);
   }
 }
 
