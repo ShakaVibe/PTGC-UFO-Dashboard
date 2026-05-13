@@ -1195,6 +1195,36 @@
       }
     };
 
+    // ===== Growth Projection — fee breakdown per token =====
+    // Each row: how much of the trade fee goes to this allocation (`pct` of total fee),
+    // and the default `% of that allocation` that gets used as code buyback for the active token.
+    // `locked:true` means the allocation cannot be changed (automatic buyback mechanism).
+    const FEE_BREAKDOWN = {
+      PTGC: [
+        { id:'bnb', label:'Buy & Burn',  pct:1, defaultBuyback:100, locked:true  },
+        { id:'lp',  label:'Add LP',      pct:1, defaultBuyback:50,  locked:false },
+        { id:'dao', label:'DAO',         pct:2, defaultBuyback:50,  locked:false },
+        { id:'hld', label:'Holders',     pct:1, defaultBuyback:0,   locked:false },
+      ],
+      UFO: [
+        { id:'lp',   label:'LP Providers',     pct:3, defaultBuyback:0,   locked:false },
+        { id:'hld',  label:'Holders',          pct:1, defaultBuyback:0,   locked:false },
+        { id:'bnbU', label:'Buy & Burn UFO',   pct:1, defaultBuyback:100, locked:true  },
+        { id:'bnbP', label:'Buy & Burn PTGC',  pct:1, defaultBuyback:0,   locked:false },
+      ],
+    };
+    const computeInitialAllocations = (tk) => {
+      const out = {};
+      FEE_BREAKDOWN[tk].forEach(r => { out[r.id] = r.defaultBuyback; });
+      return out;
+    };
+    const computeBuybackFromAllocations = (tk, allocations) => {
+      const breakdown = FEE_BREAKDOWN[tk];
+      const total = breakdown.reduce((s, r) => s + r.pct, 0);
+      const weighted = breakdown.reduce((s, r) => s + (r.pct * ((allocations[r.id] ?? r.defaultBuyback) / 100)), 0);
+      return total > 0 ? Math.round((weighted / total) * 100) : 0;
+    };
+
     const GP_Pill = ({ glowColor, active, onClick, children }) => (
       <button onClick={onClick} className="px-3 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap" style={{
         background: active ? `${glowColor}0.2)` : 'rgba(255,255,255,0.03)',
@@ -1285,21 +1315,44 @@
       const [injection, setInjection] = React.useState(5000);
       const [userGrowth, setUserGrowth] = React.useState(100);
       const [sellPct, setSellPct] = React.useState(50);
-      const [buybackPct, setBuybackPct] = React.useState(50);
+      const [feeAllocations, setFeeAllocations] = React.useState(() => computeInitialAllocations(props.cfg.name));
+      const [buybackPct, setBuybackPct] = React.useState(() => computeBuybackFromAllocations(props.cfg.name, computeInitialAllocations(props.cfg.name)));
+
+      // When the active token changes, reset fee allocations to that token's defaults and recompute slider
+      React.useEffect(() => {
+        const fresh = computeInitialAllocations(growthToken);
+        setFeeAllocations(fresh);
+        setBuybackPct(computeBuybackFromAllocations(growthToken, fresh));
+      }, [growthToken]);
+
+      // Editing a single fee allocation: clamp to 0..100, update state, recompute slider
+      const updateAllocation = (id, raw) => {
+        const v = Math.max(0, Math.min(100, raw));
+        const next = { ...feeAllocations, [id]: v };
+        setFeeAllocations(next);
+        setBuybackPct(computeBuybackFromAllocations(growthToken, next));
+      };
       const [lvScenarioKey, setLvScenarioKey] = React.useState('median');
       const [scaleMode, setScaleMode] = React.useState('linear');
       const [sellInfoOpen, setSellInfoOpen] = React.useState(false);
 
       // Live L/V ratio scenarios — pulled from the same source as the Liquidity Impact calc.
-      // Falls back to the original hardcoded percentile values while loading or on fetch failure.
-      const LV_FALLBACK = { conservative: 0.0922, median: 0.0944, strong: 0.1285, peak: 0.2537, count: 0 };
+      // No hardcoded fallbacks: until live data lands, lvRatio is 0 and the UI shows a loading state.
       const [liveScenarios, setLiveScenarios] = React.useState({ PTGC: null, UFO: null });
+      const [lvLoadState, setLvLoadState] = React.useState('loading'); // 'loading' | 'loaded' | 'error'
       React.useEffect(() => {
-        fetchLVScenarios().then(r => { if (r) setLiveScenarios(r); });
+        fetchLVScenarios().then(r => {
+          if (r && (r.PTGC || r.UFO)) {
+            setLiveScenarios(r);
+            setLvLoadState('loaded');
+          } else {
+            setLvLoadState('error');
+          }
+        }).catch(() => setLvLoadState('error'));
       }, []);
-      const tokenScenarios = liveScenarios[growthToken] || LV_FALLBACK;
-      const lvRatio = tokenScenarios[lvScenarioKey] || 0;
-      const scenariosAreLive = liveScenarios[growthToken] != null;
+      const tokenScenarios = liveScenarios[growthToken];
+      const lvRatio = tokenScenarios ? (tokenScenarios[lvScenarioKey] || 0) : 0;
+      const scenariosAreLive = tokenScenarios != null;
 
       // Baseline values — derived from liveData (no longer user-editable)
       const currentPrice = liveData?.price || 0;
@@ -1744,24 +1797,69 @@
                 </div>
 
                 <div className="mb-5">
-                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback % of {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
-                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" /></div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[25,50,75,100].map(v => <GP_Pill glowColor={glowColor} key={v} active={buybackPct===v} onClick={()=>setBuybackPct(v)}>{v}%</GP_Pill>)}
+                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback &middot; {(cfg.taxRate * 100).toFixed(0)}% Trade Fee Breakdown</label>
+
+                  {/* Per-allocation input rows: each line of the trade fee + what % of it becomes code buyback */}
+                  <div className="rounded-lg bg-black/30 border border-white/[0.06] overflow-hidden mb-3">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-3 py-2 border-b border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-white/35">
+                      <span>Fee Line</span>
+                      <span className="text-right">Of Tax</span>
+                      <span className="text-right" style={{minWidth:'88px'}}>Buyback %</span>
+                    </div>
+                    {FEE_BREAKDOWN[growthToken].map(row => {
+                      const v = feeAllocations[row.id] ?? row.defaultBuyback;
+                      return (
+                        <div key={row.id} className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-3 py-2 border-b last:border-b-0 border-white/[0.04] items-center">
+                          <span className="text-white/75 text-sm">{row.label}{row.locked && <span className="ml-1.5 text-white/30 text-[10px] uppercase tracking-wider">locked</span>}</span>
+                          <span className="text-white/45 text-sm font-mono tabular-nums text-right">{row.pct}%</span>
+                          <div className="relative" style={{width:'88px'}}>
+                            <input
+                              type="number" min="0" max="100" step="1"
+                              value={v}
+                              disabled={row.locked}
+                              onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) updateAllocation(row.id, n); }}
+                              className={`w-full pl-2 pr-6 py-1.5 rounded bg-black/50 text-white text-sm font-bold font-mono focus:outline-none transition ${row.locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              style={{ border: row.locked ? '1px solid rgba(255,255,255,0.06)' : `1px solid ${glowColor}0.25)` }}
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 text-xs pointer-events-none">%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
+
+                  {/* Slider — reflects the weighted sum of the boxes above, but can still be moved manually */}
+                  <div className="text-[11px] text-white/40 font-mono mb-1.5 flex justify-between items-center">
+                    <span>Effective code buyback &middot; <span className="text-white/70 font-bold">{buybackPct}%</span> of {(cfg.taxRate * 100).toFixed(0)}% fee</span>
+                    <span className="text-white/30">drag to override</span>
+                  </div>
+                  <GP_Slider glowColor={glowColor} isGold={isGold} value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" />
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Volume Scenario (L/V Ratio)</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}].map(o => <GP_Pill glowColor={glowColor} key={o.key} active={lvScenarioKey===o.key} onClick={()=>setLvScenarioKey(o.key)}>{o.label}</GP_Pill>)}
-                  </div>
-                  <div className="mt-2 text-[11px] text-white/35 font-mono flex items-center gap-1.5">
-                    <span className={scenariosAreLive ? 'text-green-400/70' : 'text-yellow-400/60'}>{'\u25CF'}</span>
-                    <span>{scenariosAreLive ? `${tokenScenarios.count}wk live` : 'fallback'}</span>
-                    <span className="text-white/20">|</span>
-                    <span>{lvRatio > 0 ? lvRatio.toFixed(4) : '\u2014'} weekly L/V</span>
-                  </div>
+                  {lvLoadState === 'loaded' ? (
+                    <>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}].map(o => <GP_Pill glowColor={glowColor} key={o.key} active={lvScenarioKey===o.key} onClick={()=>setLvScenarioKey(o.key)}>{o.label}</GP_Pill>)}
+                      </div>
+                      <div className="mt-2 text-[11px] text-white/35 font-mono flex items-center gap-1.5">
+                        <span className="text-green-400/80">{'\u25CF'}</span>
+                        <span>Live &middot; {tokenScenarios.count} complete week{tokenScenarios.count === 1 ? '' : 's'}</span>
+                        <span className="text-white/20">|</span>
+                        <span>{lvRatio.toFixed(4)} weekly L/V</span>
+                      </div>
+                    </>
+                  ) : lvLoadState === 'loading' ? (
+                    <div className="flex items-center gap-2.5 py-3 px-1">
+                      <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" style={{color:`${glowColor}0.6)`}}></div>
+                      <span className="text-white/50 text-xs">Loading live L/V data from snapshot history\u2026</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 py-2 px-3 rounded-md bg-red-500/10 border border-red-500/30">
+                      <span className="text-red-400 text-xs">Could not load L/V scenarios. Please reload the page.</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-white/5">
