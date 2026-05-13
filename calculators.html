@@ -1195,6 +1195,13 @@
       }
     };
 
+    // ===== Growth Projection — per-token scenario defaults =====
+    // Applied on initial mount and on every token toggle, so each token has its own baseline.
+    const GROWTH_DEFAULTS = {
+      PTGC: { lpYear0: 10, lpAnnual: 25, usersYear0: 5000, injection: 5000, userGrowth: 35, sellPct: 95, lvScenarioKey: 'median' },
+      UFO:  { lpYear0: 10, lpAnnual: 25, usersYear0: 2500, injection: 5000, userGrowth: 35, sellPct: 95, lvScenarioKey: 'median' },
+    };
+
     // ===== Growth Projection — fee breakdown per token =====
     // Each row: how much of the trade fee goes to this allocation (`pct` of total fee),
     // and the % of that allocation routed to code buyback for the active token.
@@ -1308,18 +1315,29 @@
       const liveData = allData[growthToken];
       const loadingLive = liveData === null;
 
-      // Scenario state — mirrors original `state` object (minus baseline state)
-      const [lpYear0, setLpYear0] = React.useState(10);
-      const [lpAnnual, setLpAnnual] = React.useState(25);
-      const [usersYear0, setUsersYear0] = React.useState(5000);
-      const [injection, setInjection] = React.useState(5000);
-      const [userGrowth, setUserGrowth] = React.useState(35);
-      const [sellPct, setSellPct] = React.useState(95);
+      // Scenario state — initialized from per-token defaults; reset on token toggle below.
+      const [lpYear0, setLpYear0]       = React.useState(GROWTH_DEFAULTS[props.cfg.name].lpYear0);
+      const [lpAnnual, setLpAnnual]     = React.useState(GROWTH_DEFAULTS[props.cfg.name].lpAnnual);
+      const [usersYear0, setUsersYear0] = React.useState(GROWTH_DEFAULTS[props.cfg.name].usersYear0);
+      const [injection, setInjection]   = React.useState(GROWTH_DEFAULTS[props.cfg.name].injection);
+      const [userGrowth, setUserGrowth] = React.useState(GROWTH_DEFAULTS[props.cfg.name].userGrowth);
+      const [sellPct, setSellPct]       = React.useState(GROWTH_DEFAULTS[props.cfg.name].sellPct);
+      const [lvScenarioKey, setLvScenarioKey] = React.useState(GROWTH_DEFAULTS[props.cfg.name].lvScenarioKey);
       const [feeAllocations, setFeeAllocations] = React.useState(() => computeInitialAllocations(props.cfg.name));
       const [buybackPct, setBuybackPct] = React.useState(() => computeBuybackFromAllocations(props.cfg.name, computeInitialAllocations(props.cfg.name)));
+      const [scaleMode, setScaleMode] = React.useState('linear');
+      const [sellInfoOpen, setSellInfoOpen] = React.useState(false);
 
-      // When the active token changes, reset fee allocations to that token's defaults and recompute slider
+      // When the active token changes: reset every scenario input + fee allocations to that token's defaults
       React.useEffect(() => {
+        const d = GROWTH_DEFAULTS[growthToken];
+        setLpYear0(d.lpYear0);
+        setLpAnnual(d.lpAnnual);
+        setUsersYear0(d.usersYear0);
+        setInjection(d.injection);
+        setUserGrowth(d.userGrowth);
+        setSellPct(d.sellPct);
+        setLvScenarioKey(d.lvScenarioKey);
         const fresh = computeInitialAllocations(growthToken);
         setFeeAllocations(fresh);
         setBuybackPct(computeBuybackFromAllocations(growthToken, fresh));
@@ -1332,9 +1350,6 @@
         setFeeAllocations(next);
         setBuybackPct(computeBuybackFromAllocations(growthToken, next));
       };
-      const [lvScenarioKey, setLvScenarioKey] = React.useState('median');
-      const [scaleMode, setScaleMode] = React.useState('linear');
-      const [sellInfoOpen, setSellInfoOpen] = React.useState(false);
 
       // Live L/V ratio scenarios — pulled from the same source as the Liquidity Impact calc.
       // No hardcoded fallbacks: until live data lands, lvRatio is 0 and the UI shows a loading state.
@@ -1639,16 +1654,16 @@
         <div className="space-y-6">
           {/* Token selector + live data summary */}
           <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
-            <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between">
+            <div className="px-6 pt-3 pb-0.5 flex items-center justify-between">
               <span className="text-white/60 text-base font-bold uppercase tracking-widest">Token</span>
               <span className="text-white/30 text-xs font-bold uppercase tracking-widest">
                 {loadingLive ? 'Fetching live data\u2026' : 'Live'}
                 {!loadingLive && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 ml-1.5 align-middle animate-pulse"></span>}
               </span>
             </div>
-            <div className="p-5 sm:p-6">
+            <div className="px-5 pb-4 sm:px-6 sm:pb-5">
               {/* Token buttons */}
-              <div className="flex justify-center gap-3 mb-5">
+              <div className="flex justify-center gap-3 mb-3">
                 {['PTGC', 'UFO'].map(tk => {
                   const tCfg = TOKENS[tk];
                   const tIsGold = tCfg.color === 'gold';
@@ -1680,8 +1695,8 @@
                   { label: 'Circulating Supply', val: fmtUsers(supply), cls: 'text-white/90' },
                   { label: 'Current MCap', val: fmt$(currentPrice * supply), cls: 'text-blue-400' },
                 ].map(t => (
-                  <div key={t.label} className="bg-black/40 border border-white/5 rounded-lg px-4 py-4 text-center">
-                    <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-2">{t.label}</div>
+                  <div key={t.label} className="bg-black/40 border border-white/5 rounded-lg px-4 py-2.5 text-center">
+                    <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">{t.label}</div>
                     <div className={`text-2xl font-bold ${t.cls}`}>
                       {loadingLive ? <span className="text-white/30 text-sm">{'Loading\u2026'}</span> : t.val}
                     </div>
