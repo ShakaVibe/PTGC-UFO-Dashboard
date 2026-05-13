@@ -28,6 +28,7 @@
     .buy-btn{position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease}
     .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
     .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
+    .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
   </style>
 </head>
 <body>
@@ -4344,54 +4345,120 @@
       
       return(
         <div className="min-h-screen bg-[#0a0a0a]">
-          <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
-            <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-5">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-4 sm:gap-6">
-                  <button onClick={goBack} className="text-white/40 hover:text-white/70 flex flex-col items-center leading-none transition-colors"><span className="text-xl">{'\u2190'}</span><span className="text-[9px] uppercase">Home</span></button>
-                  <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24"/>
-                  <div>
-                    <span className={`font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold ${theme.text}`}>{token}</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span>
-                      <button onClick={copyAddress} className="text-white/40 hover:text-white/70 text-xs">{copied?'\u2713':'\u{1F4CB}'}</button>
-                    </div>
-                  </div>
-                  <div className={`${theme.card} border ${theme.border} rounded-xl px-5 py-3 flex items-center gap-3`}>
-                    <Price p={data?.price} c={`text-3xl sm:text-4xl font-bold ${theme.text}`}/>
-                    <span className={`text-3xl font-bold ${priceUp?'text-green-400':'text-red-400'}`}>{priceUp?'\u25B2':'\u25BC'}{Math.abs(data?.change||0).toFixed(2)}%</span>
-                  </div>
-                  <div className={`${theme.card} border ${theme.border} rounded-xl px-4 py-2 flex items-center gap-3`}>
-                    <div className="text-center"><div className="text-white text-xs uppercase leading-tight">PLS Ratio</div><div className={`text-2xl sm:text-3xl font-bold ${theme.text}`}>{plsRatio}</div></div>
-                    <div className="w-px self-stretch bg-white/15"></div>
-                    <div className="text-center"><div className="text-white text-xs uppercase leading-tight">X's to ATH</div><div className={`text-2xl sm:text-3xl font-bold ${theme.text}`}>{hdrFmtX(xToATH)}</div></div>
-                    <div className="w-px self-stretch bg-white/15"></div>
-                    <div className="text-center"><div className="text-white text-xs uppercase leading-tight">X's to a Penny</div><div className={`text-2xl sm:text-3xl font-bold ${theme.text}`}>{hdrFmtX(xToPenny)}</div></div>
+          <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+
+              {/* Row 1: ONE continuous data strip — packed, no justify-between. Stats use flex-1 to absorb slack. */}
+              <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 flex-wrap">
+
+                {/* Back arrow — minimal, no pill */}
+                <button onClick={goBack} className="group flex items-center text-white/40 hover:text-white transition-colors p-1 -ml-1 shrink-0">
+                  <span className="text-xl group-hover:-translate-x-0.5 transition-transform">{'\u2190'}</span>
+                </button>
+
+                {/* Logo with subtle halo */}
+                <div className="relative shrink-0">
+                  <div className="absolute inset-0 rounded-full blur-xl opacity-30 scale-110" style={{background:`radial-gradient(circle, ${cfg.colorHex} 0%, transparent 60%)`}}></div>
+                  <img src={cfg.logo} alt={token} className="relative w-14 h-14 sm:w-20 sm:h-20 lg:w-24 lg:h-24"/>
+                </div>
+
+                {/* Token name + address */}
+                <div className="shrink-0">
+                  <div className={`font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold leading-none tracking-wide ${isGold?'metallic-gold':theme.text}`}>{token}</div>
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <span className="text-white/40 text-xs font-mono tabular-nums">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span>
+                    <button onClick={copyAddress} className="text-white/40 hover:text-white/80 transition-colors text-xs">{copied?'\u2713':'\u{1F4CB}'}</button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-2 px-5 py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(217,202,93,0.35), rgba(217,202,93,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(217,202,93,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(217,202,93,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
-                    <img src={cfg.logo} alt={token} className="w-10 h-10"/>
-                    <span className={`font-orbitron font-bold text-base ${theme.text}`}>BUY</span>
+
+                {/* hairline divider */}
+                <div className="hidden md:block w-px self-stretch bg-white/10 mx-1"></div>
+
+                {/* Price + change (stacked) */}
+                <div className="shrink-0">
+                  <Price p={data?.price} c={`font-bold leading-none tabular-nums text-2xl sm:text-3xl lg:text-4xl ${isGold?'metallic-gold':theme.text}`}/>
+                  <div className={`mt-2 text-xs sm:text-sm lg:text-base font-bold tabular-nums ${priceUp?'text-emerald-400':'text-rose-400'}`}>
+                    {priceUp?'\u2191':'\u2193'} {Math.abs(data?.change||0).toFixed(2)}%
+                  </div>
+                </div>
+
+                {/* hairline divider */}
+                <div className="hidden lg:block w-px self-stretch bg-white/10 mx-1"></div>
+
+                {/* Stats — flex-1 absorbs slack into spacing instead of leaving a void */}
+                <div className="hidden lg:flex items-center flex-1 min-w-0 justify-around gap-4">
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
+                    <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{plsRatio}</span>
+                  </div>
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH</span>
+                    <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{hdrFmtX(xToATH)}</span>
+                  </div>
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny</span>
+                    <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{hdrFmtX(xToPenny)}</span>
+                  </div>
+                </div>
+
+                {/* hairline divider */}
+                <div className="hidden lg:block w-px self-stretch bg-white/10 mx-1"></div>
+
+                {/* Actions — packed right next to stats, no gap created by justify-between */}
+                <div className="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
+                  <a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
+                    <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9"/>
+                    <span className={`font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] ${isGold?'metallic-gold':theme.text}`}>BUY</span>
                   </a>
-                  <button onClick={switchToken} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all">
-                    <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-8 h-8"/>
-                    <span className="text-white/70 text-sm font-medium">Switch</span>
+                  <button onClick={switchToken} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+                    <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-6 h-6 sm:w-8 sm:h-8"/>
+                    <span className="text-white/70 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em]">Switch</span>
                   </button>
                 </div>
               </div>
-              {/* Page Navigation */}
-              <div className="flex justify-end -mt-1 -mb-3">
-                <div className="flex items-center gap-1">
-                  <button onClick={()=>navTo('dashboard')} className={`px-3 py-1 text-sm rounded font-medium transition-all border ${theme.border} ${theme.text} hover:bg-white/5`}>Dashboard</button>
-                  <button onClick={()=>navTo('kpi')} className={`px-3 py-1 text-sm rounded font-medium transition-all border ${theme.border} ${theme.text} hover:bg-white/5`}>KPI Report</button>
-                  <button onClick={()=>navTo('social')} className={`px-3 py-1 text-sm rounded font-medium transition-all border ${theme.border} ${theme.text} hover:bg-white/5`}>Social</button>
-                  <span className={`px-3 py-1 text-sm rounded font-medium ${theme.bg} text-black`}>Calculators</span>
-                  <button onClick={()=>navTo('charts')} className={`px-3 py-1 text-sm rounded font-medium transition-all border ${theme.border} ${theme.text} hover:bg-white/5`}>Charts</button>
-                  <button onClick={()=>navTo('portfolio')} className="px-3 py-1 text-sm rounded font-medium transition-all border border-[#D9CA5D]/40 hover:bg-[#D9CA5D]/10"><span style={{background:'linear-gradient(to right,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></button>
-                  <button onClick={()=>navTo('affiliates')} className="px-3 py-1 text-sm rounded font-medium transition-all border border-purple-500/40 text-purple-300 hover:bg-purple-500/20">Affiliates</button>
+
+              {/* Stats fallback for small screens (since they're hidden in row 1 below lg) */}
+              <div className="lg:hidden flex items-center gap-x-5 gap-y-2 mt-3 flex-wrap">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
+                  <span className={`text-base font-bold tabular-nums ${theme.text}`}>{plsRatio}</span>
+                </div>
+                <div className="w-px h-4 bg-white/15"></div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH</span>
+                  <span className={`text-base font-bold tabular-nums ${theme.text}`}>{hdrFmtX(xToATH)}</span>
+                </div>
+                <div className="w-px h-4 bg-white/15"></div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny</span>
+                  <span className={`text-base font-bold tabular-nums ${theme.text}`}>{hdrFmtX(xToPenny)}</span>
                 </div>
               </div>
+
+              {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator. */}
+              <div className="flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-wrap overflow-x-auto">
+                <button onClick={()=>navTo('dashboard')} className="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">
+                  Dashboard
+                </button>
+                <button onClick={()=>navTo('kpi')} className="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">
+                  KPI Report
+                </button>
+                <button onClick={()=>navTo('social')} className="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">
+                  Socials
+                </button>
+                <span className={`relative px-3.5 py-3 text-sm font-semibold ${theme.text} shrink-0`}>
+                  Calculators
+                  <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>
+                </span>
+                <button onClick={()=>navTo('charts')} className="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">
+                  Charts
+                </button>
+                <button onClick={()=>navTo('portfolio')} className="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0">
+                  <span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span>
+                </button>
+                <button onClick={()=>navTo('affiliates')} className="px-3.5 py-3 text-sm font-semibold text-purple-300 hover:text-purple-200 transition-colors shrink-0">Affiliates</button>
+              </div>
+
             </div>
           </header>
           <CalculatorsTab token={token} cfg={cfg} data={data} burn={burn} pls={pls} theme={theme} stakingData={stakingData} volumeByPeriod={volumeByPeriod} totalUFOShareRate={totalUFOShareRate} stakingPairs={stakingPairs} onBack={goBack}/>
