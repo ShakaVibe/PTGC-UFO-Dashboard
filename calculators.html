@@ -1451,8 +1451,7 @@
       for (let y = 0; y <= 10; y++) totalUsersAll += usersYear0 * Math.pow(1 + userGrowth / 100, y);
       const totalNetOrg = yearsWith.reduce((a, y) => a + y.netOrganic, 0);
       const totalCodeAll = yearsWith.reduce((a, y) => a + y.annualCode, 0);
-      const captureRate = 100 - sellPct;
-      const codeRateOfVol = cfg.taxRate * buybackPct;
+      const captureRate = 100 - sellPct; // kept for potential reuse; not currently displayed
       const mcap = currentPrice * supply;
       const lpRatioPct = mcap > 0 ? (currentLP / mcap) * 100 : 0;
       const weeklyVolNow = currentLP * lvRatio;
@@ -1684,7 +1683,7 @@
                 ].map(t => (
                   <div key={t.label} className="bg-black/40 border border-white/5 rounded-lg px-4 py-3 text-center">
                     <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1.5">{t.label}</div>
-                    <div className={`font-mono text-base font-bold ${t.cls}`}>
+                    <div className={`text-base font-bold ${t.cls}`}>
                       {loadingLive ? <span className="text-white/30 text-sm">{'Loading\u2026'}</span> : t.val}
                     </div>
                   </div>
@@ -1782,7 +1781,7 @@
                         </div>
                         <p className="mb-2 text-white/60 text-xs">Models how much selling pushes back against each year&apos;s gross buy inflow from new users.</p>
                         <p className="mb-2 text-white/60 text-xs">For every <span className={`${theme.text} font-bold`}>$1</span> of new buy pressure (Users &times; Avg Injection), this percentage is the matching dollar amount sold by existing holders.</p>
-                        <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5 font-mono text-xs">
+                        <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5 text-xs">
                           <div className="flex items-baseline justify-between gap-3"><span className="text-green-400/80 font-bold whitespace-nowrap">50%</span><span className="text-white/55">$1 in, $0.50 out &rarr; net BUY</span></div>
                           <div className="flex items-baseline justify-between gap-3"><span className="text-yellow-400/80 font-bold whitespace-nowrap">100%</span><span className="text-white/55">$1 in, $1 out &rarr; net zero</span></div>
                           <div className="flex items-baseline justify-between gap-3"><span className="text-red-400/80 font-bold whitespace-nowrap">150%</span><span className="text-white/55">$1 in, $1.50 out &rarr; net SELL</span></div>
@@ -1798,12 +1797,12 @@
                 </div>
 
                 <div className="mb-5">
-                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback Breakdown &middot; {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
+                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback &middot; {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
 
                   <div className="rounded-lg bg-black/30 border border-white/[0.06] overflow-hidden">
                     <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-2 border-b border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-white/35">
                       <span>Fee Line</span>
-                      <span className="text-right">Of Tax</span>
+                      <span className="text-right">Of Fee</span>
                       <span className="text-right" style={{minWidth:'70px'}}>Buyback</span>
                     </div>
                     {FEE_BREAKDOWN[growthToken].map(row => {
@@ -1811,16 +1810,16 @@
                       return (
                         <div key={row.id} className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-2 border-b last:border-b-0 border-white/[0.04] items-center">
                           <span className="text-white/70 text-sm">{row.label}</span>
-                          <span className="text-white/45 text-sm font-mono tabular-nums text-right">{row.pct}%</span>
+                          <span className="text-white/45 text-sm text-right">{row.pct}%</span>
                           {row.locked ? (
-                            <span className="text-white/55 text-sm font-mono tabular-nums text-right" style={{width:'70px'}}>{v}%</span>
+                            <span className="text-white/55 text-sm text-right" style={{width:'70px'}}>{v}%</span>
                           ) : (
                             <div className="relative" style={{width:'70px'}}>
                               <input
                                 type="number" min="0" max="100" step="1"
                                 value={v}
                                 onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) updateAllocation(row.id, n); }}
-                                className="w-full pl-2 pr-5 py-1 rounded bg-black/50 text-white text-sm font-bold font-mono focus:outline-none transition"
+                                className="w-full pl-2 pr-5 py-1 rounded bg-black/50 text-white text-sm font-bold focus:outline-none transition"
                                 style={{ border: `1px solid ${glowColor}0.45)` }}
                               />
                               <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40 text-[10px] pointer-events-none">%</span>
@@ -1833,24 +1832,25 @@
 
                   <div className="mt-2.5 flex items-baseline justify-between gap-3 px-1">
                     <span className="text-white/35 uppercase tracking-widest text-[10px] font-bold">Effective Code Buyback</span>
-                    <span className="font-mono"><span className={`${theme.text} font-bold text-base`}>{buybackPct}%</span><span className="text-white/40 text-xs"> of {(cfg.taxRate * 100).toFixed(0)}% fee</span></span>
+                    <span className=""><span className={`${theme.text} font-bold text-base`}>{buybackPct}%</span><span className="text-white/40 text-xs"> of {(cfg.taxRate * 100).toFixed(0)}% fee</span></span>
                   </div>
                 </div>
 
                 <div className="mb-5">
-                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Volume Scenario (L/V Ratio)</label>
-                  {lvLoadState === 'loaded' ? (
-                    <>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}].map(o => <GP_Pill glowColor={glowColor} key={o.key} active={lvScenarioKey===o.key} onClick={()=>setLvScenarioKey(o.key)}>{o.label}</GP_Pill>)}
-                      </div>
-                      <div className="mt-2 text-[11px] text-white/35 font-mono flex items-center gap-1.5">
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <label className="text-white/70 text-sm uppercase tracking-wide font-bold">Volume Scenario (L/V Ratio)</label>
+                    {lvLoadState === 'loaded' && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-white/45">
                         <span className="text-green-400/80">{'\u25CF'}</span>
-                        <span>Live &middot; {tokenScenarios.count} complete week{tokenScenarios.count === 1 ? '' : 's'}</span>
-                        <span className="text-white/20">|</span>
-                        <span>{lvRatio.toFixed(4)} weekly L/V</span>
-                      </div>
-                    </>
+                        <span className="uppercase tracking-widest font-bold text-[10px]">Live</span>
+                      </span>
+                    )}
+                  </div>
+                  {lvLoadState === 'loaded' ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}].map(o => <GP_Pill glowColor={glowColor} key={o.key} active={lvScenarioKey===o.key} onClick={()=>setLvScenarioKey(o.key)}>{o.label}</GP_Pill>)}
+                      <span className="text-white/45 text-[11px] ml-1">{lvRatio.toFixed(4)}</span>
+                    </div>
                   ) : lvLoadState === 'loading' ? (
                     <div className="flex items-center gap-2.5 py-3 px-1">
                       <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" style={{color:`${glowColor}0.6)`}}></div>
@@ -1864,8 +1864,6 @@
                 </div>
 
                 <div className="pt-3 border-t border-white/5">
-                  <GP_StatLine label="Net buy capture" value={captureRate + '% of gross'} cls="text-green-400" />
-                  <GP_StatLine label="Code buy rate \u00b7 % of vol" value={codeRateOfVol.toFixed(2) + '% of vol'} cls="text-blue-400" />
                   <GP_StatLine label="Total code buy 10yr" value={fmt$(totalCodeAll)} cls="text-blue-400" />
                 </div>
               </div>
@@ -1897,11 +1895,11 @@
               <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/5">
                 <div className="text-center">
                   <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Potential</div>
-                  <div className={`${theme.text} font-bold font-mono text-lg`}>{fmtMult(y0.priceEnd / currentPrice)}</div>
+                  <div className={`${theme.text} font-bold text-lg`}>{fmtMult(y0.priceEnd / currentPrice)}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">MCap</div>
-                  <div className="text-blue-400 font-bold font-mono text-lg">{fmt$(y0.priceEnd * supply)}</div>
+                  <div className="text-blue-400 font-bold text-lg">{fmt$(y0.priceEnd * supply)}</div>
                 </div>
               </div>
             </div>
@@ -1915,11 +1913,11 @@
               <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/5">
                 <div className="text-center">
                   <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">LP Growth</div>
-                  <div className="text-green-400 font-bold font-mono text-lg">{fmtMult(y0.lpEnd / currentLP)}</div>
+                  <div className="text-green-400 font-bold text-lg">{fmtMult(y0.lpEnd / currentLP)}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Weekly Vol</div>
-                  <div className="text-white/80 font-bold font-mono text-lg">{fmt$(y0.weeklyVol)}</div>
+                  <div className="text-white/80 font-bold text-lg">{fmt$(y0.weeklyVol)}</div>
                 </div>
               </div>
             </div>
@@ -1930,19 +1928,19 @@
             <div className="grid grid-cols-2 md:grid-cols-4">
               <div className="px-4 py-4 border-r border-white/5 text-center">
                 <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Code Buy / Yr</div>
-                <div className="text-xl font-bold font-mono text-green-400">{fmt$(y0.annualCode)}</div>
+                <div className="text-xl font-bold text-green-400">{fmt$(y0.annualCode)}</div>
               </div>
               <div className="px-4 py-4 md:border-r border-white/5 text-center">
                 <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Net Organic / Yr</div>
-                <div className={`text-xl font-bold font-mono ${theme.text}`}>{fmt$(y0.netOrganic)}</div>
+                <div className={`text-xl font-bold ${theme.text}`}>{fmt$(y0.netOrganic)}</div>
               </div>
               <div className="px-4 py-4 border-r border-white/5 text-center border-t md:border-t-0">
                 <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Total Buy / Yr</div>
-                <div className="text-xl font-bold font-mono text-blue-400">{fmt$(y0.totalNet)}</div>
+                <div className="text-xl font-bold text-blue-400">{fmt$(y0.totalNet)}</div>
               </div>
               <div className="px-4 py-4 text-center border-t md:border-t-0">
                 <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Sells / Yr</div>
-                <div className="text-xl font-bold font-mono text-orange-400">{fmt$(y0.sellsAmount)}</div>
+                <div className="text-xl font-bold text-orange-400">{fmt$(y0.sellsAmount)}</div>
               </div>
             </div>
           </div>
@@ -1970,16 +1968,16 @@
                 <tbody>
                   {yearsWith.map(y => (
                     <tr key={y.year} className="border-b border-white/5 hover:bg-white/[0.02] transition">
-                      <td className="px-3 py-2.5 text-left text-white/70 font-bold font-mono whitespace-nowrap">Y{y.year}</td>
-                      <td className={`px-3 py-2.5 text-right ${theme.text} font-bold font-mono whitespace-nowrap`}>{fmtPrice(y.priceEnd)}</td>
-                      <td className="px-3 py-2.5 text-right text-green-400 font-mono whitespace-nowrap">{fmtMult(y.priceEnd / currentPrice)}</td>
-                      <td className="px-3 py-2.5 text-right text-blue-400 font-mono whitespace-nowrap">{fmt$(y.priceEnd * supply)}</td>
-                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.lpEnd)}</td>
-                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.weeklyVol / 7)}</td>
-                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.weeklyVol)}</td>
-                      <td className="px-3 py-2.5 text-right text-green-400 font-mono whitespace-nowrap">{fmt$(y.annualCode)}</td>
-                      <td className="px-3 py-2.5 text-right text-white/70 font-mono whitespace-nowrap">{fmt$(y.netOrganic)}</td>
-                      <td className="px-3 py-2.5 text-right text-green-400 font-bold font-mono whitespace-nowrap">{fmt$(y.totalNet)}</td>
+                      <td className="px-3 py-2.5 text-left text-white/70 font-bold whitespace-nowrap">Y{y.year}</td>
+                      <td className={`px-3 py-2.5 text-right ${theme.text} font-bold whitespace-nowrap`}>{fmtPrice(y.priceEnd)}</td>
+                      <td className="px-3 py-2.5 text-right text-green-400 whitespace-nowrap">{fmtMult(y.priceEnd / currentPrice)}</td>
+                      <td className="px-3 py-2.5 text-right text-blue-400 whitespace-nowrap">{fmt$(y.priceEnd * supply)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 whitespace-nowrap">{fmt$(y.lpEnd)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 whitespace-nowrap">{fmt$(y.weeklyVol / 7)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 whitespace-nowrap">{fmt$(y.weeklyVol)}</td>
+                      <td className="px-3 py-2.5 text-right text-green-400 whitespace-nowrap">{fmt$(y.annualCode)}</td>
+                      <td className="px-3 py-2.5 text-right text-white/70 whitespace-nowrap">{fmt$(y.netOrganic)}</td>
+                      <td className="px-3 py-2.5 text-right text-green-400 font-bold whitespace-nowrap">{fmt$(y.totalNet)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2038,7 +2036,7 @@
               ].map(m => (
                 <div key={m.label} className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-center">
                   <div className="text-white/30 text-xs font-bold uppercase tracking-widest mb-1">{m.label}</div>
-                  <div className={`font-mono text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmt$(m.val)}</div>
+                  <div className={`text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmt$(m.val)}</div>
                 </div>
               ))}
             </div>
@@ -2062,7 +2060,7 @@
                 ].map(m => (
                   <div key={m.label} className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-center">
                     <div className="text-white/30 text-xs font-bold uppercase tracking-widest mb-1">{m.label}</div>
-                    <div className={`font-mono text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmtUsers(m.val)}</div>
+                    <div className={`text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmtUsers(m.val)}</div>
                   </div>
                 ))}
               </div>
@@ -2086,7 +2084,7 @@
                 ].map(m => (
                   <div key={m.label} className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-center">
                     <div className="text-white/30 text-xs font-bold uppercase tracking-widest mb-1">{m.label}</div>
-                    <div className={`font-mono text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmt$(m.val)}</div>
+                    <div className={`text-xs font-bold ${m.cls || 'text-white/80'}`}>{fmt$(m.val)}</div>
                   </div>
                 ))}
               </div>
@@ -2097,7 +2095,7 @@
           <div className="bg-black/30 border border-white/5 rounded-xl px-5 py-4 text-white/40 text-xs leading-relaxed">
             <span className={`${theme.text} font-bold`}>Model:</span> AMM v2 constant-product (x&middot;y=k) on a balanced pool. Each year applies LP X factor first (paired-side appreciation), then nets organic flows + annual code buyback into the pool.
             <br />
-            <span className={`${theme.text} font-bold`}>Formula:</span> <span className="font-mono">P_new = P &times; (1 + 2&middot;NetBuy / LP)&sup2; &nbsp;&middot;&nbsp; LP_new = LP + 2&middot;NetBuy</span>
+            <span className={`${theme.text} font-bold`}>Formula:</span> <span className="">P_new = P &times; (1 + 2&middot;NetBuy / LP)&sup2; &nbsp;&middot;&nbsp; LP_new = LP + 2&middot;NetBuy</span>
           </div>
 
           {/* Disclaimer */}
