@@ -1112,6 +1112,46 @@
       );
     };
 
+    // ===== Growth Projection — hoisted helper components (module-scope so React preserves their identity between renders, otherwise text inputs lose focus on every keystroke) =====
+    const GP_Pill = ({ glowColor, active, onClick, children }) => (
+      <button onClick={onClick} className="px-3 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap" style={{
+        background: active ? `${glowColor}0.2)` : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${active ? glowColor + '0.5)' : 'rgba(255,255,255,0.08)'}`,
+        color: active ? 'white' : 'rgba(255,255,255,0.4)',
+        boxShadow: active ? `0 0 10px ${glowColor}0.15)` : 'none',
+        fontFamily: "'Orbitron', monospace",
+        letterSpacing: '0.05em',
+      }}>{children}</button>
+    );
+
+    const GP_NumInput = ({ glowColor, value, onChange, suffix, prefix, step, min }) => (
+      <div className="relative">
+        {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{prefix}</span>}
+        <input type="number" value={value} step={step} min={min}
+          onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
+          className={`w-full ${prefix ? 'pl-7' : 'pl-3'} ${suffix ? 'pr-8' : 'pr-3'} py-2.5 rounded-lg bg-black/50 text-white text-base font-bold font-mono focus:outline-none transition`}
+          style={{ border: `1px solid ${glowColor}0.25)` }} />
+        {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{suffix}</span>}
+      </div>
+    );
+
+    const GP_Slider = ({ glowColor, isGold, value, onChange, min, max, step, suffix }) => (
+      <div className="flex items-center gap-3">
+        <input type="range" min={min} max={max} step={step} value={value}
+          onChange={e => onChange(parseFloat(e.target.value))}
+          className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+          style={{ background: `linear-gradient(to right, ${glowColor}0.6) 0%, ${glowColor}0.6) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) 100%)`, accentColor: isGold ? '#D9CA5D' : '#7CFC00' }} />
+        <span className="text-white/70 font-mono text-xs min-w-[3.5em] text-right">{value}{suffix}</span>
+      </div>
+    );
+
+    const GP_StatLine = ({ label, value, cls }) => (
+      <div className="flex justify-between items-center py-1">
+        <span className="text-white/40 text-xs">{label}</span>
+        <span className={`font-mono text-xs font-bold ${cls || 'text-white/80'}`}>{value}</span>
+      </div>
+    );
+
     // ===== GROWTH PROJECTION CALCULATOR (hidden — dot trigger) =====
     const GrowthProjectionTab = (props) => {
       // Internal token toggle — independent of the page's selected token
@@ -1448,47 +1488,6 @@
         return () => { if (priceChartInst.current) { priceChartInst.current.destroy(); priceChartInst.current = null; } };
       }, [currentLP, lpYear0, lpAnnual, usersYear0, injection, userGrowth, sellPct, buybackPct, lvRatio, currentPrice, supply, scaleMode, isGold]);
 
-      // ===== Reusable styled pieces =====
-      const Pill = ({ active, onClick, children }) => (
-        <button onClick={onClick} className="px-3 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap" style={{
-          background: active ? `${glowColor}0.2)` : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${active ? glowColor + '0.5)' : 'rgba(255,255,255,0.08)'}`,
-          color: active ? 'white' : 'rgba(255,255,255,0.4)',
-          boxShadow: active ? `0 0 10px ${glowColor}0.15)` : 'none',
-          fontFamily: "'Orbitron', monospace",
-          letterSpacing: '0.05em',
-        }}>{children}</button>
-      );
-
-      const NumInput = ({ value, onChange, suffix, prefix, step, min }) => (
-        <div className="relative">
-          {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{prefix}</span>}
-          <input type="number" value={value} step={step} min={min}
-            onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
-            className={`w-full ${prefix ? 'pl-7' : 'pl-3'} ${suffix ? 'pr-8' : 'pr-3'} py-2.5 rounded-lg bg-black/50 text-white text-base font-bold font-mono focus:outline-none transition`}
-            style={{ border: `1px solid ${glowColor}0.25)` }} />
-          {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{suffix}</span>}
-        </div>
-      );
-
-      const Slider = ({ value, onChange, min, max, step, suffix }) => (
-        <div className="flex items-center gap-3">
-          <input type="range" min={min} max={max} step={step} value={value}
-            onChange={e => onChange(parseFloat(e.target.value))}
-            className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
-            style={{ background: `linear-gradient(to right, ${glowColor}0.6) 0%, ${glowColor}0.6) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) 100%)`, accentColor: isGold ? '#D9CA5D' : '#7CFC00' }} />
-          <span className="text-white/70 font-mono text-xs min-w-[3.5em] text-right">{value}{suffix}</span>
-        </div>
-      );
-
-      // Stat line for inside cards
-      const StatLine = ({ label, value, cls }) => (
-        <div className="flex justify-between items-center py-1">
-          <span className="text-white/40 text-xs">{label}</span>
-          <span className={`font-mono text-xs font-bold ${cls || 'text-white/80'}`}>{value}</span>
-        </div>
-      );
-
       // Scenario strip text bits
       const accentSpan = (s) => <span className={theme.text + ' font-bold'}>{s}</span>;
 
@@ -1549,14 +1548,6 @@
             </div>
           </div>
 
-          {/* Scenario strip */}
-          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl px-6 py-3 text-center`}>
-            <div className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Current Scenario</div>
-            <div className="text-white/70 text-sm">
-              {accentSpan(lpYear0 + 'x')} Y0 LP &middot; {accentSpan('+' + lpAnnual + '%')}/yr ongoing &middot; {accentSpan(usersYear0.toLocaleString())} users &times; {accentSpan('+' + userGrowth + '%')}/yr &middot; {accentSpan(sellPct + '%')} sells &middot; {accentSpan(buybackPct + '%')} code buyback &middot; {accentSpan(fmtScenarioLabel(lvRatio))} volume
-            </div>
-          </div>
-
           {/* Main Calculator Card - BOLD border with inputs grid */}
           <div className="rounded-2xl overflow-hidden" style={{
             border: `4px solid ${glowColor}0.85)`,
@@ -1576,26 +1567,26 @@
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Year 0 LP Multiplier</label>
-                  <div className="mb-2"><NumInput value={lpYear0} onChange={setLpYear0} suffix="x" step="0.5" min="0.1" /></div>
-                  <div className="mb-2"><Slider value={lpYear0} onChange={setLpYear0} min={0} max={100} step={1} suffix="x" /></div>
+                  <div className="mb-2"><GP_NumInput glowColor={glowColor} value={lpYear0} onChange={setLpYear0} suffix="x" step="0.5" min="0.1" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={lpYear0} onChange={setLpYear0} min={0} max={100} step={1} suffix="x" /></div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[2,5,10,25,50,100].map(v => <Pill key={v} active={lpYear0===v} onClick={()=>setLpYear0(v)}>{v}x</Pill>)}
+                    {[2,5,10,25,50,100].map(v => <GP_Pill glowColor={glowColor} key={v} active={lpYear0===v} onClick={()=>setLpYear0(v)}>{v}x</GP_Pill>)}
                   </div>
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Ongoing Annual LP Growth (after Y0)</label>
-                  <div className="mb-2"><NumInput value={lpAnnual} onChange={setLpAnnual} suffix="%" step="5" min="0" /></div>
-                  <div className="mb-2"><Slider value={lpAnnual} onChange={setLpAnnual} min={0} max={300} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_NumInput glowColor={glowColor} value={lpAnnual} onChange={setLpAnnual} suffix="%" step="5" min="0" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={lpAnnual} onChange={setLpAnnual} min={0} max={300} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[0,25,50,100,200,300].map(v => <Pill key={v} active={lpAnnual===v} onClick={()=>setLpAnnual(v)}>{v}%</Pill>)}
+                    {[0,25,50,100,200,300].map(v => <GP_Pill glowColor={glowColor} key={v} active={lpAnnual===v} onClick={()=>setLpAnnual(v)}>{v}%</GP_Pill>)}
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-white/5">
-                  <StatLine label="Y10 LP \u00b7 factor only" value={fmt$(y10LpOnly)} />
-                  <StatLine label="Total LP multiplier" value={fmtMult(y10LpOnly / currentLP)} />
-                  <StatLine label="Y10 LP \u00b7 full model" value={fmt$(y10LpFull)} cls="text-green-400" />
+                  <GP_StatLine label="Y10 LP \u00b7 factor only" value={fmt$(y10LpOnly)} />
+                  <GP_StatLine label="Total LP multiplier" value={fmtMult(y10LpOnly / currentLP)} />
+                  <GP_StatLine label="Y10 LP \u00b7 full model" value={fmt$(y10LpFull)} cls="text-green-400" />
                 </div>
               </div>
 
@@ -1605,26 +1596,26 @@
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">New Users in Year 0</label>
-                  <NumInput value={usersYear0} onChange={setUsersYear0} step="100" min="0" />
+                  <GP_NumInput glowColor={glowColor} value={usersYear0} onChange={setUsersYear0} step="100" min="0" />
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Avg Price Injection per User</label>
-                  <NumInput value={injection} onChange={setInjection} prefix="$" step="500" min="0" />
+                  <GP_NumInput glowColor={glowColor} value={injection} onChange={setInjection} prefix="$" step="500" min="0" />
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Annual User Growth %</label>
-                  <div className="mb-2"><Slider value={userGrowth} onChange={setUserGrowth} min={0} max={400} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={userGrowth} onChange={setUserGrowth} min={0} max={400} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[{v:0,l:'0% Flat'},{v:25,l:'25%'},{v:50,l:'50%'},{v:100,l:'100%'},{v:200,l:'200%'},{v:300,l:'300%'},{v:400,l:'400%'}].map(o => <Pill key={o.v} active={userGrowth===o.v} onClick={()=>setUserGrowth(o.v)}>{o.l}</Pill>)}
+                    {[{v:0,l:'0% Flat'},{v:25,l:'25%'},{v:50,l:'50%'},{v:100,l:'100%'},{v:200,l:'200%'},{v:300,l:'300%'},{v:400,l:'400%'}].map(o => <GP_Pill glowColor={glowColor} key={o.v} active={userGrowth===o.v} onClick={()=>setUserGrowth(o.v)}>{o.l}</GP_Pill>)}
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-white/5">
-                  <StatLine label="Y10 new users" value={fmtUsers(y10Users)} />
-                  <StatLine label="Total users \u00b7 Y0\u2013Y10" value={fmtUsers(totalUsersAll)} />
-                  <StatLine label="Total net organic 10yr" value={fmt$(totalNetOrg)} cls="text-green-400" />
+                  <GP_StatLine label="Y10 new users" value={fmtUsers(y10Users)} />
+                  <GP_StatLine label="Total users \u00b7 Y0\u2013Y10" value={fmtUsers(totalUsersAll)} />
+                  <GP_StatLine label="Total net organic 10yr" value={fmt$(totalNetOrg)} cls="text-green-400" />
                 </div>
               </div>
 
@@ -1634,34 +1625,42 @@
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Sell Pressure %</label>
-                  <div className="mb-2"><Slider value={sellPct} onChange={setSellPct} min={0} max={150} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={sellPct} onChange={setSellPct} min={0} max={150} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[25,50,75,95,125,150].map(v => <Pill key={v} active={sellPct===v} onClick={()=>setSellPct(v)}>{v}%</Pill>)}
+                    {[25,50,75,95,125,150].map(v => <GP_Pill glowColor={glowColor} key={v} active={sellPct===v} onClick={()=>setSellPct(v)}>{v}%</GP_Pill>)}
                   </div>
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback % of {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
-                  <div className="mb-2"><Slider value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[25,50,75,100].map(v => <Pill key={v} active={buybackPct===v} onClick={()=>setBuybackPct(v)}>{v}%</Pill>)}
+                    {[25,50,75,100].map(v => <GP_Pill glowColor={glowColor} key={v} active={buybackPct===v} onClick={()=>setBuybackPct(v)}>{v}%</GP_Pill>)}
                   </div>
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Volume Scenario (L/V Ratio)</label>
                   <div className="flex flex-wrap gap-1.5">
-                    {[{v:0.0922,l:'Conservative'},{v:0.0944,l:'Median'},{v:0.1285,l:'Strong'},{v:0.2537,l:'Peak'}].map(o => <Pill key={o.v} active={lvRatio===o.v} onClick={()=>setLvRatio(o.v)}>{o.l}</Pill>)}
+                    {[{v:0.0922,l:'Conservative'},{v:0.0944,l:'Median'},{v:0.1285,l:'Strong'},{v:0.2537,l:'Peak'}].map(o => <GP_Pill glowColor={glowColor} key={o.v} active={lvRatio===o.v} onClick={()=>setLvRatio(o.v)}>{o.l}</GP_Pill>)}
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-white/5">
-                  <StatLine label="Net buy capture" value={captureRate + '% of gross'} cls="text-green-400" />
-                  <StatLine label="Code buy rate \u00b7 % of vol" value={codeRateOfVol.toFixed(2) + '% of vol'} cls="text-blue-400" />
-                  <StatLine label="Total code buy 10yr" value={fmt$(totalCodeAll)} cls="text-blue-400" />
+                  <GP_StatLine label="Net buy capture" value={captureRate + '% of gross'} cls="text-green-400" />
+                  <GP_StatLine label="Code buy rate \u00b7 % of vol" value={codeRateOfVol.toFixed(2) + '% of vol'} cls="text-blue-400" />
+                  <GP_StatLine label="Total code buy 10yr" value={fmt$(totalCodeAll)} cls="text-blue-400" />
                 </div>
               </div>
 
+            </div>
+          </div>
+
+          {/* Scenario strip */}
+          <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl px-6 py-3 text-center`}>
+            <div className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Current Scenario</div>
+            <div className="text-white/70 text-sm">
+              {accentSpan(lpYear0 + 'x')} Y0 LP &middot; {accentSpan('+' + lpAnnual + '%')}/yr ongoing &middot; {accentSpan(usersYear0.toLocaleString())} users &times; {accentSpan('+' + userGrowth + '%')}/yr &middot; {accentSpan(sellPct + '%')} sells &middot; {accentSpan(buybackPct + '%')} code buyback &middot; {accentSpan(fmtScenarioLabel(lvRatio))} volume
             </div>
           </div>
 
@@ -1675,7 +1674,7 @@
             <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl p-6`}>
               <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">{cfg.name} at Year 0</div>
               <div className="text-white/30 text-xs mb-3">After LP X factor + organic + code buyback</div>
-              <div className={`text-4xl sm:text-5xl font-bold font-orbitron ${theme.text}`} style={{textShadow:`0 0 24px ${glowColor}0.3)`}}>{fmtPrice(y0.priceEnd)}</div>
+              <div className={`text-2xl sm:text-3xl font-bold font-orbitron ${theme.text}`} style={{textShadow:`0 0 24px ${glowColor}0.3)`}}>{fmtPrice(y0.priceEnd)}</div>
               <div className="mt-3 flex items-center gap-3 text-xs">
                 <span className={`${theme.text} font-bold font-mono`}>{fmtMult(y0.priceEnd / currentPrice)} Potential</span>
                 <span className="text-white/20">|</span>
@@ -1686,7 +1685,7 @@
             <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl p-6`}>
               <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">{cfg.name} LP at Year 0</div>
               <div className="text-white/30 text-xs mb-3">Liquidity pool size after all flows</div>
-              <div className="text-4xl sm:text-5xl font-bold font-orbitron text-green-400" style={{textShadow:'0 0 24px rgba(74,222,128,0.3)'}}>{fmt$(y0.lpEnd)}</div>
+              <div className="text-2xl sm:text-3xl font-bold font-orbitron text-green-400" style={{textShadow:'0 0 24px rgba(74,222,128,0.3)'}}>{fmt$(y0.lpEnd)}</div>
               <div className="mt-3 flex items-center gap-3 text-xs">
                 <span className="text-green-400 font-bold font-mono">{fmtMult(y0.lpEnd / currentLP)} LP Growth</span>
                 <span className="text-white/20">|</span>
@@ -1761,7 +1760,7 @@
             <span className="text-white/40 text-xs font-bold uppercase tracking-widest">Chart Scale</span>
             <div className="inline-flex gap-1">
               {['linear','log'].map(m => (
-                <Pill key={m} active={scaleMode===m} onClick={()=>setScaleMode(m)}>{m === 'linear' ? 'Linear' : 'Log'}</Pill>
+                <GP_Pill glowColor={glowColor} key={m} active={scaleMode===m} onClick={()=>setScaleMode(m)}>{m === 'linear' ? 'Linear' : 'Log'}</GP_Pill>
               ))}
             </div>
           </div>
@@ -2424,7 +2423,7 @@
           {/* Calculator Nav - glass/glow style like Buy button */}
           <div className="flex justify-center mb-10">
             <div className="inline-flex gap-2">
-              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact',isNew:true}].map(b=>{
+              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact'}].map(b=>{
                 const active=calcTab===b.id;
                 return(
                   <button key={b.id} onClick={()=>setCalcTab(b.id)} className="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110" style={{
@@ -2455,10 +2454,10 @@
                 title=""
                 className="self-center transition-opacity"
                 style={{
-                  width:'7px',height:'7px',borderRadius:'50%',
-                  marginLeft:'6px',
-                  background: calcTab==='growth' ? `${glowColor}0.7)` : 'rgba(255,255,255,0.10)',
-                  border: calcTab==='growth' ? `1px solid ${glowColor}0.9)` : '1px solid rgba(255,255,255,0.15)',
+                  width:'6px',height:'6px',borderRadius:'50%',
+                  marginLeft:'28px',
+                  background: calcTab==='growth' ? `${glowColor}0.7)` : 'rgba(255,255,255,0.04)',
+                  border: calcTab==='growth' ? `1px solid ${glowColor}0.9)` : '1px solid rgba(255,255,255,0.06)',
                   boxShadow: calcTab==='growth' ? `0 0 8px ${glowColor}0.5)` : 'none',
                   padding:0, cursor:'pointer', flexShrink:0,
                 }}
