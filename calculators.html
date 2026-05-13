@@ -29,6 +29,8 @@
     .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
     .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
+    @keyframes growBtnPulse{0%,100%{box-shadow:0 0 14px rgba(124,252,0,0.15),0 0 22px rgba(212,175,55,0.12),inset 0 1px 0 rgba(255,255,255,0.06)}50%{box-shadow:0 0 22px rgba(124,252,0,0.4),0 0 32px rgba(212,175,55,0.25),inset 0 1px 0 rgba(255,255,255,0.12)}}
+    .animate-grow-btn{animation:growBtnPulse 2.5s ease-in-out infinite}
   </style>
 </head>
 <body>
@@ -1811,7 +1813,7 @@
                 </div>
 
                 <div className="mb-5">
-                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback &middot; {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
+                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Permanent Buyback &middot; {(cfg.taxRate * 100).toFixed(0)}% Fee</label>
 
                   <div className="rounded-lg bg-black/30 border border-white/[0.06] overflow-hidden">
                     <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-1 border-b border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-white/35">
@@ -2666,24 +2668,27 @@
           
           {/* Calculator Nav - glass/glow style like Buy button */}
           <div className="flex justify-center mb-10">
-            <div className="inline-flex gap-2">
-              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact'}].map(b=>{
+            <div className="inline-flex gap-2 flex-wrap justify-center">
+              {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact'},{id:'growth',label:'10 Yr Projection',isNew:true,standout:true}].map(b=>{
                 const active=calcTab===b.id;
                 return(
-                  <button key={b.id} onClick={()=>setCalcTab(b.id)} className="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110" style={{
+                  <button key={b.id} onClick={()=>setCalcTab(b.id)} className={`relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110 ${b.standout && !active ? 'animate-grow-btn' : ''}`} style={{
                     padding:'10px 24px',
-                    background:active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:b.isNew?'rgba(124,252,0,0.06)':'rgba(255,255,255,0.03)',
-                    border:active?`1px solid ${glowColor}0.6)`:b.isNew?'1px solid rgba(124,252,0,0.25)':'1px solid rgba(255,255,255,0.08)',
-                    boxShadow:active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:b.isNew?'0 0 14px rgba(124,252,0,0.08)':'none',
-                    color:active?'white':b.isNew?'rgba(124,252,0,0.7)':'rgba(255,255,255,0.35)'
+                    background:active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:b.standout?'linear-gradient(135deg, rgba(212,175,55,0.20), rgba(124,252,0,0.22))':b.isNew?'rgba(124,252,0,0.06)':'rgba(255,255,255,0.03)',
+                    border:active?`1px solid ${glowColor}0.6)`:b.standout?'1px solid rgba(124,252,0,0.5)':b.isNew?'1px solid rgba(124,252,0,0.25)':'1px solid rgba(255,255,255,0.08)',
+                    boxShadow:active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:b.standout?undefined:b.isNew?'0 0 14px rgba(124,252,0,0.08)':'none',
+                    color:active?'white':b.standout?'white':b.isNew?'rgba(124,252,0,0.7)':'rgba(255,255,255,0.35)'
                   }}>
                     {b.label}
                     {b.isNew&&!active&&(
                       <span style={{
                         position:'absolute',top:'-1px',right:'-1px',
-                        background:'linear-gradient(135deg,#7CFC00,#4ade80)',
-                        color:'#000',fontSize:'9px',fontWeight:900,
-                        padding:'2px 6px',borderRadius:'0 10px 0 6px',
+                        background: b.standout ? 'linear-gradient(135deg,#FFD700,#7CFC00)' : 'linear-gradient(135deg,#7CFC00,#4ade80)',
+                        color:'#000',
+                        fontSize: b.standout ? '10px' : '9px',
+                        fontWeight:900,
+                        padding: b.standout ? '3px 8px' : '2px 6px',
+                        borderRadius:'0 10px 0 6px',
                         letterSpacing:'0.08em',lineHeight:1.4,
                         fontFamily:"'Orbitron',monospace"
                       }}>NEW</span>
@@ -2691,21 +2696,6 @@
                   </button>
                 );
               })}
-              {/* Hidden growth-projection trigger — faint dot, no label */}
-              <button
-                onClick={()=>setCalcTab('growth')}
-                aria-label="hidden"
-                title=""
-                className="self-center transition-opacity"
-                style={{
-                  width:'6px',height:'6px',borderRadius:'50%',
-                  marginLeft:'28px',
-                  background: calcTab==='growth' ? `${glowColor}0.7)` : 'rgba(255,255,255,0.04)',
-                  border: calcTab==='growth' ? `1px solid ${glowColor}0.9)` : '1px solid rgba(255,255,255,0.06)',
-                  boxShadow: calcTab==='growth' ? `0 0 8px ${glowColor}0.5)` : 'none',
-                  padding:0, cursor:'pointer', flexShrink:0,
-                }}
-              />
             </div>
           </div>
           
