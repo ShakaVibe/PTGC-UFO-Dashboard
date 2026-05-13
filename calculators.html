@@ -1197,20 +1197,21 @@
 
     // ===== Growth Projection — fee breakdown per token =====
     // Each row: how much of the trade fee goes to this allocation (`pct` of total fee),
-    // and the default `% of that allocation` that gets used as code buyback for the active token.
-    // `locked:true` means the allocation cannot be changed (automatic buyback mechanism).
+    // and the % of that allocation routed to code buyback for the active token.
+    // `locked:true` means the user cannot edit this value — it renders as static text
+    // (these are either automatic mechanisms or non-discretionary protocol flows).
     const FEE_BREAKDOWN = {
       PTGC: [
-        { id:'bnb', label:'Buy & Burn',  pct:1, defaultBuyback:100, locked:true  },
-        { id:'lp',  label:'Add LP',      pct:1, defaultBuyback:50,  locked:false },
-        { id:'dao', label:'DAO',         pct:2, defaultBuyback:50,  locked:false },
-        { id:'hld', label:'Holders',     pct:1, defaultBuyback:0,   locked:false },
+        { id:'bnb', label:'Buy & Burn',      pct:0.5, defaultBuyback:100, locked:true  },
+        { id:'lp',  label:'Add LP',           pct:0.5, defaultBuyback:50,  locked:true  },
+        { id:'hld', label:'Holders/Stakers',  pct:2,   defaultBuyback:0,   locked:true  },
+        { id:'dao', label:'DAO',              pct:2,   defaultBuyback:50,  locked:false },
       ],
       UFO: [
-        { id:'lp',   label:'LP Providers',     pct:3, defaultBuyback:0,   locked:false },
-        { id:'hld',  label:'Holders',          pct:1, defaultBuyback:0,   locked:false },
-        { id:'bnbU', label:'Buy & Burn UFO',   pct:1, defaultBuyback:100, locked:true  },
-        { id:'bnbP', label:'Buy & Burn PTGC',  pct:1, defaultBuyback:0,   locked:false },
+        { id:'lp',   label:'LP Providers',     pct:3, defaultBuyback:0,   locked:true },
+        { id:'hld',  label:'Holders',          pct:1, defaultBuyback:0,   locked:true },
+        { id:'bnbU', label:'Buy & Burn UFO',   pct:1, defaultBuyback:100, locked:true },
+        { id:'bnbP', label:'Buy & Burn PTGC',  pct:1, defaultBuyback:0,   locked:true },
       ],
     };
     const computeInitialAllocations = (tk) => {
@@ -1797,43 +1798,43 @@
                 </div>
 
                 <div className="mb-5">
-                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback &middot; {(cfg.taxRate * 100).toFixed(0)}% Trade Fee Breakdown</label>
+                  <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Code Buyback Breakdown &middot; {(cfg.taxRate * 100).toFixed(0)}% Trade Fee</label>
 
-                  {/* Per-allocation input rows: each line of the trade fee + what % of it becomes code buyback */}
-                  <div className="rounded-lg bg-black/30 border border-white/[0.06] overflow-hidden mb-3">
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-3 py-2 border-b border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-white/35">
+                  <div className="rounded-lg bg-black/30 border border-white/[0.06] overflow-hidden">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-2 border-b border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-white/35">
                       <span>Fee Line</span>
                       <span className="text-right">Of Tax</span>
-                      <span className="text-right" style={{minWidth:'88px'}}>Buyback %</span>
+                      <span className="text-right" style={{minWidth:'70px'}}>Buyback</span>
                     </div>
                     {FEE_BREAKDOWN[growthToken].map(row => {
                       const v = feeAllocations[row.id] ?? row.defaultBuyback;
                       return (
-                        <div key={row.id} className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-3 py-2 border-b last:border-b-0 border-white/[0.04] items-center">
-                          <span className="text-white/75 text-sm">{row.label}{row.locked && <span className="ml-1.5 text-white/30 text-[10px] uppercase tracking-wider">locked</span>}</span>
+                        <div key={row.id} className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-2 border-b last:border-b-0 border-white/[0.04] items-center">
+                          <span className="text-white/70 text-sm">{row.label}</span>
                           <span className="text-white/45 text-sm font-mono tabular-nums text-right">{row.pct}%</span>
-                          <div className="relative" style={{width:'88px'}}>
-                            <input
-                              type="number" min="0" max="100" step="1"
-                              value={v}
-                              disabled={row.locked}
-                              onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) updateAllocation(row.id, n); }}
-                              className={`w-full pl-2 pr-6 py-1.5 rounded bg-black/50 text-white text-sm font-bold font-mono focus:outline-none transition ${row.locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              style={{ border: row.locked ? '1px solid rgba(255,255,255,0.06)' : `1px solid ${glowColor}0.25)` }}
-                            />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 text-xs pointer-events-none">%</span>
-                          </div>
+                          {row.locked ? (
+                            <span className="text-white/55 text-sm font-mono tabular-nums text-right" style={{width:'70px'}}>{v}%</span>
+                          ) : (
+                            <div className="relative" style={{width:'70px'}}>
+                              <input
+                                type="number" min="0" max="100" step="1"
+                                value={v}
+                                onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) updateAllocation(row.id, n); }}
+                                className="w-full pl-2 pr-5 py-1 rounded bg-black/50 text-white text-sm font-bold font-mono focus:outline-none transition"
+                                style={{ border: `1px solid ${glowColor}0.45)` }}
+                              />
+                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40 text-[10px] pointer-events-none">%</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Slider — reflects the weighted sum of the boxes above, but can still be moved manually */}
-                  <div className="text-[11px] text-white/40 font-mono mb-1.5 flex justify-between items-center">
-                    <span>Effective code buyback &middot; <span className="text-white/70 font-bold">{buybackPct}%</span> of {(cfg.taxRate * 100).toFixed(0)}% fee</span>
-                    <span className="text-white/30">drag to override</span>
+                  <div className="mt-2.5 flex items-baseline justify-between gap-3 px-1">
+                    <span className="text-white/35 uppercase tracking-widest text-[10px] font-bold">Effective Code Buyback</span>
+                    <span className="font-mono"><span className={`${theme.text} font-bold text-base`}>{buybackPct}%</span><span className="text-white/40 text-xs"> of {(cfg.taxRate * 100).toFixed(0)}% fee</span></span>
                   </div>
-                  <GP_Slider glowColor={glowColor} isGold={isGold} value={buybackPct} onChange={setBuybackPct} min={0} max={100} step={1} suffix="%" />
                 </div>
 
                 <div className="mb-5">
