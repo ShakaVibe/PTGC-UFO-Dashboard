@@ -687,7 +687,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v6_cache'; // v6: backward-window daily backfill (v5 held shallow ~49d daily data)
+const CACHE_STORAGE_KEY = 'charts_v8_cache'; // v8: Moralis daily fetched in 120d chunks (single 365d request was truncated to ~49d)
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -1393,63 +1393,66 @@ function moralisParamsForTier(tier) {
 async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   const { timeframe, daysBack } = moralisParamsForTier(tier);
   const moralisHeaders = { 'X-API-Key': MORALIS_API_KEY, 'accept': 'application/json' };
-  const fromMs = Date.now() - daysBack * 86400000;
+  const targetFromMs = Date.now() - daysBack * 86400000;
 
-  // Moralis frequently returns only its most recent page of candles for a wide
-  // date range WITHOUT supplying a pagination cursor — so cursor-only paging
-  // stopped after one shallow chunk (~49 daily candles regardless of how much
-  // history the pair actually has). Instead we walk the window BACKWARD: fetch a
-  // chunk, then request again ending just before the oldest candle we received,
-  // repeating until we reach the requested start, stop making progress, or the
-  // data runs out. cleanData() dedupes the overlaps.
+  // Moralis truncates a single wide OHLCV request — asking for 365d returns only
+  // the most recent ~49d — but a ~6-month window in the past returns fully (verified
+  // against the API directly). So request in fixed CHUNKS comfortably under that
+  // limit and walk backward, stepping each chunk to just before the OLDEST candle
+  // actually received (not the requested start) so there are never gaps. Stop when
+  // a chunk comes back empty (pair has no older data) or we reach the target start.
+  const CHUNK_DAYS = (tier === 'daily') ? 120 : daysBack; // minute/hourly are already small
+  const chunkMs = CHUNK_DAYS * 86400000;
   let allResults = [];
   let toMs = Date.now();
-  let oldestSeen = Infinity;
-  const MAX_WINDOWS = 16;          // safety net (~49d/window covers >2yr)
-  const MAX_PAGES_PER_WINDOW = 4;  // follow a cursor within a window if offered
+  let prevOldest = Infinity;
+  const MAX_CHUNKS = 12;            // 12 × 120d ≈ 4yr of headroom
+  const MAX_PAGES_PER_CHUNK = 3;    // follow a cursor within a chunk if offered
 
-  for (let w = 0; w < MAX_WINDOWS; w++) {
+  for (let c = 0; c < MAX_CHUNKS; c++) {
     if (signal && signal.aborted) return null;
-    if (toMs <= fromMs) break;
+    if (toMs <= targetFromMs) break;
 
+    const fromMs = Math.max(targetFromMs, toMs - chunkMs);
     const fromDate = new Date(fromMs).toISOString();
     const toDate = new Date(toMs).toISOString();
     let cursor = null;
-    let windowGot = 0;
-    let windowOldest = Infinity;
+    let chunkGot = 0;
+    let chunkOldest = Infinity;
 
-    for (let page = 0; page < MAX_PAGES_PER_WINDOW; page++) {
+    for (let page = 0; page < MAX_PAGES_PER_CHUNK; page++) {
       if (signal && signal.aborted) return null;
-      let url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
+      let url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}&limit=1000`;
       if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
 
       const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
       if (!r) break;
       let j;
       try { j = await r.json(); }
-      catch (e) { console.warn(`Moralis parse error for ${sym} (window ${w} page ${page}):`, e); break; }
+      catch (e) { console.warn(`Moralis parse error for ${sym} (chunk ${c} page ${page}):`, e); break; }
 
       const results = j?.result || [];
-      if (!results.length) break;
-      allResults = allResults.concat(results);
-      windowGot += results.length;
-      for (const c of results) {
-        const t = new Date(c.timestamp).getTime();
-        if (t < windowOldest) windowOldest = t;
+      if (results.length) {
+        allResults = allResults.concat(results);
+        chunkGot += results.length;
+        for (const cc of results) {
+          const t = new Date(cc.timestamp).getTime();
+          if (t < chunkOldest) chunkOldest = t;
+        }
       }
-
       cursor = j?.cursor || null;
       if (!cursor) break;
-      await sleep(250);
+      await sleep(200);
     }
 
-    if (!windowGot || !isFinite(windowOldest)) break; // nothing returned — done
-    if (windowOldest >= oldestSeen) break;            // no backward progress — pair has no older data
-    oldestSeen = windowOldest;
-    if (windowOldest <= fromMs) break;                // reached the requested start
+    if (chunkGot === 0) break;                 // empty chunk → no older data (younger pair)
+    if (!isFinite(chunkOldest)) break;
+    if (chunkOldest >= prevOldest) break;      // no backward progress — stop
+    prevOldest = chunkOldest;
+    if (chunkOldest <= targetFromMs) break;    // reached requested start
 
-    toMs = windowOldest - 1;                          // step the window back
-    await sleep(300);
+    toMs = chunkOldest - 1;                    // step back to just before oldest received (no gaps)
+    await sleep(250);
   }
 
   if (!allResults.length) return null;
@@ -1458,9 +1461,6 @@ async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   const _lastD = new Date(_spanRaw[_spanRaw.length - 1]).toISOString().slice(0, 10);
   const _spanDays = Math.round((_spanRaw[_spanRaw.length - 1] - _spanRaw[0]) / 86400000);
   console.log(`Moralis ${sym} [${tier}]: ${allResults.length} candles, span ${_spanDays}d (${_firstD} → ${_lastD}), requested ${daysBack}d back`);
-  if (tier === 'daily' && _spanDays < daysBack - 7) {
-    console.warn(`Moralis ${sym}: pair ${pairAddr} returned only ${_spanDays}d of daily history (requested ${daysBack}d). The longer ranges can't fill — this pair lacks deeper OHLCV on Moralis.`);
-  }
 
   const raw = allResults.map(c => ({
     ts: new Date(c.timestamp).getTime(),
@@ -1512,13 +1512,83 @@ async function discoverPairForMoralis(dexAddr, signal) {
 }
 
 /* Unified Moralis fetch — uses pairAddr if available, discovers via DexScreener otherwise */
+/* SOURCE 1b: GeckoTerminal — free pool OHLCV with DEEP history (no API key).
+   Moralis only serves ~49d of OHLCV on this key, so the daily tier (1M–1Y) uses
+   GeckoTerminal instead. Each call returns up to 6 months; we page further back
+   with before_timestamp until we reach the requested start or run out of data.
+   Network slug for PulseChain is 'pulsechain' (tracking is in beta on GT). */
+const GT_NETWORK = 'pulsechain';
+function gtParamsForTier(tier) {
+  switch (tier) {
+    case 'minute': return { timeframe: 'minute', aggregate: 15, daysBack: 1 };
+    case 'hourly': return { timeframe: 'hour',   aggregate: 1,  daysBack: 14 };
+    case 'daily':  return { timeframe: 'day',    aggregate: 1,  daysBack: 365 };
+  }
+}
+
+async function fetchFromGeckoTerminal(pairAddr, tier, sym, signal) {
+  const { timeframe, aggregate, daysBack } = gtParamsForTier(tier);
+  const fromMs = Date.now() - daysBack * 86400000;
+  let allRaw = [];
+  let beforeTs = Math.floor(Date.now() / 1000) + 60; // start at "now", page backward
+  let oldestSeen = Infinity;
+  const MAX_PAGES = 8; // ~6 months/page → covers >1yr with margin
+
+  for (let p = 0; p < MAX_PAGES; p++) {
+    if (signal && signal.aborted) return null;
+    const url = `https://api.geckoterminal.com/api/v2/networks/${GT_NETWORK}/pools/${pairAddr}/ohlcv/${timeframe}` +
+      `?aggregate=${aggregate}&before_timestamp=${beforeTs}&limit=1000&currency=usd`;
+    const r = await fetchRetry(url, 2, 2000, signal, { 'accept': 'application/json' });
+    if (!r) break;
+    let j;
+    try { j = await r.json(); }
+    catch (e) { console.warn(`GeckoTerminal parse error for ${sym} (page ${p}):`, e); break; }
+
+    const list = j?.data?.attributes?.ohlcv_list || [];
+    if (!list.length) break;
+
+    let pageOldest = Infinity;
+    for (const c of list) {                 // c = [tsSec, open, high, low, close, volume]
+      const price = parseFloat(c[4]);
+      if (price > 0) allRaw.push({ ts: c[0] * 1000, price });
+      if (c[0] < pageOldest) pageOldest = c[0];
+    }
+
+    if (!isFinite(pageOldest)) break;
+    if (pageOldest * 1000 <= fromMs) break;  // reached requested start
+    if (pageOldest >= oldestSeen) break;     // no backward progress — no older data
+    oldestSeen = pageOldest;
+    beforeTs = pageOldest;                   // page further back
+    await sleep(300);
+  }
+
+  if (allRaw.length < 2) return null;
+  const cleaned = cleanData(allRaw, daysBack + 1);
+  if (cleaned && cleaned.length) {
+    const span = Math.round((cleaned[cleaned.length - 1].ts - cleaned[0].ts) / 86400000);
+    const first = new Date(cleaned[0].ts).toISOString().slice(0, 10);
+    const last = new Date(cleaned[cleaned.length - 1].ts).toISOString().slice(0, 10);
+    console.log(`GeckoTerminal ${sym} [${tier}]: ${cleaned.length} candles, span ${span}d (${first} → ${last}), requested ${daysBack}d`);
+  }
+  return cleaned;
+}
+
 async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
   let pairAddr = tokenConfig.pairAddr;
   if (!pairAddr && tokenConfig.dexAddr) {
     pairAddr = await discoverPairForMoralis(tokenConfig.dexAddr, signal);
   }
   if (!pairAddr) return null;
-  const data = await fetchFromMoralis(pairAddr, tier, sym, signal);
+
+  // Daily tier: Moralis (chunked) is primary — it has full history on the paid plan.
+  // GeckoTerminal is kept only as a deep-history fallback if Moralis comes up short.
+  let data = await fetchFromMoralis(pairAddr, tier, sym, signal);
+  if (tier === 'daily' && (!data || data.length < 2)) {
+    try {
+      const gt = await fetchFromGeckoTerminal(pairAddr, tier, sym, signal);
+      if (gt && gt.length >= 2) data = gt;
+    } catch (e) { if (e.name !== 'AbortError') console.warn(`GeckoTerminal fallback failed for ${sym}:`, e); }
+  }
 
   // $1 sanity check: if ALL prices are ~$1 (±5%), we probably fetched a stablecoin pair
   // This catches WPLS/DAI and similar wrong-pair issues
