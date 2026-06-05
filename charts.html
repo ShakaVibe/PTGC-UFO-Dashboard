@@ -687,7 +687,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v8_cache'; // v8: Moralis daily fetched in 120d chunks (single 365d request was truncated to ~49d)
+const CACHE_STORAGE_KEY = 'charts_v9_cache'; // v9: daily tier primary = GeckoTerminal (Moralis has empty-result gaps on PulseChain pools)
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -1580,14 +1580,16 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
   }
   if (!pairAddr) return null;
 
-  // Daily tier: Moralis (chunked) is primary — it has full history on the paid plan.
-  // GeckoTerminal is kept only as a deep-history fallback if Moralis comes up short.
-  let data = await fetchFromMoralis(pairAddr, tier, sym, signal);
-  if (tier === 'daily' && (!data || data.length < 2)) {
-    try {
-      const gt = await fetchFromGeckoTerminal(pairAddr, tier, sym, signal);
-      if (gt && gt.length >= 2) data = gt;
-    } catch (e) { if (e.name !== 'AbortError') console.warn(`GeckoTerminal fallback failed for ${sym}:`, e); }
+  // Daily tier: GeckoTerminal is primary — it indexes PulseChain pools continuously,
+  // whereas Moralis returns HTTP 200 with empty candles for gap periods (verified).
+  // Moralis (chunked) is the fallback if GeckoTerminal fails (e.g. CORS) or is short.
+  let data = null;
+  if (tier === 'daily') {
+    try { data = await fetchFromGeckoTerminal(pairAddr, tier, sym, signal); }
+    catch (e) { if (e.name !== 'AbortError') console.warn(`GeckoTerminal failed for ${sym}, falling back to Moralis:`, e); }
+  }
+  if (!data || data.length < 2) {
+    data = await fetchFromMoralis(pairAddr, tier, sym, signal);
   }
 
   // $1 sanity check: if ALL prices are ~$1 (±5%), we probably fetched a stablecoin pair
