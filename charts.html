@@ -687,7 +687,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v5_cache';
+const CACHE_STORAGE_KEY = 'charts_v6_cache'; // v6: backward-window daily backfill (v5 held shallow ~49d daily data)
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -1392,39 +1392,64 @@ function moralisParamsForTier(tier) {
 
 async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   const { timeframe, daysBack } = moralisParamsForTier(tier);
-  const toDate = new Date().toISOString();
-  const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString();
   const moralisHeaders = { 'X-API-Key': MORALIS_API_KEY, 'accept': 'application/json' };
+  const fromMs = Date.now() - daysBack * 86400000;
 
+  // Moralis frequently returns only its most recent page of candles for a wide
+  // date range WITHOUT supplying a pagination cursor — so cursor-only paging
+  // stopped after one shallow chunk (~49 daily candles regardless of how much
+  // history the pair actually has). Instead we walk the window BACKWARD: fetch a
+  // chunk, then request again ending just before the oldest candle we received,
+  // repeating until we reach the requested start, stop making progress, or the
+  // data runs out. cleanData() dedupes the overlaps.
   let allResults = [];
-  let cursor = null;
-  const MAX_PAGES = 8; // Safety limit to prevent infinite loops
+  let toMs = Date.now();
+  let oldestSeen = Infinity;
+  const MAX_WINDOWS = 16;          // safety net (~49d/window covers >2yr)
+  const MAX_PAGES_PER_WINDOW = 4;  // follow a cursor within a window if offered
 
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let w = 0; w < MAX_WINDOWS; w++) {
     if (signal && signal.aborted) return null;
+    if (toMs <= fromMs) break;
 
-    let url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
-    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    const fromDate = new Date(fromMs).toISOString();
+    const toDate = new Date(toMs).toISOString();
+    let cursor = null;
+    let windowGot = 0;
+    let windowOldest = Infinity;
 
-    const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
-    if (!r) break;
+    for (let page = 0; page < MAX_PAGES_PER_WINDOW; page++) {
+      if (signal && signal.aborted) return null;
+      let url = `${MORALIS_BASE}/pairs/${pairAddr}/ohlcv?chain=0x171&timeframe=${timeframe}&currency=usd&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
+      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
 
-    try {
-      const j = await r.json();
+      const r = await fetchRetry(url, 2, 2000, signal, moralisHeaders);
+      if (!r) break;
+      let j;
+      try { j = await r.json(); }
+      catch (e) { console.warn(`Moralis parse error for ${sym} (window ${w} page ${page}):`, e); break; }
+
       const results = j?.result || [];
       if (!results.length) break;
       allResults = allResults.concat(results);
+      windowGot += results.length;
+      for (const c of results) {
+        const t = new Date(c.timestamp).getTime();
+        if (t < windowOldest) windowOldest = t;
+      }
 
-      // Check for pagination cursor
       cursor = j?.cursor || null;
-      if (!cursor) break; // No more pages
-
-      // Small delay between pages to be polite to the API
-      await sleep(300);
-    } catch (e) {
-      console.warn(`Moralis parse error for ${sym} (page ${page}):`, e);
-      break;
+      if (!cursor) break;
+      await sleep(250);
     }
+
+    if (!windowGot || !isFinite(windowOldest)) break; // nothing returned — done
+    if (windowOldest >= oldestSeen) break;            // no backward progress — pair has no older data
+    oldestSeen = windowOldest;
+    if (windowOldest <= fromMs) break;                // reached the requested start
+
+    toMs = windowOldest - 1;                          // step the window back
+    await sleep(300);
   }
 
   if (!allResults.length) return null;
