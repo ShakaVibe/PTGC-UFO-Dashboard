@@ -687,7 +687,7 @@ function getTier(days) {
 }
 
 /* localStorage cache with size management */
-const CACHE_STORAGE_KEY = 'charts_v10_cache'; // v10: short daily series escalate to token's deepest GeckoTerminal pool
+const CACHE_STORAGE_KEY = 'charts_v11_cache'; // v11: global GeckoTerminal throttle to stop 429/CORS storm
 const MAX_CACHE_SIZE = 3 * 1024 * 1024; // 3MB safety limit (localStorage is ~5MB)
 
 let cache = {};
@@ -836,7 +836,34 @@ function navTo(tab) {
 /* ═══════════════════════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════════════════════ */
+/* ===== TEMPORARY MAINTENANCE MODE =====
+   Set MAINTENANCE_MODE = false (or delete this block + the guard in the
+   DOMContentLoaded handler below) to bring the charts back. */
+const MAINTENANCE_MODE = true;
+function showMaintenance() {
+  const style = document.createElement('style');
+  style.textContent =
+    '@keyframes mxPulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}' +
+    '@keyframes mxFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}' +
+    '@keyframes mxDot{0%,100%{opacity:.25}50%{opacity:1}}';
+  document.head.appendChild(style);
+
+  const o = document.createElement('div');
+  o.id = 'maintenanceOverlay';
+  o.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:radial-gradient(circle at 50% 35%,rgba(212,175,55,0.08),#0a0a0a 60%),#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:Rajdhani,sans-serif';
+  o.innerHTML =
+    '<div style="font-size:84px;line-height:1;animation:mxFloat 3s ease-in-out infinite">\u{1F6F8}</div>' +
+    '<div class="font-orbitron metallic-gold" style="font-size:30px;font-weight:900;letter-spacing:2px;margin-top:22px">CHARTS UNDER MAINTENANCE</div>' +
+    '<div style="color:rgba(255,255,255,0.6);font-size:17px;max-width:440px;margin-top:14px;line-height:1.5">We\u2019re upgrading the price-data pipeline behind the charts. They\u2019ll be back online shortly \u2014 thanks for your patience.</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-top:24px;color:rgba(212,175,55,0.9);font-family:\'JetBrains Mono\',monospace;font-size:12px;letter-spacing:1.5px;text-transform:uppercase">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:#D4AF37;box-shadow:0 0 10px #D4AF37;animation:mxDot 1.3s ease-in-out infinite"></span>Working on it</div>' +
+    '<a href="index.html" style="margin-top:30px;text-decoration:none;padding:11px 26px;border-radius:12px;border:1.5px solid rgba(212,175,55,0.5);background:linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08));color:#D4AF37;font-family:\'Orbitron\',sans-serif;font-weight:700;font-size:14px;letter-spacing:1px;animation:mxPulse 2.5s ease-in-out infinite">\u2190 BACK TO DASHBOARD</a>';
+  document.body.appendChild(o);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  if (MAINTENANCE_MODE) { showMaintenance(); return; } // skip all data fetching while down
+
   // Migrate: clean up old caches from previous versions
   try { sessionStorage.removeItem('charts_data_cache'); } catch {}
   try { localStorage.removeItem('charts_v2_cache'); } catch {}
@@ -955,6 +982,22 @@ function renderButtons() {
    HELPERS
    ═══════════════════════════════════════════════════════════════ */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* Global GeckoTerminal throttle — GT allows ~30 requests/minute, and firing many
+   at once gets the whole batch 429'd (which surfaces as CORS errors). This gate
+   serializes ALL GT calls with ~2.2s spacing (~27/min) so they never collide. */
+let _gtChain = Promise.resolve();
+let _gtLast = 0;
+const GT_MIN_INTERVAL = 2200;
+function gtGate() {
+  const p = _gtChain.then(async () => {
+    const wait = GT_MIN_INTERVAL - (Date.now() - _gtLast);
+    if (wait > 0) await sleep(wait);
+    _gtLast = Date.now();
+  });
+  _gtChain = p.catch(() => {});
+  return p;
+}
 
 /* Smart retry — skip retries for 400/404, timeout protection, external abort support */
 async function fetchRetry(url, retries = 3, delayMs = 1000, externalSignal, headers = {}) {
@@ -1539,6 +1582,7 @@ async function fetchFromGeckoTerminal(pairAddr, tier, sym, signal, tokenSide) {
     if (signal && signal.aborted) return null;
     const url = `https://api.geckoterminal.com/api/v2/networks/${GT_NETWORK}/pools/${pairAddr}/ohlcv/${timeframe}` +
       `?aggregate=${aggregate}&before_timestamp=${beforeTs}&limit=1000&currency=usd&token=${side}`;
+    await gtGate();
     const r = await fetchRetry(url, 2, 2000, signal, { 'accept': 'application/json' });
     if (!r) break;
     let j;
@@ -1591,6 +1635,7 @@ async function resolveBestGTPool(tokenAddr, signal) {
 
   try {
     const url = `https://api.geckoterminal.com/api/v2/networks/${GT_NETWORK}/tokens/${tokenAddr}/pools`;
+    await gtGate();
     const r = await fetchRetry(url, 2, 2000, signal, { accept: 'application/json' });
     if (!r) return null;
     const j = await r.json();
