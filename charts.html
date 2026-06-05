@@ -1428,7 +1428,14 @@ async function fetchFromMoralis(pairAddr, tier, sym, signal) {
   }
 
   if (!allResults.length) return null;
-  console.log(`Moralis: ${sym} fetched ${allResults.length} candles across pagination`);
+  const _spanRaw = allResults.map(c => new Date(c.timestamp).getTime()).sort((a, b) => a - b);
+  const _firstD = new Date(_spanRaw[0]).toISOString().slice(0, 10);
+  const _lastD = new Date(_spanRaw[_spanRaw.length - 1]).toISOString().slice(0, 10);
+  const _spanDays = Math.round((_spanRaw[_spanRaw.length - 1] - _spanRaw[0]) / 86400000);
+  console.log(`Moralis ${sym} [${tier}]: ${allResults.length} candles, span ${_spanDays}d (${_firstD} → ${_lastD}), requested ${daysBack}d back`);
+  if (tier === 'daily' && _spanDays < daysBack - 7) {
+    console.warn(`Moralis ${sym}: pair ${pairAddr} returned only ${_spanDays}d of daily history (requested ${daysBack}d). The longer ranges can't fill — this pair lacks deeper OHLCV on Moralis.`);
+  }
 
   const raw = allResults.map(c => ({
     ts: new Date(c.timestamp).getTime(),
@@ -1602,11 +1609,33 @@ function _doRenderChart() {
     return;
   }
 
+  // Fit the x-axis to the data that actually reaches the chart rather than pinning
+  // it to the full requested window. If the dataset is shorter than the selected
+  // range (e.g. the fetch/fallback returned less history than 365d), forcing
+  // min = now - days left the line stranded in the recent slice with the rest of
+  // the chart blank. When the full window IS available, dataMinX ≈ requestedMin so
+  // this is a no-op. The console diagnostics below reveal when the dataset is short.
+  const requestedMin = Date.now() - getDays() * 86400000;
+  let dataMinX = Infinity;
+  datasets.forEach(ds => { if (ds.data && ds.data.length && ds.data[0].x < dataMinX) dataMinX = ds.data[0].x; });
+  const xMin = isFinite(dataMinX) ? dataMinX : requestedMin;
+  const xMax = Date.now();
+
+  // Diagnostic: report what actually reached the chart vs. what was requested.
+  // If a line looks short on a long range, this shows whether the dataset itself
+  // is short (upstream fetch/fallback) rather than an axis problem.
+  datasets.forEach(ds => {
+    const first = ds.data[0].x, last = ds.data[ds.data.length - 1].x;
+    const shownDays = Math.round((last - first) / 86400000);
+    const limited = (TOKENS[ds.key] && TOKENS[ds.key]._limited) ? ' [LIMITED/2pt fallback]' : '';
+    console.log(`Chart ${ds.label}: ${ds.data.length} pts, span ${shownDays}d of ${getDays()}d requested${limited}`);
+  });
+
   const chartOpts = {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,10,10,0.95)', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1, titleFont: { family: "'JetBrains Mono',monospace", size: 11, weight: '600' }, bodyFont: { family: "'JetBrains Mono',monospace", size: 12 }, padding: 14, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8, boxPadding: 4, callbacks: { title(items) { if (!items.length) return ''; return new Date(items[0].parsed.x).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}) }) }, label(c) { const v = c.parsed.y; return ` ${c.dataset.label}  ${v >= 0 ? '+' : ''}${v.toFixed(2)}%` }, labelColor(c) { return { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor, borderRadius: 2 } } } } },
     scales: {
-      x: { type: 'time', min: Date.now() - getDays() * 86400000, max: Date.now(), time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
+      x: { type: 'time', min: xMin, max: xMax, time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 10 }, border: { display: false } }
     }
   };
@@ -1616,6 +1645,8 @@ function _doRenderChart() {
   if (chart && _lastRenderGen === fetchGeneration) {
     try {
       chart.data.datasets = datasets;
+      chart.options.scales.x.min = xMin; // keep axis fitted as more data streams in
+      chart.options.scales.x.max = xMax;
       chart.update('none'); // 'none' = no animation, instant update
       return;
     } catch (e) {
