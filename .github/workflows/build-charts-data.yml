@@ -1,0 +1,52 @@
+name: Build Charts Data
+
+# Builds data/charts-data.json (full-year daily price series for charts.html)
+# from the CoinGecko Pro on-chain API. Additive — does not touch the existing
+# "Fetch CoinGecko Data" workflow or any other data file. Scheduled off the top
+# of the hour so it never runs at the same time as the hourly data job.
+
+on:
+  schedule:
+    - cron: '40 */2 * * *'   # every 2 hours at :40 (daily candles don't need more)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-charts-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build charts-data.json
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+        run: node scripts/build-charts-data.js
+
+      - name: Commit if changed (rebase + retry so it can't clobber other jobs)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/charts-data.json
+          if git diff --staged --quiet; then
+            echo "No change in charts-data.json — nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: update charts-data.json [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push && { echo "pushed"; exit 0; }
+            echo "push attempt $i failed; retrying in 5s…"; sleep 5
+          done
+          echo "ERROR: could not push after 3 attempts"; exit 1
