@@ -3096,8 +3096,11 @@
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
-          // Fetch live 24H burn from blockchain in background (non-blocking)
-          fetchLive24hBurn(cfg.address,cfg.decimals).then(v=>{if(v!==null)setLive24hBurn(v);});
+          // Fetch live 24H burn from blockchain in background (non-blocking).
+          // live24hBurn stays null only while in flight (= loading); on success it's
+          // the live value, on failure it falls back to the cached h24 so the box
+          // always lands on a real number without flashing the stale cache first.
+          fetchLive24hBurn(cfg.address,cfg.decimals).then(v=>{setLive24hBurn(v!==null?v:(periods.h24||0));});
           
           // Update holder change with current holder count
           const hc=getHolderChange(token,h);
@@ -3542,17 +3545,26 @@
 
                   <div className="flex-1"></div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[{l:'24H',v:live24hBurn!==null?live24hBurn:burnPeriods.h24,live:live24hBurn!==null},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v,live})=>{
-                      const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
-                      const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
+                    {[{l:'24H',v:live24hBurn,loading:live24hBurn===null},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v,loading})=>{
+                      const pct=cfg.totalSupply>0&&v>0?(v/cfg.totalSupply)*100:0;
+                      const c=(!loading&&v>0)?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                       return(
                         <div key={l} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-3 flex flex-col items-center gap-1.5 min-w-0">
                           <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">{l}</div>
-                          <div className="text-lg sm:text-xl flex items-center gap-1">{c.e}{c.cnt>0&&<span className="text-white/55 text-xs font-bold tabular-nums">x{c.cnt}</span>}</div>
-                          {burnShowTokens?(
-                            <div className={`font-bold text-base sm:text-xl tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtAbbr(v)} <span className="text-white/35 text-xs">{token}</span></div>
+                          {loading?(
+                            <>
+                              <div className="text-lg sm:text-xl opacity-25">{'\u{1F41A}'}</div>
+                              <div className="h-4 sm:h-5 w-16 rounded bg-white/10 animate-pulse"></div>
+                            </>
                           ):(
-                            <div className={`text-base sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtUSD(v*(data?.price||0))}</div>
+                            <>
+                              <div className="text-lg sm:text-xl flex items-center gap-1">{c.e}{c.cnt>0&&<span className="text-white/55 text-xs font-bold tabular-nums">x{c.cnt}</span>}</div>
+                              {burnShowTokens?(
+                                <div className={`font-bold text-base sm:text-xl tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtAbbr(v)} <span className="text-white/35 text-xs">{token}</span></div>
+                              ):(
+                                <div className={`text-base sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtUSD(v*(data?.price||0))}</div>
+                              )}
+                            </>
                           )}
                         </div>
                       );
