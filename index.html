@@ -3275,6 +3275,8 @@
       const creatures=getBurnC(burn?.pct||0,'Squid');
       const plsRatio=data?.price&&pls?(data.price/pls).toFixed(2):'\u2014';
       const priceUp=(data?.change||0)>=0;
+      const _hdrFirstPool=data?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
+      const hdrDaysOld=(_hdrFirstPool&&isFinite(_hdrFirstPool))?Math.max(0,Math.floor((Date.now()-_hdrFirstPool)/86400000)):null;
       
       // X's to ATH: try coingecko cache first, then hardcoded fallback
       const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
@@ -3347,6 +3349,7 @@
                     <span className="text-white/40 text-xs font-mono tabular-nums">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span>
                     <button onClick={copyAddress} className="text-white/40 hover:text-white/80 transition-colors text-xs">{copied?'\u2713':'\u{1F4CB}'}</button>
                   </div>
+                  {hdrDaysOld!=null&&(<div className="mt-1.5"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{hdrDaysOld.toLocaleString()}</span></div></div>)}
                 </div>
 
                 {/* hairline divider */}
