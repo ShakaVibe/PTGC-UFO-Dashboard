@@ -635,6 +635,12 @@ const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
    bad/absent file degrades gracefully rather than breaking the page. */
 const STATIC_DAILY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json';
 
+/* Majors → CoinGecko coin ids (used by the live intraday fetch below). */
+const CG_IDS = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin', XRP: 'ripple' };
+/* Optional: paste a FREE CoinGecko Demo key for higher intraday rate limits.
+   Leave '' to use the keyless public endpoint (works, just rate-limited). */
+const COINGECKO_DEMO_KEY = '';
+
 let _staticDailyPromise = null;
 let _staticDailyHour = null;
 async function loadStaticDaily(signal) {
@@ -1275,7 +1281,7 @@ async function go() {
       sleep(i * 300).then(async () => {
         if (currentGen !== fetchGeneration) return;
         try {
-          const data = await fetchFromCryptoCompare(t.ccSym, tier, k, signal);
+          const data = await fetchMajorUnified(t, tier, k, signal);
           if (data && data.length >= 2 && currentGen === fetchGeneration) {
             setCached(k, tier, data, false);
             applyTokenData(k, data, false, days);
@@ -1300,9 +1306,9 @@ async function go() {
         setStatus(`<span class="dot spin"></span>Retrying ${t.sym}...`);
 
         if (t.source === 'cc') {
-          /* ── CryptoCompare retry ── */
+          /* ── CoinGecko retry (static daily / live intraday) ── */
           await sleep(2000);
-          data = await fetchFromCryptoCompare(t.ccSym, tier, k, signal);
+          data = await fetchMajorUnified(t, tier, k, signal);
         } else if (t.source === 'moralis') {
           /* ── Moralis retry then DexScreener pool discovery ── */
           await sleep(1000);
@@ -1796,6 +1802,37 @@ async function fetchFromCryptoCompare(ccSymbol, tier, sym, signal) {
     const raw = candles.map(c => ({ ts: c.time * 1000, price: c.close }));
     return cleanData(raw, maxAge);
   } catch (e) { console.warn(`CryptoCompare parse error for ${sym}:`, e); return null; }
+}
+
+/* Majors (BTC/ETH/SOL/BNB/XRP):
+   • daily / long-range (1M-1Y) → prebuilt static file (server-side CoinGecko Pro), like PulseChain tokens
+   • intraday (24H/7D/14D) → live CoinGecko PUBLIC market_chart (keyless; optional demo key)
+   Replaces the retired keyless CryptoCompare endpoint. */
+async function fetchMajorUnified(tokenConfig, tier, sym, signal) {
+  if (tier === 'daily') {
+    try {
+      const json = await loadStaticDaily(signal);
+      const series = getStaticDailySeries(json, sym);
+      if (series && series.length >= 2) {
+        const cleaned = cleanData(series, gtParamsForTier('daily').daysBack + 1);
+        if (cleaned && cleaned.length >= 2) { console.log(`Static ${sym} [daily]: ${cleaned.length} candles`); return cleaned; }
+      }
+    } catch (e) { if (e.name !== 'AbortError') console.warn(`Static daily unavailable for ${sym}, using live:`, e); }
+  }
+  const id = CG_IDS[tokenConfig.ccSym] || CG_IDS[sym];
+  if (!id) return null;
+  const days = tier === 'daily' ? 365 : Math.max(1, Math.ceil(getDays()));
+  let url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`;
+  if (COINGECKO_DEMO_KEY) url += `&x_cg_demo_api_key=${COINGECKO_DEMO_KEY}`;
+  const r = await fetchRetry(url, 2, 2000, signal);
+  if (!r) return null;
+  try {
+    const j = await r.json();
+    const prices = (j && j.prices) || [];
+    if (!prices.length) return null;
+    const raw = prices.map(p => ({ ts: p[0], price: p[1] }));
+    return cleanData(raw, ccParamsForTier(tier).maxAge);
+  } catch (e) { console.warn(`CoinGecko parse error for ${sym}:`, e); return null; }
 }
 
 /* SOURCE 3: DexScreener pool discovery → Moralis fallback (for GT tokens that fail) */
