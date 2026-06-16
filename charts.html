@@ -622,6 +622,48 @@ function applyHeaderValues(data, t) {
 const MORALIS_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjZjMzk5M2I1LWQ3NTgtNDU1MS1hYTQwLTIzZjM4YjlhNjJmZSIsIm9yZ0lkIjoiNDg5NzQxIiwidXNlcklkIjoiNTAzODc5IiwidHlwZUlkIjoiZWUwNjY5NTYtOWI4Yy00ZjI1LTlhOWEtNjM3Mjg2NzYyMzdlIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NzAwNTYyMDYsImV4cCI6NDkyNTgxNjIwNn0.c2xp-hC0CzB3f6ECyL_-igEGtWuD4o7-YdxCtuW_0vk';
 const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
 
+/* ── Static daily series (server-side prebuilt) ──────────────────────────────
+   Long-range daily history (1M/3M/6M/1Y) is built server-side by the
+   "Build Charts Data" GitHub Action and committed to data/charts-data.json.
+   The browser reads that file instead of hitting GeckoTerminal directly for
+   the daily tier (the old path 429'd / CORS-failed when several tokens loaded
+   at once). Intraday tiers (24H/7D/14D) and the majors are unaffected and
+   still fetched live. If the static file or a token is missing, the daily
+   guard in fetchMoralisUnified() falls through to the old live fetch, so a
+   bad/absent file degrades gracefully rather than breaking the page. */
+const STATIC_DAILY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json';
+
+let _staticDailyPromise = null;
+let _staticDailyHour = null;
+async function loadStaticDaily(signal) {
+  // Cache-bust hourly: a fresh build is picked up within the hour, but
+  // repeated token loads inside the same hour reuse a single fetch.
+  const hourKey = Math.floor(Date.now() / 3600000);
+  if (_staticDailyPromise && _staticDailyHour === hourKey) return _staticDailyPromise;
+  _staticDailyHour = hourKey;
+  _staticDailyPromise = (async () => {
+    const r = await fetch(`${STATIC_DAILY_URL}?t=${hourKey}`, { signal });
+    if (!r.ok) throw new Error(`static daily HTTP ${r.status}`);
+    const json = await r.json();
+    console.log('Static daily series loaded:', json && json.lastUpdated,
+                '—', Object.keys((json && json.tokens) || {}).length, 'tokens');
+    return json;
+  })();
+  // On failure, clear the memo so a later attempt can retry this hour.
+  _staticDailyPromise.catch(() => {
+    if (_staticDailyHour === hourKey) { _staticDailyPromise = null; _staticDailyHour = null; }
+  });
+  return _staticDailyPromise;
+}
+
+// Returns [{ts, price}, …] for a token symbol, mapping the [tsMs, price]
+// tuples in charts-data.json. Null if the token is absent or too short.
+function getStaticDailySeries(json, sym) {
+  const tok = json && json.tokens && json.tokens[sym];
+  if (!tok || !Array.isArray(tok.series) || tok.series.length < 2) return null;
+  return tok.series.map(p => ({ ts: p[0], price: p[1] }));
+}
+
 const dexLogo = a => `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
 
 const TOKENS = {
@@ -839,7 +881,7 @@ function navTo(tab) {
 /* ===== TEMPORARY MAINTENANCE MODE =====
    Set MAINTENANCE_MODE = false (or delete this block + the guard in the
    DOMContentLoaded handler below) to bring the charts back. */
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 function showMaintenance() {
   const style = document.createElement('style');
   style.textContent =
@@ -1662,6 +1704,26 @@ async function resolveBestGTPool(tokenAddr, signal) {
 }
 
 async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
+  // Daily tier: serve from the prebuilt static file first. If it loads and the
+  // token has a usable series, return it (after cleanData). On any miss
+  // (file unreachable, token absent, series too short) fall through to the
+  // existing live fetch below — nothing regresses.
+  if (tier === 'daily') {
+    try {
+      const json = await loadStaticDaily(signal);
+      const series = getStaticDailySeries(json, sym);
+      if (series && series.length >= 2) {
+        const cleaned = cleanData(series, gtParamsForTier('daily').daysBack + 1);
+        if (cleaned && cleaned.length >= 2) {
+          console.log(`Static ${sym} [daily]: ${cleaned.length} candles`);
+          return cleaned;
+        }
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn(`Static daily unavailable for ${sym}, using live fetch:`, e);
+    }
+  }
+
   let pairAddr = tokenConfig.pairAddr;
   if (!pairAddr && tokenConfig.dexAddr) {
     pairAddr = await discoverPairForMoralis(tokenConfig.dexAddr, signal);
