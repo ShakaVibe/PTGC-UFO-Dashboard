@@ -40,6 +40,17 @@ const TOKENS = [
   { sym: 'PRVX', addr: '0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11', pair: null },
 ];
 
+/* Global majors — fetched from CoinGecko's coin-market endpoint (not on-chain).
+   Same Pro key, same server-side safety. charts.html reads these for the daily
+   (1M/3M/6M/1Y) ranges; intraday for majors is fetched live in the browser. */
+const MAJORS = [
+  { sym: 'BTC', id: 'bitcoin' },
+  { sym: 'ETH', id: 'ethereum' },
+  { sym: 'SOL', id: 'solana' },
+  { sym: 'BNB', id: 'binancecoin' },
+  { sym: 'XRP', id: 'ripple' },
+];
+
 const REQUEST_TIMEOUT_MS = 20000;   // never let a hung socket stall the job
 const CG_DELAY_MS = 2000;           // match fetch-coingecko-data.js — proactive anti-429
 const MAX_PAGES = 6;                // 6 × ~180d ≈ 3yr backward headroom
@@ -199,6 +210,29 @@ async function buildToken(token) {
   return { source: 'coingecko', pool: win.pool, points: s.length, span: spanDays(s), series: s };
 }
 
+/* Daily price history for a global major via the coin-market endpoint.
+   Returns [[tsMs, price], …]. days=365 yields daily granularity (auto). */
+async function fetchMajorDaily(cgId) {
+  const j = await apiGet(`/coins/${cgId}/market_chart?vs_currency=usd&days=${RANGE_DAYS}`);
+  const prices = (j && j.prices) || [];
+  return prices
+    .map((p) => [p[0], parseFloat(p[1])])
+    .filter(([ts, pr]) => ts && pr > 0);
+}
+
+async function buildMajor(m) {
+  console.log(`\n${m.sym} (coingecko: ${m.id})`);
+  try {
+    const s = clean(await fetchMajorDaily(m.id));
+    if (!s) { console.warn(`  ✗ no usable series for ${m.sym}`); return null; }
+    console.log(`  ✓ ${s.length} candles, span ${spanDays(s)}d (${new Date(s[0][0]).toISOString().slice(0,10)} → ${new Date(s[s.length-1][0]).toISOString().slice(0,10)}) via coingecko market_chart`);
+    return { source: 'coingecko-market', pool: 'market_chart', points: s.length, span: spanDays(s), series: s };
+  } catch (e) {
+    console.warn(`  market_chart failed for ${m.sym}: ${e.message}`);
+    return null;
+  }
+}
+
 (async () => {
   console.log(`Building charts-data.json — ${RANGE_DAYS}d daily, network "${NETWORK}", ${CG_DELAY_MS}ms pacing`);
   if (!(await preflight())) process.exit(1);
@@ -216,6 +250,17 @@ async function buildToken(token) {
     } catch (e) {
       console.warn(`  unexpected error for ${t.sym}: ${e.message}`);
       if (prev[t.sym]) { tokens[t.sym] = { ...prev[t.sym], carriedForward: true }; }
+    }
+  }
+
+  for (const m of MAJORS) {
+    try {
+      const built = await buildMajor(m);
+      if (built) tokens[m.sym] = built;
+      else if (prev[m.sym]) { tokens[m.sym] = { ...prev[m.sym], carriedForward: true }; console.warn(`  → kept previous ${m.sym} series`); }
+    } catch (e) {
+      console.warn(`  unexpected error for ${m.sym}: ${e.message}`);
+      if (prev[m.sym]) { tokens[m.sym] = { ...prev[m.sym], carriedForward: true }; }
     }
   }
 
