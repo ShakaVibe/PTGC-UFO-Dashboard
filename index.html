@@ -1795,8 +1795,37 @@
       );
     };
     
+    // ===== MAINT-MIGRATION: TEMPORARY maintenance components (remove this whole block + tagged edits to revert) =====
+    const MAINT_MSG="This section is temporarily under maintenance while the UFO token contract migration is completed. Some data would be inaccurate during the migration, so it has been paused. Please check back soon.";
+    const MaintenanceNotice=({open,onClose})=>{
+      if(!open)return null;
+      return(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)'}} onClick={onClose}>
+          <div onClick={e=>e.stopPropagation()} className="relative max-w-md w-full rounded-2xl border border-yellow-400/30 bg-[#141414] p-6 sm:p-8 text-center" style={{boxShadow:'0 0 40px rgba(234,179,8,0.15)'}}>
+            <div className="text-4xl mb-3">🛠️</div>
+            <h3 className="font-orbitron text-xl sm:text-2xl font-bold text-yellow-300 mb-2">Under Maintenance</h3>
+            <p className="text-white/60 text-xs uppercase tracking-[0.2em] mb-4">Migration in Progress</p>
+            <p className="text-white/75 text-sm leading-relaxed mb-6">{MAINT_MSG}</p>
+            <button onClick={onClose} className="px-6 py-2.5 rounded-xl bg-yellow-500/20 border border-yellow-400/40 text-yellow-200 font-semibold hover:bg-yellow-500/30 transition-all">Got it</button>
+          </div>
+        </div>
+      );
+    };
+    const MaintenanceScreen=({label})=>(
+      <div className="max-w-2xl mx-auto px-4 py-16 sm:py-24 text-center">
+        <div className="rounded-2xl border border-yellow-400/30 bg-[#141414] p-8 sm:p-12" style={{boxShadow:'0 0 40px rgba(234,179,8,0.1)'}}>
+          <div className="text-5xl sm:text-6xl mb-4">🛠️</div>
+          <h2 className="font-orbitron text-2xl sm:text-3xl font-bold text-yellow-300 mb-2">{label} — Under Maintenance</h2>
+          <p className="text-white/60 text-xs uppercase tracking-[0.2em] mb-5">Migration in Progress</p>
+          <p className="text-white/75 text-sm sm:text-base leading-relaxed">{MAINT_MSG}</p>
+        </div>
+      </div>
+    );
+    // ===== END MAINT-MIGRATION components =====
+
     const Home=({onSelect})=>{
       const[data,setData]=useState({PTGC:null,UFO:null});
+      const[showMaint,setShowMaint]=useState(false); // MAINT-MIGRATION
       const[pls,setPls]=useState(0);
       const[loading,setLoading]=useState(true);
       useEffect(()=>{const load=async()=>{
@@ -1826,7 +1855,8 @@
         const _firstPool=d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
         const daysOld=(_firstPool&&isFinite(_firstPool))?Math.max(0,Math.floor((Date.now()-_firstPool)/86400000)):null;
         return(
-          <div onClick={()=>onSelect(token)} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8`}>
+          <div onClick={()=>{if(token==='UFO'){setShowMaint(true)}else{onSelect(token)}}} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8 relative ${token==='UFO'?'opacity-60':''}`}>
+            {token==='UFO'&&<div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/20 border border-yellow-400/40">{/* MAINT-MIGRATION badge */}<span className="text-yellow-300 text-xs">⚠</span><span className="text-yellow-200 text-[10px] font-bold uppercase tracking-wider">Under Maintenance</span></div>}
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
               <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
               <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1"><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></div>{daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
@@ -1840,6 +1870,7 @@
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
           <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl w-full">{loading?<><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/></>}</div></div>
+          <MaintenanceNotice open={showMaint} onClose={()=>setShowMaint(false)}/>{/* MAINT-MIGRATION */}
           <footer className="text-center py-4 border-t border-white/10"><p className="text-white text-base">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
         </div>
       );
@@ -2721,6 +2752,7 @@
 
 
     const Dashboard=({token,onBack,onSwitch,onAffiliates})=>{
+      const[showMaintNotice,setShowMaintNotice]=useState(false); // MAINT-MIGRATION
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#F0DC78]':'text-[#7CFC00]',border:isGold?'border-[#D4AF37]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D4AF37]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
       const[data,setData]=useState(null);
@@ -3394,7 +3426,7 @@
                     <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9"/>
                     <span className={`font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] ${isGold?'metallic-gold':theme.text}`}>BUY</span>
                   </a>
-                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+                  <button onClick={()=>setShowMaintNotice(true)/* MAINT-MIGRATION: was onSwitch(token==='PTGC'?'UFO':'PTGC') */} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
                     <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-6 h-6 sm:w-8 sm:h-8"/>
                     <span className="text-white/70 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em]">Switch</span>
                   </button>
@@ -3433,7 +3465,7 @@
                   Socials
                   {activeTab==='social' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
-                <a href="./calculators.html" onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Calculators</a>
+                <a href="#" onClick={(e)=>{e.preventDefault();setShowMaintNotice(true)}/* MAINT-MIGRATION: was href="./calculators.html" */} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Calculators</a>
                 <a href="./charts.html" onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
                 <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0">
                   <span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span>
@@ -3990,14 +4022,16 @@
           </>)}
           
           {/* KPI Report Tab Content */}
-          {activeTab==='kpi'&&(
+          {activeTab==='kpi'&&(<MaintenanceScreen label="KPI Report"/>)}{/* MAINT-MIGRATION */}
+          {false&&activeTab==='kpi'&&(
             <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
               <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod}/>
             </div>
           )}
           
           {/* Social Tab Content */}
-          {activeTab==='social'&&(
+          {activeTab==='social'&&(<MaintenanceScreen label="Socials"/>)}{/* MAINT-MIGRATION */}
+          {false&&activeTab==='social'&&(
             <div className="max-w-5xl mx-auto px-3 sm:px-6 py-6">
               <div className="text-center mb-6">
                 <h2 className="text-2xl font-bold text-white mb-2">Socials Hub</h2>
@@ -6266,6 +6300,7 @@
             />
           )}
           
+          <MaintenanceNotice open={showMaintNotice} onClose={()=>setShowMaintNotice(false)}/>{/* MAINT-MIGRATION */}
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
           
         </div>
