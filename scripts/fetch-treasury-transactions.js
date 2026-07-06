@@ -1,8 +1,13 @@
 /**
- * Fetch DAO Treasury Transactions - MORALIS VERSION
- * 
+ * Fetch DAO Treasury Transactions - PULSESCAN VERSION
+ *
  * Fetches all transactions (normal + token transfers) for DAO treasury wallets
  * and saves them to JSON files for the ledger to consume.
+ *
+ * All data now comes from the PulseChain block explorer API
+ * (api.scan.pulsechain.com) — no API key and no usage limits. Previously the
+ * normal-transaction, token-balance and native-balance calls used Moralis,
+ * which ran out of plan credits and returned HTTP 401.
  * 
  * Files created:
  * - treasury-summary.json (totals, last updated, etc.)
@@ -15,15 +20,12 @@
 const fs = require('fs');
 const path = require('path');
 
-// Moralis API Key - set via environment variable
-const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
-if (!MORALIS_API_KEY) {
-  console.error('ERROR: MORALIS_API_KEY environment variable not set');
-  process.exit(1);
-}
+// No API key required — PulseScan is the public PulseChain block explorer.
 
-// PulseChain chain identifier for Moralis
-const CHAIN = '0x171'; // PulseChain mainnet (369 in hex)
+// Max consecutive retries per page before aborting. Prevents the old failure
+// mode where a persistent error (e.g. Moralis 401) retried forever and the job
+// ran for hours until the CI timeout.
+const MAX_RETRIES = 5;
 
 // DAO Treasury Wallet Addresses
 const WALLET1 = '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1';
@@ -51,38 +53,8 @@ const KNOWN_ROUTERS = {
   '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
 };
 
-const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
 const PULSESCAN_BASE = 'https://api.scan.pulsechain.com/api';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Make Moralis API request
- */
-async function moralisRequest(endpoint, params = {}) {
-  const url = new URL(`${MORALIS_BASE}${endpoint}`);
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null) url.searchParams.set(k, v);
-  });
-  
-  try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'X-API-Key': MORALIS_API_KEY,
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`HTTP ${response.status}: ${text}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.log(`  API Error: ${error.message}`);
-    return null;
-  }
-}
 
 /**
  * Make PulseScan API request (no auth required — it's the public chain explorer)
@@ -127,122 +99,135 @@ function loadExistingData(filePath) {
 }
 
 /**
- * Fetch all native transactions for a wallet using Moralis
+ * Fetch all native (normal) transactions for a wallet via PulseScan.
+ *
+ * Was Moralis (GET /{wallet}); now uses PulseScan's Etherscan-compatible
+ * `txlist` action — same public explorer, no API key, no usage limits. The
+ * output keys are kept identical to the previous Moralis-formatted shape so the
+ * ledger keeps reading them unchanged.
+ *
+ * Notes:
+ *  - The old Moralis call bundled internal transactions (include=
+ *    internal_transactions), but the ledger never reads that field, so we skip
+ *    the extra call and set internal_transactions to [].
+ *  - `method_label` (Moralis's decoded method name) isn't in classic txlist; we
+ *    best-effort it from `functionName` when present, else leave it blank (the
+ *    ledger already falls back to empty).
+ *  - Full fetch each run (like the token-transfer fetch below), then merge +
+ *    dedupe by hash. Self-healing and simple; treasury wallets are low-volume.
  */
 async function fetchWalletTransactions(walletAddress, walletName, existingTxns = []) {
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`Fetching ${walletName} transactions via Moralis...`);
+  console.log(`Fetching ${walletName} transactions via PulseScan...`);
   console.log(`Wallet: ${walletAddress}`);
   console.log(`${'='.repeat(50)}`);
-  
-  // Get the most recent block we have (for incremental updates)
-  const lastBlock = existingTxns.length > 0 
-    ? Math.max(...existingTxns.map(tx => Number(tx.block_number) || 0))
-    : 0;
-  
-  if (lastBlock) {
-    console.log(`Incremental mode: fetching after block ${lastBlock}`);
-  } else {
-    console.log('Full fetch mode: getting all historical transactions');
-  }
-  
+  console.log(`Existing entries loaded from disk: ${existingTxns.length}`);
+
   const newTxns = [];
-  let cursor = null;
-  let page = 0;
-  
+  let page = 1;
+  const pageSize = 10000; // PulseScan allows up to 10k per page
+  let retries = 0;
+
   while (true) {
-    // Moralis endpoint for wallet transactions
-    const params = {
-      chain: CHAIN,
-      cursor: cursor,
-      limit: 100,
-      include: 'internal_transactions'
-    };
-    
-    // Only set from_block for incremental updates
-    if (lastBlock > 0) {
-      params.from_block = lastBlock + 1;
-    }
-    
-    const data = await moralisRequest(`/${walletAddress}`, params);
-    
+    const data = await pulsescanRequest({
+      module: 'account',
+      action: 'txlist',
+      address: walletAddress,
+      startblock: 0,
+      endblock: 99999999,
+      sort: 'desc',
+      page: page,
+      offset: pageSize
+    });
+
     if (!data) {
-      console.log(`  Page ${page + 1}: API error, retrying in 5s...`);
+      if (++retries > MAX_RETRIES) {
+        throw new Error(`PulseScan txlist failed ${MAX_RETRIES}x for ${walletName} (page ${page}) — aborting instead of looping forever.`);
+      }
+      console.log(`  Page ${page}: request failed, retry ${retries}/${MAX_RETRIES} in 5s...`);
       await delay(5000);
       continue;
     }
-    
-    if (!data.result || data.result.length === 0) {
-      console.log(`  No more data after page ${page + 1}`);
+    retries = 0;
+
+    // Etherscan-style API returns { status, message, result }. result is an
+    // array on success, or a string/empty when there are no records.
+    if (!Array.isArray(data.result) || data.result.length === 0) {
+      console.log(`  Page ${page}: no more data (${data.message || 'empty'})`);
       break;
     }
-    
+
     for (const tx of data.result) {
-      // Convert Moralis format to PulseScan-compatible format
-      const formattedTx = {
+      const methodLabel = tx.functionName
+        ? String(tx.functionName).split('(')[0].trim()
+        : (tx.method_label || '');
+
+      // Keep the exact output shape the ledger already consumes.
+      newTxns.push({
         hash: tx.hash,
-        block_number: tx.block_number,
-        timeStamp: Math.floor(new Date(tx.block_timestamp).getTime() / 1000).toString(),
-        from: tx.from_address,
-        to: tx.to_address || '',
+        block_number: tx.blockNumber,
+        timeStamp: tx.timeStamp,
+        from: (tx.from || '').toLowerCase(),
+        to: (tx.to || '').toLowerCase(),
         value: tx.value || '0',
         gas: tx.gas || '0',
-        gasPrice: tx.gas_price || '0',
-        gasUsed: tx.receipt_gas_used || '0',
+        gasPrice: tx.gasPrice || '0',
+        gasUsed: tx.gasUsed || '0',
         input: tx.input || '0x',
-        txreceipt_status: tx.receipt_status === '1' ? '1' : '0',
-        isError: tx.receipt_status === '1' ? '0' : '1',
-        // Keep some Moralis-specific fields
-        method_label: tx.method_label || '',
-        // Store internal transactions if present
-        internal_transactions: tx.internal_transactions || []
-      };
-      
-      newTxns.push(formattedTx);
+        txreceipt_status: tx.txreceipt_status === '1' ? '1' : '0',
+        isError: tx.isError === '1' ? '1' : '0',
+        method_label: methodLabel,
+        internal_transactions: [] // not used by the ledger; not fetched from PulseScan
+      });
     }
-    
-    // Log progress
-    if (page % 10 === 0 || page < 5) {
-      console.log(`  Page ${page + 1}: ${newTxns.length} new transactions collected`);
-    }
-    
-    // Check for next page
-    cursor = data.cursor;
-    if (!cursor) {
-      break;
-    }
-    
+
+    const newest = data.result[0];
+    const newestDate = newest?.timeStamp
+      ? new Date(Number(newest.timeStamp) * 1000).toISOString().slice(0, 10)
+      : '?';
+    console.log(`  Page ${page}: ${newTxns.length} total fetched (newest on page: block ${newest?.blockNumber || '?'}, ${newestDate})`);
+
+    // Got less than a full page → reached the end
+    if (data.result.length < pageSize) break;
     page++;
-    await delay(200); // Gentle rate limiting
+    await delay(300); // Gentle rate limiting for PulseScan
   }
-  
-  console.log(`Fetched ${newTxns.length} new transactions for ${walletName}`);
+
+  console.log(`Fetched ${newTxns.length} transactions from PulseScan for ${walletName}`);
   console.log(`Existing transactions: ${existingTxns.length}`);
-  
-  // Merge with existing (new first, then existing)
-  // Dedupe by hash
+
+  // Merge: new (authoritative) first, then any existing not re-fetched. Dedupe by hash.
   const seenHashes = new Set();
   const allTxns = [];
-  
+
   for (const tx of newTxns) {
     if (!seenHashes.has(tx.hash)) {
       seenHashes.add(tx.hash);
       allTxns.push(tx);
     }
   }
-  
+
+  let preservedCount = 0;
   for (const tx of existingTxns) {
     if (!seenHashes.has(tx.hash)) {
       seenHashes.add(tx.hash);
       allTxns.push(tx);
+      preservedCount++;
     }
   }
-  
+
   // Sort by timestamp descending (newest first)
   allTxns.sort((a, b) => Number(b.timeStamp) - Number(a.timeStamp));
-  
-  console.log(`Total transactions after merge: ${allTxns.length}`);
-  
+
+  // Sanity check: warn loudly if the fetch missed recent activity
+  const newestTs = allTxns.length > 0 ? Number(allTxns[0].timeStamp) : 0;
+  const ageHours = (Date.now() / 1000 - newestTs) / 3600;
+  if (ageHours > 48 && allTxns.length > 0) {
+    console.log(`  ⚠️  WARNING: newest transaction is ${ageHours.toFixed(1)}h old — PulseScan may have an indexing issue`);
+  }
+
+  console.log(`Total transactions after merge: ${allTxns.length} (${preservedCount} preserved from existing)`);
+
   return allTxns;
 }
 
@@ -253,23 +238,23 @@ async function fetchWalletTransactions(walletAddress, walletName, existingTxns =
  * endpoint has stopped reliably indexing PulseChain Transfer events — the newest
  * data Moralis returns for our wallets is months old. PulseScan is PulseChain's
  * canonical block explorer and returns every Transfer event authoritatively.
- *
- * Normal transaction fetching (above) still uses Moralis since that endpoint
- * remains current.
+ * (Normal transactions, balances and holdings now use PulseScan too, so this
+ * whole script is Moralis-free.)
  */
 async function fetchWalletTokenTransfers(walletAddress, walletName, existingTransfers = []) {
   console.log(`\n${'='.repeat(50)}`);
   console.log(`Fetching ${walletName} token transfers via PulseScan...`);
   console.log(`Wallet: ${walletAddress}`);
   console.log(`${'='.repeat(50)}`);
-  
-  console.log(`Data source: PulseScan API (Moralis ERC20 indexing is behind by months)`);
+
+  console.log(`Data source: PulseScan API`);
   console.log(`Existing entries loaded from disk: ${existingTransfers.length}`);
   
   const newTransfers = [];
   let page = 1;
   const pageSize = 10000; // PulseScan allows up to 10k per page
-  
+  let retries = 0;
+
   while (true) {
     const data = await pulsescanRequest({
       module: 'account',
@@ -281,12 +266,16 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
       page: page,
       offset: pageSize
     });
-    
+
     if (!data) {
-      console.log(`  Page ${page}: request failed, retrying in 5s...`);
+      if (++retries > MAX_RETRIES) {
+        throw new Error(`PulseScan tokentx failed ${MAX_RETRIES}x for ${walletName} (page ${page}) — aborting instead of looping forever.`);
+      }
+      console.log(`  Page ${page}: request failed, retry ${retries}/${MAX_RETRIES} in 5s...`);
       await delay(5000);
       continue;
     }
+    retries = 0;
     
     // PulseScan returns { status, message, result } — result is array on success,
     // or a string message like "No transactions found" when empty.
@@ -373,60 +362,76 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
 }
 
 /**
- * Fetch current token balances for a wallet
+ * Fetch current token balances for a wallet via PulseScan `tokenlist`.
+ *
+ * Was Moralis (GET /{wallet}/erc20). Moralis returned a `possible_spam` flag we
+ * used to hide junk; PulseScan doesn't, so instead we restrict to the
+ * KNOWN_TOKENS allowlist. That keeps airdrop-spam out of the treasury holdings.
+ * If the treasury starts holding a new *legitimate* token, add it to
+ * KNOWN_TOKENS at the top of this file and it'll appear here automatically.
  */
 async function fetchWalletBalances(walletAddress, walletName) {
-  console.log(`\nFetching ${walletName} token balances...`);
-  
-  const data = await moralisRequest(`/${walletAddress}/erc20`, {
-    chain: CHAIN
+  console.log(`\nFetching ${walletName} token balances via PulseScan...`);
+
+  const data = await pulsescanRequest({
+    module: 'account',
+    action: 'tokenlist',
+    address: walletAddress
   });
-  
-  if (data && Array.isArray(data)) {
-    console.log(`  Found ${data.length} tokens`);
-    
-    const balances = data.map(token => {
-      const tokenAddr = token.token_address?.toLowerCase() || '';
-      const knownToken = KNOWN_TOKENS[tokenAddr];
-      const decimals = knownToken?.decimals || token.decimals || 18;
+
+  if (!data || !Array.isArray(data.result)) {
+    console.log(`  No token balance data returned (${data?.message || 'no result'})`);
+    return [];
+  }
+
+  const balances = data.result
+    .map(token => {
+      const tokenAddr = (token.contractAddress || '').toLowerCase();
+      const known = KNOWN_TOKENS[tokenAddr];
+      if (!known) return null; // allowlist only — drops spam / unknown tokens
+      const decimals = known.decimals;
       const balance = Number(BigInt(token.balance || '0')) / Math.pow(10, decimals);
-      
+
       return {
-        address: token.token_address,
-        symbol: knownToken?.symbol || token.symbol || 'Unknown',
-        name: knownToken?.name || token.name || '',
+        address: token.contractAddress,
+        symbol: known.symbol,
+        name: known.name,
         balance: balance,
         decimals: decimals,
-        possible_spam: token.possible_spam || false,
-        verified_contract: token.verified_contract || false
+        possible_spam: false,
+        verified_contract: true // allowlisted, so treated as verified
       };
-    }).filter(t => t.balance > 0 && !t.possible_spam);
-    
-    // Sort by balance (descending)
-    balances.sort((a, b) => b.balance - a.balance);
-    
-    return balances;
-  }
-  
-  return [];
+    })
+    .filter(t => t && t.balance > 0);
+
+  // Sort by balance (descending)
+  balances.sort((a, b) => b.balance - a.balance);
+
+  console.log(`  Found ${balances.length} known tokens with a balance`);
+  return balances;
 }
 
 /**
- * Fetch native balance for a wallet
+ * Fetch native (PLS) balance for a wallet via PulseScan `balance`.
+ * Was Moralis (GET /{wallet}/balance).
  */
 async function fetchNativeBalance(walletAddress, walletName) {
   console.log(`\nFetching ${walletName} native (PLS) balance...`);
-  
-  const data = await moralisRequest(`/${walletAddress}/balance`, {
-    chain: CHAIN
+
+  const data = await pulsescanRequest({
+    module: 'account',
+    action: 'balance',
+    address: walletAddress
   });
-  
-  if (data && data.balance) {
-    const balance = Number(BigInt(data.balance)) / 1e18;
+
+  // Etherscan-style balance returns the wei amount as a decimal string in `result`.
+  if (data && data.result && /^\d+$/.test(String(data.result))) {
+    const balance = Number(BigInt(data.result)) / 1e18;
     console.log(`  ${walletName} PLS balance: ${balance.toLocaleString()}`);
     return balance;
   }
-  
+
+  console.log(`  Could not read native balance (${data?.message || 'no result'})`);
   return 0;
 }
 
@@ -435,7 +440,7 @@ async function fetchNativeBalance(walletAddress, walletName) {
  */
 async function main() {
   console.log('\n' + '='.repeat(60));
-  console.log('TREASURY TRANSACTION FETCHER - MORALIS VERSION');
+  console.log('TREASURY TRANSACTION FETCHER - PULSESCAN VERSION');
   console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
   
@@ -560,7 +565,7 @@ async function main() {
   
   const summaryData = {
     lastUpdated: new Date().toISOString(),
-    dataSource: 'Moralis',
+    dataSource: 'PulseScan',
     
     wallet1: {
       address: WALLET1,
