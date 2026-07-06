@@ -19,7 +19,6 @@ const TOKENS = {
   }
 };
 
-const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 const DATA_DIR = './data';
 const METRICS_FILE = path.join(DATA_DIR, 'metrics-history.json');
 
@@ -90,54 +89,17 @@ async function fetchDexScreener(tokenAddress) {
 }
 
 /**
- * Fetch holder count from Moralis
- */
-async function fetchHolderCount(tokenAddress) {
-  if (!MORALIS_API_KEY) {
-    console.error('MORALIS_API_KEY not set');
-    return null;
-  }
-
-  try {
-    const url = `https://deep-index.moralis.io/api/v2.2/erc20/${tokenAddress}/owners?chain=pulsechain&order=DESC`;
-    const res = await fetch(url, {
-      headers: {
-        'X-API-Key': MORALIS_API_KEY,
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!res.ok) {
-      console.error(`Moralis API error: ${res.status} ${res.statusText}`);
-      return null;
-    }
-
-    const data = await res.json();
-    
-    // Moralis returns total count in the response
-    // The 'result' array contains holders, but we need the total
-    // Check if there's a cursor or total field
-    if (data.result) {
-      // If no explicit total, we may need to paginate or use page info
-      // Moralis typically provides this in the response metadata
-      const total = data.total || data.result.length;
-      return total;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error(`Moralis error for ${tokenAddress}:`, error.message);
-    return null;
-  }
-}
-
-/**
- * Alternative: Fetch holder count from PulseScan (backup)
+ * Fetch holder count from PulseScan (the PulseChain block explorer).
+ * This is the same source fetch-coingecko-data.js uses — no API key needed.
  */
 async function fetchHolderCountPulseScan(tokenAddress) {
   try {
     const url = `https://api.scan.pulsechain.com/api/v2/tokens/${tokenAddress}`;
     const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`PulseScan error for ${tokenAddress}: HTTP ${res.status}`);
+      return null;
+    }
     const data = await res.json();
     return data.holders ? parseInt(data.holders) : null;
   } catch (error) {
@@ -159,12 +121,8 @@ async function collectTokenMetrics(tokenName, tokenConfig) {
     return null;
   }
 
-  // Fetch holder count (try Moralis first, fallback to PulseScan)
-  let holders = await fetchHolderCount(tokenConfig.address);
-  if (holders === null) {
-    console.log(`Moralis failed for ${tokenName}, trying PulseScan...`);
-    holders = await fetchHolderCountPulseScan(tokenConfig.address);
-  }
+  // Fetch holder count from PulseScan (same source as fetch-coingecko-data.js)
+  const holders = await fetchHolderCountPulseScan(tokenConfig.address);
 
   return {
     price: dexData.price,
