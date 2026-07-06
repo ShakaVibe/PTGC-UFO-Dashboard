@@ -20,8 +20,14 @@ permissions:
   id-token: write
 
 concurrency:
+  # Allow only one Pages deployment at a time. Queue new ones behind the
+  # running deploy and skip intermediate queued runs (GitHub keeps only the
+  # latest). Do NOT cancel an in-progress deploy — cancelling one mid-flight
+  # is what was showing up as failed runs when several data workflows finished
+  # at once and each triggered a deploy. This matches GitHub's official Pages
+  # deployment template.
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
