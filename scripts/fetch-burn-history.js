@@ -21,15 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 
-// Moralis API Key - set via environment variable
-const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
-if (!MORALIS_API_KEY) {
-  console.error('ERROR: MORALIS_API_KEY environment variable not set');
-  process.exit(1);
-}
-
-// PulseChain chain identifier for Moralis
-const CHAIN = '0x171'; // PulseChain mainnet (369 in hex)
+// No Moralis key needed — price/volume/liquidity now come from DexScreener (keyless).
 
 // Addresses
 const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
@@ -43,7 +35,6 @@ const UFO_LP_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
 
-const MORALIS_BASE = 'https://deep-index.moralis.io/api/v2.2';
 const DEXSCREENER_BASE = 'https://api.dexscreener.com/latest/dex';
 const PULSESCAN_BASE = 'https://api.scan.pulsechain.com/api/v2';
 
@@ -110,32 +101,56 @@ function getPeriodKey(timestamp) {
 }
 
 /**
- * Make Moralis API request
+ * Fetch + aggregate a token's market data from DexScreener, memoized per run.
+ * Replaces the old Moralis price / analytics / pairs calls with the same
+ * aggregation the dashboard's fetch-metrics.js and index.html already use, so
+ * the numbers stay consistent. One HTTP call per token address — the price,
+ * volume and pairs functions below all read from this single result.
  */
-async function moralisRequest(endpoint, params = {}) {
-  const url = new URL(`${MORALIS_BASE}${endpoint}`);
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null) url.searchParams.set(k, v);
-  });
-  
-  try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'X-API-Key': MORALIS_API_KEY,
-        'Accept': 'application/json'
+const _dexCache = {};
+function fetchDexAggregated(tokenAddress) {
+  const key = tokenAddress.toLowerCase();
+  if (_dexCache[key]) return _dexCache[key];
+
+  _dexCache[key] = (async () => {
+    const empty = { price: 0, priceChange24h: 0, volume24h: 0, totalLiquidity: 0, totalTokensInLP: 0, pairs: [], pairCount: 0 };
+    try {
+      const res = await fetch(`${DEXSCREENER_BASE}/tokens/${tokenAddress}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+
+      const pairs = (json.pairs || []).filter(p => !p.chainId || p.chainId === 'pulsechain');
+      if (!pairs.length) return empty;
+
+      // Deepest-liquidity pair drives price + price change.
+      pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+      const main = pairs[0];
+
+      let totalLiquidity = 0, totalVolume = 0, totalTokensInLP = 0;
+      for (const p of pairs) {
+        totalLiquidity += p.liquidity?.usd || 0;
+        totalVolume += p.volume?.h24 || 0;
+        const isBase = p.baseToken?.address?.toLowerCase() === key;
+        if (isBase && p.liquidity?.base) totalTokensInLP += p.liquidity.base;
+        else if (!isBase && p.liquidity?.quote) totalTokensInLP += p.liquidity.quote;
       }
-    });
-    
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`HTTP ${response.status}: ${text}`);
+
+      return {
+        price: parseFloat(main.priceUsd) || 0,
+        priceChange24h: main.priceChange?.h24 || 0,
+        volume24h: totalVolume,
+        totalLiquidity,
+        totalTokensInLP,
+        pairs,
+        pairCount: pairs.length
+      };
+    } catch (error) {
+      console.log(`  DexScreener error for ${tokenAddress}: ${error.message}`);
+      return empty;
     }
-    
-    return await response.json();
-  } catch (error) {
-    console.log(`  API Error: ${error.message}`);
-    return null;
-  }
+  })();
+
+  return _dexCache[key];
 }
 
 /**
@@ -456,87 +471,45 @@ function calculatePeriods(burns) {
 }
 
 /**
- * Fetch token price from Moralis
+ * Fetch token price (from DexScreener)
  */
 async function fetchTokenPrice(tokenAddress, tokenSymbol) {
   console.log(`\nFetching ${tokenSymbol} price...`);
-  
-  const data = await moralisRequest(`/erc20/${tokenAddress}/price`, {
-    chain: CHAIN,
-    include: 'percent_change'
-  });
-  
-  if (data) {
-    const price = data.usdPrice || 0;
-    console.log(`  ${tokenSymbol} price: $${price}`);
-    return {
-      usd: price,
-      change24h: data['24hrPercentChange'] || 0
-    };
-  }
-  
-  return { usd: 0, change24h: 0 };
+  const agg = await fetchDexAggregated(tokenAddress);
+  console.log(`  ${tokenSymbol} price: $${agg.price}`);
+  return {
+    usd: agg.price,
+    change24h: agg.priceChange24h
+  };
 }
 
 /**
- * Fetch volume stats from Moralis
+ * Fetch 24h volume (from DexScreener)
  */
 async function fetchVolumeStats(tokenAddress, tokenSymbol) {
   console.log(`\nFetching ${tokenSymbol} volume...`);
-  
-  const data = await moralisRequest(`/erc20/${tokenAddress}/analytics`, {
-    chain: CHAIN
-  });
-  
-  if (data) {
-    console.log(`  ${tokenSymbol} 24h volume: $${data.totalVolume24h || 0}`);
-    return {
-      volume24h: data.totalVolume24h || 0,
-      change24h: data.volumeChange24h || 0
-    };
-  }
-  
-  return { volume24h: 0, change24h: 0 };
+  const agg = await fetchDexAggregated(tokenAddress);
+  console.log(`  ${tokenSymbol} 24h volume: $${agg.volume24h}`);
+  // DexScreener doesn't expose a 24h volume-change %, so change24h is left at 0.
+  return {
+    volume24h: agg.volume24h,
+    change24h: 0
+  };
 }
 
 /**
- * Fetch token pairs and liquidity from Moralis
+ * Fetch token pairs and liquidity (from DexScreener)
  */
 async function fetchTokenPairs(tokenAddress, tokenSymbol) {
   console.log(`\nFetching ${tokenSymbol} LP pairs...`);
-  
-  const data = await moralisRequest(`/erc20/${tokenAddress}/pairs`, {
-    chain: CHAIN,
-    limit: 50
-  });
-  
-  if (data && data.pairs) {
-    console.log(`  Found ${data.pairs.length} pairs`);
-    
-    let totalLiquidity = 0;
-    let totalTokensInLP = 0;
-    
-    for (const pair of data.pairs) {
-      totalLiquidity += pair.usdValueCombined || 0;
-      
-      // Find this token's reserve in the pair
-      if (pair.token0 && pair.token0.address.toLowerCase() === tokenAddress.toLowerCase()) {
-        totalTokensInLP += Number(pair.reserve0 || 0);
-      } else if (pair.token1 && pair.token1.address.toLowerCase() === tokenAddress.toLowerCase()) {
-        totalTokensInLP += Number(pair.reserve1 || 0);
-      }
-    }
-    
-    console.log(`  Total liquidity: $${totalLiquidity.toLocaleString()}`);
-    
-    return {
-      pairs: data.pairs,
-      totalLiquidity,
-      totalTokensInLP
-    };
-  }
-  
-  return { pairs: [], totalLiquidity: 0, totalTokensInLP: 0 };
+  const agg = await fetchDexAggregated(tokenAddress);
+  console.log(`  Found ${agg.pairCount} pairs`);
+  console.log(`  Total liquidity: $${agg.totalLiquidity.toLocaleString()}`);
+  return {
+    pairs: agg.pairs,
+    totalLiquidity: agg.totalLiquidity,
+    totalTokensInLP: agg.totalTokensInLP
+  };
 }
 
 /**
@@ -566,7 +539,7 @@ async function fetchHolderCount(tokenAddress, tokenSymbol) {
  */
 async function main() {
   console.log('\n' + '='.repeat(60));
-  console.log('BURN HISTORY FETCHER - MORALIS VERSION (SPLIT FILES)');
+  console.log('BURN HISTORY FETCHER - DEXSCREENER VERSION (SPLIT FILES)');
   console.log('Holder counts: PulseScan (for consistency with dashboard)');
   console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
@@ -803,7 +776,7 @@ async function main() {
   
   const summaryData = {
     lastUpdated: new Date().toISOString(),
-    dataSource: 'RPC/eth_getLogs (burns), Moralis (price/volume/pairs), PulseScan (holders)',
+    dataSource: 'RPC/eth_getLogs (burns), DexScreener (price/volume/liquidity), PulseScan (holders)',
     
     PTGC: {
       totalBurned: ptgcTotal,
