@@ -1,18 +1,24 @@
 name: Deploy to GitHub Pages
 
 on:
+  # Deploy only when the SITE ITSELF changes (a human push to main) or on demand.
+  #
+  # The data files (data/*.json) are read LIVE by the frontend from
+  # raw.githubusercontent.com/.../main/data/, so they do NOT need a deploy to
+  # refresh. That's why the old per-data-workflow triggers were removed: they
+  # republished the exact same static site dozens of times an hour, which made
+  # GitHub Pages intermittently reject deployments with "try again later".
+  #
+  # Note: commits pushed by the data workflows use GITHUB_TOKEN, which by design
+  # does NOT re-trigger workflows — so those data commits won't fire this deploy,
+  # and they don't need to. Your own code commits (pushed as you) DO fire it.
   push:
     branches: [main]
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - "Fetch Treasury Transactions"
-      - "Fetch UFO PTGC Burns"
-      - "Fetch CoinGecko Data"
-      - "Update Burn and Holder History"
-      - "Update Metrics History"
-      - "LV Snapshot"
-    types: [completed]
+  # Optional safety net: one rebuild a day so the published HTML never drifts
+  # from the repo even if a push event is ever missed. Remove if you don't want it.
+  schedule:
+    - cron: '0 6 * * *'
 
 permissions:
   contents: read
@@ -20,20 +26,13 @@ permissions:
   id-token: write
 
 concurrency:
-  # Allow only one Pages deployment at a time. Queue new ones behind the
-  # running deploy and skip intermediate queued runs (GitHub keeps only the
-  # latest). Do NOT cancel an in-progress deploy — cancelling one mid-flight
-  # is what was showing up as failed runs when several data workflows finished
-  # at once and each triggered a deploy. This matches GitHub's official Pages
-  # deployment template.
+  # One Pages deployment at a time; queue a new one behind the running deploy and
+  # skip intermediate queued runs. Never cancel an in-progress deploy.
   group: "pages"
   cancel-in-progress: false
 
 jobs:
   deploy:
-    # When triggered by workflow_run, only deploy if the upstream fetch succeeded.
-    # For push / workflow_dispatch triggers, this condition passes trivially.
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
