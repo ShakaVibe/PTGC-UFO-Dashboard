@@ -625,7 +625,9 @@
     const PAIR_SWAP_TOPIC='0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
     const PAIR_MINT_TOPIC='0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f';
     const PAIR_BURN_TOPIC='0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496';
-    const SEL_TOKEN0='0x0dfe1681'; // token0()
+    const SEL_TOKEN0='0x0dfe1681';       // token0()
+    const SEL_MAX_SLIPPAGE='0x8c04166f'; // maxSlippage()
+    const SEL_SWAP_THRESHOLD='0x0445b667'; // swapThreshold()
     /* The contract wraps every swapback action in try/catch and emits this on failure.
        If addPLSLiquidity is reverting, the LP portion of the fee never reaches a pool. */
     const SWAPBACK_FAILED_TOPIC='0xe2cc6589fa66f3a1443517f47ba01474cfe9d23a5177fb4d49653a45468209d3';
@@ -724,8 +726,31 @@
         // happened" and "LP adds were attempted and failed".
         const failLogs=await getLogsChunked(tokenAddress,[SWAPBACK_FAILED_TOPIC],fromBlock,cur);
         const swapbackFailures={};
-        if(failLogs){for(const l of failLogs){const a=decodeAbiString(l.data);swapbackFailures[a]=(swapbackFailures[a]||0)+1;}}
+        const swapbackFailTxs=[];
+        if(failLogs){for(const l of failLogs){
+          const a=decodeAbiString(l.data);
+          swapbackFailures[a]=(swapbackFailures[a]||0)+1;
+          if(swapbackFailTxs.length<6)swapbackFailTxs.push({tx:l.transactionHash,action:a});
+        }}
         const swapbackFailQueryOk=failLogs!==null;
+
+        /* CORROBORATION, independent of the event log:
+           If the LP adds revert, the contract keeps the UFO half AND the PLS it raised.
+           So a healthy contract should hold near-zero of both between swapbacks.
+           Stranded balances would confirm the failures without relying on my decoding. */
+        const[msRaw,stRaw,balRaw,plsRaw]=await Promise.all([
+          ethCallRead(tokenAddress,SEL_MAX_SLIPPAGE),
+          ethCallRead(tokenAddress,SEL_SWAP_THRESHOLD),
+          ethCallRead(tokenAddress,'0x70a08231'+encodeAddress(tokenAddress)),
+          rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[tokenAddress,'latest'],id:1})
+        ]);
+        const health={
+          maxSlippageBps: msRaw?Number(BigInt(msRaw)):null,
+          swapThresholdUFO: stRaw?weiToTokens(BigInt(stRaw)):null,
+          contractUfoBalance: balRaw?weiToTokens(BigInt(balRaw)):null,
+          contractPlsBalance: (plsRaw&&plsRaw.result)?weiToTokens(BigInt(plsRaw.result)):null
+        };
+        console.log('contract health:',health);
 
         console.log('liquidity-event detection per pair:');console.table(liqDiag);
         if(swapbackFailQueryOk){
@@ -802,7 +827,7 @@
            fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
            gross them up by the tax rate to compare like-for-like with DEX volume. */
         const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
-        const out={ok:true,liqDetectionOk,liqDiag,swapbackFailures,swapbackFailQueryOk,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        const out={ok:true,liqDetectionOk,liqDiag,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         feeAuditCache[key]=out;
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
@@ -4673,7 +4698,25 @@
                                     )}
                                     {feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures).length>0&&(
                                       <div className="mt-1 px-2 py-1 rounded bg-red-500/15 border border-red-400/40 text-red-300">
-                                        swapback actions FAILED: {Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k} x${v}`).join(', ')}
+                                        <div className="font-bold">swapback actions FAILED: {Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k} x${v}`).join(', ')}</div>
+                                        <div className="mt-0.5 text-red-200/70">verify on PulseScan (look for the SwapBackActionFailed event):</div>
+                                        <div className="mt-0.5">
+                                          {feeAudit.swapbackFailTxs.map((t,i)=>(
+                                            <a key={i} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer" className="mr-2 underline hover:text-white">
+                                              {t.tx.slice(0,10)}… ({t.action})
+                                            </a>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {feeAudit.health&&(
+                                      <div className="mt-1 px-2 py-1 rounded bg-white/5 border border-white/10 text-white/60">
+                                        <div className="text-white/45 font-semibold">contract health (independent corroboration)</div>
+                                        <div>maxSlippage: <span className="text-white/85">{feeAudit.health.maxSlippageBps!=null?`${feeAudit.health.maxSlippageBps} bps (${(feeAudit.health.maxSlippageBps/100).toFixed(1)}%)`:'?'}</span></div>
+                                        <div>swapThreshold: <span className="text-white/85">{feeAudit.health.swapThresholdUFO!=null?fmtAbbr(Math.round(feeAudit.health.swapThresholdUFO))+' UFO':'?'}</span></div>
+                                        <div>UFO stranded in contract: <span className={feeAudit.health.contractUfoBalance>0?'text-amber-300':'text-white/85'}>{feeAudit.health.contractUfoBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractUfoBalance))+' UFO':'?'}</span></div>
+                                        <div>PLS stranded in contract: <span className={feeAudit.health.contractPlsBalance>0?'text-amber-300':'text-white/85'}>{feeAudit.health.contractPlsBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractPlsBalance))+' PLS':'?'}</span></div>
+                                        <div className="text-white/30 mt-0.5">if the LP adds revert, the contract keeps both the UFO half and the PLS it raised — so these should be near zero if swapback is healthy</div>
                                       </div>
                                     )}
                                     {feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures).length===0&&(
