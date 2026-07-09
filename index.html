@@ -555,6 +555,14 @@
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
     const WETH_ADDRESS='0x02dcdD04e3F455D838cd1249292C58f3B79e3C3C'.toLowerCase();
     const ETH_LOGO='data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI1MCIgZmlsbD0iIzYyN0VFQSIvPjxwb2x5Z29uIHBvaW50cz0iNTAsMTIgMjcsNTIgNTAsNDMiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMSkiLz48cG9seWdvbiBwb2ludHM9IjUwLDEyIDczLDUyIDUwLDQzIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjI3LDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjczLDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMikiLz48cG9seWdvbiBwb2ludHM9IjUwLDYwIDI3LDU2IDUwLDg4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDEpIi8+PHBvbHlnb24gcG9pbnRzPSI1MCw2MCA3Myw1NiA1MCw4OCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjYpIi8+PC9zdmc+';
+    /* Value Generated LP buckets show the partner token's logo. Same sources the LP Pairs
+       rows use: DexScreener token images, except bridged WETH which uses the inline SVG. */
+    const bucketLogoSrc=(priceKey)=>{
+      if(priceKey==='WETH')return ETH_LOGO;
+      if(priceKey==='PLS')return getLogo(WPLS_ADDRESS);
+      if(priceKey==='PLSX')return getLogo(PLSX_ADDRESS);
+      return null;
+    };
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     // Get highest tier creature with count for period burns
@@ -4152,7 +4160,6 @@
                             <>
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(liveTotalUsd)}</span>
                               <span className="text-white/45 text-sm sm:text-base">from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">ON-CHAIN</span>
                               {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in window</span>}
                             </>
                           ):realizedLoading&&token==='UFO'?(
@@ -4186,6 +4193,7 @@
                               <div key={i} className={`bg-white/[0.04] border ${item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
                                   <span className="text-base shrink-0">{item.emoji}</span>
+                                  {item.isLP&&bucketLogoSrc(item.priceKey)&&<img src={bucketLogoSrc(item.priceKey)} alt="" className="w-4 h-4 rounded-full shrink-0" onError={e=>{e.target.style.display='none'}}/>}
                                   <span className="text-white/55 text-xs sm:text-sm truncate">{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
                                 </div>
                                 {valueGenShowTokens&&partsLabel?(
@@ -5336,6 +5344,7 @@
                                 <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg ${valueGenShowTokens?'p-1.5':'p-2'}`}>
                                   <div className={`flex items-center gap-1 ${valueGenShowTokens?'mb-0.5':'mb-1'}`}>
                                     {item.tripleIcon?<span className="text-xs">{'\u{1F48E}'}{'\u{1F48E}'}{'\u{1F48E}'}</span>:<span className={valueGenShowTokens?'text-sm':'text-lg'}>{item.emoji}</span>}
+                                    {item.isLP&&bucketLogoSrc(item.priceKey)&&<img src={bucketLogoSrc(item.priceKey)} alt="" className="w-3.5 h-3.5 rounded-full shrink-0" onError={e=>{e.target.style.display='none'}}/>}
                                     <span className="text-white/70 text-xs leading-tight">{item.name}</span>
                                   </div>
                                   {valueGenShowTokens&&partsLabel?(
