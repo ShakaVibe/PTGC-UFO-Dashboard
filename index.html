@@ -273,8 +273,40 @@
      * ================================================================================= */
     const TRANSFER_TOPIC='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
     const FEES_UPDATED_TOPIC='0x020b4e17880b9764de4da2ebf8857a187cc492ae288e9f3ec0db3e2fdb37a2ec';
-    const BLOCKS_PER_DAY=8640; // PulseChain ~10s blocks (same assumption as fetchLive24hBurn)
-    const REALIZED_PERIOD_BLOCKS={'24h':BLOCKS_PER_DAY,'7d':BLOCKS_PER_DAY*7,'30d':BLOCKS_PER_DAY*30,'90d':BLOCKS_PER_DAY*90};
+    /* Do NOT assume a block time. If the real one is faster than the guess, every window
+       starts too late and we silently undercount fee events. Measure it from two block
+       timestamps instead; fall back to 10s only if the RPC won't answer. */
+    const BLOCKS_PER_DAY_FALLBACK=8640;   // PulseChain nominal ~10s
+    const PERIOD_DAYS={'24h':1,'7d':7,'30d':30,'90d':90};
+    let chainTiming=null; // {secPerBlock, blocksPerDay}
+
+    const getChainTiming=async(headBlock)=>{
+      if(chainTiming)return chainTiming;
+      try{
+        const back=Math.max(1,headBlock-5000);
+        const[h1,h2]=await Promise.all([
+          rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+headBlock.toString(16),false],id:2}),
+          rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+back.toString(16),false],id:3})
+        ]);
+        const t1=parseInt(h1&&h1.result&&h1.result.timestamp||'0x0',16);
+        const t2=parseInt(h2&&h2.result&&h2.result.timestamp||'0x0',16);
+        const span=headBlock-back;
+        if(t1&&t2&&t1>t2&&span>0){
+          const spb=(t1-t2)/span;
+          if(spb>=0.5&&spb<=60){
+            chainTiming={secPerBlock:spb,blocksPerDay:Math.round(86400/spb)};
+            console.log(`Measured block time: ${spb.toFixed(2)}s -> ${chainTiming.blocksPerDay} blocks/day`);
+            return chainTiming;
+          }
+        }
+      }catch(e){console.warn('block-time probe failed:',e.message);}
+      chainTiming={secPerBlock:10,blocksPerDay:BLOCKS_PER_DAY_FALLBACK};
+      console.warn('Using fallback block time of 10s');
+      return chainTiming;
+    };
+
+    // ~5 minute cache bucket, wall-clock (independent of block time)
+    const cacheBucket=()=>Math.floor(Date.now()/(5*60*1000));
     const LOG_CHUNK=10000;
     const MAX_LOG_RANGES=100;
     let lastLogError=null;
@@ -356,23 +388,28 @@
     /* A token can't have emitted logs before it existed. Clamping every scan to the
        token's launch block means even a 90-day window on a day-old token costs one
        small query instead of 777,600 blocks. */
-    const estimateLaunchBlock=(currentBlock,firstPoolMs)=>{
+    const estimateLaunchBlock=(currentBlock,firstPoolMs,secPerBlock)=>{
       if(!firstPoolMs||!isFinite(firstPoolMs))return 0;
       const ageSec=Math.max(0,(Date.now()-firstPoolMs)/1000);
-      return Math.max(0,currentBlock-(Math.ceil(ageSec/10)+600)); // 10s blocks + margin
+      // 15% slack + 5000 blocks. Starting too EARLY costs one extra query; starting too
+      // LATE silently drops fee events, which is the far worse failure.
+      const blocks=Math.ceil((ageSec/secPerBlock)*1.15)+5000;
+      return Math.max(0,currentBlock-blocks);
     };
 
     const fetchRealizedFees=async(tokenAddress,period,firstPoolMs)=>{
       lastLogError=null;
       try{
-        const span=REALIZED_PERIOD_BLOCKS[period];
-        if(!span)return{ok:false,period,error:'period not supported'};
+        const days=PERIOD_DAYS[period];
+        if(!days)return{ok:false,period,error:'period not supported'};
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return{ok:false,period,error:'could not read current block'};
         const cur=parseInt(blk.result,16);
-        const launch=estimateLaunchBlock(cur,firstPoolMs);
+        const{secPerBlock,blocksPerDay}=await getChainTiming(cur);
+        const span=blocksPerDay*days;
+        const launch=estimateLaunchBlock(cur,firstPoolMs,secPerBlock);
         const fromBlock=Math.max(0,cur-span,launch);
-        const key=`${tokenAddress}-${period}-${Math.floor(cur/300)}`; // ~50min cache bucket
+        const key=`${tokenAddress}-${period}-${cacheBucket()}`;
         if(realizedFeeCache[key])return realizedFeeCache[key];
 
         const contractTopic='0x'+encodeAddress(tokenAddress);
@@ -397,9 +434,10 @@
           tokens.wethLP    +=cFee*(r.wethLP/contractBps);
         }
         const totalTokens=Object.values(tokens).reduce((a,b)=>a+b,0);
-        const out={ok:true,tokens,totalTokens,txCount:transferLogs.length,fromBlock,toBlock:cur,period,feeChanges:feeEvents.length};
+        const windowHours=((cur-fromBlock)*secPerBlock/3600).toFixed(1);
+        const out={ok:true,tokens,totalTokens,txCount:transferLogs.length,fromBlock,toBlock:cur,period,feeChanges:feeEvents.length,windowHours};
         realizedFeeCache[key]=out;
-        console.log(`Realized UFO fees (${period}): ${totalTokens.toLocaleString()} UFO from ${transferLogs.length} taxed transfers, ${feeEvents.length} fee change(s)`);
+        console.log(`Realized UFO fees (${period}): ${totalTokens.toLocaleString()} UFO from ${transferLogs.length} taxed transfers, ${feeEvents.length} fee change(s) | window blocks ${fromBlock}-${cur} (~${windowHours}h)`);
         return out;
       }catch(e){console.error('fetchRealizedFees error:',e);return{ok:false,period,error:e.message||'unexpected error'};}
     };
@@ -416,9 +454,10 @@
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const launch=estimateLaunchBlock(cur,firstPoolMs);
-        const fromBlock=Math.max(0,cur-BLOCKS_PER_DAY*90,launch);
-        const key=`${tokenAddress}-burnp-${Math.floor(cur/300)}`;
+        const{secPerBlock,blocksPerDay}=await getChainTiming(cur);
+        const launch=estimateLaunchBlock(cur,firstPoolMs,secPerBlock);
+        const fromBlock=Math.max(0,cur-blocksPerDay*90,launch);
+        const key=`${tokenAddress}-burnp-${cacheBucket()}`;
         if(burnPeriodsCache[key])return burnPeriodsCache[key];
 
         const logs=await getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],fromBlock,cur);
@@ -428,10 +467,10 @@
           const b=parseInt(l.blockNumber,16);
           const raw=BigInt(l.data&&l.data!=='0x'?l.data:'0x0');
           const amt=decimals===18?weiToTokens(raw):Number(raw)/Math.pow(10,decimals);
-          if(b>=cur-BLOCKS_PER_DAY/2)acc.h12+=amt;
-          if(b>=cur-BLOCKS_PER_DAY)acc.h24+=amt;
-          if(b>=cur-BLOCKS_PER_DAY*7)acc.d7+=amt;
-          if(b>=cur-BLOCKS_PER_DAY*30)acc.d30+=amt;
+          if(b>=cur-blocksPerDay/2)acc.h12+=amt;
+          if(b>=cur-blocksPerDay)acc.h24+=amt;
+          if(b>=cur-blocksPerDay*7)acc.d7+=amt;
+          if(b>=cur-blocksPerDay*30)acc.d30+=amt;
           acc.d90+=amt;
         }
         // sinceLaunch = the 90d window reaches back past the token's birth, so d90 is lifetime
@@ -454,9 +493,10 @@
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const launch=estimateLaunchBlock(cur,firstPoolMs);
-        const fromBlock=Math.max(0,cur-BLOCKS_PER_DAY*90,launch);
-        const key=`${ufoAddress}-ptgcburn-${Math.floor(cur/300)}`;
+        const{secPerBlock,blocksPerDay}=await getChainTiming(cur);
+        const launch=estimateLaunchBlock(cur,firstPoolMs,secPerBlock);
+        const fromBlock=Math.max(0,cur-blocksPerDay*90,launch);
+        const key=`${ufoAddress}-ptgcburn-${cacheBucket()}`;
         if(ptgcByUfoCache[key])return ptgcByUfoCache[key];
 
         const ufoTopic='0x'+encodeAddress(ufoAddress);
@@ -474,9 +514,9 @@
           const b=parseInt(l.blockNumber,16);
           const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
           acc.total+=amt;
-          if(b>=cur-BLOCKS_PER_DAY)acc.h24+=amt;
-          if(b>=cur-BLOCKS_PER_DAY*7)acc.d7+=amt;
-          if(b>=cur-BLOCKS_PER_DAY*30)acc.d30+=amt;
+          if(b>=cur-blocksPerDay)acc.h24+=amt;
+          if(b>=cur-blocksPerDay*7)acc.d7+=amt;
+          if(b>=cur-blocksPerDay*30)acc.d30+=amt;
           acc.d90+=amt;
         }
         const out={...acc,txs};
@@ -571,11 +611,17 @@
       if(!partner)return null;
       const overlap=Math.round(size*0.62);
       const hide=e=>{e.target.style.visibility='hidden';};
+      /* The UFO asset is a transparent PNG with generous padding, so at small sizes the
+         artwork occupies only the middle ~70% of the box and looks soft. Clip it to a
+         disc and scale up slightly so it fills the circle like the partner token does. */
       return(
         <span className="relative inline-block shrink-0" style={{width:size+overlap,height:size}}>
-          <img src={TOKENS.UFO.logo} alt="" onError={hide}
-               className="absolute top-0 left-0 object-contain"
-               style={{width:size,height:size}}/>
+          <span className="absolute top-0 left-0 rounded-full overflow-hidden flex items-center justify-center"
+                style={{width:size,height:size,background:'#0d0d0d'}}>
+            <img src={TOKENS.UFO.logo} alt="" onError={hide}
+                 className="object-contain"
+                 style={{width:'100%',height:'100%',transform:'scale(1.35)'}}/>
+          </span>
           <img src={partner} alt="" onError={hide}
                className="absolute top-0 rounded-full"
                style={{width:size,height:size,left:overlap,boxShadow:'0 0 0 1.5px #0d0d0d'}}/>
@@ -3270,7 +3316,7 @@
         const avail={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
         // LIVE mode reads fees straight from logs, so it doesn't need cached volume for
         // the window. Only fall back when neither source can serve the selected period.
-        const liveCanServe=(token==='UFO'&&!!REALIZED_PERIOD_BLOCKS[valueGenPeriod]);
+        const liveCanServe=(token==='UFO'&&!!PERIOD_DAYS[valueGenPeriod]);
         if(avail[valueGenPeriod]==null&&!liveCanServe){
           const fallback=['90d','30d','7d','24h'].find(p=>avail[p]!=null&&avail[p]>0);
           if(fallback&&fallback!==valueGenPeriod)setValueGenPeriod(fallback);
@@ -3281,7 +3327,7 @@
       // unsupported (too many blocks to scan from a browser) and falls back to the estimate.
       useEffect(()=>{
         if(token!=='UFO'){setRealizedFees(null);return;}
-        if(!REALIZED_PERIOD_BLOCKS[valueGenPeriod]){setRealizedFees(null);return;}
+        if(!PERIOD_DAYS[valueGenPeriod]){setRealizedFees(null);return;}
         const _fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
         const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
         let cancelled=false;
