@@ -274,7 +274,7 @@
     const TRANSFER_TOPIC='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
     const FEES_UPDATED_TOPIC='0x020b4e17880b9764de4da2ebf8857a187cc492ae288e9f3ec0db3e2fdb37a2ec';
     const BLOCKS_PER_DAY=8640; // PulseChain ~10s blocks (same assumption as fetchLive24hBurn)
-    const REALIZED_PERIOD_BLOCKS={'24h':BLOCKS_PER_DAY,'7d':BLOCKS_PER_DAY*7,'30d':BLOCKS_PER_DAY*30};
+    const REALIZED_PERIOD_BLOCKS={'24h':BLOCKS_PER_DAY,'7d':BLOCKS_PER_DAY*7,'30d':BLOCKS_PER_DAY*30,'90d':BLOCKS_PER_DAY*90};
     const LOG_CHUNK=5000;
     const MAX_LOG_CHUNKS=60;
     // Constructor sets every fee to 100 bps. Rates before the first FeesUpdated event.
@@ -322,14 +322,25 @@
     };
 
     const realizedFeeCache={};
-    const fetchRealizedFees=async(tokenAddress,period)=>{
+
+    /* A token can't have emitted logs before it existed. Clamping every scan to the
+       token's launch block means even a 90-day window on a day-old token costs one
+       small query instead of 777,600 blocks. */
+    const estimateLaunchBlock=(currentBlock,firstPoolMs)=>{
+      if(!firstPoolMs||!isFinite(firstPoolMs))return 0;
+      const ageSec=Math.max(0,(Date.now()-firstPoolMs)/1000);
+      return Math.max(0,currentBlock-(Math.ceil(ageSec/10)+600)); // 10s blocks + margin
+    };
+
+    const fetchRealizedFees=async(tokenAddress,period,firstPoolMs)=>{
       try{
         const span=REALIZED_PERIOD_BLOCKS[period];
-        if(!span)return null; // 90d is too many blocks to scan from a browser
+        if(!span)return null;
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const fromBlock=Math.max(0,cur-span);
+        const launch=estimateLaunchBlock(cur,firstPoolMs);
+        const fromBlock=Math.max(0,cur-span,launch);
         const key=`${tokenAddress}-${period}-${Math.floor(cur/300)}`; // ~50min cache bucket
         if(realizedFeeCache[key])return realizedFeeCache[key];
 
@@ -360,6 +371,88 @@
         console.log(`Realized UFO fees (${period}): ${totalTokens.toLocaleString()} UFO from ${transferLogs.length} taxed transfers, ${feeEvents.length} fee change(s)`);
         return out;
       }catch(e){console.error('fetchRealizedFees error:',e);return null;}
+    };
+
+    /* MIGRATION: Total Supply Burned periods, straight from the chain.
+       The headline is balanceOf(0x369) — literally whatever sits in the burn address.
+       These period boxes sum Transfer(->0x369) logs inside each window. Note this
+       INCLUDES a launch burn or any manual send to 0x369, which is correct: it is
+       burned supply regardless of who burned it. It is NOT "burned by fees". */
+    const BURN_TOPIC_PADDED='0x0000000000000000000000000000000000000000000000000000000000000369';
+    const burnPeriodsCache={};
+    const fetchBurnPeriodsOnChain=async(tokenAddress,decimals,firstPoolMs)=>{
+      try{
+        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+        if(!blk.result)return null;
+        const cur=parseInt(blk.result,16);
+        const launch=estimateLaunchBlock(cur,firstPoolMs);
+        const fromBlock=Math.max(0,cur-BLOCKS_PER_DAY*90,launch);
+        const key=`${tokenAddress}-burnp-${Math.floor(cur/300)}`;
+        if(burnPeriodsCache[key])return burnPeriodsCache[key];
+
+        const logs=await getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],fromBlock,cur);
+        if(!logs)return null;
+        const acc={h12:0,h24:0,d7:0,d30:0,d90:0};
+        for(const l of logs){
+          const b=parseInt(l.blockNumber,16);
+          const raw=BigInt(l.data&&l.data!=='0x'?l.data:'0x0');
+          const amt=decimals===18?weiToTokens(raw):Number(raw)/Math.pow(10,decimals);
+          if(b>=cur-BLOCKS_PER_DAY/2)acc.h12+=amt;
+          if(b>=cur-BLOCKS_PER_DAY)acc.h24+=amt;
+          if(b>=cur-BLOCKS_PER_DAY*7)acc.d7+=amt;
+          if(b>=cur-BLOCKS_PER_DAY*30)acc.d30+=amt;
+          acc.d90+=amt;
+        }
+        // sinceLaunch = the 90d window reaches back past the token's birth, so d90 is lifetime
+        const out={...acc,sinceLaunch:fromBlock<=launch+1,burnTxs:logs.length};
+        burnPeriodsCache[key]=out;
+        console.log(`On-chain burn periods (${tokenAddress.slice(0,8)}...): 24h=${acc.h24.toLocaleString()} 7d=${acc.d7.toLocaleString()} from ${logs.length} burn txs`);
+        return out;
+      }catch(e){console.error('fetchBurnPeriodsOnChain error:',e);return null;}
+    };
+
+    /* MIGRATION: PTGC burned BY UFO, measured on-chain for the NEW contract.
+       Problem: a PTGC transfer to 0x369 looks identical whether UFO burned it or PTGC's
+       own tax did. Discriminator: UFO's buybackBurnpTGC() only ever runs inside _swapBack,
+       and every _swapBack starts by sending UFO out of the contract (swapTokensForPLS).
+       So a PTGC burn belongs to UFO iff its transaction ALSO contains a UFO transfer
+       whose sender is the UFO contract. We intersect on transactionHash. */
+    const ptgcByUfoCache={};
+    const fetchPtgcBurnedByUfo=async(ufoAddress,ptgcAddress,firstPoolMs)=>{
+      try{
+        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+        if(!blk.result)return null;
+        const cur=parseInt(blk.result,16);
+        const launch=estimateLaunchBlock(cur,firstPoolMs);
+        const fromBlock=Math.max(0,cur-BLOCKS_PER_DAY*90,launch);
+        const key=`${ufoAddress}-ptgcburn-${Math.floor(cur/300)}`;
+        if(ptgcByUfoCache[key])return ptgcByUfoCache[key];
+
+        const ufoTopic='0x'+encodeAddress(ufoAddress);
+        const[ptgcBurns,ufoOut]=await Promise.all([
+          getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],fromBlock,cur),
+          getLogsChunked(ufoAddress,[TRANSFER_TOPIC,ufoTopic,null],fromBlock,cur)
+        ]);
+        if(!ptgcBurns||!ufoOut)return null;
+        const swapbackTxs=new Set(ufoOut.map(l=>l.transactionHash));
+
+        const acc={total:0,h24:0,d7:0,d30:0,d90:0};let txs=0;
+        for(const l of ptgcBurns){
+          if(!swapbackTxs.has(l.transactionHash))continue; // PTGC's own burn, not UFO's
+          txs++;
+          const b=parseInt(l.blockNumber,16);
+          const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
+          acc.total+=amt;
+          if(b>=cur-BLOCKS_PER_DAY)acc.h24+=amt;
+          if(b>=cur-BLOCKS_PER_DAY*7)acc.d7+=amt;
+          if(b>=cur-BLOCKS_PER_DAY*30)acc.d30+=amt;
+          acc.d90+=amt;
+        }
+        const out={...acc,txs};
+        ptgcByUfoCache[key]=out;
+        console.log(`PTGC burned by NEW UFO: ${acc.total.toLocaleString()} PTGC across ${txs} swapback tx(s)`);
+        return out;
+      }catch(e){console.error('fetchPtgcBurnedByUfo error:',e);return null;}
     };
 
     // Token amounts span ~10 orders of magnitude here (hundreds of millions of UFO vs
@@ -3045,10 +3138,11 @@
       const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0,d90:0});
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
-      // MIGRATION: realized on-chain fees (see fetchRealizedFees). 'live' = measured, 'est' = volume x rate.
-      const[valueGenSource,setValueGenSource]=useState('live');
+      // MIGRATION: UFO's Value Generated is always measured on-chain (see fetchRealizedFees).
+      // There is no estimate mode for UFO — an estimate is what produced the bad numbers.
       const[realizedFees,setRealizedFees]=useState(null);
       const[realizedLoading,setRealizedLoading]=useState(false);
+      const[ptgcByUfoLive,setPtgcByUfoLive]=useState(null); // MIGRATION: NEW contract's PTGC burns
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
       const[daoData,setDaoData]=useState(null);
@@ -3109,26 +3203,28 @@
         const avail={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
         // LIVE mode reads fees straight from logs, so it doesn't need cached volume for
         // the window. Only fall back when neither source can serve the selected period.
-        const liveCanServe=(token==='UFO'&&valueGenSource==='live'&&!!REALIZED_PERIOD_BLOCKS[valueGenPeriod]);
+        const liveCanServe=(token==='UFO'&&!!REALIZED_PERIOD_BLOCKS[valueGenPeriod]);
         if(avail[valueGenPeriod]==null&&!liveCanServe){
           const fallback=['90d','30d','7d','24h'].find(p=>avail[p]!=null&&avail[p]>0);
           if(fallback&&fallback!==valueGenPeriod)setValueGenPeriod(fallback);
         }
-      },[volumeByPeriod,token,valueGenSource,valueGenPeriod]);
+      },[volumeByPeriod,token,valueGenPeriod]);
 
       // MIGRATION: pull realized fees for whatever window is selected. 90d is intentionally
       // unsupported (too many blocks to scan from a browser) and falls back to the estimate.
       useEffect(()=>{
         if(token!=='UFO'){setRealizedFees(null);return;}
         if(!REALIZED_PERIOD_BLOCKS[valueGenPeriod]){setRealizedFees(null);return;}
+        const _fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+        const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
         let cancelled=false;
         setRealizedLoading(true);
-        fetchRealizedFees(TOKENS.UFO.address,valueGenPeriod)
+        fetchRealizedFees(TOKENS.UFO.address,valueGenPeriod,firstPoolMs)
           .then(r=>{if(!cancelled)setRealizedFees(r);})
           .catch(()=>{if(!cancelled)setRealizedFees(null);})
           .finally(()=>{if(!cancelled)setRealizedLoading(false);});
         return()=>{cancelled=true;};
-      },[token,valueGenPeriod]);
+      },[token,valueGenPeriod,data?.pairs]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
@@ -3433,12 +3529,23 @@
             fetchTokensInLPHistory()
           ]);
           
-          // Load burn periods from cache
-          const periods=getBurnPeriods(token);
+          /* MIGRATION: burn-summary.json describes the OLD UFO token. For UFO we ignore it
+             entirely and read the burn address from chain instead. PTGC still uses the cache. */
+          const periods=(token==='UFO')?{h12:0,h24:0,d7:0,d30:0,d90:0}:getBurnPeriods(token);
           setBurnPeriods(periods);
           
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          
+          if(token==='UFO'){
+            const _fp=d?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+            const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
+            fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs).then(bp=>{
+              if(bp)setBurnPeriods(bp);
+            }).catch(()=>{});
+            fetchPtgcBurnedByUfo(cfg.address,TOKENS.PTGC.address,firstPoolMs)
+              .then(r=>{if(r)setPtgcByUfoLive(r);}).catch(()=>{});
+          }
           
           // Fetch live 24H burn from blockchain in background (non-blocking).
           // live24hBurn stays null only while in flight (= loading); on success it's
@@ -3965,12 +4072,6 @@
                       <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5">
                         <button onClick={()=>setValueGenShowTokens(false)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${!valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>USD</button>
                         <button onClick={()=>setValueGenShowTokens(true)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>TOK</button>
-                        {/* MIGRATION: LIVE = measured on-chain fees. EST = volume x rate projection. */}
-                        {token==='UFO'&&<>
-                          <span className="w-px h-3 bg-white/15 mx-1"></span>
-                          <button onClick={()=>setValueGenSource('live')} title="Measured from on-chain fee transfers" className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenSource==='live'?'bg-emerald-400 text-black':'text-white/50 hover:text-white'}`}>LIVE</button>
-                          <button onClick={()=>setValueGenSource('est')} title="Projected from trading volume" className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenSource==='est'?'bg-white/70 text-black':'text-white/50 hover:text-white'}`}>EST</button>
-                        </>}
                       </div>
                       <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5">
                         {['24h','7d','30d','90d'].map(p=>(
@@ -3994,7 +4095,7 @@
                     /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
                        attributed with the fee rates actually in force at each block. */
                     const ufoPx=data?.price||0;
-                    const live=(token==='UFO'&&valueGenSource==='live'&&realizedFees&&realizedFees.period===valueGenPeriod&&ufoPx>0)?realizedFees:null;
+                    const live=(token==='UFO'&&realizedFees&&realizedFees.period===valueGenPeriod&&ufoPx>0)?realizedFees:null;
                     const liveItems=live?UFO_FEE_BUCKETS.map(b=>{
                       const tok=live.tokens[b.key]||0;
                       const cur=cfg.taxBreakdown.find(x=>x.key===b.key);
@@ -4013,20 +4114,19 @@
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">ON-CHAIN</span>
                               {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in window</span>}
                             </>
-                          ):realizedLoading&&token==='UFO'&&valueGenSource==='live'?(
+                          ):realizedLoading&&token==='UFO'?(
                             <span className="text-base text-white/40">Reading fees from chain…</span>
-                          ):hasData?(
+                          ):(hasData&&token!=='UFO')?(
                             <>
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(totalGen)}</span>
                               <span className="text-white/45 text-sm sm:text-base">from {fmtUSD(periodVol)} vol</span>
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-white/10 text-white/50 border border-white/15">EST</span>
                             </>
                           ):(
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
                         <div className="flex-1"></div>
-                        {(showLive||hasData)&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {(showLive?liveItems:orderedItems).map((item,i)=>{
                             // Realized: fees actually accrued to this bucket, priced in UFO.
                             // Estimated: period volume x bucket rate, with LP buckets split half/half.
@@ -4242,11 +4342,19 @@
                       <span className="text-sky-400/50 text-[10px] uppercase tracking-[0.18em]">Lifetime</span>
                     </div>
                     {(()=>{
+                      /* MIGRATION: combined OLD + NEW. The old contract is retired, so its
+                         lifetime total is a fixed base; the new contract's burns are read
+                         from chain and added. Period boxes reflect the NEW contract only,
+                         because the old one hasn't burned anything since migration. */
                       const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
                       const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
-                      const totalBurned=ptgcByUFO?.totalBurned||0;
+                      const oldBurned=ptgcByUFO?.totalBurned||0;
+                      const newBurned=ptgcByUfoLive?.total||0;
+                      const totalBurned=oldBurned+newBurned;
                       const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
-                      const periods=ptgcByUFO?.periods||{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
+                      const periods=ptgcByUfoLive
+                        ?{h24:{amount:ptgcByUfoLive.h24},d7:{amount:ptgcByUfoLive.d7},d30:{amount:ptgcByUfoLive.d30},d90:{amount:ptgcByUfoLive.d90}}
+                        :{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
                       const whaleProgress=getWhaleProgress(burnPct);
                       const creatures=getBurnC(burnPct,'Squid');
 
@@ -5343,9 +5451,11 @@
                       (()=>{
                         const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
                         const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
-                        const totalBurned=ptgcByUFO?.totalBurned||0;
+                        const totalBurned=(ptgcByUFO?.totalBurned||0)+(ptgcByUfoLive?.total||0); // MIGRATION: old + new
                         const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
-                        const periods=ptgcByUFO?.periods||{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
+                        const periods=ptgcByUfoLive
+                          ?{h24:{amount:ptgcByUfoLive.h24},d7:{amount:ptgcByUfoLive.d7},d30:{amount:ptgcByUfoLive.d30},d90:{amount:ptgcByUfoLive.d90}}
+                          :{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
                         const whaleProgressUFO=getWhaleProgress(burnPct);
                         const creaturesUFO=getBurnC(burnPct,'Squid');
                         
