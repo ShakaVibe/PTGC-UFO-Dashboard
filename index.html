@@ -626,6 +626,19 @@
     const PAIR_MINT_TOPIC='0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f';
     const PAIR_BURN_TOPIC='0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496';
     const SEL_TOKEN0='0x0dfe1681'; // token0()
+    /* The contract wraps every swapback action in try/catch and emits this on failure.
+       If addPLSLiquidity is reverting, the LP portion of the fee never reaches a pool. */
+    const SWAPBACK_FAILED_TOPIC='0xe2cc6589fa66f3a1443517f47ba01474cfe9d23a5177fb4d49653a45468209d3';
+    const decodeAbiString=(data)=>{
+      try{
+        const h=data.startsWith('0x')?data.slice(2):data;
+        const len=Number(BigInt('0x'+h.slice(64,128)));
+        const bytes=h.slice(128,128+len*2);
+        let out='';
+        for(let i=0;i<bytes.length;i+=2)out+=String.fromCharCode(parseInt(bytes.substr(i,2),16));
+        return out;
+      }catch(e){return '(undecodable)';}
+    };
     const feeAuditCache={};
 
     const fetchFeeExemptionAudit=async(tokenAddress,firstPoolMs)=>{
@@ -664,10 +677,14 @@
            exact token amounts, so we match a leg to a liquidity event by amount. Anything
            that doesn't match a Mint/Burn amount in its own tx+pair is a real swap. */
         const liqByTxPair={}; // `${tx}|${pair}` -> [ufoAmount, ...]
+        const liqDiag=[];     // never let a failed query masquerade as "no liquidity"
+        let liqDetectionOk=true;
         for(const pa of pairAddrsRaw){
           const paLc=lc(pa);
-          const t0=wordToAddress(await ethCallRead(pa,SEL_TOKEN0));
-          const ufoIsToken0=t0&&lc(t0)===contract;
+          const t0raw=await ethCallRead(pa,SEL_TOKEN0);
+          const t0=wordToAddress(t0raw);
+          if(!t0){liqDetectionOk=false;liqDiag.push({pair:paLc,token0:'FAILED',mint:'-',burn:'-'});continue;}
+          const ufoIsToken0=lc(t0)===contract;
           const decodePair=(data)=>{
             const h=data.startsWith('0x')?data.slice(2):data;
             const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64));
@@ -677,11 +694,28 @@
             getLogsChunked(pa,[PAIR_MINT_TOPIC],fromBlock,cur),
             getLogsChunked(pa,[PAIR_BURN_TOPIC],fromBlock,cur)
           ]);
+          if(mn===null||bn===null)liqDetectionOk=false;
+          liqDiag.push({pair:paLc,token0:ufoIsToken0?'UFO=token0':'UFO=token1',
+                        mint:mn===null?'QUERY FAILED':mn.length, burn:bn===null?'QUERY FAILED':bn.length});
           for(const l of (mn||[]).concat(bn||[])){
             const k=`${l.transactionHash}|${paLc}`;
             (liqByTxPair[k]=liqByTxPair[k]||[]).push(weiToTokens(decodePair(l.data)));
           }
         }
+        // Did any swapback action revert? This is the difference between "no LP adds
+        // happened" and "LP adds were attempted and failed".
+        const failLogs=await getLogsChunked(tokenAddress,[SWAPBACK_FAILED_TOPIC],fromBlock,cur);
+        const swapbackFailures={};
+        if(failLogs){for(const l of failLogs){const a=decodeAbiString(l.data);swapbackFailures[a]=(swapbackFailures[a]||0)+1;}}
+        const swapbackFailQueryOk=failLogs!==null;
+
+        console.log('liquidity-event detection per pair:');console.table(liqDiag);
+        if(swapbackFailQueryOk){
+          const n=Object.values(swapbackFailures).reduce((a,b)=>a+b,0);
+          if(n>0)console.error('*** swapback actions FAILED in this window: ***',swapbackFailures);
+          else console.log('no SwapBackActionFailed events — every swapback action succeeded');
+        }else console.warn('could not read SwapBackActionFailed events');
+        if(!liqDetectionOk)console.error('*** liquidity detection FAILED for at least one pair — "0 liquidity moves" is NOT trustworthy ***');
         // A leg is a liquidity move if its amount matches an unconsumed Mint/Burn amount.
         const matchLiquidity=(tx,pair,amt)=>{
           const arr=liqByTxPair[`${tx}|${pair}`];
@@ -750,7 +784,7 @@
            fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
            gross them up by the tax rate to compare like-for-like with DEX volume. */
         const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
-        const out={ok:true,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        const out={ok:true,liqDetectionOk,liqDiag,swapbackFailures,swapbackFailQueryOk,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         feeAuditCache[key]=out;
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
@@ -4608,6 +4642,32 @@
                                       {feeAudit.ownerAddr&&<> · owner {feeAudit.ownerAddr.slice(0,8)}…{feeAudit.ownerAddr.slice(-4)}</>}
                                     </div>
                                     <div className="text-white/25">note: priced at current UFO price, not trade-time price</div>
+                                    {/* Never present a failed query as a finding. */}
+                                    {!feeAudit.liqDetectionOk&&(
+                                      <div className="mt-1 px-2 py-1 rounded bg-red-500/15 border border-red-400/40 text-red-300">
+                                        liquidity detection FAILED — "0 liquidity moves" is not trustworthy. See console.
+                                      </div>
+                                    )}
+                                    {feeAudit.liqDetectionOk&&feeAudit.untaxedLiqTokens===0&&feeAudit.taxedLiqTokens===0&&(
+                                      <div className="mt-1 px-2 py-1 rounded bg-amber-500/10 border border-amber-400/30 text-amber-300">
+                                        queries succeeded but found zero Mint/Burn events in this window. The contract adds LP on every swapback, so either no swapback happened in the last 24h, or something is wrong.
+                                      </div>
+                                    )}
+                                    {feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures).length>0&&(
+                                      <div className="mt-1 px-2 py-1 rounded bg-red-500/15 border border-red-400/40 text-red-300">
+                                        swapback actions FAILED: {Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k} x${v}`).join(', ')}
+                                      </div>
+                                    )}
+                                    {feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures).length===0&&(
+                                      <div className="mt-1 text-emerald-300/70">no swapback failures in this window</div>
+                                    )}
+                                    {feeAudit.liqDiag&&(
+                                      <div className="mt-1 text-white/30">
+                                        {feeAudit.liqDiag.map(d=>(
+                                          <div key={d.pair}>{d.pair.slice(0,10)}… · {d.token0} · mint: {String(d.mint)} · burn: {String(d.burn)}</div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })()}
