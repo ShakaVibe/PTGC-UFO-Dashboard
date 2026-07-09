@@ -282,7 +282,11 @@
     const DEFAULT_FEE_RATES={reflection:100,ufoBurn:100,ptgcBurn:100,plsLP:100,plsxLP:100,wethLP:100};
 
     // BigInt -> token float without blowing through Number's 2^53 precision.
-    const weiToTokens=(bg)=>Number(bg/(10n**12n))/1e6;
+    /* CAUTION: do NOT write 10n**12n here. Babel (which compiles this page in-browser via
+       type="text/babel") transpiles the ** operator into Math.pow(), and Math.pow throws
+       "Cannot convert a BigInt value to a number" on BigInt operands. Use a literal. */
+    const WEI_SCALE_1E12=1000000000000n;
+    const weiToTokens=(bg)=>Number(bg/WEI_SCALE_1E12)/1e6;
 
     /* Public RPCs cap eth_getLogs by block span AND by result size, and they don't agree
        on the limits. So: try a range; if it fails, halve it and retry, down to 250 blocks.
