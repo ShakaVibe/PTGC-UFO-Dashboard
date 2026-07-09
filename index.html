@@ -309,6 +309,10 @@
     const cacheBucket=()=>Math.floor(Date.now()/(5*60*1000));
     const LOG_CHUNK=10000;
     const MAX_LOG_RANGES=100;
+    /* RPC log caps are almost always round numbers. A result of EXACTLY one of these,
+       or any very full batch, may have been silently truncated. Split and refetch. */
+    const LOG_CAP_SUSPECTS=[100,128,200,250,256,500,512,1000,1024,2000,2048,4096,5000,10000];
+    const looksTruncated=(n)=>n>=900||LOG_CAP_SUSPECTS.indexOf(n)>=0;
     let lastLogError=null;
     // Constructor sets every fee to 100 bps. Rates before the first FeesUpdated event.
     const DEFAULT_FEE_RATES={reflection:100,ufoBurn:100,ptgcBurn:100,plsLP:100,plsxLP:100,wethLP:100};
@@ -328,7 +332,21 @@
       const toParam=(b>=headBlock)?'latest':('0x'+b.toString(16));
       const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
         params:[{address,fromBlock:'0x'+a.toString(16),toBlock:toParam,topics}],id:1},20000);
-      if(r&&Array.isArray(r.result))return r.result;
+      if(r&&Array.isArray(r.result)){
+        /* Public RPCs silently CAP the number of logs returned — no error, just fewer
+           rows. A suspiciously full batch is therefore untrustworthy: split and refetch
+           until each slice is comfortably under any cap. Silent truncation is how we
+           lost 10% of swap legs. */
+        if(looksTruncated(r.result.length)&&(b-a)>1&&depth<14){
+          const mid=Math.floor((a+b)/2);
+          const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
+          if(left===null)return null;
+          const right=await getLogsRange(address,topics,mid+1,b,depth+1,headBlock);
+          if(right===null)return null;
+          return left.concat(right);
+        }
+        return r.result;
+      }
       const msg=(r&&r.error&&r.error.message)||'no result field';
       if(depth<6&&(b-a)>250){
         const mid=Math.floor((a+b)/2);
@@ -696,6 +714,7 @@
            that doesn't match a Mint/Burn amount in its own tx+pair is a real swap. */
         const liqByTxPair={}; // `${tx}|${pair}` -> [ufoAmount, ...]
         const liqDiag=[];     // never let a failed query masquerade as "no liquidity"
+        let totalPairSwapUfo=0,totalPairSwapCount=0;
         let liqDetectionOk=true;
         for(const pa of pairAddrsRaw){
           const paLc=lc(pa);
@@ -714,6 +733,22 @@
           ]);
           if(mn===null||bn===null)liqDetectionOk=false;
           /* Don't trust our topic constants. Ask the pair what it actually emitted. */
+          /* The pair's Swap event carries exact token amounts. Summing the UFO side gives
+             swap volume in TOKENS — no price, no DexScreener, nothing to argue about. */
+          const swLogs=await getLogsChunked(pa,[PAIR_SWAP_TOPIC],fromBlock,cur);
+          let pairSwapUfo=0,pairSwapCount=0;
+          if(swLogs){
+            pairSwapCount=swLogs.length;
+            for(const l of swLogs){
+              const h=l.data.startsWith('0x')?l.data.slice(2):l.data;
+              const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // amount0In,amount1In,amount0Out,amount1Out
+              const inAmt =ufoIsToken0?w(0):w(1);
+              const outAmt=ufoIsToken0?w(2):w(3);
+              pairSwapUfo+=weiToTokens(inAmt+outAmt);
+            }
+          }
+          totalPairSwapUfo+=pairSwapUfo; totalPairSwapCount+=pairSwapCount;
+
           const allPairLogs=await getLogsChunked(pa,[],fromBlock,cur);
           const tally={};
           if(allPairLogs)for(const l of allPairLogs){
@@ -722,6 +757,7 @@
             tally[nm]=(tally[nm]||0)+1;
           }
           liqDiag.push({pair:paLc,token0:ufoIsToken0?'UFO=token0':'UFO=token1',
+                        swaps:swLogs===null?'QUERY FAILED':pairSwapCount, swapUfo:Math.round(pairSwapUfo),
                         mint:mn===null?'QUERY FAILED':mn.length, burn:bn===null?'QUERY FAILED':bn.length,
                         emitted:allPairLogs===null?'QUERY FAILED':Object.entries(tally).map(([k,v])=>`${k}:${v}`).join(' ')});
           for(const l of (mn||[]).concat(bn||[])){
@@ -834,7 +870,7 @@
            fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
            gross them up by the tax rate to compare like-for-like with DEX volume. */
         const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
-        const out={ok:true,liqDetectionOk,liqDiag,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        const out={ok:true,liqDetectionOk,liqDiag,totalPairSwapUfo,totalPairSwapCount,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         feeAuditCache[key]=out;
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
@@ -4683,7 +4719,27 @@
                                     <div className="text-white/50">on-chain REAL SWAP volume: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.swapTokens))} UFO</span> · liquidity moves excluded: <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.taxedLiqTokens+feeAudit.untaxedLiqTokens))} UFO</span></div>
                                     <div className="text-white/50">of which untaxed: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.untaxedTokens))} UFO</span> — <span className="text-amber-300">{fmtAbbr(Math.round(feeAudit.untaxedSwapTokens))} real swaps</span> · <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.untaxedLiqTokens))} liquidity moves</span></div>
                                     <div className="text-white/50">untaxed SWAP volume only: <span className="text-white/80">≈ {fmtUSD(feeAudit.untaxedSwapTokens*px)}</span> ← the only part that inflates DEX volume</div>
-                                    <div className="text-white/50">DexScreener 24h volume: <span className="text-white/80">{fmtUSD(dexUsd)}</span></div>
+                                    {/* TOKEN-denominated reconciliation. No prices involved. */}
+                                    {feeAudit.totalPairSwapCount>0&&(()=>{
+                                      const legShort=feeAudit.totalPairSwapCount-feeAudit.swapLegs;
+                                      const impliedTaxedUfo=(realizedFees&&realizedFees.ok&&realizedFees.byPeriod['24h'])
+                                        ? realizedFees.byPeriod['24h'].totalTokens/0.06 : null;
+                                      return(
+                                        <div className="mt-1 pt-1 border-t border-white/10">
+                                          <div className="text-white/45 font-semibold">reconciliation in TOKENS (no prices)</div>
+                                          <div>pairs reported <span className="text-white/85">{feeAudit.totalPairSwapCount}</span> Swap events · our scan saw <span className={legShort!==0?'text-amber-300':'text-white/85'}>{feeAudit.swapLegs}</span> swap legs
+                                            {legShort!==0&&<span className="text-amber-300"> — missing {legShort} ({(legShort/feeAudit.totalPairSwapCount*100).toFixed(0)}%), logs incomplete</span>}
+                                          </div>
+                                          <div>pair-reported UFO swap volume: <span className="text-white/85">{fmtAbbr(Math.round(feeAudit.totalPairSwapUfo))} UFO</span></div>
+                                          {impliedTaxedUfo!=null&&(
+                                            <div>volume implied by fees (24h): <span className="text-white/85">{fmtAbbr(Math.round(impliedTaxedUfo))} UFO</span>
+                                              <span className="text-white/40"> — ratio {(impliedTaxedUfo/feeAudit.totalPairSwapUfo).toFixed(2)}x</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                    <div className="text-white/50">DexScreener 24h volume: <span className="text-white/80">{fmtUSD(dexUsd)}</span> <span className="text-white/30">(price-based, less reliable)</span></div>
                                     <div className={Math.abs(diff)>dexUsd*0.15?'text-amber-300/80':'text-white/40'}>
                                       difference: {fmtUSD(diff)} {Math.abs(diff)>dexUsd*0.15?'— windows differ or logs incomplete':'— within noise'}
                                     </div>
@@ -4732,7 +4788,7 @@
                                     {feeAudit.liqDiag&&(
                                       <div className="mt-1 text-white/30">
                                         {feeAudit.liqDiag.map(d=>(
-                                          <div key={d.pair}>{d.pair.slice(0,10)}… · {d.token0} · mint: {String(d.mint)} · burn: {String(d.burn)}<br/><span className="text-white/40 pl-3">events actually emitted: {String(d.emitted)}</span></div>
+                                          <div key={d.pair}>{d.pair.slice(0,10)}… · {d.token0} · swaps: {String(d.swaps)} · swapUFO: {fmtAbbr(d.swapUfo||0)} · mint: {String(d.mint)} · burn: {String(d.burn)}<br/><span className="text-white/40 pl-3">events actually emitted: {String(d.emitted)}</span></div>
                                         ))}
                                       </div>
                                     )}
