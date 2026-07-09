@@ -60,8 +60,24 @@
         stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
         taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
-      UFO:{name:'UFO',address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',pulseScanUrl:'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
-        taxBreakdown:[{name:'LP Providers',pct:3,emoji:'\u{1F4A7}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Burn UFO',pct:1,emoji:'\u{1F525}'},{name:'Burn PTGC',pct:1,emoji:'\u{1F525}'}]
+      UFO:{name:'UFO',address:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,
+        /* MIGRATION: seeded with the known UFO/WPLS pair; re-confirmed on-chain at boot
+           via the PulseX factory (chain value wins if they ever disagree). */
+        mainPair:'0xE221e6fC30e5787F0d551f980B4da1055D832A03',
+        pulseScanUrl:'https://scan.pulsechain.com/token/0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',
+        totalSupply:999999999051, /* confirmed: matches contract _tTotal */
+        /* MIGRATION: taxRate + taxBreakdown below are FALLBACKS ONLY (contract defaults, 1% each).
+           At boot they are overwritten by the live on-chain fee values. The founder can change
+           these at any time via updateFees(); the site reads whatever the contract currently says. */
+        taxRate:0.06,hasDAO:false,
+        taxBreakdown:[
+          {key:'reflection',name:'Holders',pct:1,emoji:'\u{1F48E}',priceKey:'UFO'},
+          {key:'ufoBurn',name:'Burn UFO',pct:1,emoji:'\u{1F525}',priceKey:'UFO'},
+          {key:'ptgcBurn',name:'Burn PTGC',pct:1,emoji:'\u{1F525}',priceKey:'PTGC'},
+          {key:'plsLP',name:'LP PLS',pct:1,emoji:'\u{1F4A7}',priceKey:'PLS',isLP:true},
+          {key:'plsxLP',name:'LP PLSX',pct:1,emoji:'\u{1F4A7}',priceKey:'PLSX',isLP:true},
+          {key:'wethLP',name:'LP WETH',pct:1,emoji:'\u{1F4A7}',priceKey:'WETH',isLP:true}
+        ]
       }
     };
     
@@ -73,16 +89,13 @@
       UFO: 0.000113     // from Moon Math calculator in portfolio.html
     };
     
+    // MIGRATION: only PTGC pools remain static. UFO's new pools are appended at boot.
     const LP_ADDRESSES=[
       '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', // PTGC/WPLS main pair
-      '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', // UFO/WPLS main pair
-      '0x31c77e0519a0347aa547aeab6e866c30a1a32123', // UFO/PLSX
-      '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', // UFO/INC
-      '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', // UFO/HEX
-      '0xd3a87bda2238ee28b424d38991df1fbadd2be666', // UFO/EHEX
-      '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', // UFO/PTGC (also PTGC LP)
       '0x975c7ab1dae5c97327ef7019587dffc66096f5d8', // PTGC/PRVX
-      '0x462187352e9c09ae4a5675dc8af50ce1c7a196a9'  // UFO/PRVX
+      '0xe221e6fc30e5787f0d551f980b4da1055d832a03', // UFO/WPLS  (new)
+      '0x145bc3a8a5ec0c84061511a5db6023360cadf654', // UFO/PLSX  (new)
+      '0xc4434600f1f263ee38c38dfe32c8def8c0047c0b'  // UFO/WETH  (new)
     ];
     
     // Hardcoded PTGC pairs that should always show (even if DexScreener doesn't return them)
@@ -92,14 +105,13 @@
 
     // Hardcoded UFO pairs that should always show (even if DexScreener doesn't return them)
     // Note: PTGC is NOT an RH core, but we still want to show that pair
+    // MIGRATION: the old token's pools are dead. These are the new token's three pools,
+    // created by the contract constructor. Re-confirmed on-chain at boot by resolveUfoPairs();
+    // if the factory ever disagrees, the chain value wins.
     const HARDCODED_UFO_PAIRS = [
-      { address: '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS', quoteAddress: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', isRHCore: true, version: 'v2' },
-      { address: '0x31c77e0519a0347aa547aeab6e866c30a1a32123', quoteSymbol: 'PLSX', quoteName: 'PulseX', quoteAddress: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', isRHCore: true, version: 'v2' },
-      { address: '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', quoteSymbol: 'INC', quoteName: 'Incentive', quoteAddress: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', isRHCore: true, version: 'v2' },
-      { address: '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', quoteSymbol: 'HEX', quoteName: 'HEX', quoteAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', isRHCore: true, version: 'v2' },
-      { address: '0xd3a87bda2238ee28b424d38991df1fbadd2be666', quoteSymbol: 'EHEX', quoteName: 'HEX from Ethereum', quoteAddress: '0x57fde0a71132198BBeC939B98976993d8D89D225', isRHCore: true, version: 'v2' },
-      { address: '0x462187352e9c09AE4A5675dc8aF50CE1C7a196A9', quoteSymbol: 'PRVX', quoteName: 'ProveX', quoteAddress: '0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11', isRHCore: true, version: 'v2' },
-      { address: '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', quoteSymbol: 'PTGC', quoteName: 'PTGC', quoteAddress: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', isRHCore: false, version: 'v2' }
+      { address: '0xE221e6fC30e5787F0d551f980B4da1055D832A03', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS',   quoteAddress: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', isRHCore: true, version: 'v2' },
+      { address: '0x145BC3a8a5EC0C84061511a5DB6023360caDF654', quoteSymbol: 'PLSX', quoteName: 'PulseX',         quoteAddress: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', isRHCore: true, version: 'v2' },
+      { address: '0xc4434600F1f263Ee38c38dfe32c8DEf8c0047C0b', quoteSymbol: 'WETH', quoteName: 'Wrapped Ether',  quoteAddress: '0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C', isRHCore: true, version: 'v2' }
     ];
     
     // Fetch LP data directly from blockchain (for pairs DexScreener doesn't track)
@@ -164,6 +176,108 @@
       }
     };
     
+    /* ===================== MIGRATION: UFO on-chain fee reader ===================== *
+     * The new UFO contract exposes each fee as a public variable, so Solidity gives us
+     * a free getter for each. Fees are basis points (100 = 1%), total capped at 600 (6%).
+     * The founder can change these at any time via updateFees(); we therefore never
+     * hardcode them — we read them live from the contract on every load.
+     * ============================================================================= */
+    const PULSEX_ROUTER='0x165C3410fC91EF562C50559f7d2289fEbed552d9';
+    const WPLS_ADDRESS='0xA1077a294dDE1B09bB078844df40758a5D0f9a27';
+    const PLSX_ADDRESS='0x95B303987A60C71504D99Aa1b13B4DA07b0790ab';
+    const UFO_WETH='0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C';
+    const SEL_FACTORY='0xc45a0155';   // factory()
+    const SEL_GETPAIR='0xe6a43905';   // getPair(address,address)
+
+    // isLP buckets are split in half by the contract: half stays UFO, half is swapped
+    // to the partner asset, then the two are paired. Never price the whole bucket as
+    // one token — that would overstate the partner amount by ~2x.
+    const UFO_FEE_BUCKETS=[
+      {key:'reflection', sel:'0x83ad7994', name:'Holders',   emoji:'\u{1F48E}', priceKey:'UFO'},
+      {key:'ufoBurn',    sel:'0xea9f27e5', name:'Burn UFO',  emoji:'\u{1F525}', priceKey:'UFO'},
+      {key:'ptgcBurn',   sel:'0xc045df51', name:'Burn PTGC', emoji:'\u{1F525}', priceKey:'PTGC'},
+      {key:'plsLP',      sel:'0x1bbe947c', name:'LP PLS',    emoji:'\u{1F4A7}', priceKey:'PLS',  isLP:true},
+      {key:'plsxLP',     sel:'0x7ddabe9d', name:'LP PLSX',   emoji:'\u{1F4A7}', priceKey:'PLSX', isLP:true},
+      {key:'wethLP',     sel:'0xd5d58ce7', name:'LP WETH',   emoji:'\u{1F4A7}', priceKey:'WETH', isLP:true}
+    ];
+
+    const ethCallRead=async(to,data)=>{
+      const r=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data},'latest'],id:1});
+      return (r&&r.result&&r.result!=='0x')?r.result:null;
+    };
+    const wordToAddress=w=>(w&&w.length>=42)?('0x'+w.slice(-40)):null;
+    const encodeAddress=a=>a.slice(2).toLowerCase().padStart(64,'0');
+    const isZeroAddress=a=>!a||/^0x0{40}$/i.test(a);
+
+    // Returns {breakdown,totalBps,taxRate} or null on any failure (caller falls back to config).
+    const fetchUfoFees=async(tokenAddress)=>{
+      try{
+        const raw=await Promise.all(UFO_FEE_BUCKETS.map(b=>ethCallRead(tokenAddress,b.sel)));
+        if(raw.some(r=>r===null))return null;
+        const bps=raw.map(r=>Number(BigInt(r)));
+        if(bps.some(v=>!isFinite(v)||v<0))return null;
+        const totalBps=bps.reduce((a,b)=>a+b,0);
+        if(totalBps>600)return null; // contract caps total at 6%; anything higher means a bad read
+        const breakdown=UFO_FEE_BUCKETS.map((b,i)=>({...b,bps:bps[i],pct:bps[i]/100}));
+        return{breakdown,totalBps,taxRate:totalBps/10000};
+      }catch(e){console.error('fetchUfoFees error:',e);return null;}
+    };
+
+    // The contract's three pairs are `private immutable` (no getter), so we ask the
+    // PulseX factory for them instead. This survives any future contract redeploy.
+    const resolveUfoPairs=async(tokenAddress)=>{
+      try{
+        const factory=wordToAddress(await ethCallRead(PULSEX_ROUTER,SEL_FACTORY));
+        if(isZeroAddress(factory))return null;
+        const partners=[
+          {quoteSymbol:'WPLS',quoteName:'Wrapped PLS',quoteAddress:WPLS_ADDRESS},
+          {quoteSymbol:'PLSX',quoteName:'PulseX',quoteAddress:PLSX_ADDRESS},
+          {quoteSymbol:'WETH',quoteName:'Wrapped Ether',quoteAddress:UFO_WETH}
+        ];
+        const found=await Promise.all(partners.map(async p=>{
+          const data=SEL_GETPAIR+encodeAddress(tokenAddress)+encodeAddress(p.quoteAddress);
+          const addr=wordToAddress(await ethCallRead(factory,data));
+          if(isZeroAddress(addr))return null;
+          return{address:addr,quoteSymbol:p.quoteSymbol,quoteName:p.quoteName,quoteAddress:p.quoteAddress,isRHCore:true,version:'v2'};
+        }));
+        const pairs=found.filter(Boolean);
+        return pairs.length?pairs:null;
+      }catch(e){console.error('resolveUfoPairs error:',e);return null;}
+    };
+
+    // Ordered buckets for the Value Generated panel. PTGC keeps its legacy shape.
+    const buildValueGenItems=(token,cfg)=>{
+      if(token==='PTGC'){
+        const find=n=>cfg.taxBreakdown.find(t=>t.name===n);
+        const holders=find('Holders'),stakers=find('Stakers');
+        const items=[find('DAO'),find('Add LP'),find('Buy & Burn'),holders,stakers].filter(Boolean);
+        items.push({name:'Total H&S',pct:(holders?.pct||0)+(stakers?.pct||0),emoji:'\u{1F48E}\u{1F48E}\u{1F48E}',isTotal:true});
+        return items;
+      }
+      // UFO: driven entirely by live on-chain fees. Buckets set to 0% are hidden.
+      return cfg.taxBreakdown.filter(b=>(b.pct||0)>0);
+    };
+
+    // Converts a bucket's USD value into token amounts. LP buckets return TWO parts
+    // (half UFO + half partner) because that is what the contract actually pairs.
+    const valueGenParts=(token,item,dollarVal,prices)=>{
+      const q=(usd,px)=>(px>0?usd/px:null);
+      if(token==='PTGC'){
+        const isPls=item.name==='DAO'||item.name==='Add LP';
+        const qty=q(dollarVal,isPls?prices.PLS:prices.PTGC);
+        return qty===null?null:[{qty,symbol:isPls?'PLS':'PTGC'}];
+      }
+      if(item.isLP){
+        const half=dollarVal/2;
+        const ufoQty=q(half,prices.UFO);
+        const partnerQty=q(half,prices[item.priceKey]);
+        if(ufoQty===null||partnerQty===null)return null;
+        return[{qty:ufoQty,symbol:'UFO'},{qty:partnerQty,symbol:item.priceKey}];
+      }
+      const qty=q(dollarVal,prices[item.priceKey]);
+      return qty===null?null:[{qty,symbol:item.priceKey}];
+    };
+
     const HOLDER_TIERS_DISPLAY=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
       {n:'Whale',e:'\u{1F40B}',p:1},
@@ -2279,8 +2393,8 @@
         const fetchPrices=async()=>{
           try{
             const[ptgcRes,ufoRes]=await Promise.all([
-              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11'),
-              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5')
+              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.PTGC.mainPair),
+              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.UFO.mainPair) /* MIGRATION: resolved at boot */
             ]);
             const ptgcData=await ptgcRes.json();
             const ufoData=await ufoRes.json();
@@ -2785,6 +2899,9 @@
       const[holderTiers,setHolderTiers]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
       const[copied,setCopied]=useState(false);
       const[ptgcPrice,setPtgcPrice]=useState(0);
+      const[plsxPrice,setPlsxPrice]=useState(0);  // MIGRATION: needed for LP PLSX bucket
+      const[wethPrice,setWethPrice]=useState(0);  // MIGRATION: needed for LP WETH bucket
+      const[feeVersion,setFeeVersion]=useState(0); // MIGRATION: bumps when live fees are re-read
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
       const _initTab=(()=>{try{const t=localStorage.getItem('ptgc_nav_tab');if(t&&['dashboard','kpi','social','calculators'].includes(t)){localStorage.removeItem('ptgc_nav_tab');if(t==='calculators'){window.location.href='./calculators.html';return'dashboard'}return t}}catch(e){}return'dashboard'})();
@@ -3188,6 +3305,23 @@
               .then(r=>r.json())
               .then(d=>setPtgcPrice(parseFloat(d.pair?.priceUsd)||0))
               .catch(()=>{});
+            // MIGRATION: LP PLSX / LP WETH buckets need their partner-asset USD prices.
+            const usdOf=async(addr)=>{
+              try{
+                const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
+                const d=await r.json();
+                const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0);
+                if(!ps.length)return 0;
+                ps.sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
+                return parseFloat(ps[0].priceUsd)||0;
+              }catch{return 0;}
+            };
+            usdOf(PLSX_ADDRESS).then(setPlsxPrice).catch(()=>{});
+            usdOf(UFO_WETH).then(setWethPrice).catch(()=>{});
+            // Re-read live fees each refresh so founder changes appear without a redeploy.
+            fetchUfoFees(cfg.address).then(f=>{
+              if(f){cfg.taxRate=f.taxRate;cfg.taxBreakdown=f.breakdown;setFeeVersion(v=>v+1);}
+            }).catch(()=>{});
           }
           
           // Use pre-fetched CoinGecko data for volume (7d, 30d, 90d)
@@ -3646,23 +3780,8 @@
                     const hasData=periodVol!==null&&periodVol!==undefined;
                     const totalGen=hasData?periodVol*cfg.taxRate:0;
 
-                    let orderedItems=[];
-                    if(token==='PTGC'){
-                      const dao=cfg.taxBreakdown.find(t=>t.name==='DAO');
-                      const addLP=cfg.taxBreakdown.find(t=>t.name==='Add LP');
-                      const burn=cfg.taxBreakdown.find(t=>t.name==='Buy & Burn');
-                      const holders=cfg.taxBreakdown.find(t=>t.name==='Holders');
-                      const stakers=cfg.taxBreakdown.find(t=>t.name==='Stakers');
-                      orderedItems=[dao,addLP,burn,holders,stakers].filter(Boolean);
-                      const holderTotal=(holders?.pct||0)+(stakers?.pct||0);
-                      orderedItems.push({name:'Total H&S',pct:holderTotal,emoji:'\u{1F48E}\u{1F48E}\u{1F48E}',isTotal:true});
-                    }else{
-                      const holders=cfg.taxBreakdown.find(t=>t.name==='Holders');
-                      const lp=cfg.taxBreakdown.find(t=>t.name==='LP Providers');
-                      const burnUFO=cfg.taxBreakdown.find(t=>t.name==='Burn UFO');
-                      const burnPTGC=cfg.taxBreakdown.find(t=>t.name==='Burn PTGC');
-                      orderedItems=[holders,lp,burnUFO,burnPTGC].filter(Boolean);
-                    }
+                    const orderedItems=buildValueGenItems(token,cfg);
+                    const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
 
                     return(
                       <>
@@ -3677,48 +3796,25 @@
                           )}
                         </div>
                         <div className="flex-1"></div>
-                        {hasData&&<div className={`grid ${token==='PTGC'?'grid-cols-2 sm:grid-cols-3':'grid-cols-2'} gap-2`}>
+                        {hasData&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {orderedItems.map((item,i)=>{
                             const dollarVal=periodVol*(item.pct/100);
-                            let tokenQty=null;
-                            let tokenSymbol='';
-                            if(token==='PTGC'){
-                              if(item.name==='DAO'||item.name==='Add LP'){
-                                tokenQty=pls>0?dollarVal/pls:0;
-                                tokenSymbol='PLS';
-                              }else{
-                                tokenQty=data?.price>0?dollarVal/data.price:0;
-                                tokenSymbol='PTGC';
-                              }
-                            }else if(token==='UFO'){
-                              if(item.name==='Holders'||item.name==='Burn UFO'){
-                                tokenQty=data?.price>0?dollarVal/data.price:0;
-                                tokenSymbol='UFO';
-                              }else if(item.name==='LP Providers'){
-                                tokenQty=pls>0?dollarVal/pls:0;
-                                tokenSymbol='PLS';
-                              }else if(item.name==='Burn PTGC'){
-                                tokenQty=ptgcPrice>0?dollarVal/ptgcPrice:0;
-                                tokenSymbol='PTGC';
-                              }
-                            }
+                            // LP buckets return two parts (half UFO + half partner) — see valueGenParts().
+                            const parts=valueGenParts(token,item,dollarVal,vgPrices);
+                            const partsLabel=parts?parts.map(pt=>`${fmtAbbr(Math.floor(pt.qty))} ${pt.symbol}`).join(' + '):null;
                             return(
                               <div key={i} className={`bg-white/[0.04] border ${item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
                                   <span className="text-base shrink-0">{item.emoji}</span>
                                   <span className="text-white/55 text-xs sm:text-sm truncate">{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
                                 </div>
-                                {valueGenShowTokens&&tokenQty!==null?(
-                                  <div className={`font-bold text-base sm:text-xl text-right tabular-nums leading-none ${theme.text} truncate`}>{fmtAbbr(Math.floor(tokenQty))} <span className="text-white/40 text-xs">{tokenSymbol}</span></div>
+                                {valueGenShowTokens&&partsLabel?(
+                                  <div className={`font-bold text-sm sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}>{partsLabel}</div>
                                 ):(
-                                  token==='UFO'&&!valueGenShowTokens&&tokenQty!==null?(
-                                    <>
-                                      <div className={`text-base sm:text-xl font-medium text-right tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(dollarVal)}</div>
-                                      <div className="text-white/35 text-[11px] text-right tabular-nums leading-tight truncate">{fmtAbbr(Math.floor(tokenQty))} {tokenSymbol}</div>
-                                    </>
-                                  ):(
+                                  <>
                                     <div className={`text-base sm:text-xl font-medium text-right tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(dollarVal)}</div>
-                                  )
+                                    {token==='UFO'&&partsLabel&&<div className="text-white/35 text-[11px] text-right tabular-nums leading-tight truncate">{partsLabel}</div>}
+                                  </>
                                 )}
                               </div>
                             );
@@ -4828,23 +4924,8 @@
                       const periodVol=volAmounts[valueGenPeriod]||0;
                       const totalGen=periodVol*cfg.taxRate;
                       
-                      let orderedItems=[];
-                      if(token==='PTGC'){
-                        const dao=cfg.taxBreakdown.find(t=>t.name==='DAO');
-                        const addLP=cfg.taxBreakdown.find(t=>t.name==='Add LP');
-                        const burn=cfg.taxBreakdown.find(t=>t.name==='Buy & Burn');
-                        const holders=cfg.taxBreakdown.find(t=>t.name==='Holders');
-                        const stakers=cfg.taxBreakdown.find(t=>t.name==='Stakers');
-                        orderedItems=[dao,addLP,burn,holders,stakers].filter(Boolean);
-                        const holderTotal=(holders?.pct||0)+(stakers?.pct||0);
-                        orderedItems.push({name:'Total H&S',pct:holderTotal,emoji:'\u{1F48E}',isTotal:true,tripleIcon:true});
-                      }else{
-                        const holders=cfg.taxBreakdown.find(t=>t.name==='Holders');
-                        const lp=cfg.taxBreakdown.find(t=>t.name==='LP Providers');
-                        const burnUFO=cfg.taxBreakdown.find(t=>t.name==='Burn UFO');
-                        const burnPTGC=cfg.taxBreakdown.find(t=>t.name==='Burn PTGC');
-                        orderedItems=[holders,lp,burnUFO,burnPTGC].filter(Boolean);
-                      }
+                      const orderedItems=buildValueGenItems(token,cfg);
+                      const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
                       
                       return(
                         <div className="flex gap-3 flex-1">
@@ -4858,40 +4939,19 @@
                           </div>
                           
                           {/* Right - breakdown boxes */}
-                          <div className={`flex-1 grid ${token==='PTGC'?'grid-cols-3':'grid-cols-2'} gap-1.5`}>
+                          <div className="flex-1 grid grid-cols-3 gap-1.5">
                             {orderedItems.map((item,i)=>{
                               const dollarVal=periodVol*(item.pct/100);
-                              // Calculate token quantities
-                              let tokenQty=null;
-                              let tokenSymbol='';
-                              if(token==='PTGC'){
-                                if(item.name==='DAO'||item.name==='Add LP'){
-                                  tokenQty=pls>0?dollarVal/pls:0;
-                                  tokenSymbol='PLS';
-                                }else{
-                                  tokenQty=data?.price>0?dollarVal/data.price:0;
-                                  tokenSymbol='PTGC';
-                                }
-                              }else if(token==='UFO'){
-                                if(item.name==='Holders'||item.name==='Burn UFO'){
-                                  tokenQty=data?.price>0?dollarVal/data.price:0;
-                                  tokenSymbol='UFO';
-                                }else if(item.name==='LP Providers'){
-                                  tokenQty=pls>0?dollarVal/pls:0;
-                                  tokenSymbol='PLS';
-                                }else if(item.name==='Burn PTGC'){
-                                  tokenQty=ptgcPrice>0?dollarVal/ptgcPrice:0;
-                                  tokenSymbol='PTGC';
-                                }
-                              }
+                              const parts=valueGenParts(token,item,dollarVal,vgPrices);
+                              const partsLabel=parts?parts.map(pt=>`${fmtAbbr(Math.floor(pt.qty))} ${pt.symbol}`).join(' + '):null;
                               return(
                                 <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg ${valueGenShowTokens?'p-1.5':'p-2'}`}>
                                   <div className={`flex items-center gap-1 ${valueGenShowTokens?'mb-0.5':'mb-1'}`}>
                                     {item.tripleIcon?<span className="text-xs">{'\u{1F48E}'}{'\u{1F48E}'}{'\u{1F48E}'}</span>:<span className={valueGenShowTokens?'text-sm':'text-lg'}>{item.emoji}</span>}
                                     <span className="text-white/70 text-xs leading-tight">{item.name}</span>
                                   </div>
-                                  {valueGenShowTokens&&tokenQty!==null?(
-                                    <div className={`font-bold text-xl leading-tight ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtAbbr(Math.floor(tokenQty))} <span className="text-white/50 text-[10px]">{tokenSymbol}</span></div>
+                                  {valueGenShowTokens&&partsLabel?(
+                                    <div className={`font-bold text-base leading-tight ${item.isTotal?'text-emerald-400':theme.text}`}>{partsLabel}</div>
                                   ):(
                                     <div className={`font-bold text-xl ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(dollarVal)}</div>
                                   )}
@@ -8030,7 +8090,50 @@
       );
     };
     
-    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    /* ===================== MIGRATION: boot-time on-chain resolution =====================
+     * Before first render we ask the chain for:
+     *   1. UFO's three PulseX pairs (they are `private immutable` in the contract, so the
+     *      factory is the only way to get them). The UFO/WPLS pair becomes mainPair.
+     *   2. The six live fee values, which overwrite the fallback taxRate/taxBreakdown.
+     * If either call fails we render anyway using the config fallbacks, so a flaky RPC
+     * degrades the numbers rather than blanking the whole site.
+     * =================================================================================== */
+    const bootstrapUFO=async()=>{
+      const ufo=TOKENS.UFO;
+      const[pairs,fees]=await Promise.all([
+        resolveUfoPairs(ufo.address).catch(()=>null),
+        fetchUfoFees(ufo.address).catch(()=>null)
+      ]);
+      if(pairs&&pairs.length){
+        // Reconcile the chain's answer against the seeded addresses. The chain is
+        // authoritative; a mismatch means a seeded constant is stale, so shout about it.
+        pairs.forEach(cp=>{
+          const seeded=HARDCODED_UFO_PAIRS.find(h=>h.quoteSymbol===cp.quoteSymbol);
+          if(seeded&&seeded.address.toLowerCase()!==cp.address.toLowerCase()){
+            console.warn(`UFO/${cp.quoteSymbol} pair mismatch — seeded ${seeded.address}, chain says ${cp.address}. Using chain value.`);
+          }
+          if(seeded){seeded.address=cp.address;}
+          else{HARDCODED_UFO_PAIRS.push(cp);}
+          const lc=cp.address.toLowerCase();
+          if(!LP_ADDRESSES.includes(lc))LP_ADDRESSES.push(lc);
+        });
+        const wpls=pairs.find(p=>p.quoteSymbol==='WPLS');
+        if(wpls)ufo.mainPair=wpls.address;
+      }else{
+        console.warn('UFO pair resolution failed; using seeded pair addresses.');
+      }
+      if(fees){
+        ufo.taxRate=fees.taxRate;
+        ufo.taxBreakdown=fees.breakdown;
+      }else{
+        console.warn('UFO fee read failed; falling back to config defaults (1% each).');
+      }
+    };
+
+    const mountApp=(()=>{let done=false;return()=>{if(done)return;done=true;ReactDOM.createRoot(document.getElementById('root')).render(<App/>);};})();
+    // Never let a slow RPC block first paint. Whichever finishes first wins; the app
+    // renders once and only once. Late-arriving fee data still lands via Dashboard's refresh.
+    Promise.race([bootstrapUFO(),new Promise(r=>setTimeout(r,5000))]).then(mountApp,mountApp);
   </script>
 </body>
 </html>
