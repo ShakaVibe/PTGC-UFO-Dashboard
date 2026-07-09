@@ -629,6 +629,15 @@
     /* The contract wraps every swapback action in try/catch and emits this on failure.
        If addPLSLiquidity is reverting, the LP portion of the fee never reaches a pool. */
     const SWAPBACK_FAILED_TOPIC='0xe2cc6589fa66f3a1443517f47ba01474cfe9d23a5177fb4d49653a45468209d3';
+    // Name lookup so we can see what a pair ACTUALLY emitted, without assuming.
+    const TOPIC_NAMES={
+      '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822':'Swap',
+      '0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f':'Mint',
+      '0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496':'Burn',
+      '0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1':'Sync',
+      '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef':'Transfer',
+      '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925':'Approval'
+    };
     const decodeAbiString=(data)=>{
       try{
         const h=data.startsWith('0x')?data.slice(2):data;
@@ -695,8 +704,17 @@
             getLogsChunked(pa,[PAIR_BURN_TOPIC],fromBlock,cur)
           ]);
           if(mn===null||bn===null)liqDetectionOk=false;
+          /* Don't trust our topic constants. Ask the pair what it actually emitted. */
+          const allPairLogs=await getLogsChunked(pa,[],fromBlock,cur);
+          const tally={};
+          if(allPairLogs)for(const l of allPairLogs){
+            const t0=(l.topics&&l.topics[0])||'?';
+            const nm=TOPIC_NAMES[t0]||t0.slice(0,10);
+            tally[nm]=(tally[nm]||0)+1;
+          }
           liqDiag.push({pair:paLc,token0:ufoIsToken0?'UFO=token0':'UFO=token1',
-                        mint:mn===null?'QUERY FAILED':mn.length, burn:bn===null?'QUERY FAILED':bn.length});
+                        mint:mn===null?'QUERY FAILED':mn.length, burn:bn===null?'QUERY FAILED':bn.length,
+                        emitted:allPairLogs===null?'QUERY FAILED':Object.entries(tally).map(([k,v])=>`${k}:${v}`).join(' ')});
           for(const l of (mn||[]).concat(bn||[])){
             const k=`${l.transactionHash}|${paLc}`;
             (liqByTxPair[k]=liqByTxPair[k]||[]).push(weiToTokens(decodePair(l.data)));
@@ -4664,7 +4682,7 @@
                                     {feeAudit.liqDiag&&(
                                       <div className="mt-1 text-white/30">
                                         {feeAudit.liqDiag.map(d=>(
-                                          <div key={d.pair}>{d.pair.slice(0,10)}… · {d.token0} · mint: {String(d.mint)} · burn: {String(d.burn)}</div>
+                                          <div key={d.pair}>{d.pair.slice(0,10)}… · {d.token0} · mint: {String(d.mint)} · burn: {String(d.burn)}<br/><span className="text-white/40 pl-3">events actually emitted: {String(d.emitted)}</span></div>
                                         ))}
                                       </div>
                                     )}
