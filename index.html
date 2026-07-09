@@ -275,25 +275,51 @@
     const FEES_UPDATED_TOPIC='0x020b4e17880b9764de4da2ebf8857a187cc492ae288e9f3ec0db3e2fdb37a2ec';
     const BLOCKS_PER_DAY=8640; // PulseChain ~10s blocks (same assumption as fetchLive24hBurn)
     const REALIZED_PERIOD_BLOCKS={'24h':BLOCKS_PER_DAY,'7d':BLOCKS_PER_DAY*7,'30d':BLOCKS_PER_DAY*30,'90d':BLOCKS_PER_DAY*90};
-    const LOG_CHUNK=5000;
-    const MAX_LOG_CHUNKS=60;
+    const LOG_CHUNK=10000;
+    const MAX_LOG_RANGES=100;
+    let lastLogError=null;
     // Constructor sets every fee to 100 bps. Rates before the first FeesUpdated event.
     const DEFAULT_FEE_RATES={reflection:100,ufoBurn:100,ptgcBurn:100,plsLP:100,plsxLP:100,wethLP:100};
 
     // BigInt -> token float without blowing through Number's 2^53 precision.
     const weiToTokens=(bg)=>Number(bg/(10n**12n))/1e6;
 
+    /* Public RPCs cap eth_getLogs by block span AND by result size, and they don't agree
+       on the limits. So: try a range; if it fails, halve it and retry, down to 250 blocks.
+       On total failure record WHY, so the UI can say "chain read failed" instead of
+       silently pretending there's no data. Silence is what made the last two bugs invisible. */
+    const getLogsRange=async(address,topics,a,b,depth,headBlock)=>{
+      const toParam=(b>=headBlock)?'latest':('0x'+b.toString(16));
+      const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
+        params:[{address,fromBlock:'0x'+a.toString(16),toBlock:toParam,topics}],id:1},20000);
+      if(r&&Array.isArray(r.result))return r.result;
+      const msg=(r&&r.error&&r.error.message)||'no result field';
+      if(depth<6&&(b-a)>250){
+        const mid=Math.floor((a+b)/2);
+        const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
+        if(left===null)return null;
+        const right=await getLogsRange(address,topics,mid+1,b,depth+1,headBlock);
+        if(right===null)return null;
+        return left.concat(right);
+      }
+      lastLogError=`eth_getLogs failed (blocks ${a}-${b}): ${msg}`;
+      console.warn(lastLogError);
+      return null;
+    };
+
     const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+      if(toBlock<fromBlock)return[];
       const ranges=[];
       for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
-      if(ranges.length>MAX_LOG_CHUNKS)return null; // too wide to fetch politely
-      const out=[];const CONC=5;
+      if(ranges.length>MAX_LOG_RANGES){
+        lastLogError=`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`;
+        console.warn(lastLogError);
+        return null;
+      }
+      const out=[];const CONC=3;
       for(let i=0;i<ranges.length;i+=CONC){
-        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>rpcFetch({
-          jsonrpc:'2.0',method:'eth_getLogs',
-          params:[{address,fromBlock:'0x'+a.toString(16),toBlock:'0x'+b.toString(16),topics}],id:1
-        },20000)));
-        for(const r of res){ if(!r||!Array.isArray(r.result))return null; out.push(...r.result); }
+        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,toBlock)));
+        for(const r of res){ if(r===null)return null; out.push(...r); }
       }
       return out;
     };
@@ -333,11 +359,12 @@
     };
 
     const fetchRealizedFees=async(tokenAddress,period,firstPoolMs)=>{
+      lastLogError=null;
       try{
         const span=REALIZED_PERIOD_BLOCKS[period];
-        if(!span)return null;
+        if(!span)return{ok:false,period,error:'period not supported'};
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return null;
+        if(!blk.result)return{ok:false,period,error:'could not read current block'};
         const cur=parseInt(blk.result,16);
         const launch=estimateLaunchBlock(cur,firstPoolMs);
         const fromBlock=Math.max(0,cur-span,launch);
@@ -349,7 +376,7 @@
           getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],fromBlock,cur),
           fetchFeeTimeline(tokenAddress,fromBlock,cur)
         ]);
-        if(!transferLogs)return null;
+        if(!transferLogs)return{ok:false,period,error:lastLogError||'chain read failed'};
 
         const tokens={reflection:0,ufoBurn:0,ptgcBurn:0,plsLP:0,plsxLP:0,wethLP:0};
         for(const log of transferLogs){
@@ -366,11 +393,11 @@
           tokens.wethLP    +=cFee*(r.wethLP/contractBps);
         }
         const totalTokens=Object.values(tokens).reduce((a,b)=>a+b,0);
-        const out={tokens,totalTokens,txCount:transferLogs.length,fromBlock,toBlock:cur,period,feeChanges:feeEvents.length};
+        const out={ok:true,tokens,totalTokens,txCount:transferLogs.length,fromBlock,toBlock:cur,period,feeChanges:feeEvents.length};
         realizedFeeCache[key]=out;
         console.log(`Realized UFO fees (${period}): ${totalTokens.toLocaleString()} UFO from ${transferLogs.length} taxed transfers, ${feeEvents.length} fee change(s)`);
         return out;
-      }catch(e){console.error('fetchRealizedFees error:',e);return null;}
+      }catch(e){console.error('fetchRealizedFees error:',e);return{ok:false,period,error:e.message||'unexpected error'};}
     };
 
     /* MIGRATION: Total Supply Burned periods, straight from the chain.
@@ -743,13 +770,17 @@
     const fetchHolders=async addr=>{
       const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
       
+      /* MIGRATION: both caches below were generated for the OLD UFO token, and they were
+         being returned BEFORE any live call — so UFO's holder count was the old token's.
+         For UFO we skip them entirely and always read PulseScan for the live address. */
+      const useCache=(token!=='UFO');
       // Return cached data immediately if available (for fast initial load)
       // Then fetch live data in background
-      if(holderHistoryCacheNew&&holderHistoryCacheNew.snapshots?.length>0){
+      if(useCache&&holderHistoryCacheNew&&holderHistoryCacheNew.snapshots?.length>0){
         const lastSnap=holderHistoryCacheNew.snapshots[holderHistoryCacheNew.snapshots.length-1];
         if(lastSnap[token]>0)return lastSnap[token];
       }
-      if(burnHistoryCache&&burnHistoryCache[token]?.holders>0){
+      if(useCache&&burnHistoryCache&&burnHistoryCache[token]?.holders>0){
         return burnHistoryCache[token].holders;
       }
       
@@ -829,6 +860,10 @@
     // Get holder change vs 24 hours ago from holder history snapshots
     // IMPORTANT: Compare stored-to-stored, not live-to-stored (different sources can have different values)
     const getHolderChange=(token,currentHolders)=>{
+      // MIGRATION: holder-history.json tracks the OLD UFO token. Comparing today's live
+      // holder count against that history produces a meaningless delta. Hide it until
+      // the history file is regenerated for the new contract.
+      if(token==='UFO')return null;
       if(!holderHistoryCacheNew?.snapshots || holderHistoryCacheNew.snapshots.length < 2) return null;
       
       const snapshots = holderHistoryCacheNew.snapshots;
@@ -3143,6 +3178,7 @@
       const[realizedFees,setRealizedFees]=useState(null);
       const[realizedLoading,setRealizedLoading]=useState(false);
       const[ptgcByUfoLive,setPtgcByUfoLive]=useState(null); // MIGRATION: NEW contract's PTGC burns
+      const[feeRetry,setFeeRetry]=useState(0);
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
       const[daoData,setDaoData]=useState(null);
@@ -3219,12 +3255,13 @@
         const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
         let cancelled=false;
         setRealizedLoading(true);
+        if(feeRetry>0)Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);
         fetchRealizedFees(TOKENS.UFO.address,valueGenPeriod,firstPoolMs)
           .then(r=>{if(!cancelled)setRealizedFees(r);})
-          .catch(()=>{if(!cancelled)setRealizedFees(null);})
+          .catch(e=>{if(!cancelled)setRealizedFees({ok:false,period:valueGenPeriod,error:e.message||'error'});})
           .finally(()=>{if(!cancelled)setRealizedLoading(false);});
         return()=>{cancelled=true;};
-      },[token,valueGenPeriod,data?.pairs]);
+      },[token,valueGenPeriod,data?.pairs,feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
@@ -4095,7 +4132,7 @@
                     /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
                        attributed with the fee rates actually in force at each block. */
                     const ufoPx=data?.price||0;
-                    const live=(token==='UFO'&&realizedFees&&realizedFees.period===valueGenPeriod&&ufoPx>0)?realizedFees:null;
+                    const live=(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.period===valueGenPeriod&&ufoPx>0)?realizedFees:null;
                     const liveItems=live?UFO_FEE_BUCKETS.map(b=>{
                       const tok=live.tokens[b.key]||0;
                       const cur=cfg.taxBreakdown.find(x=>x.key===b.key);
@@ -4121,6 +4158,12 @@
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(totalGen)}</span>
                               <span className="text-white/45 text-sm sm:text-base">from {fmtUSD(periodVol)} vol</span>
                             </>
+                          ):(token==='UFO'&&realizedFees&&!realizedFees.ok)?(
+                            <div className="flex flex-col gap-1">
+                              <span className="text-base text-amber-300/80">Couldn't read fees from chain</span>
+                              <span className="text-white/35 text-[11px]">{realizedFees.error}</span>
+                              <button onClick={()=>setFeeRetry(n=>n+1)} className="self-start mt-1 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-white/10 text-white/70 hover:bg-white/20">RETRY</button>
+                            </div>
                           ):(
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
