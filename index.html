@@ -600,6 +600,108 @@
       }catch(e){console.error('fetchPtgcBurnedByUfo error:',e);return null;}
     };
 
+    /* ============ FEE-EXEMPTION AUDIT ============================================
+     * Question: were any UFO swaps executed WITHOUT paying the 6% tax, and by whom?
+     *
+     * The contract skips the fee when isExcludedFromFee[from] || isExcludedFromFee[to].
+     * The constructor exempts exactly three: owner, the contract itself, and BURN.
+     * But the owner can exempt any address later via excludeFromFee(). If a plain wallet
+     * is exempt and trading, that is a tax bypass and the operator needs to know.
+     *
+     * Swapback runs INSIDE a user's sell transaction, so one tx contains both taxed and
+     * untaxed legs. A per-transaction "did this tx pay a fee" test is therefore wrong.
+     * We match PER LEG: the fee event is Transfer(sender -> contract), where `sender` is
+     * the original transfer's `from`. So a swap leg is taxed iff a fee log exists in the
+     * same tx with the same `from`. (For a buy, that `from` is the pair, not the buyer.)
+     *
+     * Every untaxed counterparty is then checked against isExcludedFromFee() on chain.
+     * Anything untaxed that is NOT exempt is a real problem and we shout about it.
+     * ============================================================================ */
+    const SEL_IS_EXCLUDED_FROM_FEE='0x5342acb4'; // isExcludedFromFee(address)
+    const SEL_OWNER='0x8da5cb5b';                // owner()
+    const feeAuditCache={};
+
+    const fetchFeeExemptionAudit=async(tokenAddress,firstPoolMs)=>{
+      try{
+        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+        if(!blk.result)return null;
+        const cur=parseInt(blk.result,16);
+        const key=`${tokenAddress}-audit-${cacheBucket()}`;
+        if(feeAuditCache[key])return feeAuditCache[key];
+
+        const B=await getPeriodBoundaries(cur);
+        if(!B)return null;
+        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const fromBlock=Math.max(0,B['24h'],launch); // audit the last 24h (or since launch)
+
+        // ALL transfers of UFO in the window, not just fee transfers
+        const logs=await getLogsChunked(tokenAddress,[TRANSFER_TOPIC],fromBlock,cur);
+        if(!logs)return{ok:false,error:lastLogError||'chain read failed'};
+
+        const lc=a=>a.toLowerCase();
+        const contract=lc(tokenAddress);
+        const pairSet=new Set(HARDCODED_UFO_PAIRS.map(p=>lc(p.address)));
+        const topicAddr=t=>'0x'+t.slice(26);
+
+        const byTx={};
+        for(const l of logs){
+          const from=lc(topicAddr(l.topics[1])), to=lc(topicAddr(l.topics[2]));
+          const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
+          (byTx[l.transactionHash]=byTx[l.transactionHash]||[]).push({from,to,amt});
+        }
+
+        let swapLegs=0,taxedLegs=0,untaxedLegs=0,untaxedTokens=0;
+        const untaxedBy={}; // counterparty -> {legs, tokens}
+        for(const tx of Object.keys(byTx)){
+          const ls=byTx[tx];
+          const feeSenders={};
+          for(const l of ls){ if(l.to===contract)feeSenders[l.from]=(feeSenders[l.from]||0)+1; }
+          for(const l of ls){
+            if(l.to===contract)continue;                       // the fee transfer itself
+            const fromPair=pairSet.has(l.from), toPair=pairSet.has(l.to);
+            if(!fromPair&&!toPair)continue;                    // not a swap leg
+            swapLegs++;
+            if(feeSenders[l.from]>0){feeSenders[l.from]--;taxedLegs++;continue;}
+            untaxedLegs++; untaxedTokens+=l.amt;
+            const cp=fromPair?l.to:l.from;
+            const e=untaxedBy[cp]||(untaxedBy[cp]={legs:0,tokens:0});
+            e.legs++; e.tokens+=l.amt;
+          }
+        }
+
+        // Ask the contract whether each untaxed counterparty is actually exempt.
+        const parties=Object.keys(untaxedBy);
+        const flags=await Promise.all(parties.map(async a=>{
+          const r=await ethCallRead(tokenAddress,SEL_IS_EXCLUDED_FROM_FEE+encodeAddress(a));
+          return r===null?null:(BigInt(r)!==0n);
+        }));
+
+        // The owner is exempt by the constructor; label it so it isn't reported as a surprise.
+        const ownerAddr=wordToAddress(await ethCallRead(tokenAddress,SEL_OWNER));
+        const ownerLc=ownerAddr?lc(ownerAddr):null;
+        const rows=parties.map((a,i)=>({
+          address:a, legs:untaxedBy[a].legs, tokens:untaxedBy[a].tokens,
+          excluded:flags[i],
+          known:(a===contract?'UFO contract':(a===lc(BURN_ADDRESS)?'burn address':(a===ownerLc?'owner':null)))
+        })).sort((x,y)=>y.tokens-x.tokens);
+
+        // The alarm: untaxed AND not exempt, and not the contract/burn.
+        const unexplained=rows.filter(r=>r.excluded===false);
+        const unknownExempt=rows.filter(r=>r.excluded===true&&!r.known);
+
+        const out={ok:true,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        feeAuditCache[key]=out;
+
+        console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
+        console.log(`swap legs: ${swapLegs} | taxed: ${taxedLegs} | untaxed: ${untaxedLegs} (${untaxedTokens.toLocaleString()} UFO)`);
+        if(rows.length)console.table(rows.map(r=>({address:r.address,role:r.known||'(other)',untaxed_legs:r.legs,untaxed_UFO:Math.round(r.tokens),exemptOnChain:r.excluded})));
+        if(unexplained.length)console.error('*** TAX BYPASS: untaxed swaps by addresses that are NOT fee-exempt ***',unexplained);
+        else if(unknownExempt.length)console.warn('Untaxed swaps by exempt addresses other than the contract/burn/owner:',unknownExempt);
+        else console.log('%cAll untaxed swaps are the contract, the burn address, or the owner. No bypass.','color:#7CFC00');
+        return out;
+      }catch(e){console.error('fetchFeeExemptionAudit error:',e);return{ok:false,error:e.message};}
+    };
+
     // Token amounts span ~10 orders of magnitude here (hundreds of millions of UFO vs
     // a fraction of a WETH). Math.floor() would render 0.25 WETH as "0", so scale the
     // precision to the magnitude instead of truncating.
@@ -3357,6 +3459,7 @@
       const[realizedLoading,setRealizedLoading]=useState(false);
       const[ptgcByUfoLive,setPtgcByUfoLive]=useState(null); // MIGRATION: NEW contract's PTGC burns
       const[feeRetry,setFeeRetry]=useState(0);
+      const[feeAudit,setFeeAudit]=useState(null); // MIGRATION: were any swaps untaxed, and by whom?
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
       const[daoData,setDaoData]=useState(null);
@@ -3439,6 +3542,8 @@
           .then(r=>{if(!cancelled)setRealizedFees(r);})
           .catch(e=>{if(!cancelled)setRealizedFees({ok:false,error:e.message||'error'});})
           .finally(()=>{if(!cancelled)setRealizedLoading(false);});
+        fetchFeeExemptionAudit(TOKENS.UFO.address,firstPoolMs)
+          .then(a=>{if(!cancelled)setFeeAudit(a);}).catch(()=>{});
         return()=>{cancelled=true;};
       },[token,data?.pairs,feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
@@ -4348,6 +4453,27 @@
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
+                        {/* MIGRATION: fee-exemption audit — proves no wallet is bypassing the tax */}
+                        {token==='UFO'&&feeAudit&&feeAudit.ok&&(
+                          feeAudit.unexplained.length>0?(
+                            <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40">
+                              <div className="text-red-300 text-xs font-bold">⚠ TAX BYPASS DETECTED</div>
+                              <div className="text-red-200/80 text-[11px] mt-0.5">
+                                {feeAudit.unexplained.length} address{feeAudit.unexplained.length===1?'':'es'} made untaxed swaps but {feeAudit.unexplained.length===1?'is':'are'} not fee-exempt. See console.
+                              </div>
+                            </div>
+                          ):feeAudit.unknownExempt.length>0?(
+                            <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30">
+                              <div className="text-amber-300 text-[11px] font-semibold">
+                                {feeAudit.unknownExempt.length} fee-exempt wallet{feeAudit.unknownExempt.length===1?'':'s'} traded untaxed (not the contract, burn, or owner). See console.
+                              </div>
+                            </div>
+                          ):(
+                            <div className="mb-3 text-white/35 text-[11px]">
+                              {feeAudit.taxedLegs.toLocaleString()}/{feeAudit.swapLegs.toLocaleString()} swaps taxed · {feeAudit.untaxedLegs.toLocaleString()} untaxed, all by the contract or burn address
+                            </div>
+                          )
+                        )}
                         <div className="flex-1"></div>
                         {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {(showLive?liveItems:orderedItems).map((item,i)=>{
