@@ -625,6 +625,7 @@
     const PAIR_SWAP_TOPIC='0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
     const PAIR_MINT_TOPIC='0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f';
     const PAIR_BURN_TOPIC='0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496';
+    const SEL_TOKEN0='0x0dfe1681'; // token0()
     const feeAuditCache={};
 
     const fetchFeeExemptionAudit=async(tokenAddress,firstPoolMs)=>{
@@ -646,7 +647,8 @@
 
         const lc=a=>a.toLowerCase();
         const contract=lc(tokenAddress);
-        const pairSet=new Set(HARDCODED_UFO_PAIRS.map(p=>lc(p.address)));
+        const pairAddrsRaw=HARDCODED_UFO_PAIRS.map(p=>p.address);
+        const pairSet=new Set(pairAddrsRaw.map(lc));
         const topicAddr=t=>'0x'+t.slice(26);
 
         const byTx={};
@@ -656,22 +658,43 @@
           (byTx[l.transactionHash]=byTx[l.transactionHash]||[]).push({from,to,amt});
         }
 
-        // Ask each pair what kind of action happened in each transaction.
-        const pairAddrs=HARDCODED_UFO_PAIRS.map(p=>p.address);
-        const kindByTx={}; // txHash -> 'swap' | 'liquidity'
-        for(const pa of pairAddrs){
-          const [sw,mn,bn]=await Promise.all([
-            getLogsChunked(pa,[PAIR_SWAP_TOPIC],fromBlock,cur),
+        /* Classify each LEG, not each transaction. A swapback tx contains a Swap AND
+           three Mints; labelling the whole tx "swap" mislabels the LP adds inside it.
+           Mint(sender, amount0, amount1) and Burn(sender, amount0, amount1, to) carry the
+           exact token amounts, so we match a leg to a liquidity event by amount. Anything
+           that doesn't match a Mint/Burn amount in its own tx+pair is a real swap. */
+        const liqByTxPair={}; // `${tx}|${pair}` -> [ufoAmount, ...]
+        for(const pa of pairAddrsRaw){
+          const paLc=lc(pa);
+          const t0=wordToAddress(await ethCallRead(pa,SEL_TOKEN0));
+          const ufoIsToken0=t0&&lc(t0)===contract;
+          const decodePair=(data)=>{
+            const h=data.startsWith('0x')?data.slice(2):data;
+            const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64));
+            return ufoIsToken0?w(0):w(1);
+          };
+          const[mn,bn]=await Promise.all([
             getLogsChunked(pa,[PAIR_MINT_TOPIC],fromBlock,cur),
             getLogsChunked(pa,[PAIR_BURN_TOPIC],fromBlock,cur)
           ]);
-          (sw||[]).forEach(l=>{kindByTx[l.transactionHash]='swap';});
-          (mn||[]).forEach(l=>{if(!kindByTx[l.transactionHash])kindByTx[l.transactionHash]='liquidity';});
-          (bn||[]).forEach(l=>{if(!kindByTx[l.transactionHash])kindByTx[l.transactionHash]='liquidity';});
+          for(const l of (mn||[]).concat(bn||[])){
+            const k=`${l.transactionHash}|${paLc}`;
+            (liqByTxPair[k]=liqByTxPair[k]||[]).push(weiToTokens(decodePair(l.data)));
+          }
         }
+        // A leg is a liquidity move if its amount matches an unconsumed Mint/Burn amount.
+        const matchLiquidity=(tx,pair,amt)=>{
+          const arr=liqByTxPair[`${tx}|${pair}`];
+          if(!arr||!arr.length)return false;
+          const tol=Math.max(1,Math.abs(amt)*1e-6);
+          const i=arr.findIndex(v=>Math.abs(v-amt)<=tol);
+          if(i<0)return false;
+          arr.splice(i,1);
+          return true;
+        };
 
         let swapLegs=0,taxedLegs=0,untaxedLegs=0,untaxedTokens=0,taxedTokens=0;
-        let untaxedSwapTokens=0,untaxedLiqTokens=0;
+        let untaxedSwapTokens=0,untaxedLiqTokens=0,taxedLiqTokens=0;
         const untaxedBy={}; // counterparty -> {legs, tokens, swapTokens, liqTokens}
         for(const tx of Object.keys(byTx)){
           const ls=byTx[tx];
@@ -682,14 +705,21 @@
             const fromPair=pairSet.has(l.from), toPair=pairSet.has(l.to);
             if(!fromPair&&!toPair)continue;                    // not a swap leg
             swapLegs++;
-            if(feeSenders[l.from]>0){feeSenders[l.from]--;taxedLegs++;taxedTokens+=l.amt;continue;}
+            if(feeSenders[l.from]>0){
+              feeSenders[l.from]--;taxedLegs++;
+              const pr=fromPair?l.from:l.to;
+              if(matchLiquidity(tx,pr,l.amt))taxedLiqTokens+=l.amt; else taxedTokens+=l.amt;
+              continue;
+            }
             untaxedLegs++; untaxedTokens+=l.amt;
-            const kind=kindByTx[tx]||'unknown';
-            if(kind==='swap')untaxedSwapTokens+=l.amt; else if(kind==='liquidity')untaxedLiqTokens+=l.amt;
+            const pair=fromPair?l.from:l.to;
+            const isLiq=matchLiquidity(tx,pair,l.amt);
+            if(isLiq)untaxedLiqTokens+=l.amt; else untaxedSwapTokens+=l.amt;
             const cp=fromPair?l.to:l.from;
-            const e=untaxedBy[cp]||(untaxedBy[cp]={legs:0,tokens:0,swapTokens:0,liqTokens:0});
+            const e=untaxedBy[cp]||(untaxedBy[cp]={legs:0,tokens:0,swapTokens:0,liqTokens:0,txs:[]});
             e.legs++; e.tokens+=l.amt;
-            if(kind==='swap')e.swapTokens+=l.amt; else if(kind==='liquidity')e.liqTokens+=l.amt;
+            if(isLiq)e.liqTokens+=l.amt; else e.swapTokens+=l.amt;
+            if(e.txs.length<4)e.txs.push({tx,dir:fromPair?'out of pool':'into pool',kind:isLiq?'liquidity':'SWAP',amt:l.amt});
           }
         }
 
@@ -705,7 +735,7 @@
         const ownerLc=ownerAddr?lc(ownerAddr):null;
         const rows=parties.map((a,i)=>({
           address:a, legs:untaxedBy[a].legs, tokens:untaxedBy[a].tokens,
-          swapTokens:untaxedBy[a].swapTokens, liqTokens:untaxedBy[a].liqTokens,
+          swapTokens:untaxedBy[a].swapTokens, liqTokens:untaxedBy[a].liqTokens, txs:untaxedBy[a].txs,
           excluded:flags[i],
           known:(a===contract?'UFO contract':(a===lc(BURN_ADDRESS)?'burn address':(a===ownerLc?'owner':null)))
         })).sort((x,y)=>y.tokens-x.tokens);
@@ -719,8 +749,8 @@
            the gap is a MEASUREMENT problem (missing logs / different window), not
            fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
            gross them up by the tax rate to compare like-for-like with DEX volume. */
-        const swapTokens=taxedTokens+untaxedTokens;
-        const out={ok:true,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
+        const out={ok:true,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         feeAuditCache[key]=out;
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
@@ -4542,6 +4572,19 @@
                                       <td className="py-1">{r.excluded===true?'yes':r.excluded===false?'NO ⚠':'?'}</td>
                                     </tr>
                                   ))}
+                                  {feeAudit.rows.filter(r=>r.txs&&r.txs.length).map(r=>(
+                                    <tr key={r.address+'-tx'} className="border-t border-white/5">
+                                      <td colSpan={6} className="py-1 pl-2 text-white/35">
+                                        <span className="text-white/45">{r.known||r.address.slice(0,10)}</span> sample txs:{' '}
+                                        {r.txs.map(t=>(
+                                          <a key={t.tx} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer"
+                                             className="mr-2 underline hover:text-white/70">
+                                            {t.tx.slice(0,8)}… <span className={t.kind==='SWAP'?'text-amber-300':'text-sky-300'}>{t.kind}</span> {t.dir}
+                                          </a>
+                                        ))}
+                                      </td>
+                                    </tr>
+                                  ))}
                                 </tbody>
                               </table>
                               {/* Decisive comparison: what the chain says vs what DexScreener says */}
@@ -4553,7 +4596,7 @@
                                 const diff=dexUsd-onChainUsd;
                                 return(
                                   <div className="mt-2 pt-2 border-t border-white/10 text-[10px] space-y-0.5">
-                                    <div className="text-white/50">on-chain swap volume (this window): <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.swapTokens))} UFO ≈ {fmtUSD(onChainUsd)}</span></div>
+                                    <div className="text-white/50">on-chain REAL SWAP volume: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.swapTokens))} UFO</span> · liquidity moves excluded: <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.taxedLiqTokens+feeAudit.untaxedLiqTokens))} UFO</span></div>
                                     <div className="text-white/50">of which untaxed: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.untaxedTokens))} UFO</span> — <span className="text-amber-300">{fmtAbbr(Math.round(feeAudit.untaxedSwapTokens))} real swaps</span> · <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.untaxedLiqTokens))} liquidity moves</span></div>
                                     <div className="text-white/50">untaxed SWAP volume only: <span className="text-white/80">≈ {fmtUSD(feeAudit.untaxedSwapTokens*px)}</span> ← the only part that inflates DEX volume</div>
                                     <div className="text-white/50">DexScreener 24h volume: <span className="text-white/80">{fmtUSD(dexUsd)}</span></div>
