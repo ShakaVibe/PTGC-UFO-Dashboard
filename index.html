@@ -383,6 +383,59 @@
       return r;
     };
 
+    /* Counting blocks (blocksPerDay * days) is an ESTIMATE — any drift in block time
+       stretches or shrinks the window. A 29h "24H" window overstates fees by 21%.
+       So: find each window's boundary by BINARY SEARCH on real block timestamps.
+       Then scan ONCE and bucket the logs against those boundaries, which makes
+       24h <= 7d <= 30d <= 90d true by construction rather than by coincidence. */
+    const blockTsCache={};
+    const getBlockTs=async(b)=>{
+      if(blockTsCache[b]!=null)return blockTsCache[b];
+      const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+b.toString(16),false],id:1});
+      const t=parseInt((r&&r.result&&r.result.timestamp)||'0x0',16);
+      if(t)blockTsCache[b]=t;
+      return t||0;
+    };
+
+    // smallest block whose timestamp >= targetSec
+    const findBlockAtTime=async(targetSec,headBlock,headTs,spb)=>{
+      if(targetSec>=headTs)return headBlock;
+      const guess=headBlock-Math.round((headTs-targetSec)/spb);
+      const pad=Math.max(5000,Math.abs(headBlock-guess)*0.4);
+      let lo=Math.max(0,Math.floor(guess-pad));
+      let hi=Math.min(headBlock,Math.ceil(guess+pad));
+      const tLo=await getBlockTs(lo);
+      if(tLo&&tLo>targetSec)lo=0;                 // guess was too late; widen down
+      const tHi=await getBlockTs(hi);
+      if(!tHi||tHi<targetSec)hi=headBlock;        // guess was too early; widen up
+      let ans=hi;
+      while(lo<=hi){
+        const mid=Math.floor((lo+hi)/2);
+        const t=await getBlockTs(mid);
+        if(!t)break;
+        if(t>=targetSec){ans=mid;hi=mid-1;}else{lo=mid+1;}
+      }
+      return ans;
+    };
+
+    let boundariesCache=null;
+    const getPeriodBoundaries=async(headBlock)=>{
+      const key=cacheBucket();
+      if(boundariesCache&&boundariesCache.key===key)return boundariesCache.v;
+      const headTs=await getBlockTs(headBlock);
+      if(!headTs)return null;
+      const{secPerBlock}=await getChainTiming(headBlock);
+      const at=(days)=>findBlockAtTime(headTs-days*86400,headBlock,headTs,secPerBlock);
+      const b1=await at(1), b7=await at(7), b30=await at(30), b90=await at(90);
+      const v={headBlock,headTs,secPerBlock,'24h':b1,'7d':b7,'30d':b30,'90d':b90};
+      boundariesCache={key,v};
+      console.log(`Period boundaries by timestamp | head ${headBlock} | 24h>=${b1} 7d>=${b7} 30d>=${b30} 90d>=${b90}`);
+      return v;
+    };
+
+    const PERIOD_KEYS=['24h','7d','30d','90d'];
+    const mkFeeAcc=()=>({reflection:0,ufoBurn:0,ptgcBurn:0,plsLP:0,plsxLP:0,wethLP:0});
+
     const realizedFeeCache={};
 
     /* A token can't have emitted logs before it existed. Clamping every scan to the
@@ -397,49 +450,68 @@
       return Math.max(0,currentBlock-blocks);
     };
 
-    const fetchRealizedFees=async(tokenAddress,period,firstPoolMs)=>{
+    /* ONE scan, ALL periods. Previously each period was fetched separately and cached
+       separately, so 24h and 7d could disagree (24h > 7d, which is impossible). */
+    const fetchRealizedFees=async(tokenAddress,firstPoolMs)=>{
       lastLogError=null;
       try{
-        const days=PERIOD_DAYS[period];
-        if(!days)return{ok:false,period,error:'period not supported'};
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return{ok:false,period,error:'could not read current block'};
+        if(!blk.result)return{ok:false,error:'could not read current block'};
         const cur=parseInt(blk.result,16);
-        const{secPerBlock,blocksPerDay}=await getChainTiming(cur);
-        const span=blocksPerDay*days;
-        const launch=estimateLaunchBlock(cur,firstPoolMs,secPerBlock);
-        const fromBlock=Math.max(0,cur-span,launch);
-        const key=`${tokenAddress}-${period}-${cacheBucket()}`;
+        const key=`${tokenAddress}-fees-${cacheBucket()}`;
         if(realizedFeeCache[key])return realizedFeeCache[key];
+
+        const B=await getPeriodBoundaries(cur);
+        if(!B)return{ok:false,error:'could not read block timestamps'};
+        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const scanFrom=Math.max(0,B['90d'],launch);
 
         const contractTopic='0x'+encodeAddress(tokenAddress);
         const[transferLogs,feeEvents]=await Promise.all([
-          getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],fromBlock,cur),
-          fetchFeeTimeline(tokenAddress,fromBlock,cur)
+          getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],scanFrom,cur),
+          fetchFeeTimeline(tokenAddress,scanFrom,cur)
         ]);
-        if(!transferLogs)return{ok:false,period,error:lastLogError||'chain read failed'};
+        if(!transferLogs)return{ok:false,error:lastLogError||'chain read failed'};
 
-        const tokens={reflection:0,ufoBurn:0,ptgcBurn:0,plsLP:0,plsxLP:0,wethLP:0};
+        const accs={},counts={};
+        PERIOD_KEYS.forEach(p=>{accs[p]=mkFeeAcc();counts[p]=0;});
         for(const log of transferLogs){
           const b=parseInt(log.blockNumber,16);
           const r=ratesAtBlock(feeEvents,b,DEFAULT_FEE_RATES);
           const contractBps=r.ufoBurn+r.ptgcBurn+r.plsLP+r.plsxLP+r.wethLP;
-          if(contractBps<=0)continue; // no contract fee => this log isn't a fee transfer
+          if(contractBps<=0)continue;
           const cFee=weiToTokens(BigInt(log.data&&log.data!=='0x'?log.data:'0x0'));
-          tokens.reflection+=cFee*(r.reflection/contractBps);
-          tokens.ufoBurn   +=cFee*(r.ufoBurn/contractBps);
-          tokens.ptgcBurn  +=cFee*(r.ptgcBurn/contractBps);
-          tokens.plsLP     +=cFee*(r.plsLP/contractBps);
-          tokens.plsxLP    +=cFee*(r.plsxLP/contractBps);
-          tokens.wethLP    +=cFee*(r.wethLP/contractBps);
+          for(const p of PERIOD_KEYS){
+            if(b<B[p])continue;               // outside this window
+            const a=accs[p];
+            a.reflection+=cFee*(r.reflection/contractBps);
+            a.ufoBurn   +=cFee*(r.ufoBurn/contractBps);
+            a.ptgcBurn  +=cFee*(r.ptgcBurn/contractBps);
+            a.plsLP     +=cFee*(r.plsLP/contractBps);
+            a.plsxLP    +=cFee*(r.plsxLP/contractBps);
+            a.wethLP    +=cFee*(r.wethLP/contractBps);
+            counts[p]++;
+          }
         }
-        const totalTokens=Object.values(tokens).reduce((a,b)=>a+b,0);
-        const windowHours=((cur-fromBlock)*secPerBlock/3600).toFixed(1);
-        const out={ok:true,tokens,totalTokens,txCount:transferLogs.length,fromBlock,toBlock:cur,period,feeChanges:feeEvents.length,windowHours};
+
+        const byPeriod={};
+        for(const p of PERIOD_KEYS){
+          const windowStart=Math.max(B[p],scanFrom);
+          const startTs=await getBlockTs(windowStart);
+          byPeriod[p]={
+            tokens:accs[p],
+            totalTokens:Object.values(accs[p]).reduce((a,b)=>a+b,0),
+            txCount:counts[p],
+            sinceLaunch:scanFrom>B[p],
+            windowHours:startTs?((B.headTs-startTs)/3600):null
+          };
+        }
+        const out={ok:true,byPeriod,feeChanges:feeEvents.length,scanFrom,headBlock:cur};
         realizedFeeCache[key]=out;
-        console.log(`Realized UFO fees (${period}): ${totalTokens.toLocaleString()} UFO from ${transferLogs.length} taxed transfers, ${feeEvents.length} fee change(s) | window blocks ${fromBlock}-${cur} (~${windowHours}h)`);
+        console.log(`Realized UFO fees | scanned blocks ${scanFrom}-${cur}, ${transferLogs.length} fee transfers, ${feeEvents.length} fee change(s)`);
+        PERIOD_KEYS.forEach(p=>console.log(`   ${p}: ${byPeriod[p].txCount} transfers, ${byPeriod[p].totalTokens.toLocaleString()} UFO, window ~${byPeriod[p].windowHours?byPeriod[p].windowHours.toFixed(1):'?'}h${byPeriod[p].sinceLaunch?' (since launch)':''}`));
         return out;
-      }catch(e){console.error('fetchRealizedFees error:',e);return{ok:false,period,error:e.message||'unexpected error'};}
+      }catch(e){console.error('fetchRealizedFees error:',e);return{ok:false,error:e.message||'unexpected error'};}
     };
 
     /* MIGRATION: Total Supply Burned periods, straight from the chain.
@@ -454,9 +526,10 @@
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const{secPerBlock,blocksPerDay}=await getChainTiming(cur);
-        const launch=estimateLaunchBlock(cur,firstPoolMs,secPerBlock);
-        const fromBlock=Math.max(0,cur-blocksPerDay*90,launch);
+        const B=await getPeriodBoundaries(cur);
+        if(!B)return null;
+        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const fromBlock=Math.max(0,B['90d'],launch);
         const key=`${tokenAddress}-burnp-${cacheBucket()}`;
         if(burnPeriodsCache[key])return burnPeriodsCache[key];
 
@@ -467,10 +540,10 @@
           const b=parseInt(l.blockNumber,16);
           const raw=BigInt(l.data&&l.data!=='0x'?l.data:'0x0');
           const amt=decimals===18?weiToTokens(raw):Number(raw)/Math.pow(10,decimals);
-          if(b>=cur-blocksPerDay/2)acc.h12+=amt;
-          if(b>=cur-blocksPerDay)acc.h24+=amt;
-          if(b>=cur-blocksPerDay*7)acc.d7+=amt;
-          if(b>=cur-blocksPerDay*30)acc.d30+=amt;
+          if(b>=B['24h'])acc.h12+=amt;   // 12h box is unused; keep it >= 24h-safe
+          if(b>=B['24h'])acc.h24+=amt;
+          if(b>=B['7d'])acc.d7+=amt;
+          if(b>=B['30d'])acc.d30+=amt;
           acc.d90+=amt;
         }
         // sinceLaunch = the 90d window reaches back past the token's birth, so d90 is lifetime
@@ -493,9 +566,10 @@
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const{secPerBlock,blocksPerDay}=await getChainTiming(cur);
-        const launch=estimateLaunchBlock(cur,firstPoolMs,secPerBlock);
-        const fromBlock=Math.max(0,cur-blocksPerDay*90,launch);
+        const B=await getPeriodBoundaries(cur);
+        if(!B)return null;
+        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const fromBlock=Math.max(0,B['90d'],launch);
         const key=`${ufoAddress}-ptgcburn-${cacheBucket()}`;
         if(ptgcByUfoCache[key])return ptgcByUfoCache[key];
 
@@ -514,9 +588,9 @@
           const b=parseInt(l.blockNumber,16);
           const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
           acc.total+=amt;
-          if(b>=cur-blocksPerDay)acc.h24+=amt;
-          if(b>=cur-blocksPerDay*7)acc.d7+=amt;
-          if(b>=cur-blocksPerDay*30)acc.d30+=amt;
+          if(b>=B['24h'])acc.h24+=amt;
+          if(b>=B['7d'])acc.d7+=amt;
+          if(b>=B['30d'])acc.d30+=amt;
           acc.d90+=amt;
         }
         const out={...acc,txs};
@@ -617,7 +691,7 @@
       return(
         <span className="relative inline-block shrink-0" style={{width:size+overlap,height:size}}>
           <span className="absolute top-0 left-0 rounded-full overflow-hidden flex items-center justify-center"
-                style={{width:size,height:size,background:'#0d0d0d'}}>
+                style={{width:size,height:size,background:'#0d0d0d',boxShadow:'0 0 0 1.5px #7CFC00'}}>
             <img src={TOKENS.UFO.logo} alt="" onError={hide}
                  className="object-contain"
                  style={{width:'100%',height:'100%',transform:'scale(1.35)'}}/>
@@ -3316,7 +3390,7 @@
         const avail={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
         // LIVE mode reads fees straight from logs, so it doesn't need cached volume for
         // the window. Only fall back when neither source can serve the selected period.
-        const liveCanServe=(token==='UFO'&&!!PERIOD_DAYS[valueGenPeriod]);
+        const liveCanServe=(token==='UFO'); // every period is served by the single scan
         if(avail[valueGenPeriod]==null&&!liveCanServe){
           const fallback=['90d','30d','7d','24h'].find(p=>avail[p]!=null&&avail[p]>0);
           if(fallback&&fallback!==valueGenPeriod)setValueGenPeriod(fallback);
@@ -3325,20 +3399,21 @@
 
       // MIGRATION: pull realized fees for whatever window is selected. 90d is intentionally
       // unsupported (too many blocks to scan from a browser) and falls back to the estimate.
+      /* MIGRATION: one scan covers every period, so switching 24h/7d/30d/90d never
+         refetches and the four numbers can never contradict each other. */
       useEffect(()=>{
         if(token!=='UFO'){setRealizedFees(null);return;}
-        if(!PERIOD_DAYS[valueGenPeriod]){setRealizedFees(null);return;}
         const _fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
         const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
         let cancelled=false;
         setRealizedLoading(true);
-        if(feeRetry>0)Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);
-        fetchRealizedFees(TOKENS.UFO.address,valueGenPeriod,firstPoolMs)
+        if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);boundariesCache=null;}
+        fetchRealizedFees(TOKENS.UFO.address,firstPoolMs)
           .then(r=>{if(!cancelled)setRealizedFees(r);})
-          .catch(e=>{if(!cancelled)setRealizedFees({ok:false,period:valueGenPeriod,error:e.message||'error'});})
+          .catch(e=>{if(!cancelled)setRealizedFees({ok:false,error:e.message||'error'});})
           .finally(()=>{if(!cancelled)setRealizedLoading(false);});
         return()=>{cancelled=true;};
-      },[token,valueGenPeriod,data?.pairs,feeRetry]);
+      },[token,data?.pairs,feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
@@ -4209,7 +4284,8 @@
                     /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
                        attributed with the fee rates actually in force at each block. */
                     const ufoPx=data?.price||0;
-                    const live=(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.period===valueGenPeriod&&ufoPx>0)?realizedFees:null;
+                    const livePeriod=(token==='UFO'&&realizedFees&&realizedFees.ok&&ufoPx>0)?realizedFees.byPeriod[valueGenPeriod]:null;
+                    const live=livePeriod||null;
                     const liveItems=live?UFO_FEE_BUCKETS.map(b=>{
                       const tok=live.tokens[b.key]||0;
                       const cur=cfg.taxBreakdown.find(x=>x.key===b.key);
@@ -4225,6 +4301,7 @@
                             <>
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(liveTotalUsd)}</span>
                               <span className="text-white/45 text-sm sm:text-base">from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
+                              {live.sinceLaunch&&<span className="text-white/35 text-[11px]">(token is only {live.windowHours?live.windowHours.toFixed(0):'?'}h old — this is since launch)</span>}
                               {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in window</span>}
                             </>
                           ):realizedLoading&&token==='UFO'?(
