@@ -623,7 +623,13 @@
        liquidity moves tokens to/from the pair too. The pair tells us which:
        Swap for a trade, Mint for adding liquidity, Burn for removing it. */
     const PAIR_SWAP_TOPIC='0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
+    /* PulseX's pair is NOT a straight Uniswap V2 fork here: its Mint carries a 4th arg.
+         UniV2:   Mint(address,uint256,uint256)
+         PulseX:  Mint(address,uint256,uint256,address)
+       Different signature => different topic. Filtering on the UniV2 hash silently
+       matched nothing, which is why "0 liquidity moves" looked true. Accept both. */
     const PAIR_MINT_TOPIC='0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f';
+    const PAIR_MINT_TOPIC_PULSEX='0xdbba30eb0402b389513e87f51f4db2db80bed454384ec6925a24097c3548a02a';
     const PAIR_BURN_TOPIC='0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496';
     const SEL_TOKEN0='0x0dfe1681';       // token0()
     const SEL_MAX_SLIPPAGE='0x8c04166f'; // maxSlippage()
@@ -634,7 +640,8 @@
     // Name lookup so we can see what a pair ACTUALLY emitted, without assuming.
     const TOPIC_NAMES={
       '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822':'Swap',
-      '0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f':'Mint',
+      '0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f':'Mint(v2)',
+      '0xdbba30eb0402b389513e87f51f4db2db80bed454384ec6925a24097c3548a02a':'Mint(pulsex)',
       '0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496':'Burn',
       '0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1':'Sync',
       '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef':'Transfer',
@@ -702,7 +709,7 @@
             return ufoIsToken0?w(0):w(1);
           };
           const[mn,bn]=await Promise.all([
-            getLogsChunked(pa,[PAIR_MINT_TOPIC],fromBlock,cur),
+            getLogsChunked(pa,[[PAIR_MINT_TOPIC,PAIR_MINT_TOPIC_PULSEX]],fromBlock,cur),
             getLogsChunked(pa,[PAIR_BURN_TOPIC],fromBlock,cur)
           ]);
           if(mn===null||bn===null)liqDetectionOk=false;
