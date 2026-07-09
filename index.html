@@ -255,6 +255,17 @@
       }catch(e){console.error('resolveUfoPairs error:',e);return null;}
     };
 
+    // Token amounts span ~10 orders of magnitude here (hundreds of millions of UFO vs
+    // a fraction of a WETH). Math.floor() would render 0.25 WETH as "0", so scale the
+    // precision to the magnitude instead of truncating.
+    const fmtTokenQty=(q)=>{
+      if(!isFinite(q)||q<=0)return '0';
+      if(q>=1)return fmtAbbr(Math.floor(q));
+      if(q>=0.001)return q.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+      if(q>=0.000001)return q.toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+      return q.toExponential(2);
+    };
+
     // Ordered buckets for the Value Generated panel. PTGC keeps its legacy shape.
     const buildValueGenItems=(token,cfg)=>{
       if(token==='PTGC'){
@@ -2927,6 +2938,15 @@
       const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0,d90:0});
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
+      // MIGRATION: a brand-new token has no 7d/30d/90d history. Don't strand the user on
+      // an empty panel — drop to the longest window that actually has data.
+      useEffect(()=>{
+        const avail={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
+        if(avail[valueGenPeriod]==null){
+          const fallback=['90d','30d','7d','24h'].find(p=>avail[p]!=null&&avail[p]>0);
+          if(fallback&&fallback!==valueGenPeriod)setValueGenPeriod(fallback);
+        }
+      },[volumeByPeriod]);
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
       const[daoData,setDaoData]=useState(null);
@@ -3363,17 +3383,33 @@
           }
           
           // Use pre-fetched CoinGecko data for volume (7d, 30d, 90d)
+          /* MIGRATION: coingecko-data.json in the repo was built for the OLD UFO token.
+             Feeding its 7d/30d/90d volume into Value Generated overstates everything.
+             Two guards, both of which any honest series must pass:
+               (a) never quote a window longer than the token has actually existed;
+               (b) a longer window can never contain less volume than the 24h inside it.
+             Either guard failing means the cached series doesn't describe this token,
+             so we return null and the panel shows "Data unavailable" instead of a number. */
+          const v24 = d?.vol || 0;
+          const _vFirstPool = d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m, Infinity);
+          const _ageDays = (_vFirstPool && isFinite(_vFirstPool)) ? (Date.now()-_vFirstPool)/86400000 : null;
+          const gateVol = (windowDays, val) => {
+            if (val == null || !isFinite(val) || val <= 0) return null;
+            if (_ageDays == null || _ageDays < windowDays) return null;  // younger than the window
+            if (val < v24) return null;                                   // incoherent => stale series
+            return val;
+          };
           if (coingeckoDataCache && coingeckoDataCache[token]) {
-            const v24 = d?.vol || 0;
+            const cv = coingeckoDataCache[token].volume || {};
             setVolumeByPeriod({
               vol24h: v24,
-              vol7d: coingeckoDataCache[token].volume?.vol7d || 0,
-              vol30d: coingeckoDataCache[token].volume?.vol30d || 0,
-              vol90d: coingeckoDataCache[token].volume?.vol90d || 0
+              vol7d:  gateVol(7,  cv.vol7d),
+              vol30d: gateVol(30, cv.vol30d),
+              vol90d: gateVol(90, cv.vol90d)
             });
           } else {
             // Fallback - only show 24h
-            setVolumeByPeriod({ vol24h: d?.vol || 0, vol7d: null, vol30d: null, vol90d: null });
+            setVolumeByPeriod({ vol24h: v24, vol7d: null, vol30d: null, vol90d: null });
           }
           
           // Calculate holder history from snapshots
@@ -3839,7 +3875,7 @@
                             const dollarVal=periodVol*(item.pct/100);
                             // LP buckets return two parts (half UFO + half partner) — see valueGenParts().
                             const parts=valueGenParts(token,item,dollarVal,vgPrices);
-                            const partsLabel=parts?parts.map(pt=>`${fmtAbbr(Math.floor(pt.qty))} ${pt.symbol}`).join(' + '):null;
+                            const partsLabel=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
                             return(
                               <div key={i} className={`bg-white/[0.04] border ${item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
@@ -4981,7 +5017,7 @@
                             {orderedItems.map((item,i)=>{
                               const dollarVal=periodVol*(item.pct/100);
                               const parts=valueGenParts(token,item,dollarVal,vgPrices);
-                              const partsLabel=parts?parts.map(pt=>`${fmtAbbr(Math.floor(pt.qty))} ${pt.symbol}`).join(' + '):null;
+                              const partsLabel=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
                               return(
                                 <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg ${valueGenShowTokens?'p-1.5':'p-2'}`}>
                                   <div className={`flex items-center gap-1 ${valueGenShowTokens?'mb-0.5':'mb-1'}`}>
