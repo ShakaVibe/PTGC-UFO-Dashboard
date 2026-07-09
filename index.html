@@ -563,6 +563,25 @@
       if(priceKey==='PLSX')return getLogo(PLSX_ADDRESS);
       return null;
     };
+
+    /* LP buckets are a PAIR, so show a pair: UFO overlapped by the partner token.
+       The partner sits on top-right with a dark ring so the two read as distinct discs. */
+    const PairLogo=({priceKey,size=16})=>{
+      const partner=bucketLogoSrc(priceKey);
+      if(!partner)return null;
+      const overlap=Math.round(size*0.62);
+      const hide=e=>{e.target.style.visibility='hidden';};
+      return(
+        <span className="relative inline-block shrink-0" style={{width:size+overlap,height:size}}>
+          <img src={TOKENS.UFO.logo} alt="" onError={hide}
+               className="absolute top-0 left-0 object-contain"
+               style={{width:size,height:size}}/>
+          <img src={partner} alt="" onError={hide}
+               className="absolute top-0 rounded-full"
+               style={{width:size,height:size,left:overlap,boxShadow:'0 0 0 1.5px #0d0d0d'}}/>
+        </span>
+      );
+    };
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     // Get highest tier creature with count for period burns
@@ -4192,8 +4211,9 @@
                             return(
                               <div key={i} className={`bg-white/[0.04] border ${item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
-                                  <span className="text-base shrink-0">{item.emoji}</span>
-                                  {item.isLP&&bucketLogoSrc(item.priceKey)&&<img src={bucketLogoSrc(item.priceKey)} alt="" className="w-4 h-4 rounded-full shrink-0" onError={e=>{e.target.style.display='none'}}/>}
+                                  {item.isLP&&bucketLogoSrc(item.priceKey)
+                                    ?<PairLogo priceKey={item.priceKey} size={17}/>
+                                    :<span className="text-base shrink-0">{item.emoji}</span>}
                                   <span className="text-white/55 text-xs sm:text-sm truncate">{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
                                 </div>
                                 {valueGenShowTokens&&partsLabel?(
@@ -5343,8 +5363,11 @@
                               return(
                                 <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg ${valueGenShowTokens?'p-1.5':'p-2'}`}>
                                   <div className={`flex items-center gap-1 ${valueGenShowTokens?'mb-0.5':'mb-1'}`}>
-                                    {item.tripleIcon?<span className="text-xs">{'\u{1F48E}'}{'\u{1F48E}'}{'\u{1F48E}'}</span>:<span className={valueGenShowTokens?'text-sm':'text-lg'}>{item.emoji}</span>}
-                                    {item.isLP&&bucketLogoSrc(item.priceKey)&&<img src={bucketLogoSrc(item.priceKey)} alt="" className="w-3.5 h-3.5 rounded-full shrink-0" onError={e=>{e.target.style.display='none'}}/>}
+                                    {item.tripleIcon
+                                      ?<span className="text-xs">{'\u{1F48E}'}{'\u{1F48E}'}{'\u{1F48E}'}</span>
+                                      :(item.isLP&&bucketLogoSrc(item.priceKey)
+                                        ?<PairLogo priceKey={item.priceKey} size={valueGenShowTokens?13:15}/>
+                                        :<span className={valueGenShowTokens?'text-sm':'text-lg'}>{item.emoji}</span>)}
                                     <span className="text-white/70 text-xs leading-tight">{item.name}</span>
                                   </div>
                                   {valueGenShowTokens&&partsLabel?(
