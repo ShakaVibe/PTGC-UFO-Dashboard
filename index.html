@@ -619,6 +619,12 @@
      * ============================================================================ */
     const SEL_IS_EXCLUDED_FROM_FEE='0x5342acb4'; // isExcludedFromFee(address)
     const SEL_OWNER='0x8da5cb5b';                // owner()
+    /* A transfer touching a pool is NOT necessarily a swap — adding or removing
+       liquidity moves tokens to/from the pair too. The pair tells us which:
+       Swap for a trade, Mint for adding liquidity, Burn for removing it. */
+    const PAIR_SWAP_TOPIC='0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
+    const PAIR_MINT_TOPIC='0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f';
+    const PAIR_BURN_TOPIC='0xdccd412f0b1252819cb1fd330b93224ca42612892bb3f4f789976e6d81936496';
     const feeAuditCache={};
 
     const fetchFeeExemptionAudit=async(tokenAddress,firstPoolMs)=>{
@@ -650,8 +656,23 @@
           (byTx[l.transactionHash]=byTx[l.transactionHash]||[]).push({from,to,amt});
         }
 
+        // Ask each pair what kind of action happened in each transaction.
+        const pairAddrs=HARDCODED_UFO_PAIRS.map(p=>p.address);
+        const kindByTx={}; // txHash -> 'swap' | 'liquidity'
+        for(const pa of pairAddrs){
+          const [sw,mn,bn]=await Promise.all([
+            getLogsChunked(pa,[PAIR_SWAP_TOPIC],fromBlock,cur),
+            getLogsChunked(pa,[PAIR_MINT_TOPIC],fromBlock,cur),
+            getLogsChunked(pa,[PAIR_BURN_TOPIC],fromBlock,cur)
+          ]);
+          (sw||[]).forEach(l=>{kindByTx[l.transactionHash]='swap';});
+          (mn||[]).forEach(l=>{if(!kindByTx[l.transactionHash])kindByTx[l.transactionHash]='liquidity';});
+          (bn||[]).forEach(l=>{if(!kindByTx[l.transactionHash])kindByTx[l.transactionHash]='liquidity';});
+        }
+
         let swapLegs=0,taxedLegs=0,untaxedLegs=0,untaxedTokens=0,taxedTokens=0;
-        const untaxedBy={}; // counterparty -> {legs, tokens}
+        let untaxedSwapTokens=0,untaxedLiqTokens=0;
+        const untaxedBy={}; // counterparty -> {legs, tokens, swapTokens, liqTokens}
         for(const tx of Object.keys(byTx)){
           const ls=byTx[tx];
           const feeSenders={};
@@ -663,9 +684,12 @@
             swapLegs++;
             if(feeSenders[l.from]>0){feeSenders[l.from]--;taxedLegs++;taxedTokens+=l.amt;continue;}
             untaxedLegs++; untaxedTokens+=l.amt;
+            const kind=kindByTx[tx]||'unknown';
+            if(kind==='swap')untaxedSwapTokens+=l.amt; else if(kind==='liquidity')untaxedLiqTokens+=l.amt;
             const cp=fromPair?l.to:l.from;
-            const e=untaxedBy[cp]||(untaxedBy[cp]={legs:0,tokens:0});
+            const e=untaxedBy[cp]||(untaxedBy[cp]={legs:0,tokens:0,swapTokens:0,liqTokens:0});
             e.legs++; e.tokens+=l.amt;
+            if(kind==='swap')e.swapTokens+=l.amt; else if(kind==='liquidity')e.liqTokens+=l.amt;
           }
         }
 
@@ -681,6 +705,7 @@
         const ownerLc=ownerAddr?lc(ownerAddr):null;
         const rows=parties.map((a,i)=>({
           address:a, legs:untaxedBy[a].legs, tokens:untaxedBy[a].tokens,
+          swapTokens:untaxedBy[a].swapTokens, liqTokens:untaxedBy[a].liqTokens,
           excluded:flags[i],
           known:(a===contract?'UFO contract':(a===lc(BURN_ADDRESS)?'burn address':(a===ownerLc?'owner':null)))
         })).sort((x,y)=>y.tokens-x.tokens);
@@ -695,13 +720,13 @@
            fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
            gross them up by the tax rate to compare like-for-like with DEX volume. */
         const swapTokens=taxedTokens+untaxedTokens;
-        const out={ok:true,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,swapTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        const out={ok:true,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         feeAuditCache[key]=out;
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
         console.log(`swap legs: ${swapLegs} | taxed: ${taxedLegs} | untaxed: ${untaxedLegs}`);
         console.log(`on-chain swap volume: ${Math.round(swapTokens).toLocaleString()} UFO  (taxed ${Math.round(taxedTokens).toLocaleString()} + untaxed ${Math.round(untaxedTokens).toLocaleString()})`);
-        console.log(`untaxed share of on-chain swap volume: ${swapTokens>0?(untaxedTokens/swapTokens*100).toFixed(1):'0'}%`);
+        console.log(`untaxed breakdown: ${Math.round(untaxedSwapTokens).toLocaleString()} UFO were real SWAPS, ${Math.round(untaxedLiqTokens).toLocaleString()} UFO were LIQUIDITY add/remove`);
         if(rows.length)console.table(rows.map(r=>({address:r.address,role:r.known||'(other)',untaxed_legs:r.legs,untaxed_UFO:Math.round(r.tokens),exemptOnChain:r.excluded})));
         if(unexplained.length)console.error('*** TAX BYPASS: untaxed swaps by addresses that are NOT fee-exempt ***',unexplained);
         else if(unknownExempt.length)console.warn('Untaxed swaps by exempt addresses other than the contract/burn/owner:',unknownExempt);
@@ -4497,6 +4522,7 @@
                                     <th className="py-1 pr-2 font-normal">Role</th>
                                     <th className="py-1 pr-2 font-normal text-right">Legs</th>
                                     <th className="py-1 pr-2 font-normal text-right">UFO</th>
+                                    <th className="py-1 pr-2 font-normal">Swap / Liquidity</th>
                                     <th className="py-1 font-normal">Exempt?</th>
                                   </tr>
                                 </thead>
@@ -4507,6 +4533,12 @@
                                       <td className="py-1 pr-2">{r.known||'(other)'}</td>
                                       <td className="py-1 pr-2 text-right">{r.legs}</td>
                                       <td className="py-1 pr-2 text-right">{fmtAbbr(Math.round(r.tokens))}</td>
+                                      <td className="py-1 pr-2">
+                                        {r.swapTokens>0&&<span className="text-amber-300">{fmtAbbr(Math.round(r.swapTokens))} swap</span>}
+                                        {r.swapTokens>0&&r.liqTokens>0&&<span className="text-white/30"> / </span>}
+                                        {r.liqTokens>0&&<span className="text-sky-300">{fmtAbbr(Math.round(r.liqTokens))} LP</span>}
+                                        {r.swapTokens===0&&r.liqTokens===0&&<span className="text-white/30">unknown</span>}
+                                      </td>
                                       <td className="py-1">{r.excluded===true?'yes':r.excluded===false?'NO ⚠':'?'}</td>
                                     </tr>
                                   ))}
@@ -4522,7 +4554,8 @@
                                 return(
                                   <div className="mt-2 pt-2 border-t border-white/10 text-[10px] space-y-0.5">
                                     <div className="text-white/50">on-chain swap volume (this window): <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.swapTokens))} UFO ≈ {fmtUSD(onChainUsd)}</span></div>
-                                    <div className="text-white/50">of which untaxed: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.untaxedTokens))} UFO ≈ {fmtUSD(untaxedUsd)}</span> ({feeAudit.swapTokens>0?(feeAudit.untaxedTokens/feeAudit.swapTokens*100).toFixed(1):'0'}%)</div>
+                                    <div className="text-white/50">of which untaxed: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.untaxedTokens))} UFO</span> — <span className="text-amber-300">{fmtAbbr(Math.round(feeAudit.untaxedSwapTokens))} real swaps</span> · <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.untaxedLiqTokens))} liquidity moves</span></div>
+                                    <div className="text-white/50">untaxed SWAP volume only: <span className="text-white/80">≈ {fmtUSD(feeAudit.untaxedSwapTokens*px)}</span> ← the only part that inflates DEX volume</div>
                                     <div className="text-white/50">DexScreener 24h volume: <span className="text-white/80">{fmtUSD(dexUsd)}</span></div>
                                     <div className={Math.abs(diff)>dexUsd*0.15?'text-amber-300/80':'text-white/40'}>
                                       difference: {fmtUSD(diff)} {Math.abs(diff)>dexUsd*0.15?'— windows differ or logs incomplete':'— within noise'}
