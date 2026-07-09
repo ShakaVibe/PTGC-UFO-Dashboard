@@ -255,6 +255,113 @@
       }catch(e){console.error('resolveUfoPairs error:',e);return null;}
     };
 
+    /* ============ MIGRATION: REALIZED on-chain fees (not a volume estimate) ============
+     * Every taxed transfer emits Transfer(sender, tokenContract, tContract), where
+     *     tContract = amount * contractBps / 10000
+     * Reflections emit nothing, but they're proportional to the same taxed amount:
+     *     tFee = amount * reflectionBps / 10000  =>  tFee = tContract * reflectionBps / contractBps
+     * So summing Transfer-to-contract logs recovers EVERY bucket exactly, provided we
+     * know the fee rates in force at each log's block. FeesUpdated gives us that timeline.
+     *
+     * Why this beats volume x rate:
+     *   - immune to launch burns, airdrops, or anyone sending tokens to 0x369
+     *   - immune to users adding/removing LP (those don't emit fee transfers to us)
+     *   - correct even when the founder changes the fee split mid-window
+     *
+     * Known caveat: a direct UFO transfer to the token contract by a human is
+     * indistinguishable from a fee and would be counted. Rare, and no reason to do it.
+     * ================================================================================= */
+    const TRANSFER_TOPIC='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+    const FEES_UPDATED_TOPIC='0x020b4e17880b9764de4da2ebf8857a187cc492ae288e9f3ec0db3e2fdb37a2ec';
+    const BLOCKS_PER_DAY=8640; // PulseChain ~10s blocks (same assumption as fetchLive24hBurn)
+    const REALIZED_PERIOD_BLOCKS={'24h':BLOCKS_PER_DAY,'7d':BLOCKS_PER_DAY*7,'30d':BLOCKS_PER_DAY*30};
+    const LOG_CHUNK=5000;
+    const MAX_LOG_CHUNKS=60;
+    // Constructor sets every fee to 100 bps. Rates before the first FeesUpdated event.
+    const DEFAULT_FEE_RATES={reflection:100,ufoBurn:100,ptgcBurn:100,plsLP:100,plsxLP:100,wethLP:100};
+
+    // BigInt -> token float without blowing through Number's 2^53 precision.
+    const weiToTokens=(bg)=>Number(bg/(10n**12n))/1e6;
+
+    const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+      const ranges=[];
+      for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
+      if(ranges.length>MAX_LOG_CHUNKS)return null; // too wide to fetch politely
+      const out=[];const CONC=5;
+      for(let i=0;i<ranges.length;i+=CONC){
+        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>rpcFetch({
+          jsonrpc:'2.0',method:'eth_getLogs',
+          params:[{address,fromBlock:'0x'+a.toString(16),toBlock:'0x'+b.toString(16),topics}],id:1
+        },20000)));
+        for(const r of res){ if(!r||!Array.isArray(r.result))return null; out.push(...r.result); }
+      }
+      return out;
+    };
+
+    const decodeFeesUpdated=(data)=>{
+      const h=data.startsWith('0x')?data.slice(2):data;
+      const w=i=>Number(BigInt('0x'+h.slice(i*64,(i+1)*64)));
+      return{reflection:w(0),ufoBurn:w(1),ptgcBurn:w(2),plsLP:w(3),plsxLP:w(4),wethLP:w(5)};
+    };
+
+    // Full history if the RPC allows it (narrow topic filter, tiny result set).
+    const fetchFeeTimeline=async(tokenAddress,fromBlock,toBlock)=>{
+      let arr=null;
+      const full=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
+        params:[{address:tokenAddress,fromBlock:'0x0',toBlock:'latest',topics:[FEES_UPDATED_TOPIC]}],id:1},20000);
+      if(full&&Array.isArray(full.result))arr=full.result;
+      else arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],fromBlock,toBlock)||[];
+      return arr.map(l=>({block:parseInt(l.blockNumber,16),rates:decodeFeesUpdated(l.data)}))
+                .sort((a,b)=>a.block-b.block);
+    };
+
+    const ratesAtBlock=(events,block,fallback)=>{
+      let r=fallback;
+      for(const e of events){ if(e.block<=block)r=e.rates; else break; }
+      return r;
+    };
+
+    const realizedFeeCache={};
+    const fetchRealizedFees=async(tokenAddress,period)=>{
+      try{
+        const span=REALIZED_PERIOD_BLOCKS[period];
+        if(!span)return null; // 90d is too many blocks to scan from a browser
+        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+        if(!blk.result)return null;
+        const cur=parseInt(blk.result,16);
+        const fromBlock=Math.max(0,cur-span);
+        const key=`${tokenAddress}-${period}-${Math.floor(cur/300)}`; // ~50min cache bucket
+        if(realizedFeeCache[key])return realizedFeeCache[key];
+
+        const contractTopic='0x'+encodeAddress(tokenAddress);
+        const[transferLogs,feeEvents]=await Promise.all([
+          getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],fromBlock,cur),
+          fetchFeeTimeline(tokenAddress,fromBlock,cur)
+        ]);
+        if(!transferLogs)return null;
+
+        const tokens={reflection:0,ufoBurn:0,ptgcBurn:0,plsLP:0,plsxLP:0,wethLP:0};
+        for(const log of transferLogs){
+          const b=parseInt(log.blockNumber,16);
+          const r=ratesAtBlock(feeEvents,b,DEFAULT_FEE_RATES);
+          const contractBps=r.ufoBurn+r.ptgcBurn+r.plsLP+r.plsxLP+r.wethLP;
+          if(contractBps<=0)continue; // no contract fee => this log isn't a fee transfer
+          const cFee=weiToTokens(BigInt(log.data&&log.data!=='0x'?log.data:'0x0'));
+          tokens.reflection+=cFee*(r.reflection/contractBps);
+          tokens.ufoBurn   +=cFee*(r.ufoBurn/contractBps);
+          tokens.ptgcBurn  +=cFee*(r.ptgcBurn/contractBps);
+          tokens.plsLP     +=cFee*(r.plsLP/contractBps);
+          tokens.plsxLP    +=cFee*(r.plsxLP/contractBps);
+          tokens.wethLP    +=cFee*(r.wethLP/contractBps);
+        }
+        const totalTokens=Object.values(tokens).reduce((a,b)=>a+b,0);
+        const out={tokens,totalTokens,txCount:transferLogs.length,fromBlock,toBlock:cur,period,feeChanges:feeEvents.length};
+        realizedFeeCache[key]=out;
+        console.log(`Realized UFO fees (${period}): ${totalTokens.toLocaleString()} UFO from ${transferLogs.length} taxed transfers, ${feeEvents.length} fee change(s)`);
+        return out;
+      }catch(e){console.error('fetchRealizedFees error:',e);return null;}
+    };
+
     // Token amounts span ~10 orders of magnitude here (hundreds of millions of UFO vs
     // a fraction of a WETH). Math.floor() would render 0.25 WETH as "0", so scale the
     // precision to the magnitude instead of truncating.
@@ -2938,15 +3045,10 @@
       const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0,d90:0});
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
-      // MIGRATION: a brand-new token has no 7d/30d/90d history. Don't strand the user on
-      // an empty panel — drop to the longest window that actually has data.
-      useEffect(()=>{
-        const avail={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
-        if(avail[valueGenPeriod]==null){
-          const fallback=['90d','30d','7d','24h'].find(p=>avail[p]!=null&&avail[p]>0);
-          if(fallback&&fallback!==valueGenPeriod)setValueGenPeriod(fallback);
-        }
-      },[volumeByPeriod]);
+      // MIGRATION: realized on-chain fees (see fetchRealizedFees). 'live' = measured, 'est' = volume x rate.
+      const[valueGenSource,setValueGenSource]=useState('live');
+      const[realizedFees,setRealizedFees]=useState(null);
+      const[realizedLoading,setRealizedLoading]=useState(false);
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
       const[daoData,setDaoData]=useState(null);
@@ -3001,6 +3103,32 @@
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+      // MIGRATION: a brand-new token has no 7d/30d/90d history. Don't strand the user on
+      // an empty panel — drop to the longest window that actually has data.
+      useEffect(()=>{
+        const avail={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
+        // LIVE mode reads fees straight from logs, so it doesn't need cached volume for
+        // the window. Only fall back when neither source can serve the selected period.
+        const liveCanServe=(token==='UFO'&&valueGenSource==='live'&&!!REALIZED_PERIOD_BLOCKS[valueGenPeriod]);
+        if(avail[valueGenPeriod]==null&&!liveCanServe){
+          const fallback=['90d','30d','7d','24h'].find(p=>avail[p]!=null&&avail[p]>0);
+          if(fallback&&fallback!==valueGenPeriod)setValueGenPeriod(fallback);
+        }
+      },[volumeByPeriod,token,valueGenSource,valueGenPeriod]);
+
+      // MIGRATION: pull realized fees for whatever window is selected. 90d is intentionally
+      // unsupported (too many blocks to scan from a browser) and falls back to the estimate.
+      useEffect(()=>{
+        if(token!=='UFO'){setRealizedFees(null);return;}
+        if(!REALIZED_PERIOD_BLOCKS[valueGenPeriod]){setRealizedFees(null);return;}
+        let cancelled=false;
+        setRealizedLoading(true);
+        fetchRealizedFees(TOKENS.UFO.address,valueGenPeriod)
+          .then(r=>{if(!cancelled)setRealizedFees(r);})
+          .catch(()=>{if(!cancelled)setRealizedFees(null);})
+          .finally(()=>{if(!cancelled)setRealizedLoading(false);});
+        return()=>{cancelled=true;};
+      },[token,valueGenPeriod]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
@@ -3837,6 +3965,12 @@
                       <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5">
                         <button onClick={()=>setValueGenShowTokens(false)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${!valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>USD</button>
                         <button onClick={()=>setValueGenShowTokens(true)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>TOK</button>
+                        {/* MIGRATION: LIVE = measured on-chain fees. EST = volume x rate projection. */}
+                        {token==='UFO'&&<>
+                          <span className="w-px h-3 bg-white/15 mx-1"></span>
+                          <button onClick={()=>setValueGenSource('live')} title="Measured from on-chain fee transfers" className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenSource==='live'?'bg-emerald-400 text-black':'text-white/50 hover:text-white'}`}>LIVE</button>
+                          <button onClick={()=>setValueGenSource('est')} title="Projected from trading volume" className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenSource==='est'?'bg-white/70 text-black':'text-white/50 hover:text-white'}`}>EST</button>
+                        </>}
                       </div>
                       <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5">
                         {['24h','7d','30d','90d'].map(p=>(
@@ -3857,25 +3991,50 @@
                     const orderedItems=buildValueGenItems(token,cfg);
                     const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
 
+                    /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
+                       attributed with the fee rates actually in force at each block. */
+                    const ufoPx=data?.price||0;
+                    const live=(token==='UFO'&&valueGenSource==='live'&&realizedFees&&realizedFees.period===valueGenPeriod&&ufoPx>0)?realizedFees:null;
+                    const liveItems=live?UFO_FEE_BUCKETS.map(b=>{
+                      const tok=live.tokens[b.key]||0;
+                      const cur=cfg.taxBreakdown.find(x=>x.key===b.key);
+                      return{...b,pct:cur?cur.pct:0,tokens:tok,usd:tok*ufoPx};
+                    }).filter(i=>i.tokens>0||i.pct>0):null;
+                    const liveTotalUsd=live?live.totalTokens*ufoPx:0;
+                    const showLive=!!live;
+
                     return(
                       <>
                         <div className="flex items-baseline gap-2 mb-4 flex-wrap">
-                          {hasData?(
+                          {showLive?(
+                            <>
+                              <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(liveTotalUsd)}</span>
+                              <span className="text-white/45 text-sm sm:text-base">from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">ON-CHAIN</span>
+                              {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in window</span>}
+                            </>
+                          ):realizedLoading&&token==='UFO'&&valueGenSource==='live'?(
+                            <span className="text-base text-white/40">Reading fees from chain…</span>
+                          ):hasData?(
                             <>
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(totalGen)}</span>
                               <span className="text-white/45 text-sm sm:text-base">from {fmtUSD(periodVol)} vol</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-white/10 text-white/50 border border-white/15">EST</span>
                             </>
                           ):(
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
                         <div className="flex-1"></div>
-                        {hasData&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {orderedItems.map((item,i)=>{
-                            const dollarVal=periodVol*(item.pct/100);
-                            // LP buckets return two parts (half UFO + half partner) — see valueGenParts().
-                            const parts=valueGenParts(token,item,dollarVal,vgPrices);
-                            const partsLabel=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
+                        {(showLive||hasData)&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {(showLive?liveItems:orderedItems).map((item,i)=>{
+                            // Realized: fees actually accrued to this bucket, priced in UFO.
+                            // Estimated: period volume x bucket rate, with LP buckets split half/half.
+                            const dollarVal=showLive?item.usd:periodVol*(item.pct/100);
+                            const parts=showLive?null:valueGenParts(token,item,dollarVal,vgPrices);
+                            const partsLabel=showLive
+                              ?`${fmtTokenQty(item.tokens)} UFO`
+                              :(parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null);
                             return(
                               <div key={i} className={`bg-white/[0.04] border ${item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
