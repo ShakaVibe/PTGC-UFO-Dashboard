@@ -896,6 +896,11 @@
 
         const out={ok:true,byPeriod:accs,mintQueryOk,scanFrom,headBlock:cur,launch:B.launch,
                    ptgcFeeLegsDropped,
+                   /* Exposed so the PTGC panel can subtract any pre-generated row that names
+                      one of these transactions. If the JSON generator is ever repointed at the
+                      new contract, its rows would otherwise be added on top of ours and the
+                      burn total would silently double. */
+                   swapbackTxs:Object.keys(swapbackTxs),
                    pairs:pairs.map(p=>({symbol:p.quoteSymbol,address:p.address}))};
         deliveredCache[key]=out;
         console.log(`Delivered value | blocks ${scanFrom}-${cur} | ${Object.keys(swapbackTxs).length} swapback tx(s)`);
@@ -1740,7 +1745,13 @@
           const ufoPtgcData=await r2.json();
           if(ufoPtgcData?.PTGCbyUFO){
             burnHistoryCache.PTGCbyUFO=ufoPtgcData.PTGCbyUFO;
-            console.log('PTGCbyUFO loaded from ufo-ptgc-burns.json, last updated:',ufoPtgcData.lastUpdated);
+            /* The file is NOT the frozen historical base the handoff describes. It carries
+               8,500+ DATED rows and is still being regenerated against the OLD UFO contract,
+               which is still burning pTGC (8.4M in the last 24h). Keep the rows: they are the
+               only way to give this box a real 7D / 30D / 90D. */
+            burnHistoryCache.PTGCbyUFORows=Array.isArray(ufoPtgcData._ptgcByUFOCache)?ufoPtgcData._ptgcByUFOCache:null;
+            console.log(`PTGCbyUFO loaded from ufo-ptgc-burns.json, last updated: ${ufoPtgcData.lastUpdated}`+
+              (burnHistoryCache.PTGCbyUFORows?` (${burnHistoryCache.PTGCbyUFORows.length} dated rows)`:' (no dated rows — periods will show the new contract only)'));
           }
         }catch(e2){
           console.warn('Could not load ufo-ptgc-burns.json, using fallback:',e2);
@@ -5185,8 +5196,10 @@
                             liquidity detection failed — swap/LP classification below is not trustworthy. See console.
                           </div>
                         )}
-                        <div className="flex-1"></div>
-                        {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {/* No spacer. The grid absorbs the panel's height and each tile
+                            stretches to fill it, so the six numbers are the panel rather
+                            than a footnote pinned to the bottom of it. */}
+                        {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 flex-1 mt-2">
                           {((showLive?liveItems:orderedItems)||[]).map((item,i)=>{
                             const dollarVal=showLive?item.usd:periodVol*(item.pct/100);
                             const parts=showLive?item.parts:valueGenParts(token,item,dollarVal,vgPrices);
@@ -5204,8 +5217,8 @@
                               stuck?`Accrued but never delivered — no Mint was emitted for this pool. ${fmtAbbr(Math.round(item.accruedUfo))} UFO accrued.`:null
                             ].filter(Boolean).join('\n'):undefined;
                             return(
-                              <div key={i} className={`bg-white/[0.04] border ${stuck?'border-red-400/40':item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
-                                <div className="flex items-center gap-1.5 mb-1 min-w-0">
+                              <div key={i} className={`bg-white/[0.04] border ${stuck?'border-red-400/40':item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-3 sm:py-4 min-w-0 h-full flex flex-col justify-between gap-2`}>
+                                <div className="flex items-center gap-1.5 min-w-0">
                                   {item.isLP&&bucketLogoSrc(item.priceKey)
                                     ?<PairLogo priceKey={item.priceKey} size={26}/>
                                     :<span className="text-base shrink-0">{item.emoji}</span>}
@@ -5220,7 +5233,7 @@
                                   <div className={`font-bold text-sm sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}
                                        title={qTip}>{partsLabel}</div>
                                 ):(
-                                  <div className={`text-base sm:text-xl font-medium text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}
+                                  <div className={`text-xl sm:text-3xl font-semibold text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}
                                        title={qTip}>{fmtUSD(dollarVal)}</div>
                                 )}
                               </div>
@@ -5279,55 +5292,18 @@
                   </div>
 
                   {!cfg.hasDAO&&(
-                    <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-white/[0.06]">
+                    <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-white/[0.06] flex-1 items-center">
                       <div>
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Max Total Supply</div>
-                        <div className={`text-base font-semibold tabular-nums ${theme.text}`}>{fmtAbbr(cfg.totalSupply)}</div>
+                        <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Max Total Supply</div>
+                        <div className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtAbbr(cfg.totalSupply)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Circulating Supply</div>
-                        <div className={`text-base font-semibold tabular-nums ${theme.text}`}>{fmtAbbr(cfg.totalSupply-(burn?.total||0))}</div>
+                        <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Circulating Supply</div>
+                        <div className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtAbbr(cfg.totalSupply-(burn?.total||0))}</div>
                       </div>
                     </div>
                   )}
 
-                  {/* The donut says where the supply IS. It never says where it is GOING.
-                      Everything below is already measured for Value Generated — the fee
-                      engine's lifetime output, in tokens, from chain events. It costs no
-                      extra query and it fills the panel with the one thing it was missing. */}
-                  {token==='UFO'&&delivered&&delivered.ok&&realizedFees&&realizedFees.ok&&(()=>{
-                    const d=delivered.byPeriod['90d'];
-                    const lpUfo=Object.keys(d.lp).reduce((s2,k)=>s2+d.lp[k].ufo,0);
-                    const reflected=realizedFees.byPeriod['90d'].tokens.reflection||0;
-                    const queued=(feeAudit&&feeAudit.ok&&feeAudit.health&&feeAudit.health.contractUfoBalance!=null)
-                      ?feeAudit.health.contractUfoBalance:null;
-                    const px=data?.price||0;
-                    const row=(emoji,label,val,tip)=>(
-                      <div className="flex items-baseline justify-between gap-2 py-1" title={tip}>
-                        <span className="text-white/50 text-xs truncate">{emoji} {label}</span>
-                        <span className="text-right shrink-0">
-                          <span className={`text-sm font-semibold tabular-nums ${theme.text}`}>{val==null?'\u2014':fmtAbbr(Math.round(val))}</span>
-                          {val!=null&&px>0&&<span className="text-white/30 text-[10px] tabular-nums ml-1.5">{fmtUSD(val*px)}</span>}
-                        </span>
-                      </div>
-                    );
-                    return(
-                      <div className="mt-5 pt-4 border-t border-white/[0.06]">
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1.5">
-                          Where the fees send it <span className="text-white/25 normal-case tracking-normal">/ since launch</span>
-                        </div>
-                        <div className="divide-y divide-white/[0.04]">
-                          {row('\u{1F525}','Bought back and burned',d.ufoBurned,'UFO the contract purchased with fee revenue and sent to 0x369. Measured at the burn address.')}
-                          {row('\u{1F4A7}','Paired into liquidity',lpUfo,'UFO the contract deposited into the three pools. Measured from each pair\'s Mint events.')}
-                          {row('\u{1F48E}','Redistributed to holders',reflected,'Reflections. Never transferred — the contract shifts an index and every balance rises at once.')}
-                          {row('\u23F3','Waiting for the next swapback',queued,'Fee revenue sitting in the contract. It is converted only when the balance crosses swapThreshold, and a swapback processes half the threshold at a time.')}
-                        </div>
-                        <div className="text-white/25 text-[10px] mt-2 leading-snug">
-                          The {fmtAbbr(Math.max(0,(burn?.total||0)-d.ufoBurned))} UFO in the headline above this panel was burned directly, not by fees.
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               </section>
 
@@ -5481,9 +5457,42 @@
                       const newBurned=ptgcSrc?ptgcSrc.total:0;
                       const totalBurned=oldBurned+newBurned;
                       const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
+                      /* THE PERIOD BOXES USED TO SHOW THE NEW CONTRACT ONLY, so 7D/30D/90D were
+                         all identical to 24H on a 44-hour-old token. That was never right: the
+                         OLD contract is still burning pTGC, and ufo-ptgc-burns.json carries
+                         8,500+ dated rows of it. Bucket those rows against the same wall-clock
+                         windows and add them to the on-chain figures.
+
+                         DOUBLE-COUNT GUARD: if the JSON generator is ever repointed at the new
+                         contract (open item 3 in the handoff), its rows would name the same
+                         transactions we already counted. Drop any row whose tx is one of ours. */
+                      const oldRows=burnHistoryCache?.PTGCbyUFORows;
+                      const mine={};
+                      if(delivered&&delivered.ok&&delivered.swapbackTxs)delivered.swapbackTxs.forEach(t=>{mine[t]=true;});
+                      const oldFor=hrs=>{
+                        if(!Array.isArray(oldRows))return null;
+                        const cut=Date.now()-hrs*3600*1000;
+                        let sum=0;
+                        for(let i=0;i<oldRows.length;i++){
+                          const r=oldRows[i];
+                          if(!r||r.t<cut)continue;
+                          if(r.tx&&mine[r.tx])continue;         // already counted on-chain
+                          sum+=r.a||0;
+                        }
+                        return sum;
+                      };
+                      const combine=(neu,hrs)=>{
+                        if(neu==null)return null;
+                        const old=oldFor(hrs);
+                        return old==null?neu:neu+old;           // no rows -> new contract only
+                      };
                       const periods=ptgcSrc
-                        ?{h24:{amount:ptgcSrc.h24},d7:{amount:ptgcSrc.d7},d30:{amount:ptgcSrc.d30},d90:{amount:ptgcSrc.d90}}
+                        ?{h24:{amount:combine(ptgcSrc.h24,24)},
+                          d7:{amount:combine(ptgcSrc.d7,24*7)},
+                          d30:{amount:combine(ptgcSrc.d30,24*30)},
+                          d90:{amount:combine(ptgcSrc.d90,24*90)}}
                         :null;
+                      const periodsHaveOld=Array.isArray(oldRows);
                       const whaleProgress=getWhaleProgress(burnPct);
                       const creatures=getBurnC(burnPct,'Squid');
 
@@ -5526,7 +5535,9 @@
                                   {l}
                                 </div>
                                 <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center"
-                                     title="New UFO contract only. The old contract's pTGC burns are in the LIFETIME figure above, but that total is a frozen snapshot with no dates, so it cannot be split across these windows.">{v==null?'\u2014':fmtAbbr(v)}</div>
+                                     title={periodsHaveOld
+                                       ?'Both contracts. The new contract is read live from chain; the old one — which is still burning pTGC — comes from the dated rows in ufo-ptgc-burns.json, bucketed against the same window.'
+                                       :'New UFO contract only. The dated history for the old contract could not be loaded, so its burns are missing from these windows.'}>{v==null?'\u2014':fmtAbbr(v)}</div>
                                 <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{v==null?'\u2014':fmtUSD(v*ptgcPrice)}</div>
                               </div>
                             ))}
