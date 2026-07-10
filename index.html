@@ -168,6 +168,12 @@
      * Flip this ONE value to go live. Nothing else needs to change.
      * ========================================= */
     const UFO_MAINTENANCE=true;
+    /* MAINT-MIGRATION: operator preview for pages still behind the maintenance screen.
+       Load the site with ?preview=kpi to see the REAL KPI Report while the public keeps
+       seeing "Under Maintenance". Nothing public changes. When the KPI page is finished and
+       ready to go live, delete this const and the KPI_PREVIEW branch in the tab render
+       (search "KPI_PREVIEW") so the tab shows the real page for everyone. */
+    const KPI_PREVIEW=(()=>{try{return new URLSearchParams(window.location.search).get('preview')==='kpi';}catch(e){return false;}})();
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
@@ -5886,13 +5892,13 @@
           </div>
           </>)}
           
-          {/* KPI Report Tab Content */}
-          {activeTab==='kpi'&&(<MaintenanceScreen label="KPI Report"/>)}{/* MAINT-MIGRATION */}
-          {false&&activeTab==='kpi'&&(
+          {/* KPI Report Tab Content — public sees the maintenance screen; an operator who loads
+              the site with ?preview=kpi sees the REAL page, so it can be finished behind the gate. */}
+          {activeTab==='kpi'&&(KPI_PREVIEW?(
             <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
               <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod}/>
             </div>
-          )}
+          ):(<MaintenanceScreen label="KPI Report"/>))}{/* MAINT-MIGRATION */}
           
           {/* Social Tab Content */}
           {activeTab==='social'&&(<MaintenanceScreen label="Socials"/>)}{/* MAINT-MIGRATION */}
