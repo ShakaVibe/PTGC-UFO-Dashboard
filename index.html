@@ -1147,12 +1147,21 @@
         const failLogs=await getLogsChunked(tokenAddress,[SWAPBACK_FAILED_TOPIC],fromBlock,cur);
         const swapbackFailures={};
         const swapbackFailTxs=[];
+        /* A raw count has no denominator and no clock. "x3" reads like "always",
+           which is how five wrong theories got started. Record the LAST failing
+           block so the panel can say how long ago it was — that single number is
+           what tells you whether deepening the pools fixed it. */
+        let lastFailBlock=null;
         if(failLogs){for(const l of failLogs){
           const a=decodeAbiString(l.data);
           swapbackFailures[a]=(swapbackFailures[a]||0)+1;
-          if(swapbackFailTxs.length<6)swapbackFailTxs.push({tx:l.transactionHash,action:a});
+          const b=parseInt(l.blockNumber,16);
+          if(lastFailBlock===null||b>lastFailBlock)lastFailBlock=b;
+          if(swapbackFailTxs.length<6)swapbackFailTxs.push({tx:l.transactionHash,action:a,block:b});
         }}
         const swapbackFailQueryOk=failLogs!==null;
+        const lastFailHoursAgo=(lastFailBlock!=null&&B.secPerBlock)
+          ?((cur-lastFailBlock)*B.secPerBlock/3600):null;
 
         /* CORROBORATION, independent of the event log:
            If the LP adds revert, the contract keeps the UFO half AND the PLS it raised.
@@ -1248,7 +1257,7 @@
            fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
            gross them up by the tax rate to compare like-for-like with DEX volume. */
         const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
-        const out={ok:true,liqDetectionOk,liqDiag,totalPairSwapUfo,totalPairSwapCount,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+        const out={ok:true,liqDetectionOk,liqDiag,totalPairSwapUfo,totalPairSwapCount,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,lastFailBlock,lastFailHoursAgo,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         feeAuditCache[key]=out;
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
@@ -5043,6 +5052,22 @@
                     const lpOf=sym=>(dv&&dv.lp[sym])||null;
                     const haveDelivered=!!(showLive&&dv);
 
+                    /* THE QUEUE.
+                       Reflections are delivered the instant they accrue — they shift an index,
+                       nothing to swap. The other five buckets are UFO sitting in the contract
+                       until the balance crosses swapThreshold. So `Holders` shows the front of
+                       the pipe and everything else shows the back, and the panel never said so.
+                       That, not a bug, is why Holders reads ~1.8x Burn UFO.
+
+                       The contract's UFO balance belongs to the five contract-bound buckets
+                       pro-rata by their basis points. */
+                    const healthNow=(feeAudit&&feeAudit.ok)?feeAudit.health:null;
+                    const bps=k=>{const t=cfg.taxBreakdown.find(x=>x.key===k);return t?(t.bps!=null?t.bps:t.pct*100):0;};
+                    const contractBpsNow=UFO_FEE_BUCKETS.filter(b=>b.key!=='reflection').reduce((s,b)=>s+bps(b.key),0);
+                    const queuedUfoTotal=(token==='UFO'&&healthNow&&healthNow.contractUfoBalance!=null)?healthNow.contractUfoBalance:null;
+                    const queuedFor=k=>(queuedUfoTotal==null||k==='reflection'||contractBpsNow<=0)
+                      ?0:queuedUfoTotal*(bps(k)/contractBpsNow);
+
                     /* While the delivery scan is in flight (or if it failed) fall back to the
                        accrued view rather than rendering nothing. `liveItems` must never be
                        null when showLive is true — the grid maps over it. */
@@ -5052,7 +5077,7 @@
                       const accruedUfo=live.tokens[b.key]||0;
                       if(!haveDelivered){
                         return{...b,pct,usd:accruedUfo*px('UFO'),parts:[{qty:accruedUfo,symbol:'UFO'}],
-                               accruedUfo,measured:false,delivered:true};
+                               accruedUfo,measured:false,queuedUfo:0,instant:b.key==='reflection',delivered:true};
                       }
                       let usd=0,parts=[],measured=true;
                       if(b.key==='reflection'){
@@ -5074,6 +5099,8 @@
                         }
                       }
                       return{...b,pct,usd,parts,accruedUfo,measured,
+                             queuedUfo:queuedFor(b.key),
+                             instant:b.key==='reflection',
                              delivered:(b.key==='reflection')||usd>0};
                     }).filter(i=>i.usd>0||i.pct>0):null;
 
@@ -5124,25 +5151,24 @@
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
-                        {/* Accrued is the honest denominator. But the gap is NOT all stranded:
-                            part sits in the contract, part was consumed by swap fees, the
-                            contract's own price impact, and pTGC's 5% tax on the buyback.
-                            Those are different things and were being labelled with one word. */}
+                        {/* The gap between accrued and delivered is NOT a loss. Almost all of it
+                            is UFO waiting in the contract for the next swapback. What swaps and
+                            pTGC's tax actually consumed can only be recovered as a residual —
+                            accrued minus delivered minus queued — which absorbs every rounding
+                            error in the other three. A residual does not deserve a dollar sign,
+                            so it is stated as a bound, not a figure. */}
                         {showLive&&haveDelivered&&!priceless&&(()=>{
-                          const h=(feeAudit&&feeAudit.ok)?feeAudit.health:null;
-                          const strandedUsd=h?((h.contractUfoBalance||0)*px('UFO')+(h.contractPlsBalance||0)*px('PLS')):null;
-                          const frictionUsd=(strandedUsd!=null)?Math.max(0,gapUsd-strandedUsd):null;
+                          const queuedUsd=(queuedUfoTotal!=null)?queuedUfoTotal*ufoPx:null;
+                          const plsUsd=healthNow?((healthNow.contractPlsBalance||0)*px('PLS')):0;
                           return(
                             <div className="mb-3 text-[11px] flex flex-wrap gap-x-3 gap-y-0.5">
                               <span className="text-white/40">accrued <span className="text-white/70 tabular-nums">{fmtUSD(accruedUsd)}</span> from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
-                              {gapUsd>accruedUsd*0.005&&(strandedUsd!=null?(
-                                <>
-                                  <span className="text-amber-300/80">{fmtUSD(strandedUsd)} sitting in the contract</span>
-                                  <span className="text-white/40">{fmtUSD(frictionUsd)} consumed by swap fees, price impact and pTGC's own tax</span>
-                                </>
-                              ):(
-                                <span className="text-amber-300/80">{fmtUSD(gapUsd)} accrued but not delivered</span>
-                              ))}
+                              {queuedUsd!=null&&queuedUsd>0&&(
+                                <span className="text-white/50">
+                                  <span className="tabular-nums">{fmtUSD(queuedUsd)}</span> waiting in the contract for the next swapback
+                                  {plsUsd>0&&<span className="text-amber-300/70"> · {fmtUSD(plsUsd)} of PLS stranded by failed adds</span>}
+                                </span>
+                              )}
                               <span className="text-white/25">delivered value is measured at the pool and the burn address, not estimated</span>
                             </div>
                           );
@@ -5204,40 +5230,46 @@
                             is actually wrong, so it costs nothing on a healthy contract and it
                             disappears by itself once the contract is fixed. Handoff section 3.5
                             says the way to verify a fix is that this box stops appearing. */}
-                        {token==='UFO'&&feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures||{}).length>0&&(
-                          <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px]">
-                            <div className="text-red-300 font-bold">
-                              ⚠ swapback actions FAILED: {Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k} x${v}`).join(', ')}
-                            </div>
-                            <div className="text-red-200/80 mt-1">
-                              The fees below are <span className="font-semibold">accrued</span>, not delivered.
-                              {undelivered.plsxLP&&undelivered.wethLP?' The LP PLSX and LP WETH buckets are not reaching their pools.'
-                                :undelivered.plsxLP?' The LP PLSX bucket is not reaching its pool.'
-                                :undelivered.wethLP?' The LP WETH bucket is not reaching its pool.'
-                                :undelivered.plsLP?' The LP PLS bucket is not reaching its pool.':''}
-                            </div>
-                            {feeAudit.health&&(
-                              <div className="mt-1 text-red-200/60">
-                                stranded in contract: {feeAudit.health.contractUfoBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractUfoBalance))+' UFO':'?'}
-                                {' · '}{feeAudit.health.contractPlsBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractPlsBalance))+' PLS':'?'}
-                                {feeAudit.health.swapThresholdUFO!=null&&<> · swapThreshold {fmtAbbr(Math.round(feeAudit.health.swapThresholdUFO))} UFO <span className="text-red-200/40">(read at head, not at the failing block)</span></>}
+                        {/* A raw count has no denominator and no clock. "addPLSXLiquidity x3"
+                            reads as "always", which is exactly the misreading that produced five
+                            wrong diagnoses. What matters is the RATE (three failures out of ~51
+                            rounds is 6%, not 100%) and HOW LONG AGO the last one was — because
+                            that is the only number that tells you whether deepening the pools
+                            worked. LP PLS never fails: it adds back into the pool the swapback
+                            just traded against, so its ratio matches by construction. The other
+                            two add into pools that have drifted, and revert when the drift
+                            exceeds maxSlippage. */}
+                        {token==='UFO'&&feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures||{}).length>0&&(()=>{
+                          const fails=Object.values(feeAudit.swapbackFailures).reduce((a,b)=>a+b,0);
+                          const rounds=(dv&&dv.lp&&dv.lp.WPLS)?dv.lp.WPLS.mints:null;   // PLS adds never revert
+                          const worst=Math.max(...Object.values(feeAudit.swapbackFailures));
+                          const rate=(rounds&&rounds>0)?(worst/rounds):null;
+                          const hrs=feeAudit.lastFailHoursAgo;
+                          const cold=(hrs!=null&&hrs>6);   // nothing has failed in a while
+                          const plsUsd=(feeAudit.health&&feeAudit.health.contractPlsBalance!=null)
+                            ?feeAudit.health.contractPlsBalance*px('PLS'):null;
+                          return(
+                            <div className={`mb-3 px-3 py-2 rounded-lg text-[11px] ${cold?'bg-white/[0.03] border border-white/10':'bg-amber-500/10 border border-amber-400/30'}`}>
+                              <div className={cold?'text-white/60':'text-amber-300 font-semibold'}>
+                                {rate!=null
+                                  ?<>{Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k.replace(/^add|Liquidity$/g,'')} ${v}`).join(' · ')} — <span className="tabular-nums">{(rate*100).toFixed(1)}%</span> of {rounds} liquidity rounds reverted</>
+                                  :<>{fails} liquidity add{fails===1?'':'s'} reverted (denominator unavailable)</>}
                               </div>
-                            )}
-                            {/* The allowance probe that used to live here was WRONG and has been
-                                removed. The contract calls approve() inline immediately before each
-                                add, and transferFrom spends the allowance back to zero — so a zero
-                                reading is what a HEALTHY contract looks like. Proven by the logs of
-                                the very transaction this box links to. */}
-                            <div className="mt-1">
-                              {feeAudit.swapbackFailTxs.slice(0,4).map((t,i)=>(
-                                <a key={i} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer" className="mr-2 underline text-red-200/80 hover:text-white">
-                                  {t.tx.slice(0,10)}… ({t.action})
-                                </a>
-                              ))}
+                              <div className={`mt-0.5 ${cold?'text-white/35':'text-amber-200/70'}`}>
+                                {hrs!=null
+                                  ?<>last failure <span className="tabular-nums">{hrs<1?`${Math.round(hrs*60)} min`:`${hrs.toFixed(1)}h`}</span> ago{cold?' — nothing has reverted since the pools were deepened':''}</>
+                                  :'timing unavailable'}
+                                {plsUsd!=null&&plsUsd>0&&<> · <span className="text-amber-300/80">{fmtAbbr(Math.round(feeAudit.health.contractPlsBalance))} PLS ({fmtUSD(plsUsd)}) stranded — recoverable with rescuePLS()</span></>}
+                              </div>
+                              <div className="mt-1 text-white/25">
+                                A revert happens when the target pool's ratio has drifted from UFO/WPLS by more than maxSlippage. Deeper satellite pools shrink the drift.
+                                {feeAudit.swapbackFailTxs&&feeAudit.swapbackFailTxs.length>0&&(
+                                  <> Last: <a href={`https://scan.pulsechain.com/tx/${feeAudit.swapbackFailTxs[0].tx}`} target="_blank" rel="noreferrer" className="underline hover:text-white/60">{feeAudit.swapbackFailTxs[0].tx.slice(0,10)}…</a></>
+                                )}
+                              </div>
                             </div>
-                            <div className="mt-1 text-red-200/50">Open a transaction and read the reverted internal call. The revert reason is the diagnosis; everything else is inference.</div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         {/* A failed liquidity query must never be presented as "no liquidity moves". */}
                         {token==='UFO'&&feeAudit&&feeAudit.ok&&!feeAudit.liqDetectionOk&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30 text-[11px] text-amber-300">
@@ -5260,7 +5292,7 @@
                                     ?<PairLogo priceKey={item.priceKey} size={26}/>
                                     :<span className="text-base shrink-0">{item.emoji}</span>}
                                   <span className="text-white/55 text-xs sm:text-sm truncate">{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
-                                  {showLive&&item.measured===false&&<span className="text-white/30 text-[10px] shrink-0" title="reflections shift an index rather than transfer tokens, so this bucket has no event of its own — it is derived from the fee stream">≈</span>}
+                                  {showLive&&item.instant&&<span className="text-emerald-300/50 text-[9px] shrink-0 uppercase tracking-wider" title="reflections shift an index rather than transfer tokens — holders are paid the instant the fee is taken, with nothing to queue and no event to measure">instant</span>}
                                   {stuck&&<span className="text-red-400 text-[10px] shrink-0" title="accrued but never delivered — no Mint was emitted for this pool">⚠</span>}
                                 </div>
                                 {(valueGenShowTokens||priceless)&&partsLabel?(
@@ -5270,6 +5302,13 @@
                                     <div className={`text-base sm:text-xl font-medium text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}>{fmtUSD(dollarVal)}</div>
                                     {partsLabel&&<div className="text-white/35 text-[11px] text-right tabular-nums leading-tight truncate">{partsLabel}</div>}
                                   </>
+                                )}
+                                {/* The five contract buckets wait for a swapback. Holders does not.
+                                    Without this line, Holders looks anomalous when it is simply ahead. */}
+                                {showLive&&!item.instant&&item.queuedUfo>0&&(
+                                  <div className="text-white/30 text-[10px] text-right leading-tight mt-0.5 truncate">
+                                    + {fmtAbbr(Math.round(item.queuedUfo))} UFO queued{ufoPx>0?` (${fmtUSD(item.queuedUfo*ufoPx)})`:''}
+                                  </div>
                                 )}
                                 {stuck&&(
                                   <div className="text-red-400/70 text-[10px] text-right leading-tight mt-0.5">
