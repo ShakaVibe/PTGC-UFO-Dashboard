@@ -874,17 +874,36 @@
         const mintsByPair={};
         let mintQueryOk=true;
         /* All three pairs, both queries, in parallel. These were six sequential round
-           trips (Mint x3 then token0 x3); one flight now. */
+           trips (Mint x3 then token0 x3); one flight now. Swap logs ride along — they
+           cost one memoised scan each and they are what the reconciliation guardrail
+           needs, so the check survives even when the dev audit is switched off. */
         const ufoIsToken0={};
+        const pairSwapUfo={};   // pair -> [{block, ufo}]
         await Promise.all(pairs.map(async p=>{
-          const[logs,t0raw]=await Promise.all([
+          const[logs,t0raw,swaps]=await Promise.all([
             getLogsChunked(p.address,[[PAIR_MINT_TOPIC,PAIR_MINT_TOPIC_PULSEX]],scanFrom,cur),
-            ethCallRead(p.address,SEL_TOKEN0)
+            ethCallRead(p.address,SEL_TOKEN0),
+            getLogsChunked(p.address,[PAIR_SWAP_TOPIC],scanFrom,cur)
           ]);
           if(logs===null){mintQueryOk=false;mintsByPair[p.address]=[];}
           else mintsByPair[p.address]=logs;
           const t0=wordToAddress(t0raw);
-          if(!t0)mintQueryOk=false; else ufoIsToken0[p.address]=t0.toLowerCase()===contract;
+          if(!t0){mintQueryOk=false;return;}
+          const isT0=t0.toLowerCase()===contract;
+          ufoIsToken0[p.address]=isT0;
+          /* The pair's Swap event carries exact token amounts. Summing the UFO leg
+             (in + out) gives swap volume in TOKENS — no price, no DexScreener. */
+          const arr=[];
+          if(Array.isArray(swaps)){
+            for(const l of swaps){
+              const h=l.data.startsWith('0x')?l.data.slice(2):l.data;
+              if(h.length<256)continue;
+              const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // 0In,1In,0Out,1Out
+              const ufo=weiToTokens((isT0?w(0):w(1))+(isT0?w(2):w(3)));
+              arr.push({block:parseInt(l.blockNumber,16),ufo});
+            }
+          }
+          pairSwapUfo[p.address]=arr;
         }));
 
         const accs={};
@@ -955,8 +974,25 @@
           }
         }
 
+        /* RECONCILIATION, in tokens, no prices. Bucket every pair's Swap volume into the
+           same windows. The panel compares this against the volume IMPLIED by the fees
+           the contract collected. If the fee stream is clean the ratio sits near 1.06–1.10x
+           (a sell delivers only 94% of its tokens to the pair, so pair volume structurally
+           under-reports; taxed wallet-to-wallet transfers push it up a little). A ratio
+           outside that band means the fee measurement is off — which is how the original
+           bug was caught. This is the smoke detector, and it now lives in the always-on
+           scan rather than the dev audit. */
+        const pairSwapByPeriod={};PERIOD_KEYS.forEach(p=>{pairSwapByPeriod[p]=0;});
+        let swapScanOk=true;
+        for(const p of pairs){
+          const arr=pairSwapUfo[p.address];
+          if(arr===undefined){swapScanOk=false;continue;}
+          for(const s of arr)PERIOD_KEYS.forEach(k=>{if(s.block>=B[k])pairSwapByPeriod[k]+=s.ufo;});
+        }
+
         const out={ok:true,byPeriod:accs,mintQueryOk,scanFrom,headBlock:cur,launch:B.launch,
                    ptgcFeeLegsDropped,
+                   pairSwapByPeriod,swapScanOk,
                    /* Exposed so the PTGC panel can subtract any pre-generated row that names
                       one of these transactions. If the JSON generator is ever repointed at the
                       new contract, its rows would otherwise be added on top of ours and the
@@ -970,6 +1006,10 @@
           console.log(`   ${k}: ${a.swapbackTxs} swapbacks · ${Math.round(a.ufoBurned).toLocaleString()} UFO burned · ${Math.round(a.ptgcBurned).toLocaleString()} pTGC burned · LP ${Object.keys(a.lp).map(s=>`${s}:${a.lp[s].mints}`).join(' ')||'none'}`);
         });
         if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) identified as pTGC's own 0.5% burn fee and excluded)`);
+        if(swapScanOk){
+          const p24=pairSwapByPeriod['24h']||0;
+          console.log(`reconciliation | pairs traded ${Math.round(p24).toLocaleString()} UFO (24h) — compare against fees-imply-volume in the fee log above; ratio should sit near 1.06–1.10x`);
+        }
         if(!mintQueryOk)console.error('*** Mint query failed for at least one pair — LP delivery is NOT trustworthy ***');
         return out;
       }catch(e){console.error('fetchDeliveredValue error:',e);return{ok:false,error:e.message||'unexpected error'};}
@@ -5306,6 +5346,38 @@
                             The two banners BELOW are NOT operator information and must never be
                             hidden: they say a number on this panel is untrustworthy. A bucket
                             reading $0 because a query failed is a lie, not a warning. */}
+                        {/* RECONCILIATION GUARDRAIL. Fees collected imply a gross taxed volume;
+                            the pairs report a swap volume. In tokens, no prices. The ratio sits
+                            near 1.06–1.10x when the fee stream is clean, and drifts out of band
+                            when it is not — which is exactly how the original overcounting bug
+                            was found. Silent inside the band; loud outside it. This is the check
+                            I deleted with the dev dropdown, rebuilt to stand on its own. */}
+                        {showLive&&haveDelivered&&delivered&&delivered.swapScanOk&&realizedFees&&realizedFees.ok&&(()=>{
+                          const fp=realizedFees.byPeriod[valueGenPeriod];
+                          const dpair=delivered.pairSwapByPeriod?delivered.pairSwapByPeriod[valueGenPeriod]:null;
+                          if(!fp||dpair==null||dpair<=0)return null;
+                          const totalBps=(cfg.taxBreakdown||[]).reduce((s,x)=>s+(x.bps!=null?x.bps:x.pct*100),0)||600;
+                          const impliedGross=fp.totalTokens/(totalBps/10000);
+                          const ratio=impliedGross/dpair;
+                          // Structural floor 1/0.94 = 1.064; wallet-to-wallet lifts it. Band 1.03–1.35.
+                          if(ratio>=1.03&&ratio<=1.25)return null;   // healthy: say nothing
+                          const high=ratio>1.35;
+                          return(
+                            <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30 text-[11px]">
+                              <div className="text-amber-300 font-semibold">
+                                fee / swap-volume ratio {ratio.toFixed(2)}x — outside the expected 1.06–1.10x band (fires above 1.25x or below 1.03x)
+                              </div>
+                              <div className="text-amber-200/70 mt-0.5">
+                                {high
+                                  ?'Fees imply more volume than the pairs traded. Usually means a non-swap transfer is being counted as a fee, or a large taxed wallet-to-wallet move. Check the console reconciliation.'
+                                  :'Fees imply less volume than the pairs traded. Usually means the fee scan missed events, or swap logs were double-counted. Check the console reconciliation.'}
+                              </div>
+                              <div className="text-white/30 mt-0.5 tabular-nums">
+                                fees imply {fmtAbbr(Math.round(impliedGross))} UFO · pairs report {fmtAbbr(Math.round(dpair))} UFO · window {valueGenPeriod}
+                              </div>
+                            </div>
+                          );
+                        })()}
                         {showLive&&haveDelivered&&delivered&&!delivered.mintQueryOk&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px] text-red-300">
                             a Mint query failed for at least one pair — an LP bucket reading $0 is NOT trustworthy. See console.
