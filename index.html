@@ -430,12 +430,22 @@
        Then scan ONCE and bucket the logs against those boundaries, which makes
        24h <= 7d <= 30d <= 90d true by construction rather than by coincidence. */
     const blockTsCache={};
+    /* A boundary search makes ~20 sequential reads. rpcFetch returns {result:null} on any
+       network hiccup, and findBlockAtTime (correctly) refuses to guess a boundary from a
+       failed read — so ONE flake out of twenty used to surface as "could not read block
+       timestamps" and a RETRY button. Retrying is the machine's job. Three attempts with
+       backoff; only then do we admit defeat, and we say which block failed. */
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
     const getBlockTs=async(b)=>{
       if(blockTsCache[b]!=null)return blockTsCache[b];
-      const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+b.toString(16),false],id:1});
-      const t=parseInt((r&&r.result&&r.result.timestamp)||'0x0',16);
-      if(t)blockTsCache[b]=t;
-      return t||0;
+      for(let attempt=0;attempt<3;attempt++){
+        if(attempt)await sleep(200*attempt);
+        const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+b.toString(16),false],id:1});
+        const t=parseInt((r&&r.result&&r.result.timestamp)||'0x0',16);
+        if(t){blockTsCache[b]=t;return t;}
+      }
+      console.warn(`eth_getBlockByNumber failed 3x for block ${b}`);
+      return 0;
     };
 
     // smallest block whose timestamp >= targetSec. Returns null if the chain
@@ -4135,10 +4145,26 @@
         let cancelled=false;
         setRealizedLoading(true);
         if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;}
-        fetchRealizedFees(TOKENS.UFO.address,firstPoolMs)
-          .then(r=>{if(!cancelled)setRealizedFees(r);})
-          .catch(e=>{if(!cancelled)setRealizedFees({ok:false,error:e.message||'error'});})
-          .finally(()=>{if(!cancelled)setRealizedLoading(false);});
+        /* Transient RPC failures should never reach the user as a button. Try up to three
+           times, backing off, keeping the loading state up. Only a persistent failure gets
+           surfaced — and then RETRY is a real choice, not a chore. */
+        (async()=>{
+          for(let attempt=0;attempt<3;attempt++){
+            if(attempt){
+              await new Promise(r=>setTimeout(r,600*attempt));
+              Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);
+              boundariesCache=null;
+            }
+            if(cancelled)return;
+            let r;
+            try{ r=await fetchRealizedFees(TOKENS.UFO.address,firstPoolMs); }
+            catch(e){ r={ok:false,error:e.message||'error'}; }
+            if(cancelled)return;
+            if(r&&r.ok){setRealizedFees(r);setRealizedLoading(false);return;}
+            if(attempt===2){setRealizedFees(r);setRealizedLoading(false);return;}
+            console.warn(`fee read failed (${r&&r.error}); retrying ${attempt+1}/2`);
+          }
+        })();
         fetchFeeExemptionAudit(TOKENS.UFO.address,firstPoolMs)
           .then(a=>{if(!cancelled)setFeeAudit(a);}).catch(()=>{});
         fetchDeliveredValue(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs,HARDCODED_UFO_PAIRS)
@@ -4459,9 +4485,11 @@
           if(token==='UFO'){
             const _fp=d?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
             const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
-            fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs).then(bp=>{
-              if(bp)setBurnPeriods(bp);
-            }).catch(()=>{});
+            /* `if(bp)` silently kept the zeroed initial state when the chain read failed,
+               so 7D/30D/90D rendered "$0" — a claim, not an absence. null means unknown. */
+            fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS).then(bp=>{
+              setBurnPeriods(bp||null);
+            }).catch(()=>setBurnPeriods(null));
             fetchPtgcBurnedByUfo(cfg.address,TOKENS.PTGC.address,firstPoolMs)
               .then(r=>{if(r)setPtgcByUfoLive(r);}).catch(()=>{});
           }
@@ -4967,7 +4995,8 @@
 
                   <div className="flex-1"></div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[{l:'24H',k:'24h',v:live24hBurn,loading:live24hBurn===null},{l:'7D',k:'7d',v:burnPeriods.d7},{l:'30D',k:'30d',v:burnPeriods.d30},{l:'90D',k:'90d',v:burnPeriods.d90}].map(({l,k,v,loading})=>{
+                    {[{l:'24H',k:'24h',v:live24hBurn,loading:live24hBurn===null},{l:'7D',k:'7d',v:burnPeriods?.d7},{l:'30D',k:'30d',v:burnPeriods?.d30},{l:'90D',k:'90d',v:burnPeriods?.d90}].map(({l,k,v,loading})=>{
+                      const unknown=(v==null);
                       const pct=cfg.totalSupply>0&&v>0?(v/cfg.totalSupply)*100:0;
                       const c=(!loading&&v>0)?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                       /* A window longer than the token's life is not "7 days of burns" — it is
@@ -4983,13 +5012,18 @@
                               <div className="text-lg sm:text-xl opacity-25">{'\u{1F41A}'}</div>
                               <div className="h-4 sm:h-5 w-16 rounded bg-white/10 animate-pulse"></div>
                             </>
+                          ):unknown?(
+                            <>
+                              <div className="text-lg sm:text-xl opacity-25">{'\u{1F41A}'}</div>
+                              <div className="text-base sm:text-xl font-medium text-white/30 leading-none" title="The chain read for this window failed. This is not zero — it is unknown.">{'\u2014'}</div>
+                            </>
                           ):(
                             <>
                               <div className="text-lg sm:text-xl flex items-center gap-1">{c.e}{c.cnt>0&&<span className="text-white/55 text-xs font-bold tabular-nums">x{c.cnt}</span>}</div>
                               {burnShowTokens?(
-                                <div className={`font-bold text-base sm:text-xl tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtAbbr(v)} <span className="text-white/35 text-xs">{token}</span></div>
+                                <div className={`font-bold text-base sm:text-lg tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtAbbr(v)} <span className="text-white/35 text-xs">{token}</span></div>
                               ):(
-                                <div className={`text-base sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtUSD(v*(data?.price||0))}</div>
+                                <div className={`text-base sm:text-lg font-semibold tabular-nums leading-none ${theme.text} truncate max-w-full text-center`}>{fmtUSD(v*(data?.price||0))}</div>
                               )}
                             </>
                           )}
@@ -5230,10 +5264,10 @@
                                     at the top of the panel carries the token detail, and the queued
                                     figure lives in the tooltip rather than under every tile. */}
                                 {(valueGenShowTokens||priceless)&&partsLabel?(
-                                  <div className={`font-bold text-sm sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}
+                                  <div className={`font-semibold text-sm sm:text-base text-right tabular-nums leading-tight ${theme.text} truncate`}
                                        title={qTip}>{partsLabel}</div>
                                 ):(
-                                  <div className={`text-xl sm:text-3xl font-semibold text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}
+                                  <div className={`text-base sm:text-lg font-semibold text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}
                                        title={qTip}>{fmtUSD(dollarVal)}</div>
                                 )}
                               </div>
@@ -5292,14 +5326,36 @@
                   </div>
 
                   {!cfg.hasDAO&&(
-                    <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-white/[0.06] flex-1 items-center">
-                      <div>
-                        <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Max Total Supply</div>
-                        <div className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtAbbr(cfg.totalSupply)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-white/40 mb-2">Circulating Supply</div>
-                        <div className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtAbbr(cfg.totalSupply-(burn?.total||0))}</div>
+                    <div className="mt-5 pt-4 border-t border-white/[0.06] flex-1 flex flex-col justify-center gap-4">
+                      {/* A single bar carries what the donut carries, but reads left-to-right and
+                          fills the width. Same three colours as the legend above it. */}
+                      {(()=>{
+                        const max=cfg.totalSupply||1;
+                        const b=(burn?.total||0)/max*100;
+                        const l=(tokensInLP||0)/max*100;
+                        const h=Math.max(0,100-b-l);
+                        return(
+                          <div>
+                            <div className="flex h-2 rounded-full overflow-hidden bg-white/[0.06]">
+                              <div style={{width:`${b}%`}} className="bg-orange-500" title={`Burned ${b.toFixed(2)}%`}></div>
+                              <div style={{width:`${l}%`}} className="bg-sky-400" title={`In LP ${l.toFixed(2)}%`}></div>
+                              <div style={{width:`${h}%`}} className="bg-[#7CFC00]/70" title={`Held ${h.toFixed(2)}%`}></div>
+                            </div>
+                            <div className="flex justify-between mt-1.5 text-[10px] text-white/30 tabular-nums">
+                              <span>0</span><span>{fmtAbbr(cfg.totalSupply)} max supply</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Max Total Supply</div>
+                          <div className={`text-base sm:text-xl font-medium tabular-nums leading-none ${theme.text}`}>{fmtAbbr(cfg.totalSupply)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Circulating Supply</div>
+                          <div className={`text-base sm:text-xl font-medium tabular-nums leading-none ${theme.text}`}>{fmtAbbr(cfg.totalSupply-(burn?.total||0))}</div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -5469,13 +5525,29 @@
                       const oldRows=burnHistoryCache?.PTGCbyUFORows;
                       const mine={};
                       if(delivered&&delivered.ok&&delivered.swapbackTxs)delivered.swapbackTxs.forEach(t=>{mine[t]=true;});
+                      /* CUTOFF. The old contract is still burning pTGC, but this box is "PTGC
+                         burned by UFO" and UFO is now the new token. So the old contract counts
+                         only for the part of a window that PRE-DATES the new token's launch.
+                         After launch, only the new contract counts.
+
+                         Consequence, and it is the intended one: 24H is new-contract only from
+                         now on. 7D/30D/90D still reach back past launch and pick up the old
+                         contract's history there, until those windows clear the launch date and
+                         they too become new-contract only. Nothing is double-counted and nothing
+                         keeps accruing to a retired token. */
+                      const launchMs=(()=>{
+                        const fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+                        return (fp&&isFinite(fp))?fp:UFO_LAUNCH_FALLBACK_MS;
+                      })();
                       const oldFor=hrs=>{
                         if(!Array.isArray(oldRows))return null;
                         const cut=Date.now()-hrs*3600*1000;
+                        if(launchMs<=cut)return 0;              // window starts after launch
                         let sum=0;
                         for(let i=0;i<oldRows.length;i++){
                           const r=oldRows[i];
                           if(!r||r.t<cut)continue;
+                          if(r.t>=launchMs)continue;            // new token's era: not the old contract's to claim
                           if(r.tx&&mine[r.tx])continue;         // already counted on-chain
                           sum+=r.a||0;
                         }
@@ -5534,11 +5606,11 @@
                                      title={(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k]&&realizedFees.byPeriod[k].sinceLaunch)?`The token is younger than ${l}. This window covers its full history since launch.`:undefined}>
                                   {l}
                                 </div>
-                                <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center"
+                                <div className="text-base sm:text-lg font-semibold tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center"
                                      title={periodsHaveOld
                                        ?'Both contracts. The new contract is read live from chain; the old one — which is still burning pTGC — comes from the dated rows in ufo-ptgc-burns.json, bucketed against the same window.'
                                        :'New UFO contract only. The dated history for the old contract could not be loaded, so its burns are missing from these windows.'}>{v==null?'\u2014':fmtAbbr(v)}</div>
-                                <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{v==null?'\u2014':fmtUSD(v*ptgcPrice)}</div>
+                                <div className="text-xs sm:text-sm font-medium text-white/50 tabular-nums truncate max-w-full text-center">{v==null?'\u2014':fmtUSD(v*ptgcPrice)}</div>
                               </div>
                             ))}
                           </div>
