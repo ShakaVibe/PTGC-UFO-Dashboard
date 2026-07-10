@@ -5132,7 +5132,6 @@
                                 {haveDelivered&&!priceless?'delivered':`from ${live.txCount.toLocaleString()} taxed transfer${live.txCount===1?'':'s'}`}
                               </span>
                               {priceless&&<span className="text-amber-300/70 text-[11px]">price feed unavailable — token amounts are still exact</span>}
-                              {live.sinceLaunch&&<span className="text-white/35 text-[11px]">(token is only {live.windowHours?live.windowHours.toFixed(0):'?'}h old — this is since launch)</span>}
                               {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in this window</span>}
                             </>
                           ):realizedLoading&&token==='UFO'?(
@@ -5195,6 +5194,15 @@
                               ?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + ')
                               :null;
                             const stuck=showLive&&!!undelivered[item.key];
+                            /* Everything that used to be printed under the tile now lives here.
+                               The queue is still the reason Holders reads higher than Burn UFO;
+                               it just doesn't need six lines of chrome to say so. */
+                            const qTip=showLive?[
+                              partsLabel,
+                              item.instant?'Paid to holders the instant the fee is taken — reflections shift an index, so there is nothing to swap and nothing to queue.':null,
+                              (!item.instant&&item.queuedUfo>0)?`${fmtAbbr(Math.round(item.queuedUfo))} UFO still waiting in the contract for the next swapback${ufoPx>0?` (${fmtUSD(item.queuedUfo*ufoPx)})`:''}`:null,
+                              stuck?`Accrued but never delivered — no Mint was emitted for this pool. ${fmtAbbr(Math.round(item.accruedUfo))} UFO accrued.`:null
+                            ].filter(Boolean).join('\n'):undefined;
                             return(
                               <div key={i} className={`bg-white/[0.04] border ${stuck?'border-red-400/40':item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
@@ -5205,25 +5213,15 @@
                                   {showLive&&item.instant&&<span className="text-emerald-300/50 text-[9px] shrink-0 uppercase tracking-wider" title="reflections shift an index rather than transfer tokens — holders are paid the instant the fee is taken, with nothing to queue and no event to measure">instant</span>}
                                   {stuck&&<span className="text-red-400 text-[10px] shrink-0" title="accrued but never delivered — no Mint was emitted for this pool">⚠</span>}
                                 </div>
+                                {/* USD mode shows the dollar amount and nothing else — the TOK toggle
+                                    at the top of the panel carries the token detail, and the queued
+                                    figure lives in the tooltip rather than under every tile. */}
                                 {(valueGenShowTokens||priceless)&&partsLabel?(
-                                  <div className={`font-bold text-sm sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}>{partsLabel}</div>
+                                  <div className={`font-bold text-sm sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}
+                                       title={qTip}>{partsLabel}</div>
                                 ):(
-                                  <>
-                                    <div className={`text-base sm:text-xl font-medium text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}>{fmtUSD(dollarVal)}</div>
-                                    {partsLabel&&<div className="text-white/35 text-[11px] text-right tabular-nums leading-tight truncate">{partsLabel}</div>}
-                                  </>
-                                )}
-                                {/* The five contract buckets wait for a swapback. Holders does not.
-                                    Without this line, Holders looks anomalous when it is simply ahead. */}
-                                {showLive&&!item.instant&&item.queuedUfo>0&&(
-                                  <div className="text-white/30 text-[10px] text-right leading-tight mt-0.5 truncate">
-                                    + {fmtAbbr(Math.round(item.queuedUfo))} UFO queued{ufoPx>0?` (${fmtUSD(item.queuedUfo*ufoPx)})`:''}
-                                  </div>
-                                )}
-                                {stuck&&(
-                                  <div className="text-red-400/70 text-[10px] text-right leading-tight mt-0.5">
-                                    not delivered · {fmtAbbr(Math.round(item.accruedUfo))} UFO accrued
-                                  </div>
+                                  <div className={`text-base sm:text-xl font-medium text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate`}
+                                       title={qTip}>{fmtUSD(dollarVal)}</div>
                                 )}
                               </div>
                             );
@@ -5292,6 +5290,44 @@
                       </div>
                     </div>
                   )}
+
+                  {/* The donut says where the supply IS. It never says where it is GOING.
+                      Everything below is already measured for Value Generated — the fee
+                      engine's lifetime output, in tokens, from chain events. It costs no
+                      extra query and it fills the panel with the one thing it was missing. */}
+                  {token==='UFO'&&delivered&&delivered.ok&&realizedFees&&realizedFees.ok&&(()=>{
+                    const d=delivered.byPeriod['90d'];
+                    const lpUfo=Object.keys(d.lp).reduce((s2,k)=>s2+d.lp[k].ufo,0);
+                    const reflected=realizedFees.byPeriod['90d'].tokens.reflection||0;
+                    const queued=(feeAudit&&feeAudit.ok&&feeAudit.health&&feeAudit.health.contractUfoBalance!=null)
+                      ?feeAudit.health.contractUfoBalance:null;
+                    const px=data?.price||0;
+                    const row=(emoji,label,val,tip)=>(
+                      <div className="flex items-baseline justify-between gap-2 py-1" title={tip}>
+                        <span className="text-white/50 text-xs truncate">{emoji} {label}</span>
+                        <span className="text-right shrink-0">
+                          <span className={`text-sm font-semibold tabular-nums ${theme.text}`}>{val==null?'\u2014':fmtAbbr(Math.round(val))}</span>
+                          {val!=null&&px>0&&<span className="text-white/30 text-[10px] tabular-nums ml-1.5">{fmtUSD(val*px)}</span>}
+                        </span>
+                      </div>
+                    );
+                    return(
+                      <div className="mt-5 pt-4 border-t border-white/[0.06]">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1.5">
+                          Where the fees send it <span className="text-white/25 normal-case tracking-normal">/ since launch</span>
+                        </div>
+                        <div className="divide-y divide-white/[0.04]">
+                          {row('\u{1F525}','Bought back and burned',d.ufoBurned,'UFO the contract purchased with fee revenue and sent to 0x369. Measured at the burn address.')}
+                          {row('\u{1F4A7}','Paired into liquidity',lpUfo,'UFO the contract deposited into the three pools. Measured from each pair\'s Mint events.')}
+                          {row('\u{1F48E}','Redistributed to holders',reflected,'Reflections. Never transferred — the contract shifts an index and every balance rises at once.')}
+                          {row('\u23F3','Waiting for the next swapback',queued,'Fee revenue sitting in the contract. It is converted only when the balance crosses swapThreshold, and a swapback processes half the threshold at a time.')}
+                        </div>
+                        <div className="text-white/25 text-[10px] mt-2 leading-snug">
+                          The {fmtAbbr(Math.max(0,(burn?.total||0)-d.ufoBurned))} UFO in the headline above this panel was burned directly, not by fees.
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </section>
 
@@ -5430,11 +5466,18 @@
                          lifetime total. The delivered-value scan measures the same quantity
                          from the same logs, so use it as a fallback; if BOTH are unavailable
                          the boxes read "—" rather than claiming zero. */
+                      /* SINGLE SOURCE OF TRUTH. This box and Value Generated's Burn PTGC tile
+                         measure the same thing, and they disagreed by exactly 1.00517x —
+                         pTGC's own 0.5% burn fee, which fetchPtgcBurnedByUfo counts and the
+                         delivered-value scan discriminates out (0.005/0.95 = 1.00526). Two
+                         panels reporting the same quantity must not be allowed to differ.
+                         Prefer the scan that applies the discriminator; fall back to the
+                         older reader; show "—" if neither answers. */
                       const dvP=(delivered&&delivered.ok)?delivered.byPeriod:null;
-                      const ptgcSrc=ptgcByUfoLive||(dvP?{
+                      const ptgcSrc=dvP?{
                         total:dvP['90d'].ptgcBurned,h24:dvP['24h'].ptgcBurned,
                         d7:dvP['7d'].ptgcBurned,d30:dvP['30d'].ptgcBurned,d90:dvP['90d'].ptgcBurned
-                      }:null);
+                      }:(ptgcByUfoLive||null);
                       const newBurned=ptgcSrc?ptgcSrc.total:0;
                       const totalBurned=oldBurned+newBurned;
                       const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
@@ -5482,7 +5525,8 @@
                                      title={(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k]&&realizedFees.byPeriod[k].sinceLaunch)?`The token is younger than ${l}. This window covers its full history since launch.`:undefined}>
                                   {l}
                                 </div>
-                                <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center">{v==null?'\u2014':fmtAbbr(v)}</div>
+                                <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center"
+                                     title="New UFO contract only. The old contract's pTGC burns are in the LIFETIME figure above, but that total is a frozen snapshot with no dates, so it cannot be split across these windows.">{v==null?'\u2014':fmtAbbr(v)}</div>
                                 <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{v==null?'\u2014':fmtUSD(v*ptgcPrice)}</div>
                               </div>
                             ))}
