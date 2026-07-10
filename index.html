@@ -1756,18 +1756,23 @@
         return burnHistoryCache[token].holders;
       }
       
-      // No cache - must fetch from PulseScan (with timeout)
-      try{
-        const controller=new AbortController();
-        const timeoutId=setTimeout(()=>controller.abort(),5000);
-        const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`,{signal:controller.signal});
-        clearTimeout(timeoutId);
-        const data=await r.json();
-        const count=parseInt(data.token_holders_count)||0;
-        if(count>0)return count;
-      }catch{}
-      
-      return 0;
+      // No cache - must fetch from PulseScan (timeout + one retry for transient hiccups).
+      for(let attempt=0;attempt<2;attempt++){
+        try{
+          const controller=new AbortController();
+          const timeoutId=setTimeout(()=>controller.abort(),5000);
+          const r=await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/counters`,{signal:controller.signal});
+          clearTimeout(timeoutId);
+          const data=await r.json();
+          const count=parseInt(data.token_holders_count)||0;
+          if(count>0)return count;
+        }catch{}
+        if(attempt===0)await new Promise(s=>setTimeout(s,600));
+      }
+      /* Failed/unknown — return null, NOT 0. A swallowed 0 rendered "0 holders" for a token
+         with thousands, and stuck until a manual refresh. null lets the caller keep the last
+         good value and the tile show "—". */
+      return null;
     };
     
     // Fetch live holder count from PulseScan (for background update)
@@ -4261,7 +4266,7 @@
       const theme={text:isGold?'text-[#F0DC78]':'text-[#7CFC00]',border:isGold?'border-[#D4AF37]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D4AF37]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
       const[data,setData]=useState(null);
       const[burn,setBurn]=useState({total:0,pct:0,supply:0});
-      const[holders,setHolders]=useState(0);
+      const[holders,setHolders]=useState(null);
       const[pls,setPls]=useState(0.00005);
       const[loading,setLoading]=useState(true);
       const[sortBy,setSortBy]=useState('volume');
@@ -4677,7 +4682,7 @@
         // Reset all state immediately when token changes
         setData(null);
         setBurn({total:0,pct:0,supply:0});
-        setHolders(0);
+        setHolders(null);
         setLoading(true);
         setDaoData(null);
         setDaoLoading(true);
@@ -4722,7 +4727,7 @@
           }
 
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
-          setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          setData(d);setHolders(prev=>h!=null?h:prev);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
           /* firstPoolMs is read again OUTSIDE this if-block (the live24hBurn fetch below),
              so it must live in load()'s scope. @babel/standalone renames a block-scoped
