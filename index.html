@@ -2371,26 +2371,42 @@
       // Combine static LP addresses with dynamic ones (exclude LP pools only)
       const allLPAddresses=[...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase());
       
+      /* PulseScan occasionally 500s or times out on a single page. That used to end the
+         whole scan and render the tiers as a lower bound (the "≥" prefix), with squid unknown.
+         Retry a failing page a couple of times with a short backoff before giving up — most
+         failures are transient, so this lets the scan reach completeness and show exact counts. */
+      const fetchPage=async(pageUrl)=>{
+        for(let attempt=0;attempt<3;attempt++){
+          const controller=new AbortController();
+          const timeoutId=setTimeout(()=>controller.abort(),9000);
+          try{
+            const r=await fetch(pageUrl,{signal:controller.signal});
+            clearTimeout(timeoutId);
+            if(!r.ok){if(attempt<2){await new Promise(s=>setTimeout(s,500*(attempt+1)));continue;}return{err:`holders API returned ${r.status}`};}
+            const j=await r.json();
+            if(!j||!Array.isArray(j.items)){if(attempt<2){await new Promise(s=>setTimeout(s,500*(attempt+1)));continue;}return{err:'holders API returned no items array'};}
+            return{data:j};
+          }catch(e){
+            clearTimeout(timeoutId);
+            if(attempt<2){await new Promise(s=>setTimeout(s,500*(attempt+1)));continue;}
+            return{err:e.message||'holders fetch failed'};
+          }
+        }
+        return{err:'holders fetch failed'};
+      };
+      
       try{
         while(page<maxPages){
           const url=nextPageParams
             ?`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?${nextPageParams}`
             :`https://api.scan.pulsechain.com/api/v2/tokens/${addr}/holders?limit=50`;
           
-          // Add timeout to prevent hanging
-          const controller=new AbortController();
-          const timeoutId=setTimeout(()=>controller.abort(),8000);
-          
-          try{
-            const r=await fetch(url,{signal:controller.signal});
-            clearTimeout(timeoutId);
-            /* A 500 from PulseScan used to fall through `data.items||[]` and read as
-               "there are no holders", which rendered as 0 whales, 0 sharks, 0 dolphins.
-               A failed query and an empty result must never be the same value. */
-            if(!r.ok){queryOk=false;lastErr=`holders API returned ${r.status}`;break;}
-            const data=await r.json();
-            if(!data||!Array.isArray(data.items)){queryOk=false;lastErr='holders API returned no items array';break;}
-            const items=data.items;
+          /* fetchPage retries transient failures; it returns {err} only if it truly can't
+             read the page, which leaves the tiers a lower bound rather than a false zero. */
+          const res=await fetchPage(url);
+          if(res.err){queryOk=false;lastErr=res.err;break;}
+          const data=res.data;
+          const items=data.items;
             
             if(items.length===0){complete=true;break;}
             
@@ -2444,11 +2460,6 @@
               break;
             }
             page++;
-          }catch(fetchError){
-            clearTimeout(timeoutId);
-            queryOk=false;lastErr=fetchError.message||'holders fetch failed';
-            break;
-          }
         }
       }catch(e){
         console.error('Error fetching holders:',e);
