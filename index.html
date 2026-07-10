@@ -3414,7 +3414,13 @@
         const liqMcapPct=d?.mcap>0?((d?.liq||0)/(d?.mcap)*100):0;
         const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         
-        const valueGen7d=(t===token&&valueGen7dUsd!=null)?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
+        /* For the main UFO card the Value Gen figure is measured on-chain (valueGen7dUsd),
+           which takes a few seconds to arrive. While it's still null, show a loading dash
+           rather than the crude estimate (which balloons to ~$2M on this token). undefined
+           means we're not on the measured path (compare card / modal) — keep the estimate. */
+        const valueGenMeasured=(t===token&&typeof valueGen7dUsd==='number');
+        const valueGenPending=(t===token&&valueGen7dUsd===null);
+        const valueGen7d=valueGenMeasured?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
         const creaturesRaw=getBurnC(burnPctNum,'Squid');
         const creatures=creaturesRaw.filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
         const burn7dPct=b.supply>0?(burn7dAmt/b.supply)*100:0;
@@ -3475,7 +3481,7 @@
                 <MB emoji="⚖️" label="LIQ/MC RATIO" value={`${liqMcapPct.toFixed(1)}%`} change={null}/>
                 <MB emoji="📈" label="VOLUME" value={fmtUSD(d?.vol)} change={volChange}/>
                 <MB emoji="👥" label="HOLDERS" value={fmt(h)} change={hChange} pct={false}/>
-                <MB emoji="⚡" label="VALUE GEN" value={fmtUSD(valueGen7d)} change={volChange} tag="7D"/>
+                <MB emoji="⚡" label="VALUE GEN" value={valueGenPending?<span className="animate-pulse text-white/40">—</span>:fmtUSD(valueGen7d)} change={valueGenPending?null:volChange} tag="7D"/>
               </div>
               <div className="mx-3 sm:mx-4 mb-4 p-3 sm:p-4 rounded-xl" style={{background:'rgba(249,115,22,0.1)',border:'1px solid rgba(249,115,22,0.3)'}}>
                 <div className="flex gap-3 sm:gap-4">
