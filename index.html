@@ -764,10 +764,12 @@
           any:(directSendCount>0||exemptSenders.length>0||unknownSenders>0)
         };
 
+        /* Four window-start timestamps, resolved together instead of one after another. */
+        const startTsByPeriod={};
+        await Promise.all(PERIOD_KEYS.map(async p=>{startTsByPeriod[p]=await getBlockTs(Math.max(B[p],scanFrom));}));
         const byPeriod={};
         for(const p of PERIOD_KEYS){
-          const windowStart=Math.max(B[p],scanFrom);
-          const startTs=await getBlockTs(windowStart);
+          const startTs=startTsByPeriod[p];
           byPeriod[p]={
             tokens:accs[p],
             totalTokens:Object.values(accs[p]).reduce((a,b)=>a+b,0),
@@ -871,19 +873,19 @@
            nothing here (handoff 8.2), but never assume a constant is right. */
         const mintsByPair={};
         let mintQueryOk=true;
-        for(const p of pairs){
-          const logs=await getLogsChunked(p.address,[[PAIR_MINT_TOPIC,PAIR_MINT_TOPIC_PULSEX]],scanFrom,cur);
-          if(logs===null){mintQueryOk=false;mintsByPair[p.address]=[];continue;}
-          mintsByPair[p.address]=logs;
-        }
-
-        /* token0 per pair, so amount0/amount1 can be assigned to UFO vs partner. */
+        /* All three pairs, both queries, in parallel. These were six sequential round
+           trips (Mint x3 then token0 x3); one flight now. */
         const ufoIsToken0={};
-        for(const p of pairs){
-          const t0=wordToAddress(await ethCallRead(p.address,SEL_TOKEN0));
-          if(!t0){mintQueryOk=false;continue;}
-          ufoIsToken0[p.address]=t0.toLowerCase()===contract;
-        }
+        await Promise.all(pairs.map(async p=>{
+          const[logs,t0raw]=await Promise.all([
+            getLogsChunked(p.address,[[PAIR_MINT_TOPIC,PAIR_MINT_TOPIC_PULSEX]],scanFrom,cur),
+            ethCallRead(p.address,SEL_TOKEN0)
+          ]);
+          if(logs===null){mintQueryOk=false;mintsByPair[p.address]=[];}
+          else mintsByPair[p.address]=logs;
+          const t0=wordToAddress(t0raw);
+          if(!t0)mintQueryOk=false; else ufoIsToken0[p.address]=t0.toLowerCase()===contract;
+        }));
 
         const accs={};
         PERIOD_KEYS.forEach(k=>{accs[k]=mkDelivered();});
