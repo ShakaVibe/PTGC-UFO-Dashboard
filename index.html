@@ -1781,7 +1781,7 @@
         return parseInt(data.token_holders_count)||0;
       }catch{return 0}
     };
-    const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
+    const fetchBurn=async(addr,dec)=>{try{const[bRes,sRes]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})]);const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
 
     // Fetch live 24H burn amount directly from blockchain using eth_getLogs
     // Queries Transfer events to the burn address over the last ~24H of blocks
@@ -4634,8 +4634,11 @@
         setTxnChange24h(null);
         
         const load=async()=>{
-          // Load all caches in PARALLEL (not sequential)
-          await Promise.all([
+          /* The GitHub JSON caches and the first on-chain reads don't depend on each other.
+             Kick both off at once (instead of awaiting the caches first) so first paint waits
+             only on the on-chain reads — roughly max(cache,onchain) instead of their sum.
+             The change-vs-history readouts further down DO need the caches and await cachesP. */
+          const cachesP=Promise.all([
             fetchBurnHistory(),
             fetchHolderHistory(),
             fetchCoingeckoData(),
@@ -4643,13 +4646,18 @@
             fetchTransactionHistory(),
             fetchHolderHistoryNew(),
             fetchTokensInLPHistory()
-          ]);
-          
+          ]).catch(()=>null);   // never reject: awaiting this is a timing gate, not a failure point
+
           /* MIGRATION: burn-summary.json describes the OLD UFO token. For UFO we ignore it
-             entirely and read the burn address from chain instead. PTGC still uses the cache. */
-          const periods=(token==='UFO')?{h12:0,h24:0,d7:0,d30:0,d90:0}:getBurnPeriods(token);
-          setBurnPeriods(periods);
-          
+             entirely and read the burn address from chain instead. PTGC still uses the cache,
+             so only PTGC needs the caches before it can seed its periods. */
+          if(token==='UFO'){
+            setBurnPeriods({h12:0,h24:0,d7:0,d30:0,d90:0});   // seed; the on-chain scan below fills it
+          }else{
+            await cachesP;
+            setBurnPeriods(getBurnPeriods(token));
+          }
+
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
@@ -4682,6 +4690,10 @@
           fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS)
             .then(bp=>{setLive24hBurn(bp?bp.h24:null);})
             .catch(()=>setLive24hBurn(null));
+          
+          /* First paint already happened. The readouts below compare against the history
+             caches, so make sure they've landed (for UFO this is the first time we wait). */
+          await cachesP;
           
           // Update holder change with current holder count
           const hc=getHolderChange(token,h);
@@ -5449,8 +5461,8 @@
                                     ?<PairLogo priceKey={item.priceKey} size={26}/>
                                     :<span className="flex items-center gap-1 shrink-0">
                                        <span className="text-base leading-none">{item.emoji}</span>
-                                       {item.key==='ufoBurn'&&<img src={TOKENS.UFO.logo} alt="UFO" className="w-4 h-4 rounded-full object-contain shrink-0"/>}
-                                       {item.key==='ptgcBurn'&&<img src={TOKENS.PTGC.logo} alt="PTGC" className="w-4 h-4 rounded-full object-contain shrink-0"/>}
+                                       {item.key==='ufoBurn'&&<img src={TOKENS.UFO.logo} alt="UFO" className="w-6 h-6 rounded-full object-contain shrink-0"/>}
+                                       {item.key==='ptgcBurn'&&<img src={TOKENS.PTGC.logo} alt="PTGC" className="w-6 h-6 rounded-full object-contain shrink-0"/>}
                                      </span>}
                                   <span className="text-white/55 text-xs sm:text-sm truncate">{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
                                   {showLive&&item.instant&&<span className="text-emerald-300/50 text-[9px] shrink-0 uppercase tracking-wider" title="reflections shift an index rather than transfer tokens — holders are paid the instant the fee is taken, with nothing to queue and no event to measure">instant</span>}
