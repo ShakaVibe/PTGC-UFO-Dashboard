@@ -4750,9 +4750,16 @@
              launch burn, and on failure it fell back to a lifetime figure. The correct,
              timestamp-bounded 24h burn is already computed by fetchBurnPeriodsOnChain.
              Read that instead of re-deriving it wrong. */
-          fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS)
-            .then(bp=>{setLive24hBurn(bp?bp.h24:null);})
-            .catch(()=>setLive24hBurn(null));
+          /* Only UFO reads its 24h burn live from chain (its cache describes the OLD token).
+             PTGC's periods — including 24h — come from the burn-history cache via burnPeriods,
+             so scanning ~90 days of PTGC logs here just to get one number is slow enough to
+             leave the box stuck on "Loading". Skip it for PTGC; the 24H box uses burnPeriods.h24
+             (the same cache source as its 7D/30D/90D). */
+          if(token==='UFO'){
+            fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS)
+              .then(bp=>{setLive24hBurn(bp?bp.h24:null);})
+              .catch(()=>setLive24hBurn(null));
+          }
           
           /* First paint already happened. The readouts below compare against the history
              caches, so make sure they've landed (for UFO this is the first time we wait). */
@@ -5243,7 +5250,7 @@
 
                   <div className="flex-1"></div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[{l:'24H',k:'24h',v:live24hBurn,loading:live24hBurn===null},{l:'7D',k:'7d',v:burnPeriods?.d7},{l:'30D',k:'30d',v:burnPeriods?.d30},{l:'90D',k:'90d',v:burnPeriods?.d90}].map(({l,k,v,loading})=>{
+                    {[{l:'24H',k:'24h',v:token==='UFO'?live24hBurn:burnPeriods?.h24,loading:token==='UFO'&&live24hBurn===null},{l:'7D',k:'7d',v:burnPeriods?.d7},{l:'30D',k:'30d',v:burnPeriods?.d30},{l:'90D',k:'90d',v:burnPeriods?.d90}].map(({l,k,v,loading})=>{
                       const unknown=(v==null);
                       const pct=cfg.totalSupply>0&&v>0?(v/cfg.totalSupply)*100:0;
                       const c=(!loading&&v>0)?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
