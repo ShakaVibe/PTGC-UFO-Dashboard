@@ -1972,6 +1972,28 @@
       const periodsHaveOld=Array.isArray(oldRows);
       return{ptgcSrc,oldBurned,newBurned,totalBurned,burnPct,periods,periodsHaveOld};
     };
+
+    /* Measured Value Generated per bucket for a period — the same delivered on-chain basis as
+       the Value Generated panel and the KPI card (each bucket's delivered tokens × price; LP
+       buckets are UFO + partner). The share card used volume × tax, which reads $0 while a
+       young token has no volume baseline. Returns null until the delivered scan is ready. */
+    const computeValueGenBuckets=(period,delivered,realizedFees,prices)=>{
+      if(!delivered||!delivered.ok||!realizedFees||!realizedFees.ok)return null;
+      const dv=delivered.byPeriod[period],live=realizedFees.byPeriod[period];
+      if(!dv||!live)return null;
+      const px=k=>prices[k]||0;
+      const lp=(sym,quoteKey)=>{const e=dv.lp&&dv.lp[sym];return e?(e.ufo*px('UFO')+e.quote*px(quoteKey)):0;};
+      const byKey={
+        reflection:(live.tokens?.reflection||0)*px('UFO'),
+        ufoBurn:(dv.ufoBurned||0)*px('UFO'),
+        ptgcBurn:(dv.ptgcBurned||0)*px('PTGC'),
+        plsLP:lp('WPLS','PLS'),
+        plsxLP:lp('PLSX','PLSX'),
+        wethLP:lp('WETH','WETH')
+      };
+      const total=byKey.reflection+byKey.ufoBurn+byKey.ptgcBurn+byKey.plsLP+byKey.plsxLP+byKey.wethLP;
+      return {byKey,total};
+    };
     const historyEpochMs = (tkn) => (tkn === 'UFO') ? (ufoLaunchMs || UFO_LAUNCH_FALLBACK_MS) : 0;
 
     // Snapshots that legitimately describe `tkn`: after its epoch, with a real count.
@@ -6685,17 +6707,21 @@
                     {(()=>{
                       const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
                       const periodVol=volAmounts[valueGenPeriod]||0;
-                      const totalGen=periodVol*cfg.taxRate;
-                      
                       const orderedItems=buildValueGenItems(token,cfg);
                       const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
+                      /* Measured on-chain value, same basis as the panel and KPI card. The old
+                         volume×tax estimate reads $0 while a young token has no volume baseline,
+                         which is why this card came out all $0. Falls back to the estimate only
+                         if the delivered scan isn't ready (or the token isn't UFO). */
+                      const vgMeasured=(token==='UFO')?computeValueGenBuckets(valueGenPeriod,delivered,realizedFees,vgPrices):null;
+                      const totalGen=vgMeasured?vgMeasured.total:(periodVol*cfg.taxRate);
                       
                       return(
                         <div className="flex gap-3 flex-1">
                           {/* Left - totals */}
                           <div className="w-[145px]">
                             <div className="text-white/50 text-xs mb-1">{valueGenPeriod.toUpperCase()} Volume</div>
-                            <div className="text-lg font-bold text-white/80 mb-2">{fmtUSD(periodVol)}</div>
+                            <div className="text-lg font-bold text-white/80 mb-2">{periodVol>0?fmtUSD(periodVol):'\u2014'}</div>
                             <div className="text-white/50 text-xs mb-1">Value Generated</div>
                             <div className="text-4xl font-bold text-green-400">{fmtUSD(totalGen)}</div>
                             <div className="text-white/40 text-xs mt-1">{(cfg.taxRate*100).toFixed(0)}% tax rate</div>
@@ -6704,7 +6730,7 @@
                           {/* Right - breakdown boxes */}
                           <div className="flex-1 grid grid-cols-3 gap-1.5">
                             {orderedItems.map((item,i)=>{
-                              const dollarVal=periodVol*(item.pct/100);
+                              const dollarVal=vgMeasured?(vgMeasured.byKey[item.key]||0):(periodVol*(item.pct/100));
                               const parts=valueGenParts(token,item,dollarVal,vgPrices);
                               const partsLabel=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
                               return(
