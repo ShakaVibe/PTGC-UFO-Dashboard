@@ -1783,28 +1783,9 @@
     };
     const fetchBurn=async(addr,dec)=>{try{const[bRes,sRes]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})]);const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
 
-    // Fetch live 24H burn amount directly from blockchain using eth_getLogs
-    // Queries Transfer events to the burn address over the last ~24H of blocks
-    const fetchLive24hBurn=async(tokenAddress,decimals)=>{
-      try{
-        const blockRes=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blockRes.result)return null;
-        const currentBlock=parseInt(blockRes.result,16);
-        const fromBlock=Math.max(0,currentBlock-8640); // ~24H at 10sec/block
-        const TRANSFER_SIG='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-        const BURN_TOPIC='0x0000000000000000000000000000000000000000000000000000000000000369';
-        const logsRes=await rpcFetch({
-          jsonrpc:'2.0',method:'eth_getLogs',
-          params:[{address:tokenAddress,fromBlock:'0x'+fromBlock.toString(16),toBlock:'latest',topics:[TRANSFER_SIG,null,BURN_TOPIC]}],
-          id:2
-        },15000);
-        if(!logsRes.result||!Array.isArray(logsRes.result))return null;
-        let total=0;
-        for(const log of logsRes.result){total+=Number(BigInt(log.data))/Math.pow(10,decimals);}
-        console.log(`Live 24H burn (${tokenAddress.slice(0,8)}...): ${total.toLocaleString()} from ${logsRes.result.length} txs`);
-        return total;
-      }catch(e){console.error('fetchLive24hBurn error:',e);return null;}
-    };
+    /* (removed) fetchLive24hBurn — the old block-counted 24h burn (currentBlock-8640 @10s/block)
+       drifted past launch on fast blocks and swept in the ~93B launch burn. It was replaced by
+       the timestamp-bounded fetchBurnPeriodsOnChain().h24 and had no remaining callers. */
     
     // Burn history cache - loaded from pre-generated JSON file
     let burnHistoryCache=null;
