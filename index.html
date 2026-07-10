@@ -843,10 +843,33 @@
           const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
           addTo(parseInt(l.blockNumber,16),a=>{a.ufoBurned+=amt;});
         }
+        /* pTGC taxes its own transfers 5%, and part of that tax is itself a burn.
+           So a swapback's pTGC buyback emits TWO transfers to 0x369:
+               232,845.95  the tokens UFO actually bought and burned   (95.0% of gross)
+                 1,225.505 pTGC's own burn fee on that same transfer   ( 0.5% of gross)
+           Counting both overstates "pTGC burned by UFO" by 0.5263% (0.005/0.95).
+           They share a sender — the pair — so address can't separate them. The RATIO
+           can: the fee leg is always 0.005/0.95 of the delivered leg. Same trick as the
+           direct-send fingerprint, and it survives a tx containing two swapbacks. */
+        const PTGC_FEE_RATIO=0.005/0.95;
+        const ptgcByTx={};
         for(const l of ptgcBurns){
-          if(!swapbackTxs[l.transactionHash])continue;      // pTGC's own tax burn
-          const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
-          addTo(parseInt(l.blockNumber,16),a=>{a.ptgcBurned+=amt;});
+          if(!swapbackTxs[l.transactionHash])continue;      // pTGC's own tax burn elsewhere
+          (ptgcByTx[l.transactionHash]=ptgcByTx[l.transactionHash]||[]).push(l);
+        }
+        let ptgcFeeLegsDropped=0;
+        for(const tx of Object.keys(ptgcByTx)){
+          const legs=ptgcByTx[tx].map(l=>({log:l,amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
+          const drop={};
+          for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
+            if(i===j||drop[i])continue;
+            const r=legs[i].amt/legs[j].amt;
+            if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01){drop[i]=true;ptgcFeeLegsDropped++;}
+          }
+          legs.forEach((lg,i)=>{
+            if(drop[i])return;
+            addTo(parseInt(lg.log.blockNumber,16),a=>{a.ptgcBurned+=lg.amt;});
+          });
         }
 
         for(const p of pairs){
@@ -871,7 +894,8 @@
           }
         }
 
-        const out={ok:true,byPeriod:accs,mintQueryOk,scanFrom,headBlock:cur,
+        const out={ok:true,byPeriod:accs,mintQueryOk,scanFrom,headBlock:cur,launch:B.launch,
+                   ptgcFeeLegsDropped,
                    pairs:pairs.map(p=>({symbol:p.quoteSymbol,address:p.address}))};
         deliveredCache[key]=out;
         console.log(`Delivered value | blocks ${scanFrom}-${cur} | ${Object.keys(swapbackTxs).length} swapback tx(s)`);
@@ -879,6 +903,7 @@
           const a=accs[k];
           console.log(`   ${k}: ${a.swapbackTxs} swapbacks · ${Math.round(a.ufoBurned).toLocaleString()} UFO burned · ${Math.round(a.ptgcBurned).toLocaleString()} pTGC burned · LP ${Object.keys(a.lp).map(s=>`${s}:${a.lp[s].mints}`).join(' ')||'none'}`);
         });
+        if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) identified as pTGC's own 0.5% burn fee and excluded)`);
         if(!mintQueryOk)console.error('*** Mint query failed for at least one pair — LP delivery is NOT trustworthy ***');
         return out;
       }catch(e){console.error('fetchDeliveredValue error:',e);return{ok:false,error:e.message||'unexpected error'};}
@@ -2176,6 +2201,7 @@
     // Fetch holders - stop after Dolphin tier, calculate rest as Squid & Below
     const fetchHolderTiers=async(addr,cfg,totalHolderCount,lpAddresses=[])=>{
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0};
+      let queryOk=true,lastErr=null;
       let nextPageParams=null;
       let totalFetched=0;
       const maxPages=20;
@@ -2198,8 +2224,13 @@
           try{
             const r=await fetch(url,{signal:controller.signal});
             clearTimeout(timeoutId);
+            /* A 500 from PulseScan used to fall through `data.items||[]` and read as
+               "there are no holders", which rendered as 0 whales, 0 sharks, 0 dolphins.
+               A failed query and an empty result must never be the same value. */
+            if(!r.ok){queryOk=false;lastErr=`holders API returned ${r.status}`;break;}
             const data=await r.json();
-            const items=data.items||[];
+            if(!data||!Array.isArray(data.items)){queryOk=false;lastErr='holders API returned no items array';break;}
+            const items=data.items;
             
             if(items.length===0)break;
             
@@ -2241,18 +2272,21 @@
             page++;
           }catch(fetchError){
             clearTimeout(timeoutId);
+            queryOk=false;lastErr=fetchError.message||'holders fetch failed';
             break;
           }
         }
       }catch(e){
         console.error('Error fetching holders:',e);
+        queryOk=false;lastErr=e.message||'holders fetch failed';
       }
+      if(!queryOk)console.warn(`holder tiers UNAVAILABLE: ${lastErr} — counts are NOT zero, they are unknown`);
       
       // Squid & Below = total holders - counted tiers - LP addresses - staking contract
       const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
       const squidAndBelow=Math.max(0,totalHolderCount-countedHolders-excludedAddresses);
       
-      return{counts,countedHolders,squidAndBelow,total:totalFetched};
+      return{counts,countedHolders,squidAndBelow,total:totalFetched,ok:queryOk,error:lastErr};
     };
     
     const DonutChart=({data,colors,size=120})=>{
@@ -4440,12 +4474,16 @@
           // Fetch holder tiers for all tokens - pass LP pair addresses
           const lpPairAddresses=d?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
           fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
+            /* null, not 0, when the holders API failed. Zero whales is a claim; we
+               have no basis for it. The tiles render "—" for null. */
+            const v=n=>result.ok?(n||0):null;
             setHolderTiers({
-              Poseidon:result.counts.Poseidon||0,
-              Whale:result.counts.Whale||0,
-              Shark:result.counts.Shark||0,
-              Dolphin:result.counts.Dolphin||0,
-              SquidAndBelow:result.squidAndBelow||0
+              Poseidon:v(result.counts.Poseidon),
+              Whale:v(result.counts.Whale),
+              Shark:v(result.counts.Shark),
+              Dolphin:v(result.counts.Dolphin),
+              SquidAndBelow:v(result.squidAndBelow),
+              ok:result.ok
             });
           });
           
@@ -4874,11 +4912,25 @@
                     </div>
                   </div>
 
-                  <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-3">
+                  <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-1">
                     <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmt(burn?.total)}</span>
                     <span className="text-sm sm:text-base font-semibold text-white tabular-nums">{fmtUSD((burn?.total||0)*(data?.price||0))}</span>
                     <span className="text-xs sm:text-sm text-white/45 tabular-nums">{(burn?.pct||0).toFixed(2)}%</span>
                   </div>
+                  {/* The headline is balanceOf(0x369) — every token ever burned, by anyone.
+                      Almost all of it is the one-off launch burn. What the FEES have burned
+                      is a different and much smaller number, and it is the one that grows.
+                      Showing only the headline made the two indistinguishable. */}
+                  {token==='UFO'&&delivered&&delivered.ok&&(()=>{
+                    const byFees=delivered.byPeriod['90d'].ufoBurned;
+                    const byHand=Math.max(0,(burn?.total||0)-byFees);
+                    return(
+                      <div className="mb-3 text-[11px] text-white/40">
+                        <span className="text-white/70 tabular-nums">{fmtAbbr(Math.round(byFees))} UFO</span> bought back and burned by fees
+                        <span className="text-white/25"> · {fmtAbbr(Math.round(byHand))} burned directly (launch burn and manual sends)</span>
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center gap-2 mb-4">
                     <div className="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden">
@@ -4895,12 +4947,16 @@
 
                   <div className="flex-1"></div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[{l:'24H',v:live24hBurn,loading:live24hBurn===null},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v,loading})=>{
+                    {[{l:'24H',k:'24h',v:live24hBurn,loading:live24hBurn===null},{l:'7D',k:'7d',v:burnPeriods.d7},{l:'30D',k:'30d',v:burnPeriods.d30},{l:'90D',k:'90d',v:burnPeriods.d90}].map(({l,k,v,loading})=>{
                       const pct=cfg.totalSupply>0&&v>0?(v/cfg.totalSupply)*100:0;
                       const c=(!loading&&v>0)?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
+                      /* A window longer than the token's life is not "7 days of burns" — it is
+                         everything since launch. Four identical numbers under four different
+                         headings reads like a bug. Say what the window actually is. */
+                      const since=(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k])?realizedFees.byPeriod[k].sinceLaunch:false;
                       return(
                         <div key={l} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-3 flex flex-col items-center gap-1.5 min-w-0">
-                          <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">{l}</div>
+                          <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">{since?'SINCE LAUNCH':l}</div>
                           {loading?(
                             <>
                               <div className="text-lg sm:text-xl opacity-25">{'\u{1F41A}'}</div>
@@ -5068,16 +5124,29 @@
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
-                        {/* Accrued is the honest denominator. The gap IS the contract's problem. */}
-                        {showLive&&haveDelivered&&!priceless&&(
-                          <div className="mb-3 text-[11px] flex flex-wrap gap-x-3 gap-y-0.5">
-                            <span className="text-white/40">accrued <span className="text-white/70 tabular-nums">{fmtUSD(accruedUsd)}</span> from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
-                            {gapUsd>accruedUsd*0.01&&(
-                              <span className="text-amber-300/80">undelivered <span className="tabular-nums">{fmtUSD(gapUsd)}</span> — stranded in the contract</span>
-                            )}
-                            <span className="text-white/25">delivered value is measured at the pool and the burn address, not estimated</span>
-                          </div>
-                        )}
+                        {/* Accrued is the honest denominator. But the gap is NOT all stranded:
+                            part sits in the contract, part was consumed by swap fees, the
+                            contract's own price impact, and pTGC's 5% tax on the buyback.
+                            Those are different things and were being labelled with one word. */}
+                        {showLive&&haveDelivered&&!priceless&&(()=>{
+                          const h=(feeAudit&&feeAudit.ok)?feeAudit.health:null;
+                          const strandedUsd=h?((h.contractUfoBalance||0)*px('UFO')+(h.contractPlsBalance||0)*px('PLS')):null;
+                          const frictionUsd=(strandedUsd!=null)?Math.max(0,gapUsd-strandedUsd):null;
+                          return(
+                            <div className="mb-3 text-[11px] flex flex-wrap gap-x-3 gap-y-0.5">
+                              <span className="text-white/40">accrued <span className="text-white/70 tabular-nums">{fmtUSD(accruedUsd)}</span> from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
+                              {gapUsd>accruedUsd*0.005&&(strandedUsd!=null?(
+                                <>
+                                  <span className="text-amber-300/80">{fmtUSD(strandedUsd)} sitting in the contract</span>
+                                  <span className="text-white/40">{fmtUSD(frictionUsd)} consumed by swap fees, price impact and pTGC's own tax</span>
+                                </>
+                              ):(
+                                <span className="text-amber-300/80">{fmtUSD(gapUsd)} accrued but not delivered</span>
+                              ))}
+                              <span className="text-white/25">delivered value is measured at the pool and the burn address, not estimated</span>
+                            </div>
+                          );
+                        })()}
                         {showLive&&haveDelivered&&delivered&&!delivered.mintQueryOk&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px] text-red-300">
                             a Mint query failed for at least one pair — an LP bucket reading $0 is NOT trustworthy. See console.
@@ -5245,18 +5314,18 @@
                       ))}
                     </div>
                     <div className="w-full sm:w-auto sm:border-l border-white/[0.08] sm:pl-6 sm:ml-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-white/[0.08]">
-                      {(holderTiers?.Poseidon===0&&holderTiers?.Whale===0&&holderTiers?.Shark===0&&holderTiers?.Dolphin===0&&holderTiers?.SquidAndBelow===0)?(
+                      {(holderTiers?.Poseidon===0&&holderTiers?.Whale===0&&holderTiers?.Shark===0&&holderTiers?.Dolphin===0&&holderTiers?.SquidAndBelow===0&&holderTiers?.ok!==false)?(
                         <div className="flex items-center gap-2">
                           <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
                           <span className="text-white/40 text-xs">Loading...</span>
                         </div>
                       ):(
                         <div className="grid grid-cols-3 gap-x-4 sm:gap-x-5 gap-y-2.5 text-center">
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F531}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Poseidon||0}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F40B}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Whale||0}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F988}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Shark||0}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F42C}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Dolphin||0}</div></div>
-                          <div className="col-span-2"><div className="text-xl sm:text-2xl">{'\u{1F991}'}<span className="text-white/60 mx-0.5">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{fmtAbbr(holderTiers?.SquidAndBelow||0)}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F531}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Poseidon==null?'\u2014':holderTiers.Poseidon}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F40B}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Whale==null?'\u2014':holderTiers.Whale}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F988}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Shark==null?'\u2014':holderTiers.Shark}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F42C}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Dolphin==null?'\u2014':holderTiers.Dolphin}</div></div>
+                          <div className="col-span-2"><div className="text-xl sm:text-2xl">{'\u{1F991}'}<span className="text-white/60 mx-0.5">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.SquidAndBelow==null?'\u2014':fmtAbbr(holderTiers.SquidAndBelow)}</div></div>
                         </div>
                       )}
                     </div>
@@ -5447,9 +5516,12 @@
                           </div>
 
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {[{l:'24H',v:periods.h24?.amount},{l:'7D',v:periods.d7?.amount},{l:'30D',v:periods.d30?.amount},{l:'90D',v:periods.d90?.amount}].map(({l,v})=>(
+                            {[{l:'24H',k:'24h',v:periods.h24?.amount},{l:'7D',k:'7d',v:periods.d7?.amount},{l:'30D',k:'30d',v:periods.d30?.amount},{l:'90D',k:'90d',v:periods.d90?.amount}].map(({l,k,v})=>(
                               <div key={l} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-3 flex flex-col items-center gap-1.5 min-w-0">
-                                <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">{l}</div>
+                                {/* Windows longer than the token's life are "since launch", not "7D". */}
+                                <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">
+                                  {(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k]&&realizedFees.byPeriod[k].sinceLaunch)?'SINCE LAUNCH':l}
+                                </div>
                                 <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center">{fmtAbbr(v||0)}</div>
                                 <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{fmtUSD((v||0)*ptgcPrice)}</div>
                               </div>
@@ -6561,7 +6633,7 @@
                             
                             {/* Right column - period boxes */}
                             <div className="grid grid-cols-2 gap-2 w-[210px]">
-                              {[{l:'24H',v:periods.h24?.amount},{l:'7D',v:periods.d7?.amount},{l:'30D',v:periods.d30?.amount},{l:'90D',v:periods.d90?.amount}].map(({l,v})=>(
+                              {[{l:'24H',k:'24h',v:periods.h24?.amount},{l:'7D',k:'7d',v:periods.d7?.amount},{l:'30D',k:'30d',v:periods.d30?.amount},{l:'90D',k:'90d',v:periods.d90?.amount}].map(({l,k,v})=>(
                                 <div key={l} className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 relative h-[80px]" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
                                   <div className="text-white font-bold text-base absolute top-1 left-2">{l}</div>
                                   <div className="text-right mt-5">
