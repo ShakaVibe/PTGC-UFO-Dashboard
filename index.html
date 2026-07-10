@@ -378,19 +378,42 @@
       return out;
     };
 
+    /* FeesUpdated carries SEVEN uint256 words; only six are buckets. Which slot
+       holds the total is not something we can verify from the ABI we have, and a
+       one-word shift silently misattributes EVERY bucket. So don't assume: the
+       total must equal the sum of the other six, which makes the layout
+       self-identifying. If neither candidate holds, throw. A thrown error
+       surfaces as "couldn't read fees from chain"; a wrong guess surfaces as a
+       plausible number that is wrong forever. */
     const decodeFeesUpdated=(data)=>{
       const h=data.startsWith('0x')?data.slice(2):data;
+      const n=Math.floor(h.length/64);
       const w=i=>Number(BigInt('0x'+h.slice(i*64,(i+1)*64)));
-      return{reflection:w(0),ufoBurn:w(1),ptgcBurn:w(2),plsLP:w(3),plsxLP:w(4),wethLP:w(5)};
+      const words=[];for(let i=0;i<n;i++)words.push(w(i));
+      const shape=a=>({reflection:a[0],ufoBurn:a[1],ptgcBurn:a[2],plsLP:a[3],plsxLP:a[4],wethLP:a[5]});
+      const sum=a=>a.reduce((x,y)=>x+y,0);
+      if(n===6)return shape(words);
+      if(n===7){
+        const lead=words.slice(0,6), trail=words.slice(1,7);
+        if(words[6]===sum(lead))return shape(lead);   // (buckets…, total)
+        if(words[0]===sum(trail))return shape(trail); // (total, buckets…)
+      }
+      throw new Error(`FeesUpdated layout not recognised (${n} words, no self-consistent total) — refusing to guess fee rates`);
     };
 
-    // Full history if the RPC allows it (narrow topic filter, tiny result set).
+    /* Returns null on failure. NEVER `|| []` — a failed query and "there were no
+       fee changes" must not be the same value. If this silently returned [], every
+       fee transfer would be attributed with DEFAULT_FEE_RATES and the bucket split
+       would be wrong forever, with ok:true. See handoff section 8.4.
+       The 0x0->latest fast path is also the query most likely to be silently
+       capped, so its result is truncation-checked like any other. */
     const fetchFeeTimeline=async(tokenAddress,fromBlock,toBlock)=>{
       let arr=null;
       const full=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
         params:[{address:tokenAddress,fromBlock:'0x0',toBlock:'latest',topics:[FEES_UPDATED_TOPIC]}],id:1},20000);
-      if(full&&Array.isArray(full.result))arr=full.result;
-      else arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],fromBlock,toBlock)||[];
+      if(full&&Array.isArray(full.result)&&!looksTruncated(full.result.length))arr=full.result;
+      else arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],fromBlock,toBlock);
+      if(arr===null)return null;
       return arr.map(l=>({block:parseInt(l.blockNumber,16),rates:decodeFeesUpdated(l.data)}))
                 .sort((a,b)=>a.block-b.block);
     };
@@ -415,7 +438,8 @@
       return t||0;
     };
 
-    // smallest block whose timestamp >= targetSec
+    // smallest block whose timestamp >= targetSec. Returns null if the chain
+    // won't answer — a wrong boundary is worse than no boundary.
     const findBlockAtTime=async(targetSec,headBlock,headTs,spb)=>{
       if(targetSec>=headTs)return headBlock;
       const guess=headBlock-Math.round((headTs-targetSec)/spb);
@@ -430,24 +454,44 @@
       while(lo<=hi){
         const mid=Math.floor((lo+hi)/2);
         const t=await getBlockTs(mid);
-        if(!t)break;
+        if(!t)return null;
         if(t>=targetSec){ans=mid;hi=mid-1;}else{lo=mid+1;}
       }
       return ans;
     };
 
     let boundariesCache=null;
-    const getPeriodBoundaries=async(headBlock)=>{
-      const key=cacheBucket();
+    /* SPEED: this used to run four binary searches back to back — ~20 sequential
+       eth_getBlockByNumber round trips each, ~80 before a single log was fetched.
+       On a young token, three of those four boundaries reach back past the token's
+       birth and get discarded by max(B[p],launch) at the call site anyway. So:
+       resolve the launch block first, answer those three for free, and run only
+       the searches that can actually land inside the token's life — in parallel.
+       On a 2-day-old token this is one search instead of four. */
+    const getPeriodBoundaries=async(headBlock,firstPoolMs)=>{
+      const key=`${cacheBucket()}-${firstPoolMs||0}`;
       if(boundariesCache&&boundariesCache.key===key)return boundariesCache.v;
       const headTs=await getBlockTs(headBlock);
       if(!headTs)return null;
       const{secPerBlock}=await getChainTiming(headBlock);
-      const at=(days)=>findBlockAtTime(headTs-days*86400,headBlock,headTs,secPerBlock);
-      const b1=await at(1), b7=await at(7), b30=await at(30), b90=await at(90);
-      const v={headBlock,headTs,secPerBlock,'24h':b1,'7d':b7,'30d':b30,'90d':b90};
+      const launch=estimateLaunchBlock(headBlock,firstPoolMs,secPerBlock);
+      const launchTs=launch>0?await getBlockTs(launch):0;
+
+      const DAYS={'24h':1,'7d':7,'30d':30,'90d':90};
+      const v={headBlock,headTs,secPerBlock,launch};
+      const pending=[];
+      for(const p of PERIOD_KEYS){
+        const target=headTs-DAYS[p]*86400;
+        if(launchTs&&target<=launchTs)v[p]=launch;   // window predates the token
+        else pending.push([p,target]);
+      }
+      const found=await Promise.all(pending.map(([,t])=>findBlockAtTime(t,headBlock,headTs,secPerBlock)));
+      for(let i=0;i<pending.length;i++){
+        if(found[i]===null)return null;              // never guess a boundary
+        v[pending[i][0]]=found[i];
+      }
       boundariesCache={key,v};
-      console.log(`Period boundaries by timestamp | head ${headBlock} | 24h>=${b1} 7d>=${b7} 30d>=${b30} 90d>=${b90}`);
+      console.log(`Period boundaries by timestamp | head ${headBlock} | launch>=${launch} | ${pending.length} search(es), ${PERIOD_KEYS.length-pending.length} resolved to launch | 24h>=${v['24h']} 7d>=${v['7d']} 30d>=${v['30d']} 90d>=${v['90d']}`);
       return v;
     };
 
@@ -468,8 +512,56 @@
       return Math.max(0,currentBlock-blocks);
     };
 
+    /* Which addresses does the contract not tax? A tax leg can never originate
+       from an exempt sender, because an exempt transfer pays no tax. That single
+       fact identifies the impostors we cannot spot structurally.
+       null means "we don't know" and is never treated as false. */
+    const exemptCache={};
+    const isExemptFromFee=async(tokenAddress,addr)=>{
+      const k=`${tokenAddress}|${addr}`;
+      if(exemptCache[k]!==undefined)return exemptCache[k];
+      const r=await ethCallRead(tokenAddress,SEL_IS_EXCLUDED_FROM_FEE+encodeAddress(addr));
+      const v=(r===null)?null:(BigInt(r)!==BigInt(0));
+      exemptCache[k]=v;
+      return v;
+    };
+
     /* ONE scan, ALL periods. Previously each period was fetched separately and cached
-       separately, so 24h and 7d could disagree (24h > 7d, which is impossible). */
+       separately, so 24h and 7d could disagree (24h > 7d, which is impossible).
+
+       ---------------------------------------------------------------------------
+       WHAT THIS SCAN MATCHES, AND WHY THAT IS NOT THE SAME THING AS "FEES"
+
+       The filter [Transfer, *, contract] matches EVERY inbound UFO transfer, not
+       only tax legs. Two impostors get counted as fees unless you look:
+
+       (a) A TAXED wallet sends UFO straight to the contract. That transfer is
+           itself taxed, so it emits TWO inbound legs in one transaction from the
+           same sender: the fee (contractBps of gross) and the principal
+           (10000-totalBps of gross). Both land on the contract. The principal is
+           ~19x the fee and is not a fee at all.
+
+           Fingerprint, exact and unique:
+               fee / principal  ==  contractBps / (10000 - totalBps)
+           At today's rates, 500/9400 = 0.05319. Nothing else produces two
+           same-sender inbound legs in one tx at that ratio.
+
+           It is NOT fee/(fee+principal): the reflection share is taxed away but
+           emits no Transfer, so it is missing from both legs.
+
+       (b) A FEE-EXEMPT wallet sends UFO straight to the contract. One leg,
+           structurally identical to a fee. Unrecoverable from log shape. But an
+           exempt sender pays no tax, so it can never originate a tax leg. Ask the
+           chain. Senders are checked biggest-first until everything unchecked is
+           under 0.5% of the total, so the residual error is bounded and reported
+           rather than hidden.
+
+       Legitimate senders here are the pairs (a BUY's fee leg has the pair as
+       `from`) and ordinary taxed wallets. Neither is exempt.
+
+       Neither check costs an extra log scan. (b) costs a handful of cached
+       eth_calls on the first load.
+       --------------------------------------------------------------------------- */
     const fetchRealizedFees=async(tokenAddress,firstPoolMs)=>{
       lastLogError=null;
       try{
@@ -479,9 +571,9 @@
         const key=`${tokenAddress}-fees-${cacheBucket()}`;
         if(realizedFeeCache[key])return realizedFeeCache[key];
 
-        const B=await getPeriodBoundaries(cur);
+        const B=await getPeriodBoundaries(cur,firstPoolMs);
         if(!B)return{ok:false,error:'could not read block timestamps'};
-        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const launch=B.launch;
         const scanFrom=Math.max(0,B['90d'],launch);
 
         const contractTopic='0x'+encodeAddress(tokenAddress);
@@ -490,27 +582,116 @@
           fetchFeeTimeline(tokenAddress,scanFrom,cur)
         ]);
         if(!transferLogs)return{ok:false,error:lastLogError||'chain read failed'};
+        if(!feeEvents)return{ok:false,error:lastLogError||'could not read fee-change history'};
 
-        const accs={},counts={};
-        PERIOD_KEYS.forEach(p=>{accs[p]=mkFeeAcc();counts[p]=0;});
+        /* ---- parse every inbound leg ---- */
+        const rows=[];
         for(const log of transferLogs){
+          if(!log.topics||log.topics.length<3)continue;
           const b=parseInt(log.blockNumber,16);
           const r=ratesAtBlock(feeEvents,b,DEFAULT_FEE_RATES);
           const contractBps=r.ufoBurn+r.ptgcBurn+r.plsLP+r.plsxLP+r.wethLP;
-          if(contractBps<=0)continue;
-          const cFee=weiToTokens(BigInt(log.data&&log.data!=='0x'?log.data:'0x0'));
+          if(contractBps<=0)continue;   // nothing routes to the contract at these rates
+          rows.push({
+            block:b,
+            tx:log.transactionHash,
+            from:('0x'+log.topics[1].slice(26)).toLowerCase(),
+            tokens:weiToTokens(BigInt(log.data&&log.data!=='0x'?log.data:'0x0')),
+            rates:r,
+            contractBps:contractBps,
+            totalBps:contractBps+r.reflection,
+            drop:null    // null = counted as a fee. string = why it was excluded.
+          });
+        }
+
+        /* ---- (a) direct sends from taxed wallets: two legs, one tx, one sender ---- */
+        const groups={};
+        for(const row of rows){
+          const k=`${row.tx}|${row.from}`;
+          if(!groups[k])groups[k]=[];
+          groups[k].push(row);
+        }
+        let directSendCount=0,directSendTokens=0,unclassifiedGroups=0;
+        for(const k of Object.keys(groups)){
+          const legs=groups[k];
+          if(legs.length<2)continue;
+          if(legs.length>2){unclassifiedGroups++;continue;}
+          const sorted=legs.slice().sort((a,b)=>b.tokens-a.tokens);
+          const principal=sorted[0],fee=sorted[1];
+          if(principal.tokens<=0)continue;
+          const expected=principal.contractBps/(10000-principal.totalBps);
+          const actual=fee.tokens/principal.tokens;
+          if(Math.abs(actual-expected)/expected<0.01){
+            principal.drop='direct send: principal, not a fee';
+            directSendCount++;directSendTokens+=principal.tokens;
+          }else{
+            /* Two same-sender inbound legs that do not match the tax ratio. We do
+               not understand this, so we do not silently drop it. Count it, and
+               say on screen that we could not classify it. Silence is what hid
+               the last three bugs. */
+            unclassifiedGroups++;
+          }
+        }
+
+        /* ---- (b) single legs from fee-exempt senders ---- */
+        const surviving=rows.filter(r=>!r.drop);
+        const bySender={};
+        for(const r of surviving)bySender[r.from]=(bySender[r.from]||0)+r.tokens;
+        const liveTotal=surviving.reduce((s,r)=>s+r.tokens,0);
+        const ranked=Object.keys(bySender).sort((a,b)=>bySender[b]-bySender[a]);
+        const toCheck=[];let covered=0;
+        for(const a of ranked){
+          if(liveTotal>0&&(liveTotal-covered)/liveTotal<0.005)break;  // remainder is noise
+          if(toCheck.length>=25)break;                                // bounded cost
+          toCheck.push(a);covered+=bySender[a];
+        }
+        const verdicts=await Promise.all(toCheck.map(a=>isExemptFromFee(tokenAddress,a)));
+        const exemptSenders=[];let exemptTokens=0,unknownSenders=0;
+        toCheck.forEach((a,i)=>{
+          if(verdicts[i]===true){exemptSenders.push(a);exemptTokens+=bySender[a];}
+          else if(verdicts[i]===null)unknownSenders++;
+        });
+        const exemptSet={};exemptSenders.forEach(a=>{exemptSet[a]=true;});
+        for(const r of rows){
+          if(!r.drop&&exemptSet[r.from])r.drop='sender is fee-exempt: cannot originate a tax leg';
+        }
+        const uncheckedShare=liveTotal>0?Math.max(0,(liveTotal-covered)/liveTotal):0;
+
+        /* ---- accumulate what survives ---- */
+        const accs={},counts={},changes={};
+        PERIOD_KEYS.forEach(p=>{accs[p]=mkFeeAcc();counts[p]=0;changes[p]=0;});
+        for(const row of rows){
+          if(row.drop)continue;
+          const r=row.rates,cb=row.contractBps,cFee=row.tokens;
           for(const p of PERIOD_KEYS){
-            if(b<B[p])continue;               // outside this window
+            if(row.block<B[p])continue;         // outside this window
             const a=accs[p];
-            a.reflection+=cFee*(r.reflection/contractBps);
-            a.ufoBurn   +=cFee*(r.ufoBurn/contractBps);
-            a.ptgcBurn  +=cFee*(r.ptgcBurn/contractBps);
-            a.plsLP     +=cFee*(r.plsLP/contractBps);
-            a.plsxLP    +=cFee*(r.plsxLP/contractBps);
-            a.wethLP    +=cFee*(r.wethLP/contractBps);
+            a.reflection+=cFee*(r.reflection/cb);
+            a.ufoBurn   +=cFee*(r.ufoBurn/cb);
+            a.ptgcBurn  +=cFee*(r.ptgcBurn/cb);
+            a.plsLP     +=cFee*(r.plsLP/cb);
+            a.plsxLP    +=cFee*(r.plsxLP/cb);
+            a.wethLP    +=cFee*(r.wethLP/cb);
             counts[p]++;
           }
         }
+        /* Fee changes INSIDE each window, not globally. The old `live.feeChanges`
+           read undefined because feeChanges lived on the parent object, so the
+           "N fee changes in window" notice never once rendered. */
+        for(const e of feeEvents)for(const p of PERIOD_KEYS)if(e.block>=B[p])changes[p]++;
+
+        const droppedTotal=rows.filter(r=>r.drop).reduce((s,r)=>s+r.tokens,0);
+        const excluded={
+          directSendCount:directSendCount,
+          directSendTokens:directSendTokens,
+          exemptSenders:exemptSenders,
+          exemptTokens:exemptTokens,
+          unclassifiedGroups:unclassifiedGroups,
+          unknownSenders:unknownSenders,
+          uncheckedShare:uncheckedShare,
+          droppedTotal:droppedTotal,
+          any:(directSendCount>0||exemptSenders.length>0||unclassifiedGroups>0||unknownSenders>0)
+        };
 
         const byPeriod={};
         for(const p of PERIOD_KEYS){
@@ -520,14 +701,22 @@
             tokens:accs[p],
             totalTokens:Object.values(accs[p]).reduce((a,b)=>a+b,0),
             txCount:counts[p],
-            sinceLaunch:scanFrom>B[p],
+            feeChanges:changes[p],
+            sinceLaunch:scanFrom>B[p]||B[p]<=launch,
             windowHours:startTs?((B.headTs-startTs)/3600):null
           };
         }
-        const out={ok:true,byPeriod,feeChanges:feeEvents.length,scanFrom,headBlock:cur};
+        const out={ok:true,byPeriod:byPeriod,excluded:excluded,feeChanges:feeEvents.length,scanFrom:scanFrom,headBlock:cur};
         realizedFeeCache[key]=out;
-        console.log(`Realized UFO fees | scanned blocks ${scanFrom}-${cur}, ${transferLogs.length} fee transfers, ${feeEvents.length} fee change(s)`);
-        PERIOD_KEYS.forEach(p=>console.log(`   ${p}: ${byPeriod[p].txCount} transfers, ${byPeriod[p].totalTokens.toLocaleString()} UFO, window ~${byPeriod[p].windowHours?byPeriod[p].windowHours.toFixed(1):'?'}h${byPeriod[p].sinceLaunch?' (since launch)':''}`));
+        console.log(`Realized UFO fees | blocks ${scanFrom}-${cur} | ${transferLogs.length} inbound legs, ${rows.filter(r=>r.drop).length} excluded, ${feeEvents.length} fee change(s)`);
+        if(excluded.any){
+          console.warn(`  excluded: ${directSendCount} direct send(s) = ${Math.round(directSendTokens).toLocaleString()} UFO | `+
+            `${exemptSenders.length} fee-exempt sender(s) = ${Math.round(exemptTokens).toLocaleString()} UFO | `+
+            `${unclassifiedGroups} unclassified | ${unknownSenders} sender(s) we could not check | `+
+            `${(uncheckedShare*100).toFixed(2)}% of volume from unchecked senders`);
+          if(exemptSenders.length)console.warn('  exempt senders:',exemptSenders);
+        }
+        PERIOD_KEYS.forEach(p=>console.log(`   ${p}: ${byPeriod[p].txCount} transfers, ${byPeriod[p].totalTokens.toLocaleString()} UFO, ${byPeriod[p].feeChanges} fee change(s), window ~${byPeriod[p].windowHours?byPeriod[p].windowHours.toFixed(1):'?'}h${byPeriod[p].sinceLaunch?' (since launch)':''}`));
         return out;
       }catch(e){console.error('fetchRealizedFees error:',e);return{ok:false,error:e.message||'unexpected error'};}
     };
@@ -544,9 +733,9 @@
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const B=await getPeriodBoundaries(cur);
+        const B=await getPeriodBoundaries(cur,firstPoolMs);
         if(!B)return null;
-        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const launch=B.launch;
         const fromBlock=Math.max(0,B['90d'],launch);
         const key=`${tokenAddress}-burnp-${cacheBucket()}`;
         if(burnPeriodsCache[key])return burnPeriodsCache[key];
@@ -584,9 +773,9 @@
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
         const cur=parseInt(blk.result,16);
-        const B=await getPeriodBoundaries(cur);
+        const B=await getPeriodBoundaries(cur,firstPoolMs);
         if(!B)return null;
-        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const launch=B.launch;
         const fromBlock=Math.max(0,B['90d'],launch);
         const key=`${ufoAddress}-ptgcburn-${cacheBucket()}`;
         if(ptgcByUfoCache[key])return ptgcByUfoCache[key];
@@ -685,9 +874,9 @@
         const key=`${tokenAddress}-audit-${cacheBucket()}`;
         if(feeAuditCache[key])return feeAuditCache[key];
 
-        const B=await getPeriodBoundaries(cur);
+        const B=await getPeriodBoundaries(cur,firstPoolMs);
         if(!B)return null;
-        const launch=estimateLaunchBlock(cur,firstPoolMs,B.secPerBlock);
+        const launch=B.launch;
         const fromBlock=Math.max(0,B['24h'],launch); // audit the last 24h (or since launch)
 
         // ALL transfers of UFO in the window, not just fee transfers
@@ -4597,9 +4786,12 @@
                     const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
 
                     /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
-                       attributed with the fee rates actually in force at each block. */
+                       attributed with the fee rates actually in force at each block.
+                       The chain read does NOT depend on the price feed: token amounts are
+                       exact without it. Gating `live` on ufoPx>0 used to make a dropped
+                       price feed look like "Data unavailable" when the fees were fine. */
                     const ufoPx=data?.price||0;
-                    const livePeriod=(token==='UFO'&&realizedFees&&realizedFees.ok&&ufoPx>0)?realizedFees.byPeriod[valueGenPeriod]:null;
+                    const livePeriod=(token==='UFO'&&realizedFees&&realizedFees.ok)?realizedFees.byPeriod[valueGenPeriod]:null;
                     const live=livePeriod||null;
                     const liveItems=live?UFO_FEE_BUCKETS.map(b=>{
                       const tok=live.tokens[b.key]||0;
@@ -4608,16 +4800,35 @@
                     }).filter(i=>i.tokens>0||i.pct>0):null;
                     const liveTotalUsd=live?live.totalTokens*ufoPx:0;
                     const showLive=!!live;
+                    const priceless=showLive&&!(ufoPx>0);
+                    const ex=realizedFees&&realizedFees.ok?realizedFees.excluded:null;
+                    /* Fees ACCRUE into the contract; the LP buckets only become value when
+                       _swapBack successfully adds them to a pool. While addPLSXLiquidity /
+                       addWETHLiquidity are reverting, those buckets are accrued and never
+                       delivered. Say so rather than presenting them as generated value. */
+                    const failedActions=(feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk)
+                      ?Object.keys(feeAudit.swapbackFailures||{}):[];
+                    const undelivered={};
+                    failedActions.forEach(a=>{
+                      if(/PLSX/i.test(a))undelivered.plsxLP=true;
+                      else if(/WETH/i.test(a))undelivered.wethLP=true;
+                      else if(/PLS/i.test(a))undelivered.plsLP=true;
+                    });
 
                     return(
                       <>
-                        <div className="flex items-baseline gap-2 mb-4 flex-wrap">
+                        <div className="flex items-baseline gap-2 mb-2 flex-wrap">
                           {showLive?(
                             <>
-                              <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(liveTotalUsd)}</span>
+                              {priceless?(
+                                <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtAbbr(Math.round(live.totalTokens))} UFO</span>
+                              ):(
+                                <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(liveTotalUsd)}</span>
+                              )}
                               <span className="text-white/45 text-sm sm:text-base">from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
+                              {priceless&&<span className="text-amber-300/70 text-[11px]">price feed unavailable — token amounts are still exact</span>}
                               {live.sinceLaunch&&<span className="text-white/35 text-[11px]">(token is only {live.windowHours?live.windowHours.toFixed(0):'?'}h old — this is since launch)</span>}
-                              {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in window</span>}
+                              {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in this window</span>}
                             </>
                           ):realizedLoading&&token==='UFO'?(
                             <span className="text-base text-white/40">Reading fees from chain…</span>
@@ -4636,6 +4847,30 @@
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
+                        {/* Measured, not estimated: say what was thrown out and what we could not check. */}
+                        {showLive&&!priceless&&(
+                          <div className="mb-3 text-white/30 text-[10px]">valued at the current UFO price, not the price at the time each fee accrued</div>
+                        )}
+                        {showLive&&ex&&ex.any&&(
+                          <div className="mb-3 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-[11px] space-y-0.5">
+                            <div className="text-white/50 font-semibold">excluded from the total (not fees)</div>
+                            {ex.directSendCount>0&&(
+                              <div className="text-white/60">{ex.directSendCount} direct transfer{ex.directSendCount===1?'':'s'} into the contract — <span className="text-white/85">{fmtAbbr(Math.round(ex.directSendTokens))} UFO</span> of principal, matched the tax ratio exactly</div>
+                            )}
+                            {ex.exemptSenders.length>0&&(
+                              <div className="text-white/60">{ex.exemptSenders.length} fee-exempt sender{ex.exemptSenders.length===1?'':'s'} — <span className="text-white/85">{fmtAbbr(Math.round(ex.exemptTokens))} UFO</span>. An exempt address pays no tax, so it cannot originate a fee.</div>
+                            )}
+                            {ex.unclassifiedGroups>0&&(
+                              <div className="text-amber-300/80">⚠ {ex.unclassifiedGroups} transaction{ex.unclassifiedGroups===1?'':'s'} had multiple inbound legs from one sender that do not match the tax ratio. Counted, but not understood. Check the console.</div>
+                            )}
+                            {ex.unknownSenders>0&&(
+                              <div className="text-amber-300/80">⚠ {ex.unknownSenders} sender{ex.unknownSenders===1?'':'s'} could not be checked against isExcludedFromFee()</div>
+                            )}
+                            {ex.uncheckedShare>0.005&&(
+                              <div className="text-white/40">{(ex.uncheckedShare*100).toFixed(1)}% of inbound volume came from senders below the check threshold</div>
+                            )}
+                          </div>
+                        )}
                         {/* MIGRATION: fee-exemption audit — proves no wallet is bypassing the tax */}
                         {token==='UFO'&&feeAudit&&feeAudit.ok&&(
                           feeAudit.unexplained.length>0?(
@@ -4657,146 +4892,46 @@
                             </div>
                           )
                         )}
-                        {/* MAINT-MIGRATION: on-screen audit table so the console isn't required.
-                            Hidden automatically once UFO_MAINTENANCE is false. */}
-                        {token==='UFO'&&UFO_MAINTENANCE&&feeAudit&&feeAudit.ok&&feeAudit.rows.length>0&&(
-                          <details className="mb-3 rounded-lg bg-black/40 border border-white/10">
-                            <summary className="cursor-pointer select-none px-3 py-1.5 text-[11px] text-white/50 hover:text-white/80">
-                              Fee-exemption audit — {feeAudit.rows.length} untaxed counterpart{feeAudit.rows.length===1?'y':'ies'} (dev only)
-                            </summary>
-                            <div className="px-3 pb-2 overflow-x-auto">
-                              <table className="w-full text-[10px] tabular-nums">
-                                <thead>
-                                  <tr className="text-white/40 text-left">
-                                    <th className="py-1 pr-2 font-normal">Address</th>
-                                    <th className="py-1 pr-2 font-normal">Role</th>
-                                    <th className="py-1 pr-2 font-normal text-right">Legs</th>
-                                    <th className="py-1 pr-2 font-normal text-right">UFO</th>
-                                    <th className="py-1 pr-2 font-normal">Swap / Liquidity</th>
-                                    <th className="py-1 font-normal">Exempt?</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {feeAudit.rows.map(r=>(
-                                    <tr key={r.address} className={`border-t border-white/5 ${r.excluded===false?'text-red-300':'text-white/60'}`}>
-                                      <td className="py-1 pr-2 font-mono">{r.address.slice(0,10)}…{r.address.slice(-6)}</td>
-                                      <td className="py-1 pr-2">{r.known||'(other)'}</td>
-                                      <td className="py-1 pr-2 text-right">{r.legs}</td>
-                                      <td className="py-1 pr-2 text-right">{fmtAbbr(Math.round(r.tokens))}</td>
-                                      <td className="py-1 pr-2">
-                                        {r.swapTokens>0&&<span className="text-amber-300">{fmtAbbr(Math.round(r.swapTokens))} swap</span>}
-                                        {r.swapTokens>0&&r.liqTokens>0&&<span className="text-white/30"> / </span>}
-                                        {r.liqTokens>0&&<span className="text-sky-300">{fmtAbbr(Math.round(r.liqTokens))} LP</span>}
-                                        {r.swapTokens===0&&r.liqTokens===0&&<span className="text-white/30">unknown</span>}
-                                      </td>
-                                      <td className="py-1">{r.excluded===true?'yes':r.excluded===false?'NO ⚠':'?'}</td>
-                                    </tr>
-                                  ))}
-                                  {feeAudit.rows.filter(r=>r.txs&&r.txs.length).map(r=>(
-                                    <tr key={r.address+'-tx'} className="border-t border-white/5">
-                                      <td colSpan={6} className="py-1 pl-2 text-white/35">
-                                        <span className="text-white/45">{r.known||r.address.slice(0,10)}</span> sample txs:{' '}
-                                        {r.txs.map(t=>(
-                                          <a key={t.tx} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer"
-                                             className="mr-2 underline hover:text-white/70">
-                                            {t.tx.slice(0,8)}… <span className={t.kind==='SWAP'?'text-amber-300':'text-sky-300'}>{t.kind}</span> {t.dir}
-                                          </a>
-                                        ))}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                              {/* Decisive comparison: what the chain says vs what DexScreener says */}
-                              {(()=>{
-                                const px=data?.price||0;
-                                const onChainUsd=feeAudit.swapTokens*px;
-                                const untaxedUsd=feeAudit.untaxedTokens*px;
-                                const dexUsd=data?.vol||0;
-                                const diff=dexUsd-onChainUsd;
-                                return(
-                                  <div className="mt-2 pt-2 border-t border-white/10 text-[10px] space-y-0.5">
-                                    <div className="text-white/50">on-chain REAL SWAP volume: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.swapTokens))} UFO</span> · liquidity moves excluded: <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.taxedLiqTokens+feeAudit.untaxedLiqTokens))} UFO</span></div>
-                                    <div className="text-white/50">of which untaxed: <span className="text-white/80">{fmtAbbr(Math.round(feeAudit.untaxedTokens))} UFO</span> — <span className="text-amber-300">{fmtAbbr(Math.round(feeAudit.untaxedSwapTokens))} real swaps</span> · <span className="text-sky-300">{fmtAbbr(Math.round(feeAudit.untaxedLiqTokens))} liquidity moves</span></div>
-                                    <div className="text-white/50">untaxed SWAP volume only: <span className="text-white/80">≈ {fmtUSD(feeAudit.untaxedSwapTokens*px)}</span> ← the only part that inflates DEX volume</div>
-                                    {/* TOKEN-denominated reconciliation. No prices involved. */}
-                                    {feeAudit.totalPairSwapCount>0&&(()=>{
-                                      const legShort=feeAudit.totalPairSwapCount-feeAudit.swapLegs;
-                                      const impliedTaxedUfo=(realizedFees&&realizedFees.ok&&realizedFees.byPeriod['24h'])
-                                        ? realizedFees.byPeriod['24h'].totalTokens/0.06 : null;
-                                      return(
-                                        <div className="mt-1 pt-1 border-t border-white/10">
-                                          <div className="text-white/45 font-semibold">reconciliation in TOKENS (no prices)</div>
-                                          <div>pairs reported <span className="text-white/85">{feeAudit.totalPairSwapCount}</span> Swap events · our scan saw <span className={legShort!==0?'text-amber-300':'text-white/85'}>{feeAudit.swapLegs}</span> swap legs
-                                            {legShort!==0&&<span className="text-amber-300"> — missing {legShort} ({(legShort/feeAudit.totalPairSwapCount*100).toFixed(0)}%), logs incomplete</span>}
-                                          </div>
-                                          <div>pair-reported UFO swap volume: <span className="text-white/85">{fmtAbbr(Math.round(feeAudit.totalPairSwapUfo))} UFO</span></div>
-                                          {impliedTaxedUfo!=null&&(
-                                            <div>volume implied by fees (24h): <span className="text-white/85">{fmtAbbr(Math.round(impliedTaxedUfo))} UFO</span>
-                                              <span className="text-white/40"> — ratio {(impliedTaxedUfo/feeAudit.totalPairSwapUfo).toFixed(2)}x</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                    <div className="text-white/50">DexScreener 24h volume: <span className="text-white/80">{fmtUSD(dexUsd)}</span> <span className="text-white/30">(price-based, less reliable)</span></div>
-                                    <div className={Math.abs(diff)>dexUsd*0.15?'text-amber-300/80':'text-white/40'}>
-                                      difference: {fmtUSD(diff)} {Math.abs(diff)>dexUsd*0.15?'— windows differ or logs incomplete':'— within noise'}
-                                    </div>
-                                    <div className="text-white/25 pt-1">
-                                      window: blocks {feeAudit.fromBlock.toLocaleString()}–{feeAudit.toBlock.toLocaleString()}
-                                      {feeAudit.ownerAddr&&<> · owner {feeAudit.ownerAddr.slice(0,8)}…{feeAudit.ownerAddr.slice(-4)}</>}
-                                    </div>
-                                    <div className="text-white/25">note: priced at current UFO price, not trade-time price</div>
-                                    {/* Never present a failed query as a finding. */}
-                                    {!feeAudit.liqDetectionOk&&(
-                                      <div className="mt-1 px-2 py-1 rounded bg-red-500/15 border border-red-400/40 text-red-300">
-                                        liquidity detection FAILED — "0 liquidity moves" is not trustworthy. See console.
-                                      </div>
-                                    )}
-                                    {feeAudit.liqDetectionOk&&feeAudit.untaxedLiqTokens===0&&feeAudit.taxedLiqTokens===0&&(
-                                      <div className="mt-1 px-2 py-1 rounded bg-amber-500/10 border border-amber-400/30 text-amber-300">
-                                        queries succeeded but found zero Mint/Burn events in this window. The contract adds LP on every swapback, so either no swapback happened in the last 24h, or something is wrong.
-                                      </div>
-                                    )}
-                                    {feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures).length>0&&(
-                                      <div className="mt-1 px-2 py-1 rounded bg-red-500/15 border border-red-400/40 text-red-300">
-                                        <div className="font-bold">swapback actions FAILED: {Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k} x${v}`).join(', ')}</div>
-                                        <div className="mt-0.5 text-red-200/70">verify on PulseScan (look for the SwapBackActionFailed event):</div>
-                                        <div className="mt-0.5">
-                                          {feeAudit.swapbackFailTxs.map((t,i)=>(
-                                            <a key={i} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer" className="mr-2 underline hover:text-white">
-                                              {t.tx.slice(0,10)}… ({t.action})
-                                            </a>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {feeAudit.health&&(
-                                      <div className="mt-1 px-2 py-1 rounded bg-white/5 border border-white/10 text-white/60">
-                                        <div className="text-white/45 font-semibold">contract health (independent corroboration)</div>
-                                        <div>maxSlippage: <span className="text-white/85">{feeAudit.health.maxSlippageBps!=null?`${feeAudit.health.maxSlippageBps} bps (${(feeAudit.health.maxSlippageBps/100).toFixed(1)}%)`:'?'}</span></div>
-                                        <div>swapThreshold: <span className="text-white/85">{feeAudit.health.swapThresholdUFO!=null?fmtAbbr(Math.round(feeAudit.health.swapThresholdUFO))+' UFO':'?'}</span></div>
-                                        <div>UFO stranded in contract: <span className={feeAudit.health.contractUfoBalance>0?'text-amber-300':'text-white/85'}>{feeAudit.health.contractUfoBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractUfoBalance))+' UFO':'?'}</span></div>
-                                        <div>PLS stranded in contract: <span className={feeAudit.health.contractPlsBalance>0?'text-amber-300':'text-white/85'}>{feeAudit.health.contractPlsBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractPlsBalance))+' PLS':'?'}</span></div>
-                                        <div className="text-white/30 mt-0.5">if the LP adds revert, the contract keeps both the UFO half and the PLS it raised — so these should be near zero if swapback is healthy</div>
-                                      </div>
-                                    )}
-                                    {feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures).length===0&&(
-                                      <div className="mt-1 text-emerald-300/70">no swapback failures in this window</div>
-                                    )}
-                                    {feeAudit.liqDiag&&(
-                                      <div className="mt-1 text-white/30">
-                                        {feeAudit.liqDiag.map(d=>(
-                                          <div key={d.pair}>{d.pair.slice(0,10)}… · {d.token0} · swaps: {String(d.swaps)} · swapUFO: {fmtAbbr(d.swapUfo||0)} · mint: {String(d.mint)} · burn: {String(d.burn)}<br/><span className="text-white/40 pl-3">events actually emitted: {String(d.emitted)}</span></div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                        {/* MAINT-MIGRATION: the dev audit table lived here. It has been removed.
+                            What survives is the part that has to survive: swapback failures and
+                            the balances that corroborate them. This renders ONLY when something
+                            is actually wrong, so it costs nothing on a healthy contract and it
+                            disappears by itself once the contract is fixed. Handoff section 3.5
+                            says the way to verify a fix is that this box stops appearing. */}
+                        {token==='UFO'&&feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures||{}).length>0&&(
+                          <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px]">
+                            <div className="text-red-300 font-bold">
+                              ⚠ swapback actions FAILED: {Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k} x${v}`).join(', ')}
                             </div>
-                          </details>
+                            <div className="text-red-200/80 mt-1">
+                              The fees below are <span className="font-semibold">accrued</span>, not delivered.
+                              {undelivered.plsxLP&&undelivered.wethLP?' The LP PLSX and LP WETH buckets are not reaching their pools.'
+                                :undelivered.plsxLP?' The LP PLSX bucket is not reaching its pool.'
+                                :undelivered.wethLP?' The LP WETH bucket is not reaching its pool.'
+                                :undelivered.plsLP?' The LP PLS bucket is not reaching its pool.':''}
+                            </div>
+                            {feeAudit.health&&(
+                              <div className="mt-1 text-red-200/60">
+                                stranded in contract: {feeAudit.health.contractUfoBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractUfoBalance))+' UFO':'?'}
+                                {' · '}{feeAudit.health.contractPlsBalance!=null?fmtAbbr(Math.round(feeAudit.health.contractPlsBalance))+' PLS':'?'}
+                                {feeAudit.health.swapThresholdUFO!=null&&<> · swapThreshold {fmtAbbr(Math.round(feeAudit.health.swapThresholdUFO))} UFO <span className="text-red-200/40">(read at head, not at the failing block)</span></>}
+                              </div>
+                            )}
+                            <div className="mt-1">
+                              {feeAudit.swapbackFailTxs.slice(0,4).map((t,i)=>(
+                                <a key={i} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer" className="mr-2 underline text-red-200/80 hover:text-white">
+                                  {t.tx.slice(0,10)}… ({t.action})
+                                </a>
+                              ))}
+                            </div>
+                            <div className="mt-1 text-red-200/50">Open a transaction and read the reverted internal call. The revert reason is the diagnosis; everything else is inference.</div>
+                          </div>
+                        )}
+                        {/* A failed liquidity query must never be presented as "no liquidity moves". */}
+                        {token==='UFO'&&feeAudit&&feeAudit.ok&&!feeAudit.liqDetectionOk&&(
+                          <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30 text-[11px] text-amber-300">
+                            liquidity detection failed — swap/LP classification below is not trustworthy. See console.
+                          </div>
                         )}
                         <div className="flex-1"></div>
                         {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -4808,15 +4943,19 @@
                             const partsLabel=showLive
                               ?`${fmtTokenQty(item.tokens)} UFO`
                               :(parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null);
+                            /* This bucket accrued, but _swapBack's add for it is reverting, so
+                               nothing reached a pool. Accrued is not delivered. */
+                            const stuck=showLive&&!!undelivered[item.key];
                             return(
-                              <div key={i} className={`bg-white/[0.04] border ${item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
+                              <div key={i} className={`bg-white/[0.04] border ${stuck?'border-red-400/40':item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-2.5 min-w-0`}>
                                 <div className="flex items-center gap-1.5 mb-1 min-w-0">
                                   {item.isLP&&bucketLogoSrc(item.priceKey)
                                     ?<PairLogo priceKey={item.priceKey} size={26}/>
                                     :<span className="text-base shrink-0">{item.emoji}</span>}
                                   <span className="text-white/55 text-xs sm:text-sm truncate">{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
+                                  {stuck&&<span className="text-red-400 text-[10px] shrink-0" title="accrued but not delivered — the swapback action for this bucket is reverting">⚠</span>}
                                 </div>
-                                {valueGenShowTokens&&partsLabel?(
+                                {(valueGenShowTokens||priceless)&&partsLabel?(
                                   <div className={`font-bold text-sm sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}>{partsLabel}</div>
                                 ):(
                                   <>
@@ -4824,6 +4963,7 @@
                                     {token==='UFO'&&partsLabel&&<div className="text-white/35 text-[11px] text-right tabular-nums leading-tight truncate">{partsLabel}</div>}
                                   </>
                                 )}
+                                {stuck&&<div className="text-red-400/70 text-[10px] text-right leading-tight mt-0.5">not delivered</div>}
                               </div>
                             );
                           })}
