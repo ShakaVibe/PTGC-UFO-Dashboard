@@ -168,12 +168,16 @@
      * Flip this ONE value to go live. Nothing else needs to change.
      * ========================================= */
     const UFO_MAINTENANCE=true;
-    /* MAINT-MIGRATION: operator preview for pages still behind the maintenance screen.
-       Load the site with ?preview=kpi to see the REAL KPI Report while the public keeps
-       seeing "Under Maintenance". Nothing public changes. When the KPI page is finished and
-       ready to go live, delete this const and the KPI_PREVIEW branch in the tab render
-       (search "KPI_PREVIEW") so the tab shows the real page for everyone. */
-    const KPI_PREVIEW=(()=>{try{return new URLSearchParams(window.location.search).get('preview')==='kpi';}catch(e){return false;}})();
+    /* MAINT-MIGRATION: operator preview for the KPI Report while it's still behind the gate.
+       It turns on for YOU two ways, both invisible to the public:
+         • enter UFO through the secret dot (that sets KPI_OPERATOR_ENTRY below), or
+         • load the site with ?preview=kpi.
+       The public does neither, so they keep seeing "Under Maintenance". To go fully live
+       later, delete this block and switch the kpiPreviewOn() branch in the tab render
+       (search "kpiPreviewOn") to always show the real page. */
+    const KPI_PREVIEW_PARAM=(()=>{try{return new URLSearchParams(window.location.search).get('preview')==='kpi';}catch(e){return false;}})();
+    let KPI_OPERATOR_ENTRY=false;                 // flipped true when the secret dot is clicked
+    const kpiPreviewOn=()=>KPI_PREVIEW_PARAM||KPI_OPERATOR_ENTRY;
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
@@ -3302,7 +3306,7 @@
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
-            onClick={()=>onSelect('UFO')}
+            onClick={()=>{KPI_OPERATOR_ENTRY=true;onSelect('UFO')}}
             aria-label="."
             title=""
             className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none"
@@ -5894,7 +5898,7 @@
           
           {/* KPI Report Tab Content — public sees the maintenance screen; an operator who loads
               the site with ?preview=kpi sees the REAL page, so it can be finished behind the gate. */}
-          {activeTab==='kpi'&&(KPI_PREVIEW?(
+          {activeTab==='kpi'&&(kpiPreviewOn()?(
             <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
               <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod}/>
             </div>
