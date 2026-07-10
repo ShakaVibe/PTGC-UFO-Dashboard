@@ -604,9 +604,19 @@
           });
         }
 
-        /* ---- (a) direct sends from taxed wallets: two legs, one tx, one sender ---- */
+        /* ---- (a) direct sends from taxed wallets: two legs, one tx, one sender ----
+           A PAIR can legitimately emit several fee legs in one transaction: an arb or
+           multi-hop route hits the same pool more than once, and each taxed leg emits
+           Transfer(pair -> contract, fee). Their ratio is just the ratio of the two
+           trades, so it is arbitrary. Flagging those as "not understood" was noise:
+           33 of them on the first run. Pairs are known; exclude them from the test. */
+        const pairSet={};
+        (Array.isArray(HARDCODED_UFO_PAIRS)?HARDCODED_UFO_PAIRS:[]).forEach(p=>{
+          if(p&&p.address)pairSet[p.address.toLowerCase()]=true;
+        });
         const groups={};
         for(const row of rows){
+          if(pairSet[row.from])continue;   // multiple trades in one tx, not a direct send
           const k=`${row.tx}|${row.from}`;
           if(!groups[k])groups[k]=[];
           groups[k].push(row);
@@ -976,13 +986,56 @@
           ethCallRead(tokenAddress,'0x70a08231'+encodeAddress(tokenAddress)),
           rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[tokenAddress,'latest'],id:1})
         ]);
+
+        /* WHY the LP adds revert — the structural check.
+           addPLSLiquidity pairs UFO with NATIVE PLS (addLiquidityETH: PLS arrives as
+           msg.value, only the UFO side needs a router allowance). addPLSXLiquidity and
+           addWETHLiquidity call addLiquidity(UFO, partner), which does transferFrom on
+           BOTH sides — so the contract must have approved the partner token to the router.
+           If it never did, those two revert on every swapback, at any size. That is the
+           only failure mode consistent with the observed invariance across a 5x change in
+           swapThreshold and a ~40x change in pool depth: every slippage-shaped cause
+           (_minLiquidityToken, _minOut, price impact) scales with trade size. This one
+           does not.
+
+           ASYMMETRY, and the panel must say so: a NON-ZERO allowance kills the hypothesis
+           outright. A ZERO allowance is strong support but not proof — a contract that
+           calls approve() inline on each use also reads zero between transactions.
+
+           Partner tokens are read off the pairs (token0/token1), never hardcoded. */
+        const SEL_TOKEN1='0xd21220a7';
+        const SEL_ALLOWANCE='0xdd62ed3e';
+        const allowances=[];
+        for(const pa of pairAddrsRaw){
+          const[t0raw,t1raw]=await Promise.all([ethCallRead(pa,SEL_TOKEN0),ethCallRead(pa,SEL_TOKEN1)]);
+          const t0=wordToAddress(t0raw),t1=wordToAddress(t1raw);
+          if(!t0||!t1)continue;
+          const partner=(lc(t0)===contract)?t1:t0;
+          if(lc(partner)===contract)continue;
+          const alwRaw=await ethCallRead(partner,SEL_ALLOWANCE+encodeAddress(tokenAddress)+encodeAddress(PULSEX_ROUTER));
+          allowances.push({
+            pair:lc(pa),
+            partner:lc(partner),
+            // null = the call failed. Never conflate "failed" with "zero".
+            allowanceToRouter: alwRaw===null?null:BigInt(alwRaw),
+            isZero: alwRaw===null?null:(BigInt(alwRaw)===BigInt(0))
+          });
+        }
+        const ufoAlwRaw=await ethCallRead(tokenAddress,SEL_ALLOWANCE+encodeAddress(tokenAddress)+encodeAddress(PULSEX_ROUTER));
+        const ufoSelfAllowance=ufoAlwRaw===null?null:BigInt(ufoAlwRaw);
+
         const health={
           maxSlippageBps: msRaw?Number(BigInt(msRaw)):null,
           swapThresholdUFO: stRaw?weiToTokens(BigInt(stRaw)):null,
           contractUfoBalance: balRaw?weiToTokens(BigInt(balRaw)):null,
-          contractPlsBalance: (plsRaw&&plsRaw.result)?weiToTokens(BigInt(plsRaw.result)):null
+          contractPlsBalance: (plsRaw&&plsRaw.result)?weiToTokens(BigInt(plsRaw.result)):null,
+          allowances: allowances.map(a=>({pair:a.pair,partner:a.partner,zero:a.isZero,
+            approved:a.allowanceToRouter===null?null:a.allowanceToRouter>BigInt(0)})),
+          ufoApprovedToRouter: ufoSelfAllowance===null?null:(ufoSelfAllowance>BigInt(0))
         };
         console.log('contract health:',health);
+        console.log('router allowances (partner token -> PulseX router, granted by the UFO contract):');
+        console.table(health.allowances);
 
         console.log('liquidity-event detection per pair:');console.table(liqDiag);
         if(swapbackFailQueryOk){
@@ -4917,6 +4970,39 @@
                                 {feeAudit.health.swapThresholdUFO!=null&&<> · swapThreshold {fmtAbbr(Math.round(feeAudit.health.swapThresholdUFO))} UFO <span className="text-red-200/40">(read at head, not at the failing block)</span></>}
                               </div>
                             )}
+                            {/* The structural check. A non-zero allowance kills the approval
+                                hypothesis outright; a zero allowance supports it but does not
+                                prove it, because inline approve() also reads zero between txs.
+                                Say which, rather than presenting either as a verdict. */}
+                            {feeAudit.health&&feeAudit.health.allowances&&feeAudit.health.allowances.length>0&&(()=>{
+                              const known=feeAudit.health.allowances.filter(a=>a.approved!==null);
+                              const unapproved=known.filter(a=>a.approved===false);
+                              const failed=feeAudit.health.allowances.length-known.length;
+                              return(
+                                <div className="mt-1.5 pt-1.5 border-t border-red-400/20">
+                                  <div className="text-red-200/70 font-semibold">why: router allowances granted by the contract</div>
+                                  {feeAudit.health.allowances.map(a=>(
+                                    <div key={a.pair} className="text-red-200/60 font-mono text-[10px]">
+                                      {a.partner.slice(0,10)}…{a.partner.slice(-4)} → router:{' '}
+                                      {a.approved===null?<span className="text-white/40">call failed</span>
+                                        :a.approved?<span className="text-emerald-300">approved</span>
+                                        :<span className="text-red-300 font-bold">ZERO</span>}
+                                    </div>
+                                  ))}
+                                  {failed>0&&<div className="text-amber-300/70 mt-0.5">{failed} allowance call(s) failed — treat as unknown, not as zero.</div>}
+                                  {unapproved.length>0?(
+                                    <div className="text-red-200/80 mt-1">
+                                      {unapproved.length} partner token{unapproved.length===1?'':'s'} not approved to the router. addLiquidity() calls transferFrom() on both sides, so those adds revert every time regardless of trade size — which is what we observe across a 5× change in swapThreshold and a ~40× change in pool depth.
+                                      <div className="text-red-200/50 mt-0.5">Not proof: a contract that calls approve() inline on each use also reads zero here. The revert string in the transaction above decides it. TRANSFER_FROM_FAILED confirms this reading.</div>
+                                    </div>
+                                  ):known.length>0?(
+                                    <div className="text-red-200/80 mt-1">
+                                      Every partner token is approved. The missing-approval hypothesis is dead — the cause is elsewhere. Read the revert string in the transaction above.
+                                    </div>
+                                  ):null}
+                                </div>
+                              );
+                            })()}
                             <div className="mt-1">
                               {feeAudit.swapbackFailTxs.slice(0,4).map((t,i)=>(
                                 <a key={i} href={`https://scan.pulsechain.com/tx/${t.tx}`} target="_blank" rel="noreferrer" className="mr-2 underline text-red-200/80 hover:text-white">
