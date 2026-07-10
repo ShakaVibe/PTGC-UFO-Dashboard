@@ -4647,9 +4647,15 @@
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
           setData(d);setHolders(h);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
+          /* firstPoolMs is read again OUTSIDE this if-block (the live24hBurn fetch below),
+             so it must live in load()'s scope. @babel/standalone renames a block-scoped
+             const and leaves the outer reference undeclared; a bare read of it threw
+             ReferenceError, which rejected load() and orphaned every setter after it —
+             the 24h burn, holder tiers, PTGC price and the LP quote prices all went dark.
+             check.js can't see this: it is a runtime scope error, not a compile error. */
+          const _fp=d?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+          const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
           if(token==='UFO'){
-            const _fp=d?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
-            const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
             /* `if(bp)` silently kept the zeroed initial state when the chain read failed,
                so 7D/30D/90D rendered "$0" — a claim, not an absence. null means unknown. */
             fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS).then(bp=>{
@@ -4715,13 +4721,13 @@
             });
           }
           
-          // For UFO, fetch PTGC price to show burned PTGC value
+          // For UFO, fetch PTGC + LP partner-asset USD prices.
           if(token==='UFO'){
-            fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.PTGC.mainPair)
-              .then(r=>r.json())
-              .then(d=>setPtgcPrice(parseFloat(d.pair?.priceUsd)||0))
-              .catch(()=>{});
-            // MIGRATION: LP PLSX / LP WETH buckets need their partner-asset USD prices.
+            /* All three prices come from the /tokens/{addr} endpoint (a `.pairs` array) —
+               the robust path the working PLSX/WETH prices already use. The old PTGC read
+               hit /pairs/{pair} and took d.pair?.priceUsd, but DexScreener's singular `.pair`
+               field is being retired (fetchDex already guards `if(d.pair)` for exactly this),
+               so a missing field would silently zero every PTGC USD on the page. */
             const usdOf=async(addr)=>{
               try{
                 const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
@@ -4732,6 +4738,8 @@
                 return parseFloat(ps[0].priceUsd)||0;
               }catch{return 0;}
             };
+            // A failed/empty lookup returns 0; don't let it overwrite a good PTGC price.
+            usdOf(TOKENS.PTGC.address).then(p=>{if(p>0)setPtgcPrice(p);}).catch(()=>{});
             usdOf(PLSX_ADDRESS).then(setPlsxPrice).catch(()=>{});
             usdOf(UFO_WETH).then(setWethPrice).catch(()=>{});
             // Re-read live fees each refresh so founder changes appear without a redeploy.
