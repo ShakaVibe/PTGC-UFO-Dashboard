@@ -361,7 +361,29 @@
       return null;
     };
 
+    /* SPEED. Four of the scans below are byte-for-byte identical across
+       fetchDeliveredValue, fetchBurnPeriodsOnChain and fetchPtgcBurnedByUfo — same
+       address, same topics, same block range — because they all clamp to
+       max(90d boundary, launch). Each was being fetched twice.
+
+       Memoise on the full query, INCLUDING the 5-minute cache bucket so data still
+       refreshes. Store the in-flight promise, not just the result, so two callers
+       racing the same query share one round trip instead of issuing two.
+
+       Failures are never cached: a null must stay retryable, and caching it would
+       turn one transient RPC hiccup into five minutes of "chain read failed". */
+    const logsInflight={};
     const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+      if(toBlock<fromBlock)return[];
+      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${cacheBucket()}`;
+      if(logsInflight[key])return logsInflight[key];
+      const p=_getLogsChunked(address,topics,fromBlock,toBlock);
+      logsInflight[key]=p;
+      p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
+      return p;
+    };
+
+    const _getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
       if(toBlock<fromBlock)return[];
       const ranges=[];
       for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
@@ -534,6 +556,33 @@
       const v=(r===null)?null:(BigInt(r)!==BigInt(0));
       exemptCache[k]=v;
       return v;
+    };
+
+    /* On a LIVE page the only thing the Value Generated panel needs from the audit is the
+       contract's balances — everything else (fee-exemption rows, swapback failures, the
+       token-denominated reconciliation) is operator information behind UFO_MAINTENANCE.
+       fetchFeeExemptionAudit costs ELEVEN log-scan groups, three of which pull every log
+       a pair has ever emitted with no topic filter. This costs four eth_calls. */
+    const healthCache={};
+    const fetchContractHealth=async(tokenAddress)=>{
+      const key=`${tokenAddress}-health-${cacheBucket()}`;
+      if(healthCache[key])return healthCache[key];
+      try{
+        const[msRaw,stRaw,balRaw,plsRaw]=await Promise.all([
+          ethCallRead(tokenAddress,SEL_MAX_SLIPPAGE),
+          ethCallRead(tokenAddress,SEL_SWAP_THRESHOLD),
+          ethCallRead(tokenAddress,'0x70a08231'+encodeAddress(tokenAddress)),
+          rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[tokenAddress,'latest'],id:1})
+        ]);
+        const out={ok:true,
+          maxSlippageBps: msRaw?Number(BigInt(msRaw)):null,
+          swapThresholdUFO: stRaw?weiToTokens(BigInt(stRaw)):null,
+          contractUfoBalance: balRaw?weiToTokens(BigInt(balRaw)):null,
+          contractPlsBalance: (plsRaw&&plsRaw.result)?weiToTokens(BigInt(plsRaw.result)):null};
+        healthCache[key]=out;
+        console.log('contract health:',out);
+        return out;
+      }catch(e){console.error('fetchContractHealth error:',e);return{ok:false,error:e.message};}
     };
 
     /* ONE scan, ALL periods. Previously each period was fetched separately and cached
@@ -1141,7 +1190,10 @@
           }
           totalPairSwapUfo+=pairSwapUfo; totalPairSwapCount+=pairSwapCount;
 
-          const allPairLogs=await getLogsChunked(pa,[],fromBlock,cur);
+          /* Every log this pair emitted, no topic filter — the heaviest query on the page.
+             It exists to answer "don't trust our topic constants; ask the pair what it
+             actually emitted". That is a debugging question, not a holder's question. */
+          const allPairLogs=UFO_MAINTENANCE?await getLogsChunked(pa,[],fromBlock,cur):[];
           const tally={};
           if(allPairLogs)for(const l of allPairLogs){
             const t0=(l.topics&&l.topics[0])||'?';
@@ -4086,6 +4138,8 @@
       const[feeAudit,setFeeAudit]=useState(null); // MIGRATION: were any swaps untaxed, and by whom?
       // MIGRATION: what each fee bucket ACTUALLY delivered, measured at the point of delivery.
       const[delivered,setDelivered]=useState(null);
+      // Cheap: four eth_calls. Always fetched. The full audit is dev-only.
+      const[health,setHealth]=useState(null);
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
       const[burnShowTokens,setBurnShowTokens]=useState(false);
       const[daoData,setDaoData]=useState(null);
@@ -4189,10 +4243,25 @@
             console.warn(`fee read failed (${r&&r.error}); retrying ${attempt+1}/2`);
           }
         })();
-        fetchFeeExemptionAudit(TOKENS.UFO.address,firstPoolMs)
-          .then(a=>{if(!cancelled)setFeeAudit(a);}).catch(()=>{});
+        fetchContractHealth(TOKENS.UFO.address)
+          .then(h=>{if(!cancelled)setHealth(h&&h.ok?h:null);}).catch(()=>{});
+        /* The fee-exemption audit costs eleven log-scan groups and everything it produces
+           is now either console output or gated behind UFO_MAINTENANCE. Don't make holders
+           pay for it. */
+        if(UFO_MAINTENANCE){
+          fetchFeeExemptionAudit(TOKENS.UFO.address,firstPoolMs)
+            .then(a=>{if(!cancelled)setFeeAudit(a);}).catch(()=>{});
+        }
         fetchDeliveredValue(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs,HARDCODED_UFO_PAIRS)
-          .then(d=>{if(!cancelled)setDelivered(d);}).catch(()=>{});
+          .then(d=>{
+            if(cancelled)return;
+            setDelivered(d);
+            if(!d||!d.ok){
+              console.warn('delivered-value scan failed; falling back to fetchPtgcBurnedByUfo');
+              fetchPtgcBurnedByUfo(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs)
+                .then(r=>{if(!cancelled&&r)setPtgcByUfoLive(r);}).catch(()=>{});
+            }
+          }).catch(()=>{});
         return()=>{cancelled=true;};
       },[token,data?.pairs,feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
@@ -4514,8 +4583,10 @@
             fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS).then(bp=>{
               setBurnPeriods(bp||null);
             }).catch(()=>setBurnPeriods(null));
-            fetchPtgcBurnedByUfo(cfg.address,TOKENS.PTGC.address,firstPoolMs)
-              .then(r=>{if(r)setPtgcByUfoLive(r);}).catch(()=>{});
+            /* fetchPtgcBurnedByUfo issued three log scans that fetchDeliveredValue already
+               performs, and the PTGC panel now prefers the delivered figures anyway (they
+               discriminate out pTGC's own 0.5% burn fee). It is kept only as a FALLBACK and
+               is now fired lazily, from the fee effect, if and only if delivery fails. */
           }
           
           // Fetch live 24H burn from blockchain in background (non-blocking).
@@ -5132,7 +5203,7 @@
 
                        The contract's UFO balance belongs to the five contract-bound buckets
                        pro-rata by their basis points. */
-                    const healthNow=(feeAudit&&feeAudit.ok)?feeAudit.health:null;
+                    const healthNow=health||((feeAudit&&feeAudit.ok)?feeAudit.health:null);
                     const bps=k=>{const t=cfg.taxBreakdown.find(x=>x.key===k);return t?(t.bps!=null?t.bps:t.pct*100):0;};
                     const contractBpsNow=UFO_FEE_BUCKETS.filter(b=>b.key!=='reflection').reduce((s,b)=>s+bps(b.key),0);
                     const queuedUfoTotal=(token==='UFO'&&healthNow&&healthNow.contractUfoBalance!=null)?healthNow.contractUfoBalance:null;
