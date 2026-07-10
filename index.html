@@ -1935,6 +1935,43 @@
        floor in case that lookup fails. ===== */
     let ufoLaunchMs = null;
     const UFO_LAUNCH_FALLBACK_MS = Date.parse('2026-07-08T00:00:00Z');
+
+    /* SINGLE SOURCE OF TRUTH for "PTGC burned by UFO". The Total Supply Burned panel AND its
+       share card both render from this, so they can never drift again (they diverged once, by
+       pTGC's own 0.5% burn fee). Prefer the delivered-value scan (it discriminates that fee
+       out); fall back to fetchPtgcBurnedByUfo; blend the old contract's pre-launch history from
+       the JSON rows, with a launch cutoff and a double-count guard. Pure function of its inputs. */
+    const computePtgcBurnedByUfo=(delivered,ptgcByUfoLive,burnHistoryCache,data)=>{
+      const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
+      const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
+      const oldBurned=ptgcByUFO?.totalBurned||0;
+      const dvP=(delivered&&delivered.ok)?delivered.byPeriod:null;
+      const ptgcSrc=dvP?{
+        total:dvP['90d'].ptgcBurned,h24:dvP['24h'].ptgcBurned,
+        d7:dvP['7d'].ptgcBurned,d30:dvP['30d'].ptgcBurned,d90:dvP['90d'].ptgcBurned
+      }:(ptgcByUfoLive||null);
+      const newBurned=ptgcSrc?ptgcSrc.total:0;
+      const totalBurned=oldBurned+newBurned;
+      const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
+      const oldRows=burnHistoryCache?.PTGCbyUFORows;
+      const mine={};
+      if(delivered&&delivered.ok&&delivered.swapbackTxs)delivered.swapbackTxs.forEach(t=>{mine[t]=true;});
+      const launchMs=(()=>{const fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);return (fp&&isFinite(fp))?fp:UFO_LAUNCH_FALLBACK_MS;})();
+      const oldFor=hrs=>{
+        if(!Array.isArray(oldRows))return null;
+        const cut=Date.now()-hrs*3600*1000;
+        if(launchMs<=cut)return 0;
+        let sum=0;
+        for(let i=0;i<oldRows.length;i++){const r=oldRows[i];if(!r||r.t<cut)continue;if(r.t>=launchMs)continue;if(r.tx&&mine[r.tx])continue;sum+=r.a||0;}
+        return sum;
+      };
+      const combine=(neu,hrs)=>{if(neu==null)return null;const old=oldFor(hrs);return old==null?neu:neu+old;};
+      const periods=ptgcSrc
+        ?{h24:{amount:combine(ptgcSrc.h24,24)},d7:{amount:combine(ptgcSrc.d7,24*7)},d30:{amount:combine(ptgcSrc.d30,24*30)},d90:{amount:combine(ptgcSrc.d90,24*90)}}
+        :null;
+      const periodsHaveOld=Array.isArray(oldRows);
+      return{ptgcSrc,oldBurned,newBurned,totalBurned,burnPct,periods,periodsHaveOld};
+    };
     const historyEpochMs = (tkn) => (tkn === 'UFO') ? (ufoLaunchMs || UFO_LAUNCH_FALLBACK_MS) : 0;
 
     // Snapshots that legitimately describe `tkn`: after its epoch, with a real count.
@@ -5163,7 +5200,7 @@
                     <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.7)]"></span>
                       Total Supply Burned
-                      <span className="text-white/35 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
+                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
                       <button onClick={()=>setShowBurnShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
                     </h3>
                     <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 shrink-0">
@@ -5241,7 +5278,7 @@
                     <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]"></span>
                       Value Generated
-                      <span className="text-white/35 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
+                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
                       <button onClick={()=>setShowValueGenShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
                     </h3>
                     <div className="flex gap-1.5 items-center">
@@ -5513,7 +5550,7 @@
                     <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.7)]"></span>
                       Token Allocation
-                      <span className="text-white/35 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
+                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
                       <button onClick={()=>setShowAllocationShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
                     </h3>
                     <button onClick={()=>setShowTierInfo(true)} className="px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wider uppercase text-purple-300 border border-purple-400/30 bg-purple-500/10 hover:bg-purple-500/20 hover:border-purple-400/60 transition-colors">Leagues</button>
@@ -5596,7 +5633,7 @@
                       <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>
                         DAO Treasury
-                        <span className="text-white/35 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
+                        <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
                         <button onClick={()=>setShowDAOShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
                       </h3>
                       <a href="ledger.html" className="px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wider uppercase text-sky-300 border border-sky-400/30 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/60 transition-all">Ledger</a>
@@ -5714,81 +5751,10 @@
                          lifetime total is a fixed base; the new contract's burns are read
                          from chain and added. Period boxes reflect the NEW contract only,
                          because the old one hasn't burned anything since migration. */
-                      const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
-                      const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
-                      const oldBurned=ptgcByUFO?.totalBurned||0;
-                      /* `ptgcByUfoLive?.total||0` turned a failed query into "zero pTGC burned",
-                         which also silently subtracted the new contract's burns from the
-                         lifetime total. The delivered-value scan measures the same quantity
-                         from the same logs, so use it as a fallback; if BOTH are unavailable
-                         the boxes read "—" rather than claiming zero. */
-                      /* SINGLE SOURCE OF TRUTH. This box and Value Generated's Burn PTGC tile
-                         measure the same thing, and they disagreed by exactly 1.00517x —
-                         pTGC's own 0.5% burn fee, which fetchPtgcBurnedByUfo counts and the
-                         delivered-value scan discriminates out (0.005/0.95 = 1.00526). Two
-                         panels reporting the same quantity must not be allowed to differ.
-                         Prefer the scan that applies the discriminator; fall back to the
-                         older reader; show "—" if neither answers. */
-                      const dvP=(delivered&&delivered.ok)?delivered.byPeriod:null;
-                      const ptgcSrc=dvP?{
-                        total:dvP['90d'].ptgcBurned,h24:dvP['24h'].ptgcBurned,
-                        d7:dvP['7d'].ptgcBurned,d30:dvP['30d'].ptgcBurned,d90:dvP['90d'].ptgcBurned
-                      }:(ptgcByUfoLive||null);
-                      const newBurned=ptgcSrc?ptgcSrc.total:0;
-                      const totalBurned=oldBurned+newBurned;
-                      const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
-                      /* THE PERIOD BOXES USED TO SHOW THE NEW CONTRACT ONLY, so 7D/30D/90D were
-                         all identical to 24H on a 44-hour-old token. That was never right: the
-                         OLD contract is still burning pTGC, and ufo-ptgc-burns.json carries
-                         8,500+ dated rows of it. Bucket those rows against the same wall-clock
-                         windows and add them to the on-chain figures.
-
-                         DOUBLE-COUNT GUARD: if the JSON generator is ever repointed at the new
-                         contract (open item 3 in the handoff), its rows would name the same
-                         transactions we already counted. Drop any row whose tx is one of ours. */
-                      const oldRows=burnHistoryCache?.PTGCbyUFORows;
-                      const mine={};
-                      if(delivered&&delivered.ok&&delivered.swapbackTxs)delivered.swapbackTxs.forEach(t=>{mine[t]=true;});
-                      /* CUTOFF. The old contract is still burning pTGC, but this box is "PTGC
-                         burned by UFO" and UFO is now the new token. So the old contract counts
-                         only for the part of a window that PRE-DATES the new token's launch.
-                         After launch, only the new contract counts.
-
-                         Consequence, and it is the intended one: 24H is new-contract only from
-                         now on. 7D/30D/90D still reach back past launch and pick up the old
-                         contract's history there, until those windows clear the launch date and
-                         they too become new-contract only. Nothing is double-counted and nothing
-                         keeps accruing to a retired token. */
-                      const launchMs=(()=>{
-                        const fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
-                        return (fp&&isFinite(fp))?fp:UFO_LAUNCH_FALLBACK_MS;
-                      })();
-                      const oldFor=hrs=>{
-                        if(!Array.isArray(oldRows))return null;
-                        const cut=Date.now()-hrs*3600*1000;
-                        if(launchMs<=cut)return 0;              // window starts after launch
-                        let sum=0;
-                        for(let i=0;i<oldRows.length;i++){
-                          const r=oldRows[i];
-                          if(!r||r.t<cut)continue;
-                          if(r.t>=launchMs)continue;            // new token's era: not the old contract's to claim
-                          if(r.tx&&mine[r.tx])continue;         // already counted on-chain
-                          sum+=r.a||0;
-                        }
-                        return sum;
-                      };
-                      const combine=(neu,hrs)=>{
-                        if(neu==null)return null;
-                        const old=oldFor(hrs);
-                        return old==null?neu:neu+old;           // no rows -> new contract only
-                      };
-                      const periods=ptgcSrc
-                        ?{h24:{amount:combine(ptgcSrc.h24,24)},
-                          d7:{amount:combine(ptgcSrc.d7,24*7)},
-                          d30:{amount:combine(ptgcSrc.d30,24*30)},
-                          d90:{amount:combine(ptgcSrc.d90,24*90)}}
-                        :null;
-                      const periodsHaveOld=Array.isArray(oldRows);
+                      /* PTGC-burned figures now come from the shared computePtgcBurnedByUfo,
+                         so this panel and its share card render from one source and can't
+                         diverge again (see the helper's note near UFO_LAUNCH_FALLBACK_MS). */
+                      const {totalBurned,burnPct,periods,periodsHaveOld}=computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data);
                       const whaleProgress=getWhaleProgress(burnPct);
                       const creatures=getBurnC(burnPct,'Squid');
 
@@ -6909,13 +6875,15 @@
                     ):(
                       /* PTGC Burned by UFO Content */
                       (()=>{
-                        const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
-                        const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
-                        const totalBurned=(ptgcByUFO?.totalBurned||0)+(ptgcByUfoLive?.total||0); // MIGRATION: old + new
-                        const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
-                        const periods=ptgcByUfoLive
-                          ?{h24:{amount:ptgcByUfoLive.h24},d7:{amount:ptgcByUfoLive.d7},d30:{amount:ptgcByUfoLive.d30},d90:{amount:ptgcByUfoLive.d90}}
-                          :{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
+                        /* Same shared source as the Total Supply Burned panel — the delivered
+                           scan (fetchPtgcBurnedByUfo as fallback) plus the old contract's
+                           pre-launch history, so the shared image matches the panel. It used to
+                           read ptgcByUfoLive alone, which is null in the normal case, so it
+                           rendered zeros — that was the "not populating" bug. */
+                        const _ptgc=computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data);
+                        const totalBurned=_ptgc.totalBurned;
+                        const burnPct=_ptgc.burnPct;
+                        const periods=_ptgc.periods||{h24:{},d7:{},d30:{},d90:{}};
                         const whaleProgressUFO=getWhaleProgress(burnPct);
                         const creaturesUFO=getBurnC(burnPct,'Squid');
                         
