@@ -906,7 +906,7 @@
               if(h.length<256)continue;
               const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // 0In,1In,0Out,1Out
               const ufo=weiToTokens((isT0?w(0):w(1))+(isT0?w(2):w(3)));
-              arr.push({block:parseInt(l.blockNumber,16),ufo});
+              arr.push({block:parseInt(l.blockNumber,16),ufo,tx:l.transactionHash});
             }
           }
           pairSwapUfo[p.address]=arr;
@@ -996,19 +996,23 @@
           for(const s of arr)PERIOD_KEYS.forEach(k=>{if(s.block>=B[k])pairSwapByPeriod[k]+=s.ufo;});
         }
 
-        /* Split the inbound fee stream by sender. A fee whose `from` is a pair came from a
-           trade; anything else came from a transfer (LP add / wallet-to-wallet) and has no
-           matching Swap event. The guardrail compares SWAP-sourced fees to swap volume —
-           like with like. Without this split, LP-add fees (which dominate right now) inflate
-           the implied-volume side and the ratio explodes even though nothing is wrong. */
-        const pairSet={};pairs.forEach(p=>{pairSet[p.address.toLowerCase()]=true;});
+        /* Split the inbound fee stream into TRADE fees and TRANSFER fees.
+           The discriminator is NOT the fee's sender — on a buy that sender is the pair,
+           but on a sell it is the seller's own wallet, so filtering by `from==pair` keeps
+           buys and drops sells (that was the 0.44x bug). The robust signal: a fee is
+           trade-sourced iff its TRANSACTION also contains a pair Swap event. LP adds and
+           wallet-to-wallet transfers never do. Catches both sides of every trade. */
+        const swapTxs={};
+        for(const p of pairs){
+          const arr=pairSwapUfo[p.address];
+          if(Array.isArray(arr))for(const s of arr)if(s.tx)swapTxs[s.tx]=true;
+        }
         const swapFeeTokensByPeriod={};PERIOD_KEYS.forEach(p=>{swapFeeTokensByPeriod[p]=0;});
         let feeInOk=Array.isArray(feeIn);
         if(feeInOk){
           for(const l of feeIn){
             if(!l.topics||l.topics.length<3)continue;
-            const from=('0x'+l.topics[1].slice(26)).toLowerCase();
-            if(!pairSet[from])continue;                 // not a swap fee
+            if(!swapTxs[l.transactionHash])continue;     // no Swap in this tx => not a trade fee
             const b=parseInt(l.blockNumber,16);
             const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
             PERIOD_KEYS.forEach(k=>{if(b>=B[k])swapFeeTokensByPeriod[k]+=amt;});
@@ -1034,7 +1038,7 @@
         if(swapScanOk&&feeInOk){
           const sf=swapFeeTokensByPeriod['24h']||0, ps=pairSwapByPeriod['24h']||0;
           const impl=sf/0.06;
-          console.log(`reconciliation (24h) | trade fees ${Math.round(sf).toLocaleString()} UFO imply ${Math.round(impl).toLocaleString()} UFO of swaps · pairs traded ${Math.round(ps).toLocaleString()} UFO · ratio ${ps>0?(impl/ps).toFixed(2):'?'}x (want ~1.06–1.10)`);
+          console.log(`reconciliation (24h) | trade fees ${Math.round(sf).toLocaleString()} UFO (fees whose tx contained a Swap) imply ${Math.round(impl).toLocaleString()} UFO of swaps · pairs traded ${Math.round(ps).toLocaleString()} UFO · ratio ${ps>0?(impl/ps).toFixed(2):'?'}x (want ~1.06-1.10)`);
         }
         if(!mintQueryOk)console.error('*** Mint query failed for at least one pair — LP delivery is NOT trustworthy ***');
         return out;
@@ -5286,8 +5290,17 @@
                       const pct=cur?cur.pct:0;
                       const accruedUfo=live.tokens[b.key]||0;
                       if(!haveDelivered){
-                        return{...b,pct,usd:accruedUfo*px('UFO'),parts:[{qty:accruedUfo,symbol:'UFO'}],
-                               accruedUfo,measured:false,queuedUfo:0,instant:b.key==='reflection',delivered:true};
+                        /* Delivery scan still in flight. Holders is instant and correct now.
+                           The other five are being measured; showing the accrued figure for
+                           each renders six identical numbers, then they all change at once — a
+                           jarring flash. So mark the five as pending and let the tile show a
+                           dash until real delivery arrives. */
+                        if(b.key==='reflection'){
+                          return{...b,pct,usd:accruedUfo*px('UFO'),parts:[{qty:accruedUfo,symbol:'UFO'}],
+                                 accruedUfo,measured:false,queuedUfo:0,instant:true,delivered:true,pending:false};
+                        }
+                        return{...b,pct,usd:0,parts:[],accruedUfo,measured:false,queuedUfo:0,
+                               instant:false,delivered:true,pending:true};
                       }
                       let usd=0,parts=[],measured=true;
                       if(b.key==='reflection'){
@@ -5461,7 +5474,9 @@
                                 {/* USD mode shows the dollar amount and nothing else — the TOK toggle
                                     at the top of the panel carries the token detail, and the queued
                                     figure lives in the tooltip rather than under every tile. */}
-                                {(valueGenShowTokens||priceless)&&partsLabel?(
+                                {item.pending?(
+                                  <div className="text-lg sm:text-2xl font-semibold text-right text-white/20 leading-none animate-pulse" title="measuring delivery from chain…">—</div>
+                                ):(valueGenShowTokens||priceless)&&partsLabel?(
                                   <div className={`font-semibold text-base sm:text-lg text-right tabular-nums leading-tight ${theme.text} truncate`}
                                        title={qTip}>{partsLabel}</div>
                                 ):(
