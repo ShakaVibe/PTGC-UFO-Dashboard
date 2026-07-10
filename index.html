@@ -4965,7 +4965,8 @@
                       const since=(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k])?realizedFees.byPeriod[k].sinceLaunch:false;
                       return(
                         <div key={l} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-3 flex flex-col items-center gap-1.5 min-w-0">
-                          <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">{since?'SINCE LAUNCH':l}</div>
+                          <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold"
+                               title={since?`The token is younger than ${l}. This window covers its full history since launch.`:undefined}>{l}</div>
                           {loading?(
                             <>
                               <div className="text-lg sm:text-xl opacity-25">{'\u{1F41A}'}</div>
@@ -5164,12 +5165,11 @@
                             <div className="mb-3 text-[11px] flex flex-wrap gap-x-3 gap-y-0.5">
                               <span className="text-white/40">accrued <span className="text-white/70 tabular-nums">{fmtUSD(accruedUsd)}</span> from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
                               {queuedUsd!=null&&queuedUsd>0&&(
-                                <span className="text-white/50">
+                                <span className="text-white/50" title="Reflections reach holders the instant a fee is taken. The other five buckets are UFO held by the contract until the balance crosses swapThreshold, at which point a swapback converts and delivers them.">
                                   <span className="tabular-nums">{fmtUSD(queuedUsd)}</span> waiting in the contract for the next swapback
-                                  {plsUsd>0&&<span className="text-amber-300/70"> · {fmtUSD(plsUsd)} of PLS stranded by failed adds</span>}
+                                  {UFO_MAINTENANCE&&plsUsd>0&&<span className="text-amber-300/70"> · {fmtUSD(plsUsd)} of PLS stranded by failed adds</span>}
                                 </span>
                               )}
-                              <span className="text-white/25">delivered value is measured at the pool and the burn address, not estimated</span>
                             </div>
                           );
                         })()}
@@ -5183,10 +5183,10 @@
                             showing fees <span className="font-semibold">accrued</span>, not delivered — {delivered.error}
                           </div>
                         )}
-                        {showLive&&!priceless&&(
+                        {showLive&&UFO_MAINTENANCE&&!priceless&&(
                           <div className="mb-3 text-white/30 text-[10px]">valued at the current price of each token, not the price at the time it was delivered</div>
                         )}
-                        {showLive&&ex&&ex.any&&(
+                        {showLive&&UFO_MAINTENANCE&&ex&&ex.any&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-[11px] space-y-0.5">
                             <div className="text-white/50 font-semibold">excluded from the total (not fees)</div>
                             {ex.directSendCount>0&&(
@@ -5204,7 +5204,7 @@
                           </div>
                         )}
                         {/* MIGRATION: fee-exemption audit — proves no wallet is bypassing the tax */}
-                        {token==='UFO'&&feeAudit&&feeAudit.ok&&(
+                        {token==='UFO'&&UFO_MAINTENANCE&&feeAudit&&feeAudit.ok&&(
                           feeAudit.unexplained.length>0?(
                             <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40">
                               <div className="text-red-300 text-xs font-bold">⚠ TAX BYPASS DETECTED</div>
@@ -5239,7 +5239,7 @@
                             just traded against, so its ratio matches by construction. The other
                             two add into pools that have drifted, and revert when the drift
                             exceeds maxSlippage. */}
-                        {token==='UFO'&&feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures||{}).length>0&&(()=>{
+                        {token==='UFO'&&UFO_MAINTENANCE&&feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures||{}).length>0&&(()=>{
                           const fails=Object.values(feeAudit.swapbackFailures).reduce((a,b)=>a+b,0);
                           const rounds=(dv&&dv.lp&&dv.lp.WPLS)?dv.lp.WPLS.mints:null;   // PLS adds never revert
                           const worst=Math.max(...Object.values(feeAudit.swapbackFailures));
@@ -5558,8 +5558,9 @@
                             {[{l:'24H',k:'24h',v:periods.h24?.amount},{l:'7D',k:'7d',v:periods.d7?.amount},{l:'30D',k:'30d',v:periods.d30?.amount},{l:'90D',k:'90d',v:periods.d90?.amount}].map(({l,k,v})=>(
                               <div key={l} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-3 flex flex-col items-center gap-1.5 min-w-0">
                                 {/* Windows longer than the token's life are "since launch", not "7D". */}
-                                <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold">
-                                  {(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k]&&realizedFees.byPeriod[k].sinceLaunch)?'SINCE LAUNCH':l}
+                                <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold"
+                                     title={(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k]&&realizedFees.byPeriod[k].sinceLaunch)?`The token is younger than ${l}. This window covers its full history since launch.`:undefined}>
+                                  {l}
                                 </div>
                                 <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center">{fmtAbbr(v||0)}</div>
                                 <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{fmtUSD((v||0)*ptgcPrice)}</div>
