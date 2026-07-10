@@ -3334,7 +3334,7 @@
     };
     
     // KPI Content component with dual token support
-    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod})=>{
+    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7dUsd})=>{
       const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
       const[otherData,setOtherData]=useState(null);
@@ -3414,7 +3414,7 @@
         const liqMcapPct=d?.mcap>0?((d?.liq||0)/(d?.mcap)*100):0;
         const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         
-        const valueGen7d=(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
+        const valueGen7d=(t===token&&valueGen7dUsd!=null)?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
         const creaturesRaw=getBurnC(burnPctNum,'Squid');
         const creatures=creaturesRaw.filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
         const burn7dPct=b.supply>0?(burn7dAmt/b.supply)*100:0;
@@ -5897,12 +5897,27 @@
           </>)}
           
           {/* KPI Report Tab Content — public sees the maintenance screen; an operator who loads
-              the site with ?preview=kpi sees the REAL page, so it can be finished behind the gate. */}
-          {activeTab==='kpi'&&(kpiPreviewOn()?(
-            <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
-              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod}/>
-            </div>
-          ):(<MaintenanceScreen label="KPI Report"/>))}{/* MAINT-MIGRATION */}
+              the site with ?preview=kpi (or enters via the secret dot) sees the REAL page. */}
+          {activeTab==='kpi'&&(kpiPreviewOn()?(()=>{
+            /* Value Generated (7D) measured the same way as the dashboard's Value Generated
+               panel: sum the delivered on-chain buckets. The KPI card's own estimate divided
+               the total burn (mostly the one-off ~93B launch burn) by the 1% fee and blew up
+               to ~$2M — this is the real figure. null => the card falls back to its estimate. */
+            const valueGen7dUsd=(()=>{
+              if(token!=='UFO'||!delivered||!delivered.ok||!realizedFees||!realizedFees.ok)return null;
+              const dv=delivered.byPeriod['7d'],live=realizedFees.byPeriod['7d'];
+              if(!dv||!live)return null;
+              const uP=data?.price||0,pP=ptgcPrice||0,plsP=pls||0,pxP=plsxPrice||0,wP=wethPrice||0;
+              const lpUsd=(sym,q)=>{const e=dv.lp&&dv.lp[sym];return e?(e.ufo*uP+e.quote*q):0;};
+              return (live.tokens?.reflection||0)*uP+(dv.ufoBurned||0)*uP+(dv.ptgcBurned||0)*pP
+                     +lpUsd('WPLS',plsP)+lpUsd('PLSX',pxP)+lpUsd('WETH',wP);
+            })();
+            return(
+              <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
+              </div>
+            );
+          })():(<MaintenanceScreen label="KPI Report"/>))}{/* MAINT-MIGRATION */}
           
           {/* Social Tab Content */}
           {activeTab==='social'&&(<MaintenanceScreen label="Socials"/>)}{/* MAINT-MIGRATION */}
