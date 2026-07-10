@@ -4072,7 +4072,12 @@
       useEffect(()=>{
         if(token!=='UFO'){setRealizedFees(null);return;}
         const _fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
-        const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
+        /* SPEED: this effect fires once before DexScreener has delivered pairCreatedAt.
+           With firstPoolMs=null the launch clamp is 0, so the 90d window scans ~740,000
+           blocks and four boundary searches run instead of one — for a result that is
+           immediately superseded. UFO_LAUNCH_FALLBACK_MS is a safe floor (section 6):
+           it is earlier than the real launch, so nothing is ever missed. */
+        const firstPoolMs=(_fp&&isFinite(_fp))?_fp:UFO_LAUNCH_FALLBACK_MS;
         let cancelled=false;
         setRealizedLoading(true);
         if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;}
@@ -4980,16 +4985,24 @@
                     const dv=(token==='UFO'&&delivered&&delivered.ok)?delivered.byPeriod[valueGenPeriod]:null;
                     const px=k=>vgPrices[k]||0;
                     const lpOf=sym=>(dv&&dv.lp[sym])||null;
+                    const haveDelivered=!!(showLive&&dv);
 
-                    const liveItems=(showLive&&dv)?UFO_FEE_BUCKETS.map(b=>{
+                    /* While the delivery scan is in flight (or if it failed) fall back to the
+                       accrued view rather than rendering nothing. `liveItems` must never be
+                       null when showLive is true — the grid maps over it. */
+                    const liveItems=showLive?UFO_FEE_BUCKETS.map(b=>{
                       const cur=cfg.taxBreakdown.find(x=>x.key===b.key);
                       const pct=cur?cur.pct:0;
                       const accruedUfo=live.tokens[b.key]||0;
+                      if(!haveDelivered){
+                        return{...b,pct,usd:accruedUfo*px('UFO'),parts:[{qty:accruedUfo,symbol:'UFO'}],
+                               accruedUfo,measured:false,delivered:true};
+                      }
                       let usd=0,parts=[],measured=true;
                       if(b.key==='reflection'){
                         usd=accruedUfo*px('UFO');
                         parts=[{qty:accruedUfo,symbol:'UFO'}];
-                        measured=false;                                  // derived, no event
+                        measured=false;                                  // derived, no event exists
                       }else if(b.key==='ufoBurn'){
                         usd=dv.ufoBurned*px('UFO');
                         parts=[{qty:dv.ufoBurned,symbol:'UFO'}];
@@ -5009,9 +5022,8 @@
                     }).filter(i=>i.usd>0||i.pct>0):null;
 
                     const accruedUsd=live?live.totalTokens*ufoPx:0;
-                    const deliveredUsd=liveItems?liveItems.reduce((s,i)=>s+i.usd,0):0;
+                    const deliveredUsd=haveDelivered?liveItems.reduce((s,i)=>s+i.usd,0):0;
                     const gapUsd=Math.max(0,accruedUsd-deliveredUsd);
-                    const haveDelivered=!!(liveItems&&dv);
                     const liveTotalUsd=haveDelivered?deliveredUsd:accruedUsd;
                     /* Which LP buckets reverted is no longer INFERRED from the failure
                        event's action string — it is measured. A failed add emits no Mint,
@@ -5165,7 +5177,7 @@
                         )}
                         <div className="flex-1"></div>
                         {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {(showLive?liveItems:orderedItems).map((item,i)=>{
+                          {((showLive?liveItems:orderedItems)||[]).map((item,i)=>{
                             const dollarVal=showLive?item.usd:periodVol*(item.pct/100);
                             const parts=showLive?item.parts:valueGenParts(token,item,dollarVal,vgPrices);
                             const partsLabel=(parts&&parts.length)
