@@ -5152,27 +5152,18 @@
                             <span className="text-base text-white/40">Data unavailable for {valueGenPeriod}</span>
                           )}
                         </div>
-                        {/* The gap between accrued and delivered is NOT a loss. Almost all of it
-                            is UFO waiting in the contract for the next swapback. What swaps and
-                            pTGC's tax actually consumed can only be recovered as a residual —
-                            accrued minus delivered minus queued — which absorbs every rounding
-                            error in the other three. A residual does not deserve a dollar sign,
-                            so it is stated as a bound, not a figure. */}
-                        {showLive&&haveDelivered&&!priceless&&(()=>{
-                          const queuedUsd=(queuedUfoTotal!=null)?queuedUfoTotal*ufoPx:null;
-                          const plsUsd=healthNow?((healthNow.contractPlsBalance||0)*px('PLS')):0;
-                          return(
-                            <div className="mb-3 text-[11px] flex flex-wrap gap-x-3 gap-y-0.5">
-                              <span className="text-white/40">accrued <span className="text-white/70 tabular-nums">{fmtUSD(accruedUsd)}</span> from {live.txCount.toLocaleString()} taxed transfer{live.txCount===1?'':'s'}</span>
-                              {queuedUsd!=null&&queuedUsd>0&&(
-                                <span className="text-white/50" title="Reflections reach holders the instant a fee is taken. The other five buckets are UFO held by the contract until the balance crosses swapThreshold, at which point a swapback converts and delivers them.">
-                                  <span className="tabular-nums">{fmtUSD(queuedUsd)}</span> waiting in the contract for the next swapback
-                                  {UFO_MAINTENANCE&&plsUsd>0&&<span className="text-amber-300/70"> · {fmtUSD(plsUsd)} of PLS stranded by failed adds</span>}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        {/* Removed at the owner's request: the accrued/queued summary, the
+                            pricing caveat, the exclusion report, the swaps-taxed line and the
+                            swapback-failure strip. All are OPERATOR information, not holder
+                            information, and they were crowding the six numbers people come to
+                            read. Every one of them still prints to the console, and the full
+                            figures live on the `realizedFees`, `delivered` and `feeAudit`
+                            objects. Per-bucket "queued" lines stay, because they are the only
+                            reason Holders does not look anomalous next to Burn UFO.
+
+                            The two banners BELOW are NOT operator information and must never be
+                            hidden: they say a number on this panel is untrustworthy. A bucket
+                            reading $0 because a query failed is a lie, not a warning. */}
                         {showLive&&haveDelivered&&delivered&&!delivered.mintQueryOk&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px] text-red-300">
                             a Mint query failed for at least one pair — an LP bucket reading $0 is NOT trustworthy. See console.
@@ -5183,93 +5174,12 @@
                             showing fees <span className="font-semibold">accrued</span>, not delivered — {delivered.error}
                           </div>
                         )}
-                        {showLive&&UFO_MAINTENANCE&&!priceless&&(
-                          <div className="mb-3 text-white/30 text-[10px]">valued at the current price of each token, not the price at the time it was delivered</div>
-                        )}
-                        {showLive&&UFO_MAINTENANCE&&ex&&ex.any&&(
-                          <div className="mb-3 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-[11px] space-y-0.5">
-                            <div className="text-white/50 font-semibold">excluded from the total (not fees)</div>
-                            {ex.directSendCount>0&&(
-                              <div className="text-white/60">{ex.directSendCount} direct transfer{ex.directSendCount===1?'':'s'} into the contract — <span className="text-white/85">{fmtAbbr(Math.round(ex.directSendTokens))} UFO</span> of principal, matched the tax ratio exactly</div>
-                            )}
-                            {ex.exemptSenders.length>0&&(
-                              <div className="text-white/60">{ex.exemptSenders.length} fee-exempt sender{ex.exemptSenders.length===1?'':'s'} — <span className="text-white/85">{fmtAbbr(Math.round(ex.exemptTokens))} UFO</span>. An exempt address pays no tax, so it cannot originate a fee.</div>
-                            )}
-                            {ex.unknownSenders>0&&(
-                              <div className="text-amber-300/80">⚠ {ex.unknownSenders} sender{ex.unknownSenders===1?'':'s'} could not be checked against isExcludedFromFee()</div>
-                            )}
-                            {ex.uncheckedShare>0.005&&(
-                              <div className="text-white/40">{(ex.uncheckedShare*100).toFixed(1)}% of inbound volume came from senders below the check threshold</div>
-                            )}
-                          </div>
-                        )}
-                        {/* MIGRATION: fee-exemption audit — proves no wallet is bypassing the tax */}
-                        {token==='UFO'&&UFO_MAINTENANCE&&feeAudit&&feeAudit.ok&&(
-                          feeAudit.unexplained.length>0?(
-                            <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40">
-                              <div className="text-red-300 text-xs font-bold">⚠ TAX BYPASS DETECTED</div>
-                              <div className="text-red-200/80 text-[11px] mt-0.5">
-                                {feeAudit.unexplained.length} address{feeAudit.unexplained.length===1?'':'es'} made untaxed swaps but {feeAudit.unexplained.length===1?'is':'are'} not fee-exempt. See console.
-                              </div>
-                            </div>
-                          ):feeAudit.unknownExempt.length>0?(
-                            <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30">
-                              <div className="text-amber-300 text-[11px] font-semibold">
-                                {feeAudit.unknownExempt.length} fee-exempt wallet{feeAudit.unknownExempt.length===1?'':'s'} traded untaxed (not the contract, burn, or owner). See console.
-                              </div>
-                            </div>
-                          ):(
-                            <div className="mb-3 text-white/35 text-[11px]">
-                              {feeAudit.taxedLegs.toLocaleString()}/{feeAudit.swapLegs.toLocaleString()} swaps taxed · {feeAudit.untaxedLegs.toLocaleString()} untaxed, all by the contract or burn address
-                            </div>
-                          )
-                        )}
                         {/* MAINT-MIGRATION: the dev audit table lived here. It has been removed.
                             What survives is the part that has to survive: swapback failures and
                             the balances that corroborate them. This renders ONLY when something
                             is actually wrong, so it costs nothing on a healthy contract and it
                             disappears by itself once the contract is fixed. Handoff section 3.5
                             says the way to verify a fix is that this box stops appearing. */}
-                        {/* A raw count has no denominator and no clock. "addPLSXLiquidity x3"
-                            reads as "always", which is exactly the misreading that produced five
-                            wrong diagnoses. What matters is the RATE (three failures out of ~51
-                            rounds is 6%, not 100%) and HOW LONG AGO the last one was — because
-                            that is the only number that tells you whether deepening the pools
-                            worked. LP PLS never fails: it adds back into the pool the swapback
-                            just traded against, so its ratio matches by construction. The other
-                            two add into pools that have drifted, and revert when the drift
-                            exceeds maxSlippage. */}
-                        {token==='UFO'&&UFO_MAINTENANCE&&feeAudit&&feeAudit.ok&&feeAudit.swapbackFailQueryOk&&Object.keys(feeAudit.swapbackFailures||{}).length>0&&(()=>{
-                          const fails=Object.values(feeAudit.swapbackFailures).reduce((a,b)=>a+b,0);
-                          const rounds=(dv&&dv.lp&&dv.lp.WPLS)?dv.lp.WPLS.mints:null;   // PLS adds never revert
-                          const worst=Math.max(...Object.values(feeAudit.swapbackFailures));
-                          const rate=(rounds&&rounds>0)?(worst/rounds):null;
-                          const hrs=feeAudit.lastFailHoursAgo;
-                          const cold=(hrs!=null&&hrs>6);   // nothing has failed in a while
-                          const plsUsd=(feeAudit.health&&feeAudit.health.contractPlsBalance!=null)
-                            ?feeAudit.health.contractPlsBalance*px('PLS'):null;
-                          return(
-                            <div className={`mb-3 px-3 py-2 rounded-lg text-[11px] ${cold?'bg-white/[0.03] border border-white/10':'bg-amber-500/10 border border-amber-400/30'}`}>
-                              <div className={cold?'text-white/60':'text-amber-300 font-semibold'}>
-                                {rate!=null
-                                  ?<>{Object.entries(feeAudit.swapbackFailures).map(([k,v])=>`${k.replace(/^add|Liquidity$/g,'')} ${v}`).join(' · ')} — <span className="tabular-nums">{(rate*100).toFixed(1)}%</span> of {rounds} liquidity rounds reverted</>
-                                  :<>{fails} liquidity add{fails===1?'':'s'} reverted (denominator unavailable)</>}
-                              </div>
-                              <div className={`mt-0.5 ${cold?'text-white/35':'text-amber-200/70'}`}>
-                                {hrs!=null
-                                  ?<>last failure <span className="tabular-nums">{hrs<1?`${Math.round(hrs*60)} min`:`${hrs.toFixed(1)}h`}</span> ago{cold?' — nothing has reverted since the pools were deepened':''}</>
-                                  :'timing unavailable'}
-                                {plsUsd!=null&&plsUsd>0&&<> · <span className="text-amber-300/80">{fmtAbbr(Math.round(feeAudit.health.contractPlsBalance))} PLS ({fmtUSD(plsUsd)}) stranded — recoverable with rescuePLS()</span></>}
-                              </div>
-                              <div className="mt-1 text-white/25">
-                                A revert happens when the target pool's ratio has drifted from UFO/WPLS by more than maxSlippage. Deeper satellite pools shrink the drift.
-                                {feeAudit.swapbackFailTxs&&feeAudit.swapbackFailTxs.length>0&&(
-                                  <> Last: <a href={`https://scan.pulsechain.com/tx/${feeAudit.swapbackFailTxs[0].tx}`} target="_blank" rel="noreferrer" className="underline hover:text-white/60">{feeAudit.swapbackFailTxs[0].tx.slice(0,10)}…</a></>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })()}
                         {/* A failed liquidity query must never be presented as "no liquidity moves". */}
                         {token==='UFO'&&feeAudit&&feeAudit.ok&&!feeAudit.liqDetectionOk&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30 text-[11px] text-amber-300">
@@ -5515,12 +5425,22 @@
                       const ptgcByUFO=burnHistoryCache?.PTGCbyUFO;
                       const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
                       const oldBurned=ptgcByUFO?.totalBurned||0;
-                      const newBurned=ptgcByUfoLive?.total||0;
+                      /* `ptgcByUfoLive?.total||0` turned a failed query into "zero pTGC burned",
+                         which also silently subtracted the new contract's burns from the
+                         lifetime total. The delivered-value scan measures the same quantity
+                         from the same logs, so use it as a fallback; if BOTH are unavailable
+                         the boxes read "—" rather than claiming zero. */
+                      const dvP=(delivered&&delivered.ok)?delivered.byPeriod:null;
+                      const ptgcSrc=ptgcByUfoLive||(dvP?{
+                        total:dvP['90d'].ptgcBurned,h24:dvP['24h'].ptgcBurned,
+                        d7:dvP['7d'].ptgcBurned,d30:dvP['30d'].ptgcBurned,d90:dvP['90d'].ptgcBurned
+                      }:null);
+                      const newBurned=ptgcSrc?ptgcSrc.total:0;
                       const totalBurned=oldBurned+newBurned;
                       const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
-                      const periods=ptgcByUfoLive
-                        ?{h24:{amount:ptgcByUfoLive.h24},d7:{amount:ptgcByUfoLive.d7},d30:{amount:ptgcByUfoLive.d30},d90:{amount:ptgcByUfoLive.d90}}
-                        :{h24:{amount:0},d7:{amount:0},d30:{amount:0},d90:{amount:0}};
+                      const periods=ptgcSrc
+                        ?{h24:{amount:ptgcSrc.h24},d7:{amount:ptgcSrc.d7},d30:{amount:ptgcSrc.d30},d90:{amount:ptgcSrc.d90}}
+                        :null;
                       const whaleProgress=getWhaleProgress(burnPct);
                       const creatures=getBurnC(burnPct,'Squid');
 
@@ -5555,15 +5475,15 @@
                           </div>
 
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {[{l:'24H',k:'24h',v:periods.h24?.amount},{l:'7D',k:'7d',v:periods.d7?.amount},{l:'30D',k:'30d',v:periods.d30?.amount},{l:'90D',k:'90d',v:periods.d90?.amount}].map(({l,k,v})=>(
+                            {[{l:'24H',k:'24h',v:periods?.h24?.amount},{l:'7D',k:'7d',v:periods?.d7?.amount},{l:'30D',k:'30d',v:periods?.d30?.amount},{l:'90D',k:'90d',v:periods?.d90?.amount}].map(({l,k,v})=>(
                               <div key={l} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-3 flex flex-col items-center gap-1.5 min-w-0">
                                 {/* Windows longer than the token's life are "since launch", not "7D". */}
                                 <div className="text-xs sm:text-sm uppercase tracking-[0.18em] text-white/55 font-semibold"
                                      title={(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod[k]&&realizedFees.byPeriod[k].sinceLaunch)?`The token is younger than ${l}. This window covers its full history since launch.`:undefined}>
                                   {l}
                                 </div>
-                                <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center">{fmtAbbr(v||0)}</div>
-                                <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{fmtUSD((v||0)*ptgcPrice)}</div>
+                                <div className="text-base sm:text-xl font-medium tabular-nums leading-none text-[#7CFC00] truncate max-w-full text-center">{v==null?'\u2014':fmtAbbr(v)}</div>
+                                <div className="text-sm sm:text-base font-medium text-white tabular-nums truncate max-w-full text-center">{v==null?'\u2014':fmtUSD(v*ptgcPrice)}</div>
                               </div>
                             ))}
                           </div>
