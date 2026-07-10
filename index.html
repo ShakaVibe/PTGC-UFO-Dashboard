@@ -4661,11 +4661,15 @@
                is now fired lazily, from the fee effect, if and only if delivery fails. */
           }
           
-          // Fetch live 24H burn from blockchain in background (non-blocking).
-          // live24hBurn stays null only while in flight (= loading); on success it's
-          // the live value, on failure it falls back to the cached h24 so the box
-          // always lands on a real number without flashing the stale cache first.
-          fetchLive24hBurn(cfg.address,cfg.decimals).then(v=>{setLive24hBurn(v!==null?v:(periods.h24||0));});
+          /* live24hBurn used its OWN block-counted query (currentBlock - 8640, assuming
+             10s blocks). That is the drift bug the handoff warns about — if blocks are
+             faster than 10s the window reaches back PAST launch and sweeps in the ~93B
+             launch burn, and on failure it fell back to a lifetime figure. The correct,
+             timestamp-bounded 24h burn is already computed by fetchBurnPeriodsOnChain.
+             Read that instead of re-deriving it wrong. */
+          fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS)
+            .then(bp=>{setLive24hBurn(bp?bp.h24:null);})
+            .catch(()=>setLive24hBurn(null));
           
           // Update holder change with current holder count
           const hc=getHolderChange(token,h);
@@ -5385,40 +5389,16 @@
                             The two banners BELOW are NOT operator information and must never be
                             hidden: they say a number on this panel is untrustworthy. A bucket
                             reading $0 because a query failed is a lie, not a warning. */}
-                        {/* RECONCILIATION GUARDRAIL — like with like.
-                            Fees come from two places: TRADES (a fee whose sender is a pair) and
-                            TRANSFERS (LP adds and wallet-to-wallet, which emit no Swap event).
-                            Only trade fees are comparable to pair swap volume. The first version
-                            compared ALL fees, so the ratio exploded whenever LP-add fees
-                            dominated — which they do on this token right now (5.86x was that bug,
-                            not a data problem). The trade-fee ratio sits near 1.06–1.10x; outside
-                            1.03–1.25x means the fee measurement is off. Silent inside the band. */}
-                        {showLive&&haveDelivered&&delivered&&delivered.swapScanOk&&delivered.feeInOk&&(()=>{
-                          const swapFee=delivered.swapFeeTokensByPeriod?delivered.swapFeeTokensByPeriod[valueGenPeriod]:null;
-                          const dpair=delivered.pairSwapByPeriod?delivered.pairSwapByPeriod[valueGenPeriod]:null;
-                          if(swapFee==null||dpair==null||dpair<=0)return null;
-                          const totalBps=(cfg.taxBreakdown||[]).reduce((s,x)=>s+(x.bps!=null?x.bps:x.pct*100),0)||600;
-                          const impliedGross=swapFee/(totalBps/10000);
-                          const ratio=impliedGross/dpair;
-                          if(ratio>=1.03&&ratio<=1.25)return null;   // healthy: say nothing
-                          const high=ratio>1.25;
-                          return(
-                            <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30 text-[11px]">
-                              <div className="text-amber-300 font-semibold">
-                                trade-fee / swap-volume ratio {ratio.toFixed(2)}x — outside the expected 1.06–1.10x band
-                              </div>
-                              <div className="text-amber-200/70 mt-0.5">
-                                {high
-                                  ?'Trade fees imply more swap volume than the pairs traded — a swap fee may be miscounted, or a pair address is stale.'
-                                  :'Trade fees imply less swap volume than the pairs traded — the fee scan may have missed events, or swap logs were double-counted.'}
-                                {' '}Check the console reconciliation.
-                              </div>
-                              <div className="text-white/30 mt-0.5 tabular-nums">
-                                trade fees imply {fmtAbbr(Math.round(impliedGross))} UFO · pairs report {fmtAbbr(Math.round(dpair))} UFO · window {valueGenPeriod}
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        {/* The fee/swap-volume reconciliation used to render here. It is a
+                            developer integrity check, not holder information, and cleanly
+                            separating trade fees from LP-add / wallet-to-wallet fees turned out
+                            to be hard to do exactly from logs alone (a swapback tx contains the
+                            contract's own sells and buybacks; a multicall can bundle a trade and
+                            an LP add). Three visible versions were wrong. It now lives in the
+                            console only — see the "reconciliation" line from fetchDeliveredValue,
+                            which reports the ratio and its inputs on every load. If it needs a UI
+                            again it belongs behind UFO_MAINTENANCE, never in the public panel. */}
+
                         {showLive&&haveDelivered&&delivered&&!delivered.mintQueryOk&&(
                           <div className="mb-3 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px] text-red-300">
                             a Mint query failed for at least one pair — an LP bucket reading $0 is NOT trustworthy. See console.
