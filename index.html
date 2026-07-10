@@ -2231,7 +2231,7 @@
     // Fetch holders - stop after Dolphin tier, calculate rest as Squid & Below
     const fetchHolderTiers=async(addr,cfg,totalHolderCount,lpAddresses=[])=>{
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0};
-      let queryOk=true,lastErr=null;
+      let queryOk=true,lastErr=null,complete=false;
       let nextPageParams=null;
       let totalFetched=0;
       const maxPages=20;
@@ -2262,7 +2262,7 @@
             if(!data||!Array.isArray(data.items)){queryOk=false;lastErr='holders API returned no items array';break;}
             const items=data.items;
             
-            if(items.length===0)break;
+            if(items.length===0){complete=true;break;}
             
             let foundBelowDolphin=false;
             
@@ -2290,13 +2290,27 @@
             
             totalFetched+=items.length;
             
-            if(foundBelowDolphin)break;
+            /* Holders arrive sorted by balance, descending. Once we cross below the Dolphin
+               threshold every tier above it is fully counted — the rest of the list cannot
+               contain another whale. That, not "we finished the loop", is completeness. */
+            if(foundBelowDolphin){complete=true;break;}
             
             if(data.next_page_params){
               const params=new URLSearchParams();
-              Object.entries(data.next_page_params).forEach(([k,v])=>params.set(k,v));
+              /* PulseScan returns the cursor `value` as a raw JSON number — a holder balance
+                 in wei, around 1.9e26. JSON.parse makes it a float, and URLSearchParams
+                 stringifies that as "1.9059209280044986e+26". The API cannot parse scientific
+                 notation and answers 500, which is why the tiers died on page 9.
+                 toLocaleString('fullwide') writes the same float in plain digits. */
+              Object.entries(data.next_page_params).forEach(([k,v])=>{
+                const out=(typeof v==='number'&&Math.abs(v)>=1e21)
+                  ? v.toLocaleString('fullwide',{useGrouping:false})
+                  : v;
+                params.set(k,out);
+              });
               nextPageParams=params.toString();
             }else{
+              complete=true;   // no more pages: we have seen every holder
               break;
             }
             page++;
@@ -2310,13 +2324,23 @@
         console.error('Error fetching holders:',e);
         queryOk=false;lastErr=e.message||'holders fetch failed';
       }
-      if(!queryOk)console.warn(`holder tiers UNAVAILABLE: ${lastErr} — counts are NOT zero, they are unknown`);
+      /* Three outcomes, not two:
+           complete            -> the counts are exact
+           partial (some pages)-> the counts are a LOWER BOUND. Throwing them away and
+                                  printing "—" discards ~400 holders of good data.
+           nothing fetched     -> genuinely unknown. */
+      if(!queryOk&&complete)console.warn(`holder tiers: ${lastErr}, but every tier above Dolphin was already counted — figures are exact`);
+      else if(!queryOk&&countedHolders>0)console.warn(`holder tiers PARTIAL: ${lastErr} — counts are a lower bound over the top ${totalFetched} holders`);
+      else if(!queryOk)console.warn(`holder tiers UNAVAILABLE: ${lastErr} — counts are NOT zero, they are unknown`);
       
       // Squid & Below = total holders - counted tiers - LP addresses - staking contract
       const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
       const squidAndBelow=Math.max(0,totalHolderCount-countedHolders-excludedAddresses);
       
-      return{counts,countedHolders,squidAndBelow,total:totalFetched,ok:queryOk,error:lastErr};
+      return{counts,countedHolders,squidAndBelow,total:totalFetched,
+             ok:(queryOk||complete),          // a failure after completion is not a failure
+             partial:(!queryOk&&!complete&&countedHolders>0),
+             complete,error:lastErr};
     };
     
     const DonutChart=({data,colors,size=120})=>{
@@ -4522,16 +4546,17 @@
           // Fetch holder tiers for all tokens - pass LP pair addresses
           const lpPairAddresses=d?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
           fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
-            /* null, not 0, when the holders API failed. Zero whales is a claim; we
-               have no basis for it. The tiles render "—" for null. */
-            const v=n=>result.ok?(n||0):null;
+            /* Exact -> the number. Partial -> a lower bound, still worth showing.
+               Nothing at all -> null, and the tiles print "—". Zero whales is a claim,
+               and a failed query is no basis for it. */
+            const v=n=>(result.ok||result.partial)?(n||0):null;
             setHolderTiers({
               Poseidon:v(result.counts.Poseidon),
               Whale:v(result.counts.Whale),
               Shark:v(result.counts.Shark),
               Dolphin:v(result.counts.Dolphin),
-              SquidAndBelow:v(result.squidAndBelow),
-              ok:result.ok
+              SquidAndBelow:result.ok?(result.squidAndBelow||0):null,  // needs a complete count
+              ok:result.ok,partial:!!result.partial,error:result.error
             });
           });
           
@@ -5315,10 +5340,10 @@
                         </div>
                       ):(
                         <div className="grid grid-cols-3 gap-x-4 sm:gap-x-5 gap-y-2.5 text-center">
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F531}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Poseidon==null?'\u2014':holderTiers.Poseidon}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F40B}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Whale==null?'\u2014':holderTiers.Whale}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F988}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Shark==null?'\u2014':holderTiers.Shark}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F42C}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Dolphin==null?'\u2014':holderTiers.Dolphin}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F531}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Poseidon==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Poseidon}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F40B}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Whale==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Whale}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F988}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Shark==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Shark}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F42C}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Dolphin==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Dolphin}</div></div>
                           <div className="col-span-2"><div className="text-xl sm:text-2xl">{'\u{1F991}'}<span className="text-white/60 mx-0.5">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.SquidAndBelow==null?'\u2014':fmtAbbr(holderTiers.SquidAndBelow)}</div></div>
                         </div>
                       )}
