@@ -856,11 +856,17 @@
         const ufoTopic='0x'+encodeAddress(ufoAddress);
 
         /* One scan defines the swapback transactions. Everything else is an
-           intersection against it. */
-        const[ufoOut,ufoBurns,ptgcBurns]=await Promise.all([
+           intersection against it. `feeIn` is the inbound fee stream — Transfer to the
+           contract — which the reconciliation guardrail needs split by sender: a fee whose
+           sender is a PAIR came from a trade; a fee from any other wallet came from a
+           transfer (an LP add or a wallet-to-wallet move) and produces no Swap event. Only
+           the pair-sourced fees are comparable to pair swap volume. */
+        const contractTopic='0x'+encodeAddress(ufoAddress);
+        const[ufoOut,ufoBurns,ptgcBurns,feeIn]=await Promise.all([
           getLogsChunked(ufoAddress,[TRANSFER_TOPIC,ufoTopic,null],scanFrom,cur),
           getLogsChunked(ufoAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],scanFrom,cur),
-          getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],scanFrom,cur)
+          getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],scanFrom,cur),
+          getLogsChunked(ufoAddress,[TRANSFER_TOPIC,null,contractTopic],scanFrom,cur)
         ]);
         if(!ufoOut)return{ok:false,error:lastLogError||'could not read contract transfers'};
         if(!ufoBurns)return{ok:false,error:lastLogError||'could not read UFO burns'};
@@ -990,9 +996,28 @@
           for(const s of arr)PERIOD_KEYS.forEach(k=>{if(s.block>=B[k])pairSwapByPeriod[k]+=s.ufo;});
         }
 
+        /* Split the inbound fee stream by sender. A fee whose `from` is a pair came from a
+           trade; anything else came from a transfer (LP add / wallet-to-wallet) and has no
+           matching Swap event. The guardrail compares SWAP-sourced fees to swap volume —
+           like with like. Without this split, LP-add fees (which dominate right now) inflate
+           the implied-volume side and the ratio explodes even though nothing is wrong. */
+        const pairSet={};pairs.forEach(p=>{pairSet[p.address.toLowerCase()]=true;});
+        const swapFeeTokensByPeriod={};PERIOD_KEYS.forEach(p=>{swapFeeTokensByPeriod[p]=0;});
+        let feeInOk=Array.isArray(feeIn);
+        if(feeInOk){
+          for(const l of feeIn){
+            if(!l.topics||l.topics.length<3)continue;
+            const from=('0x'+l.topics[1].slice(26)).toLowerCase();
+            if(!pairSet[from])continue;                 // not a swap fee
+            const b=parseInt(l.blockNumber,16);
+            const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
+            PERIOD_KEYS.forEach(k=>{if(b>=B[k])swapFeeTokensByPeriod[k]+=amt;});
+          }
+        }
+
         const out={ok:true,byPeriod:accs,mintQueryOk,scanFrom,headBlock:cur,launch:B.launch,
                    ptgcFeeLegsDropped,
-                   pairSwapByPeriod,swapScanOk,
+                   pairSwapByPeriod,swapScanOk,swapFeeTokensByPeriod,feeInOk,
                    /* Exposed so the PTGC panel can subtract any pre-generated row that names
                       one of these transactions. If the JSON generator is ever repointed at the
                       new contract, its rows would otherwise be added on top of ours and the
@@ -1006,9 +1031,10 @@
           console.log(`   ${k}: ${a.swapbackTxs} swapbacks · ${Math.round(a.ufoBurned).toLocaleString()} UFO burned · ${Math.round(a.ptgcBurned).toLocaleString()} pTGC burned · LP ${Object.keys(a.lp).map(s=>`${s}:${a.lp[s].mints}`).join(' ')||'none'}`);
         });
         if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) identified as pTGC's own 0.5% burn fee and excluded)`);
-        if(swapScanOk){
-          const p24=pairSwapByPeriod['24h']||0;
-          console.log(`reconciliation | pairs traded ${Math.round(p24).toLocaleString()} UFO (24h) — compare against fees-imply-volume in the fee log above; ratio should sit near 1.06–1.10x`);
+        if(swapScanOk&&feeInOk){
+          const sf=swapFeeTokensByPeriod['24h']||0, ps=pairSwapByPeriod['24h']||0;
+          const impl=sf/0.06;
+          console.log(`reconciliation (24h) | trade fees ${Math.round(sf).toLocaleString()} UFO imply ${Math.round(impl).toLocaleString()} UFO of swaps · pairs traded ${Math.round(ps).toLocaleString()} UFO · ratio ${ps>0?(impl/ps).toFixed(2):'?'}x (want ~1.06–1.10)`);
         }
         if(!mintQueryOk)console.error('*** Mint query failed for at least one pair — LP delivery is NOT trustworthy ***');
         return out;
@@ -5346,34 +5372,36 @@
                             The two banners BELOW are NOT operator information and must never be
                             hidden: they say a number on this panel is untrustworthy. A bucket
                             reading $0 because a query failed is a lie, not a warning. */}
-                        {/* RECONCILIATION GUARDRAIL. Fees collected imply a gross taxed volume;
-                            the pairs report a swap volume. In tokens, no prices. The ratio sits
-                            near 1.06–1.10x when the fee stream is clean, and drifts out of band
-                            when it is not — which is exactly how the original overcounting bug
-                            was found. Silent inside the band; loud outside it. This is the check
-                            I deleted with the dev dropdown, rebuilt to stand on its own. */}
-                        {showLive&&haveDelivered&&delivered&&delivered.swapScanOk&&realizedFees&&realizedFees.ok&&(()=>{
-                          const fp=realizedFees.byPeriod[valueGenPeriod];
+                        {/* RECONCILIATION GUARDRAIL — like with like.
+                            Fees come from two places: TRADES (a fee whose sender is a pair) and
+                            TRANSFERS (LP adds and wallet-to-wallet, which emit no Swap event).
+                            Only trade fees are comparable to pair swap volume. The first version
+                            compared ALL fees, so the ratio exploded whenever LP-add fees
+                            dominated — which they do on this token right now (5.86x was that bug,
+                            not a data problem). The trade-fee ratio sits near 1.06–1.10x; outside
+                            1.03–1.25x means the fee measurement is off. Silent inside the band. */}
+                        {showLive&&haveDelivered&&delivered&&delivered.swapScanOk&&delivered.feeInOk&&(()=>{
+                          const swapFee=delivered.swapFeeTokensByPeriod?delivered.swapFeeTokensByPeriod[valueGenPeriod]:null;
                           const dpair=delivered.pairSwapByPeriod?delivered.pairSwapByPeriod[valueGenPeriod]:null;
-                          if(!fp||dpair==null||dpair<=0)return null;
+                          if(swapFee==null||dpair==null||dpair<=0)return null;
                           const totalBps=(cfg.taxBreakdown||[]).reduce((s,x)=>s+(x.bps!=null?x.bps:x.pct*100),0)||600;
-                          const impliedGross=fp.totalTokens/(totalBps/10000);
+                          const impliedGross=swapFee/(totalBps/10000);
                           const ratio=impliedGross/dpair;
-                          // Structural floor 1/0.94 = 1.064; wallet-to-wallet lifts it. Band 1.03–1.35.
                           if(ratio>=1.03&&ratio<=1.25)return null;   // healthy: say nothing
-                          const high=ratio>1.35;
+                          const high=ratio>1.25;
                           return(
                             <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30 text-[11px]">
                               <div className="text-amber-300 font-semibold">
-                                fee / swap-volume ratio {ratio.toFixed(2)}x — outside the expected 1.06–1.10x band (fires above 1.25x or below 1.03x)
+                                trade-fee / swap-volume ratio {ratio.toFixed(2)}x — outside the expected 1.06–1.10x band
                               </div>
                               <div className="text-amber-200/70 mt-0.5">
                                 {high
-                                  ?'Fees imply more volume than the pairs traded. Usually means a non-swap transfer is being counted as a fee, or a large taxed wallet-to-wallet move. Check the console reconciliation.'
-                                  :'Fees imply less volume than the pairs traded. Usually means the fee scan missed events, or swap logs were double-counted. Check the console reconciliation.'}
+                                  ?'Trade fees imply more swap volume than the pairs traded — a swap fee may be miscounted, or a pair address is stale.'
+                                  :'Trade fees imply less swap volume than the pairs traded — the fee scan may have missed events, or swap logs were double-counted.'}
+                                {' '}Check the console reconciliation.
                               </div>
                               <div className="text-white/30 mt-0.5 tabular-nums">
-                                fees imply {fmtAbbr(Math.round(impliedGross))} UFO · pairs report {fmtAbbr(Math.round(dpair))} UFO · window {valueGenPeriod}
+                                trade fees imply {fmtAbbr(Math.round(impliedGross))} UFO · pairs report {fmtAbbr(Math.round(dpair))} UFO · window {valueGenPeriod}
                               </div>
                             </div>
                           );
