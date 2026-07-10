@@ -167,17 +167,7 @@
      *         maintenance badge and secret dot both disappear.
      * Flip this ONE value to go live. Nothing else needs to change.
      * ========================================= */
-    const UFO_MAINTENANCE=true;
-    /* MAINT-MIGRATION: operator preview for the KPI Report while it's still behind the gate.
-       It turns on for YOU two ways, both invisible to the public:
-         • enter UFO through the secret dot (that sets KPI_OPERATOR_ENTRY below), or
-         • load the site with ?preview=kpi.
-       The public does neither, so they keep seeing "Under Maintenance". To go fully live
-       later, delete this block and switch the kpiPreviewOn() branch in the tab render
-       (search "kpiPreviewOn") to always show the real page. */
-    const KPI_PREVIEW_PARAM=(()=>{try{return new URLSearchParams(window.location.search).get('preview')==='kpi';}catch(e){return false;}})();
-    let KPI_OPERATOR_ENTRY=false;                 // flipped true when the secret dot is clicked
-    const kpiPreviewOn=()=>KPI_PREVIEW_PARAM||KPI_OPERATOR_ENTRY;
+    const UFO_MAINTENANCE=false;   // LIVE. Home UFO card, dashboard access, the secret dot, and operator-only data all follow this flag.
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
@@ -3365,7 +3355,7 @@
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
-            onClick={()=>{KPI_OPERATOR_ENTRY=true;onSelect('UFO')}}
+            onClick={()=>onSelect('UFO')}
             aria-label="."
             title=""
             className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none"
@@ -5101,7 +5091,7 @@
                     <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9"/>
                     <span className={`font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] ${isGold?'metallic-gold':theme.text}`}>BUY</span>
                   </a>
-                  <button onClick={()=>setShowMaintNotice(true)/* MAINT-MIGRATION: was onSwitch(token==='PTGC'?'UFO':'PTGC') */} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
                     <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-6 h-6 sm:w-8 sm:h-8"/>
                     <span className="text-white/70 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em]">Switch</span>
                   </button>
@@ -5141,8 +5131,8 @@
                   {activeTab==='social' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
                 <a href="#" onClick={(e)=>{e.preventDefault();setShowMaintNotice(true)}/* MAINT-MIGRATION: was href="./calculators.html" */} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Calculators</a>
-                <a href="./charts.html" onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
-                <a href={`portfolio.html?from=${token}`} onClick={()=>{try{localStorage.setItem('ptgc_last_token',token)}catch(e){}}} className="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0">
+                <a href="#" onClick={(e)=>{e.preventDefault();setShowMaintNotice(true)}/* MAINT-MIGRATION: was href="./charts.html" */} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
+                <a href="#" onClick={(e)=>{e.preventDefault();setShowMaintNotice(true)}/* MAINT-MIGRATION: was href="portfolio.html?from={token}" */} className="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0">
                   <span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span>
                 </a>
                 <button onClick={onAffiliates} className="px-3.5 py-3 text-sm font-semibold text-purple-300 hover:text-purple-200 transition-colors shrink-0">Affiliates</button>
@@ -5896,9 +5886,8 @@
           </div>
           </>)}
           
-          {/* KPI Report Tab Content — public sees the maintenance screen; an operator who loads
-              the site with ?preview=kpi (or enters via the secret dot) sees the REAL page. */}
-          {activeTab==='kpi'&&(kpiPreviewOn()?(()=>{
+          {/* KPI Report Tab Content — LIVE. */}
+          {activeTab==='kpi'&&((()=>{
             /* Value Generated (7D) measured the same way as the dashboard's Value Generated
                panel: sum the delivered on-chain buckets. The KPI card's own estimate divided
                the total burn (mostly the one-off ~93B launch burn) by the 1% fee and blew up
@@ -5917,7 +5906,7 @@
                 <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
               </div>
             );
-          })():(<MaintenanceScreen label="KPI Report"/>))}{/* MAINT-MIGRATION */}
+          })())}
           
           {/* Social Tab Content */}
           {activeTab==='social'&&(<MaintenanceScreen label="Socials"/>)}{/* MAINT-MIGRATION */}
