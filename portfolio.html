@@ -31,7 +31,7 @@
     // ===== Minimal TOKENS config (logos and pair addresses needed by portfolio) =====
     const TOKENS={
       PTGC:{name:'PTGC',logo:'06_PTGC_V1_transparent_bg.png',mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11'},
-      UFO:{name:'UFO',logo:'07_Ufo_transparent.png',mainPair:'0xbeA0e55b82Eb975280041f3b49C4D0bD937b72d5'}
+      UFO:{name:'UFO',logo:'07_Ufo_transparent.png',mainPair:'0xE221e6fC30e5787F0d551f980B4da1055D832A03'}
     };
     
     // ===== RPC & Helpers =====
@@ -53,8 +53,37 @@
     const fmtComma=(n,dec=2)=>n==null||isNaN(n)?'\u2014':Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
+    // Abbreviated price with subscript-zero notation, e.g. $0.0₅3764 for very small prices. Returns a React node.
+    const fmtPriceNode=(p)=>{
+      if(p==null||isNaN(p)||p<=0)return'\u2014';
+      const n=Number(p);
+      if(n>=1)return'$'+n.toFixed(2);
+      if(n>=0.01)return'$'+n.toFixed(4);
+      const s=n.toExponential(4);
+      const[m,e]=s.split('e');
+      const exp=Math.abs(parseInt(e));
+      return<span>$0.0<sub style={{fontSize:'0.6em'}}>{exp-1}</sub>{parseFloat(m).toFixed(4).replace('.','').slice(0,4)}</span>;
+    };
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
-    const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
+    const WPLS_ADDR='0xA1077a294dDE1B09bB078844df40758a5D0f9a27';
+    // Robust USD price: read the /tokens/{addr} `.pairs` array (the path index.html uses), pick the
+    // most-liquid live pair. Returns null on failure/empty — NEVER a fake 0, so a failed lookup renders
+    // as "—" instead of masquerading as a real $0. (The old /pairs/{pair} `.pair?.priceUsd` read is being
+    // retired by DexScreener.)
+    const usdOf=async(addr)=>{
+      try{
+        const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
+        const d=await r.json();
+        const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0);
+        if(!ps.length)return null;
+        ps.sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
+        return parseFloat(ps[0].priceUsd)||null;
+      }catch{return null;}
+    };
+    const fetchPLS=()=>usdOf(WPLS_ADDR);
+    // Multiply tokens by a USD price while keeping failures visible: a null/NaN price yields null
+    // (which the formatters render as "—"), never a fake $0.
+    const usd=(tokens,price)=>(price==null||isNaN(price)||tokens==null||isNaN(tokens))?null:tokens*price;
     
     // ===== DonutChart Component =====
     const DonutChart=({data,colors,size=120})=>{
@@ -78,12 +107,63 @@
         </svg>
       );
     };
+
+    // Sea-creature league tiers (share of a token's supply), largest first.
+    const LEAGUE_TIERS=[
+      {name:'Poseidon',emoji:'\u{1F531}',pct:0.10},
+      {name:'Whale',emoji:'\u{1F40B}',pct:0.01},
+      {name:'Shark',emoji:'\u{1F988}',pct:0.001},
+      {name:'Dolphin',emoji:'\u{1F42C}',pct:0.0001},
+      {name:'Squid',emoji:'\u{1F991}',pct:0.00001},
+      {name:'Turtle',emoji:'\u{1F422}',pct:0.000001},
+      {name:'Shrimp',emoji:'\u{1F990}',pct:0.0000001},
+      {name:'Shell',emoji:'\u{1F41A}',pct:0.00000001},
+    ];
+    // Shared league-progress bar: current tier -> next tier, with % and the token/USD gap to reach it.
+    const LeagueProgress=({balance,supply,price,accent})=>{
+      if(!(balance>0))return null;
+      const tiers=LEAGUE_TIERS.map(t=>({...t,min:supply*t.pct}));
+      const curIdx=tiers.findIndex(t=>balance>=t.min); // first (highest) tier reached, -1 if below all
+      let current=null,next=null,floor=0,ceil=0;
+      if(curIdx===-1){next=tiers[tiers.length-1];ceil=next.min;}
+      else if(curIdx===0){current=tiers[0];}
+      else{current=tiers[curIdx];next=tiers[curIdx-1];floor=current.min;ceil=next.min;}
+      const pct=next?Math.max(0,Math.min(100,((balance-floor)/(ceil-floor))*100)):100;
+      const need=next?Math.max(0,ceil-balance):0;
+      const cost=usd(need,price);
+      return(
+        <div className="bg-black/20 rounded-lg p-4 mb-5" style={{border:`1px solid ${accent}1a`}}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-white/50 text-base uppercase font-bold">{'\u{1F3C6}'} League Progress</div>
+            <div className="text-base">
+              {current
+                ?<span className="font-bold" style={{color:accent}}>{current.emoji} {current.name}</span>
+                :<span className="text-white/40">below {next.emoji} {next.name}</span>}
+            </div>
+          </div>
+          {next?(
+            <>
+              <div className="relative h-3 rounded-full bg-black/40 overflow-hidden border border-white/5">
+                <div className="absolute inset-y-0 left-0 rounded-full" style={{width:pct.toFixed(1)+'%',background:`linear-gradient(90deg,${accent},#3b82f6)`}}></div>
+              </div>
+              <div className="flex items-center justify-between mt-2 text-base">
+                <span className="text-white/50">{pct.toFixed(1)}% to <span className="font-bold" style={{color:accent}}>{next.emoji} {next.name}</span></span>
+                <span className="text-white/40">need <span className="text-white font-medium">{fmtAbbr(need)}</span>{cost!=null&&<span className="text-white/30"> {'\u2248'} {fmtDollar(cost)}</span>}</span>
+              </div>
+            </>
+          ):(
+            <div className="text-center font-bold text-lg py-1" style={{color:accent}}>{'\u{1F531}'} Top league reached</div>
+          )}
+        </div>
+      );
+    };
     
     // ===== Portfolio Constants & Data Fetching =====
     const PORTFOLIO_STORAGE_KEY='ptgc_ufo_portfolio';
     const PTGC_TOKEN_ADDR='0x94534EeEe131840b1c0F61847c572228bdfDDE93';
     const PTGC_STAKING_ADDR='0xC71f597a2AC39E47F07102E849d18489C96f39EF';
-    const UFO_TOKEN_ADDR='0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
+    const UFO_TOKEN_ADDR='0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6';
+    const UFO_TOTAL_SUPPLY=999999999051; // _tTotal from the contract (human units, 18 decimals)
     
     const SEL={
       balanceOf:'0x70a08231',totalSend:'0xc64a041b',totalReceived:'0x4df9cfb3',
@@ -108,7 +188,111 @@
       return chunk?BigInt('0x'+(chunk||'0')):0n;
     };
     const toNum=(bigint,decimals=18)=>Number(bigint)/Math.pow(10,decimals);
-    
+
+    // ===== UFO reflections reconstruction =====
+    // The UFO contract (TheGraysUFO) is a classic RFI reflection token: reflections accrue silently into
+    // balanceOf and there is NO on-chain per-wallet "reflections earned" getter. So we reconstruct it from
+    // the wallet's Transfer-log history: reflections = balanceOf(now) - net principal transferred in.
+    //
+    // Verified against the contract source: a taxed transfer emits TWO Transfer events from the sender —
+    // Transfer(sender, recipient, 94%) and Transfer(sender, contract, 5% contract fee) — while the 1%
+    // reflection fee (tFee) is NEVER emitted (it only shrinks _rTotal). We sum both emitted legs as outflow,
+    // so the only unobservable piece is that 1% slice. Consequences:
+    //   - buy-and-hold wallet  -> EXACT (everything that landed is logged at face value)
+    //   - a wallet that SOLD   -> reads low by ~1% of the amount it sold (the un-emitted reflection slice)
+    //   - fee-excluded wallets (owner/contract/pairs/burn) -> net to 0 correctly (their sends are untaxed)
+    // Every failure returns null (renders "—"), never a fake 0.
+    const TRANSFER_TOPIC='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+    const UFO_LAUNCH_FALLBACK_MS=Date.parse('2026-07-08T00:00:00Z');
+    const cacheBucket=()=>Math.floor(Date.now()/(5*60*1000));
+    const LOG_CHUNK=10000, MAX_LOG_RANGES=100;
+    const LOG_CAP_SUSPECTS=[100,128,200,250,256,500,512,1000,1024,2000,2048,4096,5000,10000];
+    const looksTruncated=(n)=>n>=900||LOG_CAP_SUSPECTS.indexOf(n)>=0;
+    let lastLogError='';
+    // Public RPCs cap eth_getLogs by block span AND by result size (and silently truncate). Try a range;
+    // on error or a suspiciously full batch, bisect and retry. Any hard failure returns null (never []).
+    const getLogsRange=async(address,topics,a,b,depth,headBlock)=>{
+      const toParam=(b>=headBlock)?'latest':('0x'+b.toString(16));
+      const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
+        params:[{address,fromBlock:'0x'+a.toString(16),toBlock:toParam,topics}],id:1},20000);
+      if(r&&Array.isArray(r.result)){
+        if(looksTruncated(r.result.length)&&(b-a)>1&&depth<14){
+          const mid=Math.floor((a+b)/2);
+          const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
+          if(left===null)return null;
+          const right=await getLogsRange(address,topics,mid+1,b,depth+1,headBlock);
+          if(right===null)return null;
+          return left.concat(right);
+        }
+        return r.result;
+      }
+      const msg=(r&&r.error&&r.error.message)||'no result field';
+      if(depth<6&&(b-a)>250){
+        const mid=Math.floor((a+b)/2);
+        const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
+        if(left===null)return null;
+        const right=await getLogsRange(address,topics,mid+1,b,depth+1,headBlock);
+        if(right===null)return null;
+        return left.concat(right);
+      }
+      lastLogError=`eth_getLogs failed (blocks ${a}-${b}): ${msg}`;
+      console.warn(lastLogError);
+      return null;
+    };
+    const logsInflight={};
+    const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+      if(toBlock<fromBlock)return[];
+      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${cacheBucket()}`;
+      if(logsInflight[key])return logsInflight[key];
+      const p=_getLogsChunked(address,topics,fromBlock,toBlock);
+      logsInflight[key]=p;
+      p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
+      return p;
+    };
+    const _getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+      if(toBlock<fromBlock)return[];
+      const ranges=[];
+      for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
+      if(ranges.length>MAX_LOG_RANGES){
+        lastLogError=`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`;
+        console.warn(lastLogError);
+        return null;
+      }
+      const out=[];const CONC=3;
+      for(let i=0;i<ranges.length;i+=CONC){
+        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,toBlock)));
+        for(const r of res){ if(r===null)return null; out.push(...r); }
+      }
+      return out;
+    };
+    const getHeadBlock=async()=>{
+      const r=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+      if(!r||!r.result)return null;
+      const n=parseInt(r.result,16);
+      return isFinite(n)?n:null;
+    };
+    // reflections earned for one wallet, given its already-read UFO balance (tokens).
+    // Returns null on any read failure so the UI shows "—"/"calculating" rather than a fake number.
+    const computeUfoReflections=async(address,balanceTokens)=>{
+      if(balanceTokens==null)return null;      // balance read failed -> can't derive
+      if(balanceTokens<=0)return 0;            // nothing held -> nothing earned
+      const head=await getHeadBlock();
+      if(head==null)return null;
+      // Over-reach the launch block on purpose (assume fast 3s blocks + margin): scanning empty pre-launch
+      // ranges is cheap, but under-reaching would silently drop early transfers and inflate reflections.
+      const ageSec=Math.max(0,(Date.now()-UFO_LAUNCH_FALLBACK_MS)/1000);
+      const fromBlock=Math.max(0,head-Math.ceil(ageSec/3)-20000);
+      const wtopic='0x'+padAddr(address);
+      const [recv,sent]=await Promise.all([
+        getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head),   // to = wallet
+        getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,wtopic,null],fromBlock,head),   // from = wallet
+      ]);
+      if(recv===null||sent===null)return null; // hard chain-read failure -> unavailable, never a fake 0
+      const sum=(logs)=>logs.reduce((s,l)=>s+toNum(parseWord(l.data)),0);
+      const netReceived=sum(recv)-sum(sent);
+      return Math.max(0,balanceTokens-netReceived);
+    };
+
     // Pair display names for UFO LP
     const UFO_PAIR_NAMES=['WPLS','PTGC','INC','PLSX','HEX','EHEX','DAI'];
     const UFO_PAIR_QUOTES={
@@ -161,7 +345,7 @@
     };
     
     // Fetch all portfolio data for a single wallet
-    const fetchPortfolioData=async(address,lpStakingAddr,ufoLpPairs)=>{
+    const fetchPortfolioData=async(address)=>{
       const addr=padAddr(address);
       
       // ===== PTGC calls in parallel =====
@@ -215,46 +399,18 @@
         pendingLocks=locks.reduce((s,l)=>s+l.pending,0);
       }
       
-      // ===== UFO calls in parallel =====
-      const[ufoBal,ufoSend,ufoRecv]=await Promise.all([
-        callContract(UFO_TOKEN_ADDR,SEL.balanceOf+addr),
-        callContract(UFO_TOKEN_ADDR,SEL.totalSend+addr),
-        callContract(UFO_TOKEN_ADDR,SEL.totalReceived+addr),
-      ]);
-      
-      const ufoBalance=toNum(parseWord(ufoBal));
-      const ufoTSend=toNum(parseWord(ufoSend));
-      const ufoTRecv=toNum(parseWord(ufoRecv));
-      const ufoReflections=Math.max(0,ufoBalance+ufoTSend-ufoTRecv);
-      
-      // ===== UFO LP Staking calls =====
-      let lpPositions=[];
-      let totalPendingPLS=0;
-      let lifetimePLS=0;
-      
-      if(lpStakingAddr&&ufoLpPairs.length>0){
-        const lpPromises=ufoLpPairs.map((pool,i)=>
-          Promise.all([
-            callContract(lpStakingAddr,SEL.stakingInfo+addr+padAddr(pool)),
-            callContract(lpStakingAddr,SEL.pendingRewardLP+addr+padAddr(pool))
-          ]).then(([info,pend])=>{
-            const stakedLP=toNum(parseWord(info,0));
-            const stakedUFO=toNum(parseWord(info,1));
-            const storedPending=toNum(parseWord(info,3));
-            const calcPending=toNum(parseWord(pend));
-            const totalPending=calcPending+storedPending;
-            // Convert pending from wei (PLS uses 18 decimals, and these are PLS amounts in wei)
-            if(stakedLP>0)return{pool,symbol:UFO_PAIR_NAMES[i]||'Unknown',stakedLP,stakedUFO,pendingPLS:totalPending};
-            return null;
-          })
-        );
-        const claimedRes=await callContract(lpStakingAddr,SEL.claimedReward+addr);
-        lifetimePLS=toNum(parseWord(claimedRes));
-        
-        const lpResults=await Promise.all(lpPromises);
-        lpPositions=lpResults.filter(Boolean);
-        totalPendingPLS=lpPositions.reduce((s,l)=>s+l.pendingPLS,0);
-      }
+      // ===== UFO (new RFI reflection contract): balance only =====
+      // The new contract has no LP-staking module and no totalSend/totalReceived getters. Reflections
+      // accrue silently into balanceOf and aren't separately readable; the per-wallet "reflections earned"
+      // figure is reconstructed elsewhere from Transfer-log history (deferred until validated). We never
+      // fabricate that number, so it stays null for now.
+      const ufoBal=await callContract(UFO_TOKEN_ADDR,SEL.balanceOf+addr);
+      // Distinguish a failed/reverted call (null or '0x') from a genuine zero balance (a full 32-byte word),
+      // so a read failure shows "—" instead of a fake 0.
+      const ufoBalance=(ufoBal&&ufoBal!=='0x'&&ufoBal.length>=66)?toNum(parseWord(ufoBal)):null;
+      // Reconstruct reflections earned from this wallet's Transfer-log history (see computeUfoReflections).
+      // null on any read failure — never a fake 0.
+      const ufoReflections=await computeUfoReflections(address,ufoBalance);
       
       return{
         ptgc:{
@@ -265,16 +421,14 @@
           claimed:uiClaimed,lockClaimed:uiLockClaimed,
           lifetimeEarned:uiClaimed+uiLockClaimed,
           locks,
-          // For donut: wallet free = balance - staked amount shown in staking contract  
-          // Actually balance from balanceOf already includes locked/staked tokens (they're locked in the wallet, not transferred)
-          // So: walletFree = balance - uiAmount (staked+locked)
+          // balanceOf already includes locked/staked tokens (they never leave the wallet), so
+          // walletFree = balance - uiAmount (staked+locked); totalHolding = full balance.
           walletFree:Math.max(0,balance-uiAmount),
-          totalHolding:balance, // balanceOf gives everything including staked/locked
+          totalHolding:balance,
         },
         ufo:{
-          balance:ufoBalance,reflections:ufoReflections,
-          lpPositions,totalPendingPLS,lifetimePLS,
-          totalStakedUFO:lpPositions.reduce((s,l)=>s+l.stakedUFO,0),
+          balance:ufoBalance,
+          reflections:ufoReflections,
         }
       };
     };
@@ -371,10 +525,7 @@
       const[portfolioData,setPortfolioData]=useState({});
       const[loading,setLoading]=useState(false);
       const[loadingAddr,setLoadingAddr]=useState(null);
-      const[prices,setPrices]=useState({ptgc:0,ufo:0,pls:0});
-      const[lpStakingAddr,setLpStakingAddr]=useState(null);
-      const[ufoLpPairs,setUfoLpPairs]=useState([]);
-      const[lpPoolData,setLpPoolData]=useState({});
+      const[prices,setPrices]=useState({ptgc:null,ufo:null,pls:null});
       const[codeInput,setCodeInput]=useState('');
       const[showCodeModal,setShowCodeModal]=useState(false);
       const[showLoadModal,setShowLoadModal]=useState(false);
@@ -410,63 +561,14 @@
       // On mount: fetch prices and LP staking address
       useEffect(()=>{
         const init=async()=>{
-          // Fetch prices
-          const[ptgcRes,ufoRes,plsPrice]=await Promise.all([
-            fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.PTGC.mainPair).then(r=>r.json()).catch(()=>null),
-            fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.UFO.mainPair).then(r=>r.json()).catch(()=>null),
+          // Prices via the robust /tokens/{addr} path; each is null on failure (renders "—", never a fake 0).
+          const[ptgcPrice,ufoPrice,plsPrice]=await Promise.all([
+            usdOf(PTGC_TOKEN_ADDR),
+            usdOf(UFO_TOKEN_ADDR),
             fetchPLS()
           ]);
-          const ptgcPrice=parseFloat(ptgcRes?.pair?.priceUsd)||0;
-          const ufoPrice=parseFloat(ufoRes?.pair?.priceUsd)||0;
           setPrices({ptgc:ptgcPrice,ufo:ufoPrice,pls:plsPrice});
-          
-          // Fetch LP Staking address from UFO token
-          try{
-            const lpAddr=await callContract(UFO_TOKEN_ADDR,SEL.LPStaking);
-            if(lpAddr&&lpAddr!=='0x'&&lpAddr.length>=42){
-              const addr='0x'+lpAddr.slice(-40);
-              setLpStakingAddr(addr);
-              console.log('LP Staking address:',addr);
-              
-              // Fetch all 7 pair addresses
-              const pairPromises=[];
-              for(let i=0;i<7;i++){
-                pairPromises.push(callContract(addr,SEL.pairs+padUint(i)).then(r=>{
-                  if(r&&r!=='0x')return'0x'+r.slice(-40);
-                  return null;
-                }).catch(()=>null));
-              }
-              const pairResults=await Promise.all(pairPromises);
-              const validPairs=pairResults.filter(Boolean);
-              setUfoLpPairs(validPairs);
-              console.log('UFO LP pairs:',validPairs);
-              
-              // Fetch LP pool reserves (UFO + quote token balances + LP total supply)
-              try{
-                const reservePromises=validPairs.map((pool,i)=>{
-                  const sym=UFO_PAIR_NAMES[i];
-                  const quote=UFO_PAIR_QUOTES[sym];
-                  if(!quote)return Promise.resolve(null);
-                  return Promise.all([
-                    callContract(UFO_TOKEN_ADDR,SEL.balanceOf+padAddr(pool)),
-                    callContract(quote.address,SEL.balanceOf+padAddr(pool)),
-                    callContract(pool,'0x18160ddd')
-                  ]).then(([ufoRes,quoteRes,supplyRes])=>({
-                    symbol:sym,
-                    ufoInPool:toNum(parseWord(ufoRes)),
-                    quoteInPool:toNum(parseWord(quoteRes),quote.decimals),
-                    totalLPSupply:toNum(parseWord(supplyRes))
-                  })).catch(()=>null);
-                });
-                const reserveResults=await Promise.all(reservePromises);
-                const poolData={};
-                reserveResults.filter(Boolean).forEach(r=>{poolData[r.symbol]=r});
-                setLpPoolData(poolData);
-                console.log('LP pool reserves:',poolData);
-              }catch(e){console.error('LP reserves fetch error:',e)}
-            }
-          }catch(e){console.error('LP Staking fetch error:',e)}
-          
+          // The new UFO contract has no LP-staking module, so there's nothing to discover here.
           setInitialLoad(false);
         };
         init();
@@ -475,19 +577,18 @@
       // Auto-fetch data for saved wallets on load
       useEffect(()=>{
         if(initialLoad||wallets.length===0)return;
-        if(lpStakingAddr===null)return; // Wait for LP staking
         wallets.forEach(w=>{
           if(!portfolioData[w.address.toLowerCase()]){
             fetchWalletData(w.address);
           }
         });
-      },[wallets,lpStakingAddr,initialLoad]);
+      },[wallets,initialLoad]);
       
       const fetchWalletData=async(address)=>{
         const addr=address.toLowerCase();
         setLoadingAddr(addr);
         try{
-          const data=await fetchPortfolioData(address,lpStakingAddr,ufoLpPairs);
+          const data=await fetchPortfolioData(address);
           setPortfolioData(prev=>({...prev,[addr]:data}));
         }catch(e){
           console.error('Error fetching portfolio for',address,e);
@@ -558,8 +659,9 @@
       const agg=useMemo(()=>{
         const result={
           ptgc:{balance:0,reflections:0,staked:0,stakedOnly:0,locked:0,pendingStake:0,pendingLocks:0,totalPending:0,claimed:0,lockClaimed:0,lifetimeEarned:0,walletFree:0,totalHolding:0,locks:[]},
-          ufo:{balance:0,reflections:0,lpPositions:[],totalPendingPLS:0,lifetimePLS:0,totalStakedUFO:0}
+          ufo:{balance:0,reflections:null} // reflections deferred to the Transfer-log reconstruction
         };
+        let ufoRefSum=0,ufoRefAny=false,ufoRefPending=false;
         Object.entries(portfolioData).forEach(([addr,d])=>{
           if(!d||!isWalletChecked(addr))return;
           result.ptgc.balance+=d.ptgc.balance;
@@ -576,12 +678,13 @@
           result.ptgc.walletFree+=d.ptgc.walletFree;
           result.ptgc.totalHolding+=d.ptgc.totalHolding;
           result.ptgc.locks=[...result.ptgc.locks,...d.ptgc.locks];
-          result.ufo.balance+=d.ufo.balance;
-          result.ufo.reflections+=d.ufo.reflections;
-          result.ufo.totalPendingPLS+=d.ufo.totalPendingPLS;
-          result.ufo.lifetimePLS+=d.ufo.lifetimePLS;
-          result.ufo.totalStakedUFO+=d.ufo.totalStakedUFO;
+          result.ufo.balance+=(d.ufo.balance||0); // a failed wallet read is null -> contributes 0 to the sum, not NaN
+          // Reflections aggregate: sum the wallets that have resolved; if some are still pending/failed (null)
+          // and none have resolved yet, keep the total null ("calculating soon") rather than a misleading 0.
+          if(d.ufo.reflections==null)ufoRefPending=true;
+          else{ufoRefSum+=d.ufo.reflections;ufoRefAny=true;}
         });
+        result.ufo.reflections=ufoRefAny?ufoRefSum:(ufoRefPending?null:0);
         return result;
       },[portfolioData,checkedWallets]);
       
@@ -623,36 +726,6 @@
         {label:'Locked & Staked',value:agg.ptgc.locked},
       ].filter(d=>d.value>0);
       const ptgcDonutColors=['#D9CA5D','#a855f7','#ec4899'];
-      
-      // Compute real UFO in LP using pool share ratios (matches hover tooltip math)
-      const realUfoInLP=useMemo(()=>{
-        if(Object.keys(lpPoolData).length===0)return agg.ufo.totalStakedUFO; // fallback
-        let total=0;
-        const pairOrder=['WPLS','PTGC','INC','PLSX','HEX','EHEX','DAI'];
-        // Aggregate stakedLP per symbol across checked wallets
-        const aggLP={};
-        pairOrder.forEach(sym=>{aggLP[sym]={stakedLP:0}});
-        Object.entries(portfolioData).forEach(([addr,data])=>{
-          if(!data||!isWalletChecked(addr))return;
-          data.ufo.lpPositions.forEach(lp=>{
-            if(aggLP[lp.symbol])aggLP[lp.symbol].stakedLP+=lp.stakedLP||0;
-          });
-        });
-        pairOrder.forEach(sym=>{
-          const pool=lpPoolData[sym];
-          if(!pool||pool.totalLPSupply<=0||!aggLP[sym])return;
-          const shareRatio=aggLP[sym].stakedLP/pool.totalLPSupply;
-          total+=shareRatio*pool.ufoInPool;
-        });
-        return total>0?total:agg.ufo.totalStakedUFO;
-      },[portfolioData,lpPoolData,checkedWallets]);
-      
-      // UFO Donut data (uses real LP calculation)
-      const ufoDonut=[
-        {label:'Liquid',value:agg.ufo.balance},
-        {label:'In LP (UFO)',value:realUfoInLP},
-      ].filter(d=>d.value>0);
-      const ufoDonutColors=['#7CFC00','#3b82f6'];
       
       const formatLockTime=(endTime)=>{
         if(!endTime)return'—';
@@ -856,12 +929,12 @@
               
               {/* Total Portfolio Summary Bar */}
               {(()=>{
-                const totalPtgcUSD=agg.ptgc.totalHolding*dp.ptgc;
-                const totalUfoTokens=agg.ufo.balance+realUfoInLP;
-                const totalUfoUSD=totalUfoTokens*dp.ufo;
-                const grandTotal=totalPtgcUSD+totalUfoUSD;
-                const ptgcPct=grandTotal>0?(totalPtgcUSD/grandTotal*100):0;
-                const ufoPct=grandTotal>0?(totalUfoUSD/grandTotal*100):0;
+                const totalPtgcUSD=usd(agg.ptgc.totalHolding,dp.ptgc);
+                const totalUfoTokens=agg.ufo.balance;
+                const totalUfoUSD=usd(totalUfoTokens,dp.ufo);
+                const grandTotal=(totalPtgcUSD==null&&totalUfoUSD==null)?null:((totalPtgcUSD||0)+(totalUfoUSD||0));
+                const ptgcPct=grandTotal>0?((totalPtgcUSD||0)/grandTotal*100):0;
+                const ufoPct=grandTotal>0?((totalUfoUSD||0)/grandTotal*100):0;
                 return(
                 <div className="mb-6 bg-[#111]/80 border-2 border-white/20 rounded-2xl px-6 py-4">
                   <div className="flex items-center gap-8">
@@ -929,16 +1002,15 @@
                       <div className="flex-1">
                         <div className="font-orbitron text-3xl font-bold text-[#D9CA5D]">PTGC</div>
                         <div className="text-white/40 text-lg">The Grays Currency</div>
-                        <div className="text-[#D9CA5D]/60 text-sm font-medium mt-0.5">Live Price: {prices.ptgc?'$'+prices.ptgc.toFixed(prices.ptgc<0.01?6:prices.ptgc<1?4:2):'—'}</div>
+                        <div className="text-[#D9CA5D]/60 text-sm font-medium mt-0.5">Live Price: {fmtPriceNode(prices.ptgc)}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-[#D9CA5D] text-3xl font-bold">{fmtAbbr(agg.ptgc.totalHolding)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar(agg.ptgc.totalHolding*dp.ptgc)}</div>
+                        <div className="text-green-400 text-lg font-bold">{fmtDollar(usd(agg.ptgc.totalHolding,dp.ptgc))}</div>
                         {(()=>{
                           const creatures=getHoldingCreatures(agg.ptgc.totalHolding,'PTGC');
-                          if(creatures.length===0)return null;
                           return(
-                            <div className="flex items-center gap-1.5 justify-end mt-1.5">
+                            <div className="flex items-center gap-1.5 justify-end mt-1.5" style={{minHeight:'26px'}}>
                               {creatures.map((c,i)=>(
                                 <div key={i} className="flex items-center gap-0.5 bg-black/30 rounded px-1.5 py-0.5" title={c.name}>
                                   <span className="text-base">{c.emoji}</span>
@@ -959,17 +1031,17 @@
                       <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-center">
                         <div className="text-purple-400/70 text-base uppercase mb-1">Staking</div>
                         <div className="text-purple-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.claimed)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.claimed*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.claimed,dp.ptgc))}</div>
                       </div>
                       <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-3 text-center">
                         <div className="text-pink-400/70 text-base uppercase mb-1">Locking</div>
                         <div className="text-pink-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.lockClaimed)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.lockClaimed*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.lockClaimed,dp.ptgc))}</div>
                       </div>
                       <div className="bg-[#D9CA5D]/10 border border-[#D9CA5D]/20 rounded-lg p-3 text-center">
                         <div className="text-[#D9CA5D]/70 text-base uppercase mb-1">Reflections</div>
                         <div className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(agg.ptgc.reflections)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.reflections*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.reflections,dp.ptgc))}</div>
                       </div>
                     </div>
                     <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
@@ -977,11 +1049,12 @@
                       <div className="flex items-center gap-3">
                         <span className="text-white font-bold text-2xl">{fmtComma(Math.floor(agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections))} <span className="text-white/40 text-lg font-normal">PTGC</span></span>
                         <span className="text-white/30">•</span>
-                        <span className="text-green-400 font-bold text-xl">{fmtDollar((agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections)*dp.ptgc)}</span>
+                        <span className="text-green-400 font-bold text-xl">{fmtDollar(usd((agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections),dp.ptgc))}</span>
                       </div>
                     </div>
                   </div>
                   <div className="p-5">
+                    <LeagueProgress balance={agg.ptgc.totalHolding} supply={333333333333} price={dp.ptgc} accent="#D9CA5D"/>
                     <div className="flex items-center gap-6 mb-5">
                       {ptgcDonut.length>0?(
                         <>
@@ -1011,22 +1084,22 @@
                       <div className="bg-black/30 border border-[#D9CA5D]/15 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Liquid</div>
                         <div className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(agg.ptgc.walletFree)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.walletFree*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.walletFree,dp.ptgc))}</div>
                       </div>
                       <div className="bg-black/30 border border-purple-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Staked</div>
                         <div className="text-purple-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.staked)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.staked*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.staked,dp.ptgc))}</div>
                       </div>
                       <div className="bg-black/30 border border-pink-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Locked & Staked</div>
                         <div className="text-pink-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.locked)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.locked*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.locked,dp.ptgc))}</div>
                       </div>
                       <div className="bg-black/30 border border-green-500/20 rounded-lg p-4">
                         <div className="text-white/50 text-base uppercase">Pending Rewards</div>
                         <div className="text-green-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.totalPending)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ptgc.totalPending*dp.ptgc)}</div>
+                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.totalPending,dp.ptgc))}</div>
                       </div>
                     </div>
                     
@@ -1036,11 +1109,11 @@
                         <div className="text-[#D9CA5D] text-base uppercase mb-3 font-bold">Claimable Rewards Breakdown</div>
                         <div className="flex justify-between text-lg mb-2">
                           <span className="text-white/60">Staking Rewards</span>
-                          <span className="text-purple-400 font-bold">{fmtAbbr(agg.ptgc.pendingStake)} <span className="text-white/40 text-base">({fmtDollar(agg.ptgc.pendingStake*dp.ptgc)})</span></span>
+                          <span className="text-purple-400 font-bold">{fmtAbbr(agg.ptgc.pendingStake)} <span className="text-white/40 text-base">({fmtDollar(usd(agg.ptgc.pendingStake,dp.ptgc))})</span></span>
                         </div>
                         <div className="flex justify-between text-lg">
                           <span className="text-white/60">Lock Rewards</span>
-                          <span className="text-pink-400 font-bold">{fmtAbbr(agg.ptgc.pendingLocks)} <span className="text-white/40 text-base">({fmtDollar(agg.ptgc.pendingLocks*dp.ptgc)})</span></span>
+                          <span className="text-pink-400 font-bold">{fmtAbbr(agg.ptgc.pendingLocks)} <span className="text-white/40 text-base">({fmtDollar(usd(agg.ptgc.pendingLocks,dp.ptgc))})</span></span>
                         </div>
                       </div>
                     )}
@@ -1059,7 +1132,7 @@
                               <div key={i} className={`grid grid-cols-3 items-center px-4 py-3 rounded-lg border ${isUnlockable?'border-green-500/20 bg-green-500/5':'border-pink-500/10 bg-black/30'}`}>
                                 <div>
                                   <div className="text-white font-bold text-lg">{fmtAbbr(lock.amount)} PTGC</div>
-                                  <div className="text-white/40 text-base">{fmtDollar(lock.amount*dp.ptgc)}</div>
+                                  <div className="text-white/40 text-base">{fmtDollar(usd(lock.amount,dp.ptgc))}</div>
                                 </div>
                                 <div className="text-center">
                                   <div className={`text-lg font-bold ${isUnlockable?'text-green-400':'text-pink-400'}`}>{formatLockTime(lock.endTime)}</div>
@@ -1088,16 +1161,15 @@
                       <div className="flex-1">
                         <div className="font-orbitron text-3xl font-bold text-[#7CFC00]">UFO</div>
                         <div className="text-white/40 text-lg">UFO Token</div>
-                        <div className="text-[#7CFC00]/60 text-sm font-medium mt-0.5">Live Price: {prices.ufo?'$'+prices.ufo.toFixed(prices.ufo<0.01?6:prices.ufo<1?4:2):'—'}</div>
+                        <div className="text-[#7CFC00]/60 text-sm font-medium mt-0.5">Live Price: {fmtPriceNode(prices.ufo)}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance+realUfoInLP)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar((agg.ufo.balance+realUfoInLP)*dp.ufo)}</div>
+                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance)}</div>
+                        <div className="text-green-400 text-lg font-bold">{fmtDollar(usd(agg.ufo.balance,dp.ufo))}</div>
                         {(()=>{
-                          const creatures=getHoldingCreatures(agg.ufo.balance+realUfoInLP,'UFO');
-                          if(creatures.length===0)return null;
+                          const creatures=getHoldingCreatures(agg.ufo.balance,'UFO');
                           return(
-                            <div className="flex items-center gap-1.5 justify-end mt-1.5">
+                            <div className="flex items-center gap-1.5 justify-end mt-1.5" style={{minHeight:'26px'}}>
                               {creatures.map((c,i)=>(
                                 <div key={i} className="flex items-center gap-0.5 bg-black/30 rounded px-1.5 py-0.5" title={c.name}>
                                   <span className="text-base">{c.emoji}</span>
@@ -1112,150 +1184,67 @@
                         </div>
                       </div>
                     </div>
-                    {/* Lifetime Earned - Two Boxes */}
+                    {/* Lifetime Earned — single Reflections box centered & sized like a PTGC box; the invisible
+                        total-bar slot below reserves the same space PTGC's "Total Lifetime Earned" uses, so the
+                        league bars and donuts below line up across both cards. */}
                     <div className="text-white/50 text-base uppercase font-bold mb-2">{'\u2B50'} Lifetime Earned</div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div></div>
                       <div className="bg-[#7CFC00]/10 border border-[#7CFC00]/20 rounded-lg p-3 text-center">
                         <div className="text-[#7CFC00]/70 text-base uppercase mb-1">Reflections</div>
-                        <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.reflections)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.reflections*dp.ufo)}</div>
+                        {agg.ufo.reflections==null?(
+                          <div className="text-white/40 text-sm italic py-2">calculating<br/>soon</div>
+                        ):(
+                          <>
+                            <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.reflections)}</div>
+                            <div className="text-white/40 text-base">{fmtDollar(usd(agg.ufo.reflections,dp.ufo))}</div>
+                          </>
+                        )}
                       </div>
-                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-center">
-                        <div className="text-blue-400/70 text-base uppercase mb-1">PLS from LP</div>
-                        <div className="text-blue-400 font-bold text-2xl">{fmtAbbr(agg.ufo.lifetimePLS)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.lifetimePLS*dp.pls)}</div>
-                      </div>
+                      <div></div>
                     </div>
+                    {/* Total Lifetime Earned — styled to match PTGC's bar (white token count · green dollar).
+                        For UFO this equals reflections (its only earning); kept to one line so the row height
+                        matches PTGC's bar and the league/donut below stay aligned. */}
                     <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
                       <div className="text-white/50 text-base uppercase font-bold">Total Lifetime Earned</div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-green-400 font-bold text-xl">{fmtDollar(agg.ufo.reflections*dp.ufo+agg.ufo.lifetimePLS*dp.pls)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* UFO Donut & Breakdown */}
-                  <div className="p-5">
-                    <div className="flex items-center gap-6 mb-5">
-                      {ufoDonut.length>0?(
-                        <>
-                          <DonutChart data={ufoDonut} colors={ufoDonutColors} size={140}/>
-                          <div className="space-y-3 flex-1">
-                            {ufoDonut.map((d,i)=>(
-                              <div key={i} className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-3.5 h-3.5 rounded-full" style={{background:ufoDonutColors[i]}}></div>
-                                  <span className="text-white/60 text-lg">{d.label}</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-white font-bold text-lg">{fmtAbbr(d.value)}</span>
-                                  <span className="text-white/40 text-base ml-2">{(agg.ufo.balance+realUfoInLP)>0?((d.value/(agg.ufo.balance+realUfoInLP))*100).toFixed(1):'0'}%</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
+                      {agg.ufo.reflections==null?(
+                        <span className="text-white/40 text-base italic">calculating soon</span>
                       ):(
-                        <div className="text-center w-full py-4 text-white/40 text-lg">No UFO holdings found</div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-white font-bold text-2xl">{fmtComma(Math.floor(agg.ufo.reflections))} <span className="text-white/40 text-lg font-normal">UFO</span></span>
+                          <span className="text-white/30">•</span>
+                          <span className="text-green-400 font-bold text-xl">{fmtDollar(usd(agg.ufo.reflections,dp.ufo))}</span>
+                        </div>
                       )}
                     </div>
-                    
-                    {/* UFO Detail Cards */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">Liquid</div>
-                        <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.balance)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.balance*dp.ufo)}</div>
-                      </div>
-                      <div className="bg-black/30 border border-blue-500/20 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">UFO in LP</div>
-                        <div className="text-blue-400 font-bold text-2xl">{fmtAbbr(realUfoInLP)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(realUfoInLP*dp.ufo)}</div>
-                      </div>
-                    </div>
-                    
-                    {/* Pending PLS + UFO Shares */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="bg-black/30 border border-blue-500/20 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">Pending PLS to Claim</div>
-                        <div className="text-blue-400 font-bold text-2xl">{fmtComma(agg.ufo.totalPendingPLS)} PLS</div>
-                        <div className="text-white/40 text-base">{fmtDollar(agg.ufo.totalPendingPLS*dp.pls)}</div>
-                      </div>
-                      <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">UFO Shares</div>
-                        <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.totalStakedUFO)}</div>
-                      </div>
-                    </div>
-                    
-                    {/* LP Positions - Always show all 7 pairs (compact) */}
+                  </div>
+                  {/* UFO position anatomy */}
+                  <div className="p-5">
+                    <LeagueProgress balance={agg.ufo.balance} supply={UFO_TOTAL_SUPPLY} price={dp.ufo} accent="#7CFC00"/>
+                    {/* Principal vs Reflections donut — the composition of your UFO position (mirrors PTGC's donut) */}
                     {(()=>{
-                      const pairLogos={
-                        WPLS:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xa1077a294dde1b09bb078844df40758a5d0f9a27.png',
-                        PTGC:TOKENS.PTGC.logo,
-                        INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
-                        PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
-                        HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
-                        EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png',
-                        DAI:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x6b175474e89094c44da98b954eedeac495271d0f.png'
-                      };
-                      const pairDisplayNames={WPLS:'WPLS',PTGC:'PTGC',INC:'INC',PLSX:'PLSX',HEX:'HEX',EHEX:'eHEX',DAI:'pDAI'};
-                      const pairOrder=['WPLS','PLSX','INC','HEX','EHEX','PTGC','DAI'];
-                      // Aggregate LP positions across all checked wallets by symbol
-                      const aggLP={};
-                      pairOrder.forEach(sym=>{aggLP[sym]={stakedUFO:0,stakedLP:0,pendingPLS:0}});
-                      Object.entries(portfolioData).forEach(([addr,data])=>{
-                        if(!data||!isWalletChecked(addr))return;
-                        data.ufo.lpPositions.forEach(lp=>{
-                          if(aggLP[lp.symbol]){
-                            aggLP[lp.symbol].stakedUFO+=lp.stakedUFO;
-                            aggLP[lp.symbol].stakedLP+=lp.stakedLP||0;
-                            aggLP[lp.symbol].pendingPLS+=lp.pendingPLS;
-                          }
-                        });
-                      });
+                      const bal=agg.ufo.balance, refl=agg.ufo.reflections;
+                      if(!(bal>0)||refl==null)return null;   // wait for reflections to resolve before drawing
+                      const principal=Math.max(0,bal-refl);
+                      const donut=[{label:'Principal',value:principal},{label:'Reflections',value:refl}].filter(d=>d.value>0);
+                      const colors=['#7CFC00','#22d3ee'];
                       return(
-                        <div className="bg-black/20 border border-[#7CFC00]/10 rounded-lg p-4">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="text-white/60 text-lg uppercase font-bold">{'\u{1F4A7}'} LP Positions</div>
-                            <div className="text-white/25 text-sm italic">Hover for details</div>
-                          </div>
-                          <div className="space-y-1.5">
-                            {pairOrder.map(sym=>{
-                              const lp=aggLP[sym];
-                              const hasPosition=lp.stakedUFO>=1;
-                              const pool=lpPoolData[sym];
+                        <div className="flex items-center gap-6 mb-5">
+                          <DonutChart data={donut} colors={colors} size={140}/>
+                          <div className="space-y-3 flex-1">
+                            {donut.map((d,i)=>{
+                              const pct=bal>0?(d.value/bal)*100:0;
                               return(
-                                <div key={sym} className={`group relative flex items-center justify-between px-3 py-2 rounded-lg border ${hasPosition?'border-[#7CFC00]/15 bg-black/30':'border-white/5 bg-black/20'} cursor-default`}>
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="relative flex items-center flex-shrink-0">
-                                      <img src={TOKENS.UFO.logo} alt="UFO" className="w-6 h-6 rounded-full relative z-10 bg-black/50"/>
-                                      <img src={pairLogos[sym]} alt={sym} className="w-6 h-6 rounded-full -ml-1.5 relative z-0 bg-black/50" onError={e=>{e.target.onerror=()=>{e.target.style.display='none';const fb=e.target.nextElementSibling;if(fb)fb.style.display='flex'};e.target.src=getLogo(UFO_PAIR_QUOTES[sym]?.address)||''}}/>
-                                      <div className="w-6 h-6 rounded-full -ml-1.5 bg-gray-700 items-center justify-center text-[10px] font-bold text-white/60" style={{display:'none'}}>{pairDisplayNames[sym][0]}</div>
-                                    </div>
-                                    <span className={`font-bold text-base ${hasPosition?'text-[#7CFC00]':'text-white/30'}`}>UFO/{pairDisplayNames[sym]}</span>
-                                    {!hasPosition&&<span className="text-white/20 text-sm">—</span>}
+                                <div key={i} className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3.5 h-3.5 rounded-full" style={{background:colors[i]}}></div>
+                                    <span className="text-white/60 text-lg">{d.label}</span>
                                   </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className={`font-bold text-base ${hasPosition?(lp.pendingPLS>0?'text-blue-400':'text-white/20'):'text-white/20'}`}>+{hasPosition?fmtComma(lp.pendingPLS):'0.00'} PLS</span>
-                                    <span className={`text-sm ${hasPosition?(lp.pendingPLS>0?'text-white/40':'text-white/15'):'text-white/15'}`}>{hasPosition?fmtDollar(lp.pendingPLS*dp.pls):'$0.00'}</span>
+                                  <div className="text-right">
+                                    <span className="text-white font-bold text-lg">{fmtAbbr(d.value)}</span>
+                                    <span className="text-white/40 text-base ml-2">{pct>0&&pct<0.1?pct.toFixed(3):pct.toFixed(1)}%</span>
                                   </div>
-                                  {hasPosition&&(()=>{
-                                    const pool=lpPoolData[sym];
-                                    const shareRatio=pool&&pool.totalLPSupply>0?(lp.stakedLP/pool.totalLPSupply):0;
-                                    const userUFO=pool?shareRatio*pool.ufoInPool:0;
-                                    const userQuote=pool?shareRatio*pool.quoteInPool:0;
-                                    return(
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-4 py-3 bg-[#1a1a1a] border border-[#7CFC00]/20 rounded-lg shadow-xl z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                      <div className="text-[#7CFC00] font-bold text-sm mb-2">UFO/{pairDisplayNames[sym]} LP Details</div>
-                                      <div className="space-y-1">
-                                        <div className="text-white/60 text-sm">UFO Share Rate: <span className="text-[#7CFC00] font-medium">{fmtAbbr(lp.stakedUFO)} UFO</span></div>
-                                        {userUFO>0&&<div className="text-white/60 text-sm">Your UFO in LP: <span className="text-white font-medium">{fmtAbbr(userUFO)} UFO</span></div>}
-                                        {userQuote>0&&<div className="text-white/60 text-sm">Your {pairDisplayNames[sym]} in LP: <span className="text-white font-medium">{fmtAbbr(userQuote)} {pairDisplayNames[sym]}</span></div>}
-                                      </div>
-                                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-[#7CFC00]/20"></div>
-                                    </div>
-                                    );
-                                  })()}
                                 </div>
                               );
                             })}
@@ -1263,7 +1252,38 @@
                         </div>
                       );
                     })()}
-                    
+                    {(()=>{
+                      const bal=agg.ufo.balance;
+                      const refl=agg.ufo.reflections;                                   // number | null (pending)
+                      const principal=refl==null?null:Math.max(0,bal-refl);             // what was acquired
+                      const yieldPct=(refl==null||principal==null||principal<=0)?null:(refl/principal*100);
+                      const supplyPct=bal>0?(bal/UFO_TOTAL_SUPPLY*100):0;
+                      const fmtPct=(p)=>p==null||isNaN(p)?'\u2014':(p>0&&p<0.01?'<0.01%':p.toFixed(p<1?3:2)+'%');
+                      return(
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
+                            <div className="text-white/50 text-base uppercase">Holdings</div>
+                            <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(bal)}</div>
+                            <div className="text-white/40 text-base">{fmtDollar(usd(bal,dp.ufo))}</div>
+                          </div>
+                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
+                            <div className="text-white/50 text-base uppercase">Principal</div>
+                            <div className="text-[#7CFC00] font-bold text-2xl">{principal==null?'\u2014':fmtAbbr(principal)}</div>
+                            <div className="text-white/40 text-base">{principal==null?'acquired':fmtDollar(usd(principal,dp.ufo))}</div>
+                          </div>
+                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
+                            <div className="text-white/50 text-base uppercase">Reflection Yield</div>
+                            <div className="text-[#7CFC00] font-bold text-2xl">{yieldPct==null?'\u2014':fmtPct(yieldPct)}</div>
+                            <div className="text-white/40 text-base">of principal</div>
+                          </div>
+                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
+                            <div className="text-white/50 text-base uppercase">Share of Supply</div>
+                            <div className="text-[#7CFC00] font-bold text-2xl">{supplyPct>0?fmtPct(supplyPct):'\u2014'}</div>
+                            <div className="text-white/40 text-base">of 1T UFO</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1295,22 +1315,28 @@
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#D9CA5D]/60 text-base">PTGC Total</div>
                               <div className="text-[#D9CA5D] font-bold text-xl">{fmtAbbr(d.ptgc.totalHolding)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ptgc.totalHolding*dp.ptgc)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(usd(d.ptgc.totalHolding,dp.ptgc))}</div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#D9CA5D]/60 text-base">PTGC Pending</div>
                               <div className="text-green-400 font-bold text-xl">{fmtAbbr(d.ptgc.totalPending)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ptgc.totalPending*dp.ptgc)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(usd(d.ptgc.totalPending,dp.ptgc))}</div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#7CFC00]/60 text-base">UFO Balance</div>
                               <div className="text-[#7CFC00] font-bold text-xl">{fmtAbbr(d.ufo.balance)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ufo.balance*dp.ufo)}</div>
+                              <div className="text-white/40 text-base">{fmtDollar(usd(d.ufo.balance,dp.ufo))}</div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
-                              <div className="text-blue-400/60 text-base">PLS Pending</div>
-                              <div className="text-blue-400 font-bold text-xl">{fmtComma(d.ufo.totalPendingPLS)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(d.ufo.totalPendingPLS*dp.pls)}</div>
+                              <div className="text-[#7CFC00]/60 text-base">UFO Reflections</div>
+                              {d.ufo.reflections==null?(
+                                <div className="text-white/30 text-sm italic mt-1">soon</div>
+                              ):(
+                                <>
+                                  <div className="text-[#7CFC00] font-bold text-xl">{fmtAbbr(d.ufo.reflections)}</div>
+                                  <div className="text-white/40 text-base">{fmtDollar(usd(d.ufo.reflections,dp.ufo))}</div>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
