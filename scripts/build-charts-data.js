@@ -31,7 +31,7 @@ const OUT_PATH = path.join(__dirname, '..', 'data', 'charts-data.json');
 /* Token CONTRACT addresses (dexAddr in charts.html). pair = a known main pool. */
 const TOKENS = [
   { sym: 'PTGC', addr: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', pair: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11' },
-  { sym: 'UFO',  addr: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', pair: '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5' },
+  { sym: 'UFO',  addr: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6', pair: '0xE221e6fC30e5787F0d551f980B4da1055D832A03' }, // MIGRATION: new contract + UFO/WPLS pool
   { sym: 'WPLS', addr: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', pair: null },
   { sym: 'PLSX', addr: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', pair: '0x1b45b9148791d3a104184Cd5DFE5CE57193a3ee9' },
   { sym: 'HEX',  addr: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', pair: '0xf1F4ee610b2bAbB05C635F726eF8B0C568c8dc65' },
