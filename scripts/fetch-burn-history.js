@@ -26,7 +26,13 @@ const path = require('path');
 // Addresses
 const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
 const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
+// OLD UFO contract (pre-migration). Kept ONLY for historical burn scanning below,
+// so ufo-burns.json and past burn totals stay intact. Do NOT use this for live reads.
 const UFO_ADDRESS = '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018';
+// NEW UFO contract (post-migration, ~2026-07-08). This is the LIVE token. Every
+// current-state read — holders, price, volume, pairs, transactions — must use this
+// so holder-history.json and the dashboard reflect the real token, not the dead one.
+const UFO_ADDRESS_NEW = '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6';
 
 // LP Pairs (for identifying automated buyback burns)
 const PTGC_LP_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11';
@@ -626,33 +632,33 @@ async function main() {
   const ptgcPrice = await fetchTokenPrice(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
-  const ufoPrice = await fetchTokenPrice(UFO_ADDRESS, 'UFO');
+  const ufoPrice = await fetchTokenPrice(UFO_ADDRESS_NEW, 'UFO');
   await delay(300);
   
   const ptgcVolume = await fetchVolumeStats(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
-  const ufoVolume = await fetchVolumeStats(UFO_ADDRESS, 'UFO');
+  const ufoVolume = await fetchVolumeStats(UFO_ADDRESS_NEW, 'UFO');
   await delay(300);
   
   const ptgcPairs = await fetchTokenPairs(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
-  const ufoPairs = await fetchTokenPairs(UFO_ADDRESS, 'UFO');
+  const ufoPairs = await fetchTokenPairs(UFO_ADDRESS_NEW, 'UFO');
   await delay(300);
   
   // Fetch holder counts from PulseScan (NOT Moralis)
   const ptgcHolders = await fetchHolderCount(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
-  const ufoHolders = await fetchHolderCount(UFO_ADDRESS, 'UFO');
+  const ufoHolders = await fetchHolderCount(UFO_ADDRESS_NEW, 'UFO');
   await delay(300);
   
   // Fetch transaction counts from DexScreener
   const ptgcTxns = await fetchTransactionCount(PTGC_ADDRESS, 'PTGC');
   await delay(300);
   
-  const ufoTxns = await fetchTransactionCount(UFO_ADDRESS, 'UFO');
+  const ufoTxns = await fetchTransactionCount(UFO_ADDRESS_NEW, 'UFO');
   
   // Get tokens in LP from pairs data
   const ptgcTokensInLP = ptgcPairs.totalTokensInLP || 0;
