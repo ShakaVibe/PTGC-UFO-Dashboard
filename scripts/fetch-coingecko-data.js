@@ -38,8 +38,9 @@ const CONFIG = {
       totalSupply: 333333333333
     },
     UFO: {
-      address:     '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',
-      mainPool:    '0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',
+      // MIGRATION: new UFO contract + new UFO/WPLS main pool (post-2026-07-08).
+      address:     '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',
+      mainPool:    '0xE221e6fC30e5787F0d551f980B4da1055D832A03',
       decimals:    18,
       totalSupply: 999999999051
     }
