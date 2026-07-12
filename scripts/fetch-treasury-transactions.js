@@ -36,7 +36,8 @@ const KNOWN_TOKENS = {
   '0xa1077a294dde1b09bb078844df40758a5d0f9a27': { symbol: 'WPLS', name: 'Wrapped PLS', decimals: 18 },
   '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c': { symbol: 'WETH', name: 'Wrapped ETH', decimals: 18 },
   '0x94534eeee131840b1c0f61847c572228bdfdde93': { symbol: 'PTGC', name: 'PTGC', decimals: 18 },
-  '0x456548a9b56efbbd89ca0309edd17a9e20b04018': { symbol: 'UFO', name: 'UFO', decimals: 18 },
+  '0x456548a9b56efbbd89ca0309edd17a9e20b04018': { symbol: 'UFO', name: 'UFO', decimals: 18 }, // pre-migration UFO (kept so old transfers stay labeled)
+  '0x49ed499433bee42dd34c169470fef2c8f9fae6e6': { symbol: 'UFO', name: 'UFO', decimals: 18 }, // MIGRATION: new UFO contract
   '0x95b303987a60c71504d99aa1b13b4da07b0790ab': { symbol: 'PLSX', name: 'PulseX', decimals: 18 },
   '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d': { symbol: 'INC', name: 'Incentive', decimals: 18 },
   '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39': { symbol: 'HEX', name: 'HEX', decimals: 8 },
