@@ -23,7 +23,7 @@ const BRANCH       = 'main';
 // ── Token config ──────────────────────────────────────────────────────────────
 const TOKENS = {
   PTGC: { address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93' },
-  UFO:  { address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018' }
+  UFO:  { address: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6' } // MIGRATION: new contract
 };
 
 // ── RH Core detection (mirrors the frontend logic) ────────────────────────────
@@ -36,7 +36,7 @@ const RH_CORE_ADDRESSES = new Set([
 ]);
 const RH_CORE_PAIRS = new Set([
   '0x975c7ab1dae5c97327ef7019587dffc66096f5d8', // PTGC/PRVX
-  '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', // UFO/PRVC
+  '0xe221e6fc30e5787f0d551f980b4da1055d832a03', // UFO/WPLS (new contract)
 ]);
 const RH_CORE_SYMBOLS = new Set(['PRVX', 'PRVC']);
 
