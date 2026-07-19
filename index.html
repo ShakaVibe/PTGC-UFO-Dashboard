@@ -2407,20 +2407,26 @@
          whole scan and render the tiers as a lower bound (the "≥" prefix), with squid unknown.
          Retry a failing page a couple of times with a short backoff before giving up — most
          failures are transient, so this lets the scan reach completeness and show exact counts. */
+      /* MIGRATION: UFO's holder pages respond slower than PTGC's (~4.2s vs ~2.8s) and
+         PulseScan 500s intermittently, so 3 tries/9s occasionally ran out mid-scan and the
+         tiers came back a lower bound ("≥"). More tries + a longer timeout let the scan ride
+         out a bad page and finish exact, matching PTGC. Retries are cheap when pages succeed. */
+      const HOLDER_PAGE_TRIES=6;
       const fetchPage=async(pageUrl)=>{
-        for(let attempt=0;attempt<3;attempt++){
+        for(let attempt=0;attempt<HOLDER_PAGE_TRIES;attempt++){
+          const last=attempt>=HOLDER_PAGE_TRIES-1;
           const controller=new AbortController();
-          const timeoutId=setTimeout(()=>controller.abort(),9000);
+          const timeoutId=setTimeout(()=>controller.abort(),12000);
           try{
             const r=await fetch(pageUrl,{signal:controller.signal});
             clearTimeout(timeoutId);
-            if(!r.ok){if(attempt<2){await new Promise(s=>setTimeout(s,500*(attempt+1)));continue;}return{err:`holders API returned ${r.status}`};}
+            if(!r.ok){if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}return{err:`holders API returned ${r.status}`};}
             const j=await r.json();
-            if(!j||!Array.isArray(j.items)){if(attempt<2){await new Promise(s=>setTimeout(s,500*(attempt+1)));continue;}return{err:'holders API returned no items array'};}
+            if(!j||!Array.isArray(j.items)){if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}return{err:'holders API returned no items array'};}
             return{data:j};
           }catch(e){
             clearTimeout(timeoutId);
-            if(attempt<2){await new Promise(s=>setTimeout(s,500*(attempt+1)));continue;}
+            if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}
             return{err:e.message||'holders fetch failed'};
           }
         }
@@ -4644,22 +4650,35 @@
             fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>setStakingData(staking));
           }
           
-          // Fetch holder tiers for all tokens - pass LP pair addresses
+          // Fetch holder tiers - pass LP pair addresses.
+          // MIGRATION: the live tier scan is ~14-18 PulseScan pages (~50s) for BOTH tokens, so
+          // every reload used to wait on it. Cache a COMPLETE result in localStorage and reuse
+          // it for up to 2h: reloads then show exact tiers instantly and only re-scan when the
+          // cache ages out. Only complete (ok) scans are cached, so we never persist a "≥" bound.
           const lpPairAddresses=d?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
-          fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
-            /* Exact -> the number. Partial -> a lower bound, still worth showing.
-               Nothing at all -> null, and the tiles print "—". Zero whales is a claim,
-               and a failed query is no basis for it. */
-            const v=n=>(result.ok||result.partial)?(n||0):null;
-            setHolderTiers({
-              Poseidon:v(result.counts.Poseidon),
-              Whale:v(result.counts.Whale),
-              Shark:v(result.counts.Shark),
-              Dolphin:v(result.counts.Dolphin),
-              SquidAndBelow:result.ok?(result.squidAndBelow||0):null,  // needs a complete count
-              ok:result.ok,partial:!!result.partial,error:result.error
+          const tierCacheKey='grays_tiers_'+cfg.address.toLowerCase();
+          let freshTiers=null;
+          try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers)freshTiers=o.tiers;}}catch(e){}
+          if(freshTiers){
+            setHolderTiers(freshTiers);
+          }else{
+            fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
+              /* Exact -> the number. Partial -> a lower bound, still worth showing.
+                 Nothing at all -> null, and the tiles print "—". Zero whales is a claim,
+                 and a failed query is no basis for it. */
+              const v=n=>(result.ok||result.partial)?(n||0):null;
+              const tierObj={
+                Poseidon:v(result.counts.Poseidon),
+                Whale:v(result.counts.Whale),
+                Shark:v(result.counts.Shark),
+                Dolphin:v(result.counts.Dolphin),
+                SquidAndBelow:result.ok?(result.squidAndBelow||0):null,  // needs a complete count
+                ok:result.ok,partial:!!result.partial,error:result.error
+              };
+              setHolderTiers(tierObj);
+              if(result.ok){try{localStorage.setItem(tierCacheKey,JSON.stringify({ts:Date.now(),tiers:tierObj}));}catch(e){}}
             });
-          });
+          }
           
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
