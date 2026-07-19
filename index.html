@@ -3237,9 +3237,15 @@
           const dexData=await fetchDex(otherCfg.address,otherCfg.mainPair);
           setOtherData(dexData);
           
-          // Fetch holders count
-          const h=await fetchHolders(otherCfg.address);
-          setOtherHolders(h);
+          // Fetch holders count — file-first (newest holder-history snapshot), the same source
+          // of truth as the dashboard Holders box. fetchHolders is live PulseScan for UFO and
+          // otherHolders starts at 0, so without this the "other" card could render 0 whenever
+          // the counter is down. Live fetch stays only as a fallback.
+          await fetchHolderHistoryNew();
+          const _osnaps=snapshotsFor(otherToken);
+          const _ofile=_osnaps.length?_osnaps[_osnaps.length-1][otherToken]:null;
+          const h=_ofile!=null?_ofile:await fetchHolders(otherCfg.address);
+          setOtherHolders(h||0);
           
           // Calculate holder change using same method as main page
           const hc=getHolderChange(otherToken,h);
@@ -5831,7 +5837,7 @@
             })();
             return(
               <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
               </div>
             );
           })())}
@@ -6048,7 +6054,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod}/>
               </div>
             </div>
           )}
@@ -7133,7 +7139,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
               </div>
             </div>
           )}
