@@ -4064,7 +4064,6 @@
 
     const Dashboard=({token,onBack,onSwitch,onAffiliates})=>{
       const[showMaintNotice,setShowMaintNotice]=useState(false); // MAINT-MIGRATION
-      const[showChartsDot,setShowChartsDot]=useState(false); // MAINT-MIGRATION: operator-only faint entry to charts.html (revealed after clicking Charts nav)
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#F0DC78]':'text-[#7CFC00]',border:isGold?'border-[#D4AF37]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D4AF37]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
       const[data,setData]=useState(null);
@@ -4947,7 +4946,7 @@
                   {activeTab==='social' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
                 <a href="#" onClick={(e)=>{e.preventDefault();setShowMaintNotice(true)}/* MAINT-MIGRATION: was href="./calculators.html" */} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Calculators</a>
-                <a href="#" onClick={(e)=>{e.preventDefault();setShowMaintNotice(true);setShowChartsDot(true)}/* MAINT-MIGRATION: was href="./charts.html" — also reveals the operator-only faint dot (bottom-right) that links through to charts.html */} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
+                <a href="./charts.html" className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
                 <a href={`portfolio.html?from=${token}`} className="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0">
                   <span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span>
                 </a>
@@ -7979,12 +7978,6 @@
           )}
           
           <MaintenanceNotice open={showMaintNotice} onClose={()=>setShowMaintNotice(false)}/>{/* MAINT-MIGRATION */}
-          {showChartsDot&&(/* MAINT-MIGRATION: operator-only faint entry to charts.html. Delete this block (and the setShowChartsDot call in the Charts nav) to revert. z-index sits ABOVE the maintenance modal (9999) so it's visible/clickable even while the popup is open. */
-            <button onClick={()=>{window.location.href='./charts.html'}} title="Charts (under maintenance)" className="fixed bottom-3 right-3 z-[10000] flex items-center gap-1.5 opacity-45 hover:opacity-90 transition-opacity duration-300" style={{background:'transparent',border:'none',cursor:'pointer',padding:'4px'}}>
-              <span style={{width:'9px',height:'9px',borderRadius:'9999px',background:'#D4AF37',boxShadow:'0 0 8px rgba(212,175,55,0.9)',display:'inline-block'}}></span>
-              <span className="text-white/60" style={{fontSize:'9px',textTransform:'uppercase',letterSpacing:'0.12em',fontFamily:"'JetBrains Mono',monospace"}}>under maintenance</span>
-            </button>
-          )}
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
           
         </div>
