@@ -2476,14 +2476,18 @@
             if(data.next_page_params){
               const params=new URLSearchParams();
               /* PulseScan returns the cursor `value` as a raw JSON number — a holder balance
-                 in wei, around 1.9e26. JSON.parse makes it a float, and URLSearchParams
-                 stringifies that as "1.9059209280044986e+26". The API cannot parse scientific
-                 notation and answers 500, which is why the tiers died on page 9.
-                 toLocaleString('fullwide') writes the same float in plain digits. */
+                 in wei (>2^53). JSON.parse silently rounds it to the nearest float (e.g.
+                 1.3628695280000001e26), so the digits are already wrong by the time we read
+                 next_page_params — toLocaleString only reformats the corrupted float, and the
+                 API 500s on the mismatched value. The per-holder `value` in items[] IS returned
+                 as a STRING (full precision), so build the cursor from the last item's value. */
+              const lastItem=items[items.length-1];
+              const preciseValue=(lastItem&&lastItem.value!=null)?String(lastItem.value):null;
               Object.entries(data.next_page_params).forEach(([k,v])=>{
-                const out=(typeof v==='number'&&Math.abs(v)>=1e21)
-                  ? v.toLocaleString('fullwide',{useGrouping:false})
-                  : v;
+                let out;
+                if(k==='value'&&preciseValue!=null) out=preciseValue;
+                else if(typeof v==='number'&&Math.abs(v)>=1e21) out=v.toLocaleString('fullwide',{useGrouping:false});
+                else out=v;
                 params.set(k,out);
               });
               nextPageParams=params.toString();
@@ -4281,7 +4285,7 @@
             }catch(e){
               return{name,price:0,h24:0};
             }
-          })).then(dexResults=>{
+          })).then(async dexResults=>{
             // Use cached data for 7d, 30d, 90d changes
             const cachedCores=coingeckoDataCache?.rhCores||{};
             
@@ -4298,6 +4302,34 @@
                 }
               };
             });
+            
+            // MIGRATION: some cores (e.g. PRVX) are missing from the prebuilt rhCores cache,
+            // so their 7d/30d/90d showed no indicator. Backfill from the charts daily series
+            // (same repo) for any core still missing d7. Periods longer than a token's history
+            // clamp to its earliest point.
+            const _needCoreFb=Object.keys(prices).filter(n=>prices[n].changes.d7==null);
+            if(_needCoreFb.length){
+              try{
+                const _cr=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now());
+                const _cj=await _cr.json();
+                const _chgAt=(series,days)=>{
+                  if(!series||series.length<2)return null;
+                  const nowP=series[series.length-1][1];
+                  const target=Date.now()-days*86400000;
+                  let base=series[0];
+                  for(const p of series){ if(p[0]<=target) base=p; else break; }
+                  const p0=base[1];
+                  return (p0>0&&nowP>0)?((nowP-p0)/p0)*100:null;
+                };
+                _needCoreFb.forEach(n=>{
+                  const s=_cj?.tokens?.[n]?.series;
+                  const c=prices[n].changes;
+                  if(c.d7==null)c.d7=_chgAt(s,7);
+                  if(c.d30==null)c.d30=_chgAt(s,30);
+                  if(c.d90==null)c.d90=_chgAt(s,90);
+                });
+              }catch(e){ console.log('core priceChanges fallback failed:',e.message); }
+            }
             
             console.log('Core prices (DexScreener + cached):', prices);
             setCorePrices(prices);
@@ -6407,12 +6439,18 @@
 
             const ptgcVol=ptgcVols[combinedValueGenPeriod]||0;
             const ufoVol=ufoVols[combinedValueGenPeriod]||0;
+            // MIGRATION: use the same MEASURED on-chain buckets the dashboard and single share
+            // card use for UFO (delivered + realizedFees -> computeValueGenBuckets), not the
+            // volume x tax estimate. Available for UFO only when it's the active token and the
+            // scan has completed; the PTGC side and any not-ready case fall back to the estimate.
+            const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
+            const ufoMeasured=(token==='UFO')?computeValueGenBuckets(combinedValueGenPeriod,delivered,realizedFees,vgPrices):null;
             const ptgcTotal=ptgcVol*ptgcCfg.taxRate;
-            const ufoTotal=ufoVol*ufoCfg.taxRate;
+            const ufoTotal=ufoMeasured?ufoMeasured.total:(ufoVol*ufoCfg.taxRate);
             const combinedTotal=ptgcTotal+ufoTotal;
 
-            const FeeBlock=({tokenCfg,vol,accent,rgb})=>{
-              const totalGen=vol*tokenCfg.taxRate;
+            const FeeBlock=({tokenCfg,vol,accent,rgb,measured})=>{
+              const totalGen=measured?measured.total:(vol*tokenCfg.taxRate);
               return(
                 <div style={{borderRadius:'12px',padding:'14px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'12px'}}>
@@ -6432,7 +6470,7 @@
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.taxBreakdown.length},1fr)`,gap:'6px'}}>
                     {tokenCfg.taxBreakdown.map((item,i)=>{
-                      const dollarVal=vol*(item.pct/100);
+                      const dollarVal=measured?(measured.byKey[item.key]||0):(vol*(item.pct/100));
                       return(
                         <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'8px 6px',textAlign:'center'}}>
                           <div style={{fontSize:'18px',marginBottom:'3px'}}>{item.emoji}</div>
@@ -6489,7 +6527,7 @@
                       <FeeBlock tokenCfg={ptgcCfg} vol={ptgcVol} accent="#D4AF37" rgb="212,175,55"/>
 
                       {/* UFO Block */}
-                      <FeeBlock tokenCfg={ufoCfg} vol={ufoVol} accent="#7CFC00" rgb="124,252,0"/>
+                      <FeeBlock tokenCfg={ufoCfg} vol={ufoVol} accent="#7CFC00" rgb="124,252,0" measured={ufoMeasured}/>
 
                       {/* Combined total bar */}
                       <div style={{borderRadius:'12px',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(110deg,rgba(212,175,55,0.1),rgba(124,252,0,0.1))',border:'1px solid rgba(255,255,255,0.15)'}}>
