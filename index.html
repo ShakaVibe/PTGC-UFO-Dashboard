@@ -4307,7 +4307,7 @@
           Promise.all([
             fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`).then(r=>r.json()),
             fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`).then(r=>r.json())
-          ]).then(([ptgcDex,ufoDex])=>{
+          ]).then(async ([ptgcDex,ufoDex])=>{
             const ptgcPrice=parseFloat(ptgcDex?.pair?.priceUsd||0);
             const ufoPrice=parseFloat(ufoDex?.pair?.priceUsd||0);
             const ptgc24h=parseFloat(ptgcDex?.pair?.priceChange?.h24||0);
@@ -4315,10 +4315,30 @@
             
             // Use cached price changes from coingeckoDataCache
             const ptgcCached=coingeckoDataCache?.PTGC?.priceChanges;
-            const ufoCached=coingeckoDataCache?.UFO?.priceChanges;
-            
-            console.log('PTGC cached priceChanges:', ptgcCached);
-            console.log('UFO cached priceChanges:', ufoCached);
+            let ufoCached=coingeckoDataCache?.UFO?.priceChanges;
+
+            // MIGRATION: the prebuilt coingecko file currently has UFO.priceChanges=null
+            // (pipeline gap), so 7d/30d/90d rendered "N/A". The charts daily file in the same
+            // repo DOES carry the new UFO's price series — compute the changes from it in-page
+            // as a fallback. Periods longer than the token's age clamp to the launch price.
+            if(!ufoCached||ufoCached.d7==null){
+              try{
+                const cr=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now());
+                const cj=await cr.json();
+                const series=cj?.tokens?.UFO?.series||[];
+                const chgAt=(days)=>{
+                  if(series.length<2)return null;
+                  const nowP=series[series.length-1][1];
+                  const target=Date.now()-days*86400000;
+                  let base=series[0];
+                  for(const p of series){ if(p[0]<=target) base=p; else break; }
+                  const p0=base[1];
+                  return (p0>0&&nowP>0)?((nowP-p0)/p0)*100:null;
+                };
+                ufoCached={d7:chgAt(7),d30:chgAt(30),d90:chgAt(90)};
+                console.log('UFO priceChanges computed from charts series:', ufoCached);
+              }catch(e){ console.log('UFO priceChanges fallback failed:', e.message); }
+            }
             
             setGrayPrices({
               ptgc:{
@@ -6373,7 +6393,17 @@
             };
 
             const ptgcVols=isPTGCActive?currVols:otherVols;
-            const ufoVols=isPTGCActive?otherVols:currVols;
+            let ufoVols=isPTGCActive?otherVols:currVols;
+            // MIGRATION: the active-token volume gate (gateVol) nulls UFO's 7d/30d/90d on a
+            // <90-day-old token, which zeroed the UFO side. The coingecko cache carries the
+            // real UFO figures — backfill 7d/30d/90d from it when the gated value is 0. 24h stays live.
+            const _ufoCacheVol=((typeof coingeckoDataCache!=='undefined'&&coingeckoDataCache)||{}).UFO?.volume||{};
+            ufoVols={
+              '24h':ufoVols['24h']||0,
+              '7d':ufoVols['7d']||_ufoCacheVol.vol7d||0,
+              '30d':ufoVols['30d']||_ufoCacheVol.vol30d||0,
+              '90d':ufoVols['90d']||_ufoCacheVol.vol90d||0
+            };
 
             const ptgcVol=ptgcVols[combinedValueGenPeriod]||0;
             const ufoVol=ufoVols[combinedValueGenPeriod]||0;
