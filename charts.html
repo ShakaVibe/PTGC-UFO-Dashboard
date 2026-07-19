@@ -2085,11 +2085,19 @@ function renderShareChart() {
   datasets.forEach(ds => { ds.pointHoverRadius = 0; ds.pointHoverBackgroundColor = undefined; ds.pointHoverBorderColor = undefined; ds.pointHoverBorderWidth = undefined });
   if (!datasets.length) return;
 
+  // Fit x-axis to the data exactly like the live chart, so tick labels render as
+  // dates (MMM d) instead of Chart.js's default hour format ("11AM" everywhere).
+  const requestedMin = Date.now() - getDays() * 86400000;
+  let dataMinX = Infinity;
+  datasets.forEach(ds => { if (ds.data && ds.data.length && ds.data[0].x < dataMinX) dataMinX = ds.data[0].x; });
+  const xMin = isFinite(dataMinX) ? dataMinX : requestedMin;
+  const xMax = Date.now();
+
   shareChartInstance = new Chart(ctx, { type: 'line', data: { datasets }, options: {
     responsive: true, maintainAspectRatio: false, animation: false,
     plugins: { legend: { display: false }, tooltip: { enabled: false } },
     scales: {
-      x: { type: 'time', time: { displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: 8 }, border: { display: false } },
+      x: { type: 'time', min: xMin, max: xMax, time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 8 }, border: { display: false } }
     }
   }});
