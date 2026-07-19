@@ -4802,7 +4802,7 @@
             };
             
             setHoldersByPeriod({
-              current: h,
+              current: (newest&&newest[token]!=null?newest[token]:h),/* MIGRATION: file-first — the holder-history snapshot is the source of truth (reliable, written all day); the live PulseScan counter is only a fallback, since it 500s intermittently. */
               d1Ago: findClosestSnapshot(1),
               d7Ago: findClosestSnapshot(7),
               d30Ago: findClosestSnapshot(30),
@@ -5080,7 +5080,7 @@
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
                   <button onClick={()=>setShowHolderModal(true)} className={`absolute top-2 right-2 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Holders</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holders??holdersByPeriod?.current)/* MIGRATION: PulseScan's live counter endpoint 500s intermittently → live count null. Fall back to the file-based snapshot count so the box shows a real number instead of a dash. */}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holdersByPeriod?.current??holders)/* MIGRATION: file-first. holdersByPeriod.current is the holder-history snapshot (our reliable file); the live PulseScan count is only used if the file has no snapshot for this token. Count moves ~1-2/day so a slightly-stale file value is fine, and it never dashes. */}</div>
                   {holderChange!==null?(holderChange===0?<div className="text-xs sm:text-sm font-medium mt-2 text-white/40">{'\u2014'} 0</div>:<div className={`text-xs sm:text-sm font-medium mt-2 ${holderChange>=0?'text-emerald-400':'text-rose-400'} truncate`}>{holderChange>=0?'\u2191':'\u2193'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>):<div className="h-4 mt-2"></div>}
                 </div>
 
