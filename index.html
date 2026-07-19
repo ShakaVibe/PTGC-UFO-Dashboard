@@ -4106,6 +4106,7 @@
       const _initTab=(()=>{try{const t=localStorage.getItem('ptgc_nav_tab');if(t&&['dashboard','kpi','social','calculators'].includes(t)){localStorage.removeItem('ptgc_nav_tab');if(t==='calculators'){window.location.href='./calculators.html';return'dashboard'}return t}}catch(e){}return'dashboard'})();
       const[activeTab,setActiveTab]=useState(_initTab);
       const[socialReturn,setSocialReturn]=useState(false);
+      const[socialPreview,setSocialPreview]=useState(false); // MAINT-MIGRATION: operator-only preview of gated Socials (revealed via faint dot; delete with the dot + gate edits to revert)
       const[showRHCoresShareModal,setShowRHCoresShareModal]=useState(false);
       const[showPTGCLogosModal,setShowPTGCLogosModal]=useState(false);
       const[showUFOLogosModal,setShowUFOLogosModal]=useState(false);
@@ -5724,8 +5725,13 @@
           })())}
           
           {/* Social Tab Content */}
-          {activeTab==='social'&&(<MaintenanceScreen label="Socials"/>)}{/* MAINT-MIGRATION */}
-          {false&&activeTab==='social'&&(
+          {activeTab==='social'&&!socialPreview&&(<MaintenanceScreen label="Socials"/>)}{/* MAINT-MIGRATION */}
+          {activeTab==='social'&&!socialPreview&&(/* MAINT-MIGRATION: operator-only faint dot to preview Socials while gated. Click reveals the real content. Remove this block + the socialPreview state + revert the render gate below to un-do. */
+            <button onClick={()=>setSocialPreview(true)} title="Preview" className="fixed bottom-3 right-3 z-[10000] opacity-20 hover:opacity-70 transition-opacity duration-300" style={{background:'transparent',border:'none',cursor:'pointer',padding:'6px'}}>
+              <span style={{width:'9px',height:'9px',borderRadius:'9999px',background:'#7CFC00',boxShadow:'0 0 8px rgba(124,252,0,0.85)',display:'inline-block'}}></span>
+            </button>
+          )}
+          {socialPreview&&activeTab==='social'&&(
             <div className="max-w-5xl mx-auto px-3 sm:px-6 py-6">
               <div className="text-center mb-6">
                 <h2 className="text-2xl font-bold text-white mb-2">Socials Hub</h2>
@@ -5840,7 +5846,7 @@
                       const otherCfg=TOKENS[otherToken];
                       Promise.all([
                         fetchBurn(otherCfg.address,otherCfg.decimals),
-                        fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${otherCfg.mainPair}`).then(r=>r.json()).then(d=>parseFloat(d.pair?.priceUsd)||0).catch(()=>0)
+                        fetch(`https://api.dexscreener.com/latest/dex/tokens/${otherCfg.address}`).then(r=>r.json()).then(d=>{const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));return ps.length?parseFloat(ps[0].priceUsd)||0:0}).catch(()=>0)/* MIGRATION: was fragile /pairs/{mainPair} .pair?.priceUsd — hardened to robust /tokens/ best-pair (matches usdOf) */
                       ]).then(([burnData,price])=>{
                         const bp=getBurnPeriods(otherToken);
                         setCombinedBurnOtherData({burn:burnData,burnPeriods:bp,price});
@@ -5859,11 +5865,13 @@
                       setCombinedValueGenLoading(true);
                       const otherToken=token==='PTGC'?'UFO':'PTGC';
                       const otherCfg=TOKENS[otherToken];
-                      fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${otherCfg.mainPair}`)
+                      fetch(`https://api.dexscreener.com/latest/dex/tokens/${otherCfg.address}`)/* MIGRATION: was fragile /pairs/{mainPair} singular .pair read — hardened to robust /tokens/ best-pair */
                         .then(r=>r.json())
                         .then(d=>{
-                          const vol24h=parseFloat(d.pair?.volume?.h24)||0;
-                          const price=parseFloat(d.pair?.priceUsd)||0;
+                          const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
+                          const best=ps[0]||null;
+                          const vol24h=best?parseFloat(best.volume?.h24)||0:0;
+                          const price=best?parseFloat(best.priceUsd)||0:0;
                           const otherVol7d=coingeckoDataCache?.[otherToken]?.volume?.vol7d||0;
                           const otherVol30d=coingeckoDataCache?.[otherToken]?.volume?.vol30d||0;
                           const otherVol90d=coingeckoDataCache?.[otherToken]?.volume?.vol90d||0;
