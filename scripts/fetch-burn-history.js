@@ -523,21 +523,30 @@ async function fetchTokenPairs(tokenAddress, tokenSymbol) {
  */
 async function fetchHolderCount(tokenAddress, tokenSymbol) {
   console.log(`\nFetching ${tokenSymbol} holder count from PulseScan...`);
-  
-  try {
-    const response = await fetch(`${PULSESCAN_BASE}/tokens/${tokenAddress}/counters`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+
+  // PulseScan's /counters endpoint 500s intermittently. Retry a few times before giving up
+  // so a transient blip doesn't cost us the real count. On total failure we return 0, but the
+  // holder-history write below has a guard that NEVER records a 0 — it carries forward the last
+  // good value instead. (A failed fetch and "zero holders" must never look the same.)
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const response = await fetch(`${PULSESCAN_BASE}/tokens/${tokenAddress}/counters`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json();
+      const holders = parseInt(data.token_holders_count);
+      if (Number.isFinite(holders) && holders > 0) {
+        console.log(`  ${tokenSymbol} holders: ${holders}`);
+        return holders;
+      }
+      throw new Error(`unexpected holder count: ${data.token_holders_count}`);
+    } catch (error) {
+      console.log(`  PulseScan attempt ${attempt}/4 [${tokenSymbol}]: ${error.message}`);
+      if (attempt < 4) await delay(1500 * attempt);
     }
-    
-    const data = await response.json();
-    const holders = parseInt(data.token_holders_count) || 0;
-    console.log(`  ${tokenSymbol} holders: ${holders}`);
-    return holders;
-  } catch (error) {
-    console.log(`  PulseScan Error: ${error.message}`);
-    return 0;
   }
+  console.log(`  ${tokenSymbol} holder count unavailable after retries — returning 0 (write-guard will carry forward the last good value)`);
+  return 0;
 }
 
 /**
@@ -880,38 +889,57 @@ async function main() {
     return s.timestamp.startsWith(todayDate);
   });
   
-  const newHolderSnapshot = {
-    timestamp: now.toISOString(),
-    PTGC: ptgcHolders,
-    UFO: ufoHolders
+  // ── ZERO GUARD (the whole point of this change) ─────────────────────────────
+  // fetchHolderCount returns 0 when PulseScan fails. A 0 here is a FAILED FETCH, not
+  // "zero holders" — so never record it. Fall back to the most recent good (>0) value for
+  // that token. If neither token has anything good (fresh or historical), skip the write
+  // entirely so the existing file is left completely untouched. This stops the 0/0 rows.
+  const lastGoodCount = (tkn) => {
+    for (let i = holderHistory.snapshots.length - 1; i >= 0; i--) {
+      const v = holderHistory.snapshots[i] && holderHistory.snapshots[i][tkn];
+      if (typeof v === 'number' && v > 0) return v;
+    }
+    return null;
   };
-  
-  if (existingTodayIndex >= 0) {
-    // Update today's snapshot with latest data
-    holderHistory.snapshots[existingTodayIndex] = newHolderSnapshot;
-    console.log(`  Updated existing snapshot for ${todayDate}`);
+  const ptgcCount = (ptgcHolders > 0) ? ptgcHolders : lastGoodCount('PTGC');
+  const ufoCount  = (ufoHolders  > 0) ? ufoHolders  : lastGoodCount('UFO');
+  if (ptgcHolders <= 0) console.log(`  ⚠ PTGC holder fetch returned ${ptgcHolders} — using last good value: ${ptgcCount ?? 'none'}`);
+  if (ufoHolders  <= 0) console.log(`  ⚠ UFO holder fetch returned ${ufoHolders} — using last good value: ${ufoCount ?? 'none'}`);
+
+  if (ptgcCount == null && ufoCount == null) {
+    console.log('  Both holder counts unavailable and no prior good values — skipping holder-history write (existing file untouched).');
   } else {
-    // Add new snapshot for today
-    holderHistory.snapshots.push(newHolderSnapshot);
-    console.log(`  Added new snapshot for ${todayDate}`);
+    // Only include a token key when we actually have a good number for it.
+    const newHolderSnapshot = { timestamp: now.toISOString() };
+    if (ptgcCount != null) newHolderSnapshot.PTGC = ptgcCount;
+    if (ufoCount  != null) newHolderSnapshot.UFO  = ufoCount;
+
+    if (existingTodayIndex >= 0) {
+      // Merge, so a carried-forward value never clobbers a good one already recorded today.
+      holderHistory.snapshots[existingTodayIndex] = { ...holderHistory.snapshots[existingTodayIndex], ...newHolderSnapshot };
+      console.log(`  Updated existing snapshot for ${todayDate}`);
+    } else {
+      holderHistory.snapshots.push(newHolderSnapshot);
+      console.log(`  Added new snapshot for ${todayDate}`);
+    }
+
+    // Sort snapshots by timestamp (oldest first)
+    holderHistory.snapshots.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Keep last 365 days of data (1 year)
+    const maxSnapshots = 365;
+    if (holderHistory.snapshots.length > maxSnapshots) {
+      const removed = holderHistory.snapshots.length - maxSnapshots;
+      holderHistory.snapshots = holderHistory.snapshots.slice(-maxSnapshots);
+      console.log(`  Trimmed ${removed} old snapshots, keeping last ${maxSnapshots}`);
+    }
+
+    holderHistory.lastUpdated = now.toISOString();
+    holderHistory.source = 'PulseScan';
+
+    fs.writeFileSync(holderHistoryPath, JSON.stringify(holderHistory, null, 2));
+    console.log(`  Written: ${holderHistoryPath} (${holderHistory.snapshots.length} daily snapshots)`);
   }
-  
-  // Sort snapshots by timestamp (oldest first)
-  holderHistory.snapshots.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  
-  // Keep last 365 days of data (1 year)
-  const maxSnapshots = 365;
-  if (holderHistory.snapshots.length > maxSnapshots) {
-    const removed = holderHistory.snapshots.length - maxSnapshots;
-    holderHistory.snapshots = holderHistory.snapshots.slice(-maxSnapshots);
-    console.log(`  Trimmed ${removed} old snapshots, keeping last ${maxSnapshots}`);
-  }
-  
-  holderHistory.lastUpdated = now.toISOString();
-  holderHistory.source = 'PulseScan';
-  
-  fs.writeFileSync(holderHistoryPath, JSON.stringify(holderHistory, null, 2));
-  console.log(`  Written: ${holderHistoryPath} (${holderHistory.snapshots.length} daily snapshots)`);
   
   // Log date range
   if (holderHistory.snapshots.length > 0) {
