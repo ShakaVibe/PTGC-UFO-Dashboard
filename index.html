@@ -5046,7 +5046,7 @@
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
                   <button onClick={()=>setShowHolderModal(true)} className={`absolute top-2 right-2 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Holders</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holders)}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holders??holdersByPeriod?.current)/* MIGRATION: PulseScan's live counter endpoint 500s intermittently → live count null. Fall back to the file-based snapshot count so the box shows a real number instead of a dash. */}</div>
                   {holderChange!==null?(holderChange===0?<div className="text-xs sm:text-sm font-medium mt-2 text-white/40">{'\u2014'} 0</div>:<div className={`text-xs sm:text-sm font-medium mt-2 ${holderChange>=0?'text-emerald-400':'text-rose-400'} truncate`}>{holderChange>=0?'\u2191':'\u2193'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>):<div className="h-4 mt-2"></div>}
                 </div>
 
@@ -6570,6 +6570,18 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
               <div className="relative" onClick={e=>e.stopPropagation()}>
                 <button onClick={()=>closeModalAndReturn(setShowValueGenShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
+
+                {/* Period selector — above card, outside the screenshot (mirrors the combined card) */}
+                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',marginBottom:'16px'}}>
+                  <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',color:'rgba(255,255,255,0.4)',fontWeight:600,marginRight:'4px'}}>Period:</span>
+                  <div style={{display:'flex',gap:'4px',background:'rgba(0,0,0,0.5)',borderRadius:'20px',padding:'3px',border:'1px solid rgba(255,255,255,0.1)'}}>
+                    {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([pv,pl])=>(
+                      <button key={pv} onClick={()=>setValueGenPeriod(pv)} style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',fontWeight:700,padding:'5px 14px',borderRadius:'16px',border:'none',cursor:'pointer',transition:'all 0.18s',background:valueGenPeriod===pv?(token==='PTGC'?'rgba(212,175,55,0.45)':'rgba(124,252,0,0.35)'):'transparent',color:valueGenPeriod===pv?'#fff':'rgba(255,255,255,0.4)',outline:'none'}}>
+                        {pl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 
                 {/* Twitter Card - 600x314 */}
                 <div style={{width:`${600*sc}px`,height:`${314*sc}px`}}>
