@@ -4511,15 +4511,23 @@
 
       // Render 30D charts in the share card when data is ready
       useEffect(()=>{
+        // Closed: tear the charts down so a reopen redraws on the fresh canvases.
+        if(!showHoldersShareModal){
+          if(ptgcShareChartInst.current){ptgcShareChartInst.current.destroy();ptgcShareChartInst.current=null;}
+          if(ufoShareChartInst.current){ufoShareChartInst.current.destroy();ufoShareChartInst.current=null;}
+          return;
+        }
         if(!holdersShareData||!window.Chart)return;
         const cutoff=Date.now()-(30*24*60*60*1000);
         const _snapsFor=(k)=>snapshotsFor(k).filter(s=>new Date(s.timestamp).getTime()>=cutoff); // MIGRATION
 
+        // Returns false = canvas not mounted yet (retry); true = handled (drawn, or nothing to draw).
+        // Mirrors the dashboard holder chart: always destroy+redraw, never skip on a stale instance.
         const makeChart=(ref,instRef,tokenKey,colorHex,currentCount)=>{
-          if(!ref.current)return;
-          if(instRef.current)return; // already drawn — don't destroy and redraw on every re-render
+          if(!ref.current)return false;
           const pts=[..._snapsFor(tokenKey),{timestamp:new Date().toISOString(),[tokenKey]:currentCount}];
-          if(pts.length<2)return;
+          if(instRef.current){instRef.current.destroy();instRef.current=null;}
+          if(pts.length<2)return true; // mounted but not enough history yet (e.g. a brand-new token)
           try{
             const ctx=ref.current.getContext('2d');
             const grad=ctx.createLinearGradient(0,0,0,120);
@@ -4557,19 +4565,25 @@
               }
             });
           }catch(e){console.error('Share chart error:',e);}
+          return true;
         };
 
-        // Small delay to ensure canvases are mounted
-        setTimeout(()=>{
-          makeChart(ptgcShareChartRef,ptgcShareChartInst,'PTGC',TOKENS.PTGC.colorHex,holdersShareData.PTGC.holders);
-          makeChart(ufoShareChartRef,ufoShareChartInst,'UFO',TOKENS.UFO.colorHex,holdersShareData.UFO.holders);
-        },100);
+        // Retry across animation frames until both canvases are mounted (replaces the fragile
+        // fixed 100ms delay). Bounded so it never spins forever.
+        let tries=0,raf=0;
+        const attempt=()=>{
+          const a=makeChart(ptgcShareChartRef,ptgcShareChartInst,'PTGC',TOKENS.PTGC.colorHex,holdersShareData.PTGC.holders);
+          const b=makeChart(ufoShareChartRef,ufoShareChartInst,'UFO',TOKENS.UFO.colorHex,holdersShareData.UFO.holders);
+          if((!a||!b)&&tries++<30)raf=requestAnimationFrame(attempt);
+        };
+        raf=requestAnimationFrame(attempt);
 
         return()=>{
+          if(raf)cancelAnimationFrame(raf);
           if(ptgcShareChartInst.current){ptgcShareChartInst.current.destroy();ptgcShareChartInst.current=null;}
           if(ufoShareChartInst.current){ufoShareChartInst.current.destroy();ufoShareChartInst.current=null;}
         };
-      },[holdersShareData,holderHistoryCacheNew]);
+      },[holdersShareData,showHoldersShareModal]);
 
       useEffect(()=>{
         // Reset all state immediately when token changes
