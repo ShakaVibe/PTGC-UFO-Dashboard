@@ -4650,35 +4650,50 @@
             fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>setStakingData(staking));
           }
           
-          // Fetch holder tiers - pass LP pair addresses.
-          // MIGRATION: the live tier scan is ~14-18 PulseScan pages (~50s) for BOTH tokens, so
-          // every reload used to wait on it. Cache a COMPLETE result in localStorage and reuse
-          // it for up to 2h: reloads then show exact tiers instantly and only re-scan when the
-          // cache ages out. Only complete (ok) scans are cached, so we never persist a "≥" bound.
+          // Holder tiers — three-tier sourcing, fastest-and-freshest first:
+          //   1) prebuilt file (token-allocation.json, rebuilt server-side every few hours) —
+          //      instant for EVERY visitor, no live scan. This is the intended steady state.
+          //   2) localStorage cache from a prior live scan (<2h) — instant for a returning browser.
+          //   3) live PulseScan scan (~14-18 pages / ~50s) — last resort; caches a complete result.
+          // Until the Action publishes the file, step 1 simply misses and we behave as before.
           const lpPairAddresses=d?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
           const tierCacheKey='grays_tiers_'+cfg.address.toLowerCase();
-          let freshTiers=null;
-          try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers)freshTiers=o.tiers;}}catch(e){}
-          if(freshTiers){
-            setHolderTiers(freshTiers);
-          }else{
+          const ALLOC_FILE='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/token-allocation.json';
+          const applyTiers=(tierObj,cache)=>{
+            setHolderTiers(tierObj);
+            if(cache){try{localStorage.setItem(tierCacheKey,JSON.stringify({ts:Date.now(),tiers:tierObj}));}catch(e){}}
+          };
+          (async()=>{
+            // 1) Prebuilt file (cache-busted hourly)
+            try{
+              const r=await fetch(ALLOC_FILE+'?t='+Math.floor(Date.now()/3600000));
+              if(r.ok){
+                const j=await r.json();
+                const t=j&&j.tokens&&j.tokens[token]&&j.tokens[token].tiers;
+                if(t&&typeof t.Whale==='number'){
+                  applyTiers({Poseidon:t.Poseidon||0,Whale:t.Whale||0,Shark:t.Shark||0,Dolphin:t.Dolphin||0,SquidAndBelow:(t.SquidAndBelow!=null?t.SquidAndBelow:null),ok:true,partial:false,error:null},true);
+                  return;
+                }
+              }
+            }catch(e){}
+            // 2) localStorage cache from a prior live scan
+            try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers){setHolderTiers(o.tiers);return;}}}catch(e){}
+            // 3) Live scan (slow; caches a complete result for next time)
             fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
               /* Exact -> the number. Partial -> a lower bound, still worth showing.
                  Nothing at all -> null, and the tiles print "—". Zero whales is a claim,
                  and a failed query is no basis for it. */
               const v=n=>(result.ok||result.partial)?(n||0):null;
-              const tierObj={
+              applyTiers({
                 Poseidon:v(result.counts.Poseidon),
                 Whale:v(result.counts.Whale),
                 Shark:v(result.counts.Shark),
                 Dolphin:v(result.counts.Dolphin),
                 SquidAndBelow:result.ok?(result.squidAndBelow||0):null,  // needs a complete count
                 ok:result.ok,partial:!!result.partial,error:result.error
-              };
-              setHolderTiers(tierObj);
-              if(result.ok){try{localStorage.setItem(tierCacheKey,JSON.stringify({ts:Date.now(),tiers:tierObj}));}catch(e){}}
+              },result.ok);
             });
-          }
+          })();
           
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
