@@ -5865,16 +5865,19 @@
                       setCombinedValueGenLoading(true);
                       const otherToken=token==='PTGC'?'UFO':'PTGC';
                       const otherCfg=TOKENS[otherToken];
-                      fetch(`https://api.dexscreener.com/latest/dex/tokens/${otherCfg.address}`)/* MIGRATION: was fragile /pairs/{mainPair} singular .pair read — hardened to robust /tokens/ best-pair */
-                        .then(r=>r.json())
-                        .then(d=>{
+                      Promise.all([
+                        fetch(`https://api.dexscreener.com/latest/dex/tokens/${otherCfg.address}`).then(r=>r.json())/* MIGRATION: robust /tokens/ best-pair (was fragile /pairs/{mainPair}) */,
+                        fetchCoingeckoData().catch(()=>null)/* ensure the volume cache is loaded; reading the module var directly gave $0 when it hadn't loaded yet */
+                      ])
+                        .then(([d,cg])=>{
                           const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
                           const best=ps[0]||null;
                           const vol24h=best?parseFloat(best.volume?.h24)||0:0;
                           const price=best?parseFloat(best.priceUsd)||0:0;
-                          const otherVol7d=coingeckoDataCache?.[otherToken]?.volume?.vol7d||0;
-                          const otherVol30d=coingeckoDataCache?.[otherToken]?.volume?.vol30d||0;
-                          const otherVol90d=coingeckoDataCache?.[otherToken]?.volume?.vol90d||0;
+                          const ov=(cg||coingeckoDataCache)?.[otherToken]?.volume||{};
+                          const otherVol7d=ov.vol7d||0;
+                          const otherVol30d=ov.vol30d||0;
+                          const otherVol90d=ov.vol90d||0;
                           setCombinedValueGenOtherData({vol24h,vol7d:otherVol7d,vol30d:otherVol30d,vol90d:otherVol90d,price});
                           setCombinedValueGenLoading(false);
                         })
