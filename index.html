@@ -4411,25 +4411,58 @@
             // Ensure holder history is loaded
             await fetchHolderHistoryNew();
             
-            // Fetch current holder counts for both tokens in parallel
-            const[ptgcHolders,ufoHolders]=await Promise.all([
-              fetchHoldersLive(TOKENS.PTGC.address),
-              fetchHoldersLive(TOKENS.UFO.address)
-            ]);
-            
-            // Fetch holder tiers for both tokens
-            const[ptgcDex,ufoDex]=await Promise.all([
-              fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),
-              fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair)
-            ]);
-            
-            const ptgcLPAddrs=ptgcDex?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
-            const ufoLPAddrs=ufoDex?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
-            
-            const[ptgcTiers,ufoTiers]=await Promise.all([
-              fetchHolderTiers(TOKENS.PTGC.address,TOKENS.PTGC,ptgcHolders,ptgcLPAddrs),
-              fetchHolderTiers(TOKENS.UFO.address,TOKENS.UFO,ufoHolders,ufoLPAddrs)
-            ]);
+            // ---- Holder COUNT: file-first, same source of truth as the dashboard box ----
+            // The newest holder-history snapshot per token is authoritative (reliable, written
+            // all day). The live PulseScan counter (fetchHoldersLive) 500s intermittently and
+            // returns 0 on failure — that was the "0 current holders" bug — so it's only a
+            // fallback for a token that has no snapshot at all.
+            const fileCount=(tkn)=>{const s=snapshotsFor(tkn);return s.length?s[s.length-1][tkn]:null;};
+            let ptgcHolders=fileCount('PTGC');
+            let ufoHolders=fileCount('UFO');
+
+            // ---- Holder TIERS: file-first (token-allocation.json), same file the dashboard box reads ----
+            // Avoids the ~50s-per-token live pagination scan; that scan stays only as a fallback.
+            let ptgcTierObj=null,ufoTierObj=null;
+            try{
+              const r=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/token-allocation.json?t='+Math.floor(Date.now()/3600000));
+              if(r.ok){
+                const j=await r.json();
+                const pt=j&&j.tokens&&j.tokens.PTGC&&j.tokens.PTGC.tiers;
+                const ut=j&&j.tokens&&j.tokens.UFO&&j.tokens.UFO.tiers;
+                if(pt&&typeof pt.Whale==='number')ptgcTierObj={Poseidon:pt.Poseidon||0,Whale:pt.Whale||0,Shark:pt.Shark||0,Dolphin:pt.Dolphin||0,SquidAndBelow:pt.SquidAndBelow||0};
+                if(ut&&typeof ut.Whale==='number')ufoTierObj={Poseidon:ut.Poseidon||0,Whale:ut.Whale||0,Shark:ut.Shark||0,Dolphin:ut.Dolphin||0,SquidAndBelow:ut.SquidAndBelow||0};
+              }
+            }catch(e){}
+
+            // ---- Fallback: only fetch live for whatever the files could NOT supply ----
+            // In the normal case (files present) nothing below runs, so the modal is instant.
+            if(ptgcHolders==null||ufoHolders==null){
+              const[pc,uc]=await Promise.all([
+                ptgcHolders==null?fetchHoldersLive(TOKENS.PTGC.address):Promise.resolve(ptgcHolders),
+                ufoHolders==null?fetchHoldersLive(TOKENS.UFO.address):Promise.resolve(ufoHolders)
+              ]);
+              ptgcHolders=pc;ufoHolders=uc;
+            }
+            if(!ptgcTierObj||!ufoTierObj){
+              const[ptgcDex,ufoDex]=await Promise.all([
+                !ptgcTierObj?fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair):Promise.resolve(null),
+                !ufoTierObj?fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair):Promise.resolve(null)
+              ]);
+              const ptgcLPAddrs=ptgcDex?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
+              const ufoLPAddrs=ufoDex?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
+              const[ptgcTiers,ufoTiers]=await Promise.all([
+                !ptgcTierObj?fetchHolderTiers(TOKENS.PTGC.address,TOKENS.PTGC,ptgcHolders,ptgcLPAddrs):Promise.resolve(null),
+                !ufoTierObj?fetchHolderTiers(TOKENS.UFO.address,TOKENS.UFO,ufoHolders,ufoLPAddrs):Promise.resolve(null)
+              ]);
+              if(!ptgcTierObj&&ptgcTiers)ptgcTierObj={Poseidon:ptgcTiers.counts.Poseidon||0,Whale:ptgcTiers.counts.Whale||0,Shark:ptgcTiers.counts.Shark||0,Dolphin:ptgcTiers.counts.Dolphin||0,SquidAndBelow:ptgcTiers.squidAndBelow||0};
+              if(!ufoTierObj&&ufoTiers)ufoTierObj={Poseidon:ufoTiers.counts.Poseidon||0,Whale:ufoTiers.counts.Whale||0,Shark:ufoTiers.counts.Shark||0,Dolphin:ufoTiers.counts.Dolphin||0,SquidAndBelow:ufoTiers.squidAndBelow||0};
+            }
+
+            // Final defaults so the card never renders undefined tiers / a 0 count from a null.
+            ptgcTierObj=ptgcTierObj||{Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0};
+            ufoTierObj=ufoTierObj||{Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0};
+            ptgcHolders=ptgcHolders||0;
+            ufoHolders=ufoHolders||0;
             
             // Calculate holdersByPeriod for both tokens from snapshots
             const calcPeriods=(tkn,currentCount)=>{
@@ -4459,16 +4492,8 @@
             };
             
             setHoldersShareData({
-              PTGC:{
-                holders:ptgcHolders,
-                tiers:{Poseidon:ptgcTiers.counts.Poseidon||0,Whale:ptgcTiers.counts.Whale||0,Shark:ptgcTiers.counts.Shark||0,Dolphin:ptgcTiers.counts.Dolphin||0,SquidAndBelow:ptgcTiers.squidAndBelow||0},
-                periods:calcPeriods('PTGC',ptgcHolders)
-              },
-              UFO:{
-                holders:ufoHolders,
-                tiers:{Poseidon:ufoTiers.counts.Poseidon||0,Whale:ufoTiers.counts.Whale||0,Shark:ufoTiers.counts.Shark||0,Dolphin:ufoTiers.counts.Dolphin||0,SquidAndBelow:ufoTiers.squidAndBelow||0},
-                periods:calcPeriods('UFO',ufoHolders)
-              }
+              PTGC:{holders:ptgcHolders,tiers:ptgcTierObj,periods:calcPeriods('PTGC',ptgcHolders)},
+              UFO:{holders:ufoHolders,tiers:ufoTierObj,periods:calcPeriods('UFO',ufoHolders)}
             });
           }catch(e){
             console.error('Error loading holders share data:',e);
