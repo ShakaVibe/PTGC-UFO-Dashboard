@@ -1,9 +1,17 @@
 name: Update Metrics History
 on:
   schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
+    # Twice hourly at :10 and :45 — moved off :00/:30, which collided with
+    # CoinGecko, Burn History, Token Allocation (:00) and Treasury (:30)
+    - cron: '10,45 * * * *'
   workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-metrics
+  cancel-in-progress: false
 
 jobs:
   update-metrics:
@@ -26,10 +34,29 @@ jobs:
       - name: Run metrics collector
         run: node fetch-metrics.js
 
-      - name: Commit and push changes
+      - name: Commit if changed (race-proof rebase + retry)
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/metrics-history.json
-          git diff --staged --quiet || git commit -m "Update metrics $(date -u '+%Y-%m-%d %H:%M UTC')"
-          git push || true
+          if git diff --staged --quiet; then
+            echo "No changes — nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update metrics $(date -u '+%Y-%m-%d %H:%M UTC') [skip ci]"
+          # RACE-PROOF PUSH: many workflows in this repo commit to main on overlapping
+          # schedules, so the remote may move while this job runs. Rebase our single
+          # data commit onto whatever landed, then push; retry with jitter in case yet
+          # another push lands mid-attempt. During a rebase, '-X theirs' keeps THIS
+          # job's freshly generated file if the same path ever conflicts — each
+          # pipeline owns its own JSON, so that is always the right resolution.
+          for i in 1 2 3 4 5; do
+            git rebase --abort 2>/dev/null || true
+            git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" \
+              && git push origin "${GITHUB_REF_NAME}" \
+              && { echo "pushed on attempt $i"; exit 0; }
+            echo "push attempt $i failed; retrying…"
+            sleep $((RANDOM % 8 + 2))
+          done
+          echo "ERROR: could not push after 5 attempts"
+          exit 1
