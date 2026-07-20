@@ -1,5 +1,12 @@
 name: Fetch Treasury Transactions
 
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-treasury
+  cancel-in-progress: false
+
 on:
   schedule:
     # Run every hour at minute 30 (offset from burn fetcher if it runs at :00)
@@ -25,21 +32,29 @@ jobs:
       - name: Fetch Treasury Transactions
         run: node scripts/fetch-treasury-transactions.js
       
-      - name: Check for changes
-        id: changes
+      - name: Commit if changed (race-proof rebase + retry)
         run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
           if git diff --staged --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "No changes — nothing to commit."
+            exit 0
           fi
-      
-      - name: Commit and push changes
-        if: steps.changes.outputs.has_changes == 'true'
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git commit -m "Update treasury data [automated]"
-          git pull --rebase -X theirs origin main
-          git push
+          git commit -m "Update treasury data [automated] [skip ci]"
+          # RACE-PROOF PUSH: many workflows in this repo commit to main on overlapping
+          # schedules, so the remote may move while this job runs. Rebase our single
+          # data commit onto whatever landed, then push; retry with jitter in case yet
+          # another push lands mid-attempt. During a rebase, '-X theirs' keeps THIS
+          # job's freshly generated file if the same path ever conflicts — each
+          # pipeline owns its own JSON, so that is always the right resolution.
+          for i in 1 2 3 4 5; do
+            git rebase --abort 2>/dev/null || true
+            git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" \
+              && git push origin "${GITHUB_REF_NAME}" \
+              && { echo "pushed on attempt $i"; exit 0; }
+            echo "push attempt $i failed; retrying…"
+            sleep $((RANDOM % 8 + 2))
+          done
+          echo "ERROR: could not push after 5 attempts"
+          exit 1
