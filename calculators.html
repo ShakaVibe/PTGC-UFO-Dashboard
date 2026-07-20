@@ -4105,14 +4105,11 @@
                           <button onClick={()=>setStrategy('holdstake')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='holdstake'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
                             {'\uD83D\uDC8E\uD83D\uDC8E'} Hold + Stake
                           </button>
-                        </>):(<>
-                          <button onClick={()=>setStrategy('hold')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='hold'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
+                        </>):(
+                          <div className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm text-center" style={{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}}>
                             {'\uD83D\uDC8E'} Hold Only
-                          </button>
-                          <button onClick={()=>setStrategy('lp')} className="flex-1 px-3 py-2.5 rounded-lg font-bold text-sm transition-all" style={strategy==='lp'?{background:`${tGlow}0.2)`,border:`2px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'2px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>
-                            {'\uD83D\uDCA7'} Hold + LP
-                          </button>
-                        </>)}
+                          </div>
+                        )}
                       </div>
                       {/* Slider area — ALWAYS reserve space */}
                       <div style={{minHeight:'66px'}}>
@@ -4129,25 +4126,6 @@
                         </div>
                         ):(<div className="h-[60px]"></div>)}
                       </div>
-                      {/* UFO LP: pool selector + requirement note (new per-pair auto-liq model). Reserve space always. */}
-                      {!isPTGC&&(
-                      <div style={{minHeight:'76px'}}>
-                        {strategy==='lp'?(<>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <span className="text-white/40 text-xs font-semibold uppercase tracking-wider mr-0.5">Pool</span>
-                          {['WPLS','PLSX','WETH'].map(sym=>(
-                            <button key={sym} onClick={()=>setFreshUfoLpPair(sym)} className="px-2.5 py-1 rounded-md text-xs font-bold transition-all" style={freshUfoLpPair===sym?{background:`${tGlow}0.2)`,border:`1.5px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'1.5px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>UFO/{sym}</button>
-                          ))}
-                        </div>
-                        <div className="flex items-start gap-1.5 px-3 py-2 rounded-lg bg-yellow-500/8 border border-yellow-500/15">
-                          <span className="text-yellow-500/70 text-xs mt-px">{'\u26A0\uFE0F'}</span>
-                          <span className="text-yellow-400/60 text-xs leading-snug">Also needs ~{fmtDollar(netUSD*(splitPct/100))} of {freshUfoLpPair} to pair with your UFO. Reward = your share of the UFO/{freshUfoLpPair} pool times the 1% daily auto-liquidity (pool growth, not a payout).</span>
-                        </div>
-                        </>):(<div style={{height:'76px'}}></div>)}
-                      </div>
-                      )}
-                      {/* PTGC spacer to match UFO's LP area */}
-                      {isPTGC&&<div style={{minHeight:'76px'}}></div>}
                     </div>
                     
                     {/* Reward Projections — ALWAYS show */}
@@ -4440,7 +4418,7 @@
                     <p className="mt-2">The New Capital Simulator calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. All projections shown are hypothetical and based on current conditions at the time of calculation. Token amounts are calculated using live prices and account for buy fees (PTGC {(ptgcCfg.taxRate*100)}%, UFO {(ufoCfg.taxRate*100)}%).</p>
                     <p className="mt-2"><strong className="text-yellow-500/50">Results will NOT match reality.</strong> There are countless real-world factors that will cause actual outcomes to differ significantly from these projections, including but not limited to: changes in trading volume (which fluctuates constantly and can drop to near zero), price volatility and market crashes, changes in the number of holders and their proportional share of supply, staking pool size changes as other users stake or unstake, LP pool composition changes, arbitrage bot activity, MEV and front-running, slippage on large trades, sell pressure from other holders, overall crypto market cycles and sentiment, regulatory changes, smart contract risks, liquidity additions and removals, token burns affecting supply, whale activity, exchange listings or delistings, and general macroeconomic conditions.</p>
                     <p className="mt-2"><strong className="text-white/50">Past performance does not guarantee future results.</strong> Historical volume averages shown here reflect past activity and should not be interpreted as a prediction of future volume. A token that had $5M daily volume last month could have $50K daily volume next month, or vice versa. Reward projections scale linearly with volume — if volume drops 90%, your rewards drop 90%.</p>
-                    <p className="mt-2">UFO's fee sends 1% of every transfer into each of the UFO/WPLS, UFO/PLSX, and UFO/WETH pools as <strong className="text-white/50">auto-liquidity</strong>. The "LP" figures estimate the value of that daily 1% injection accruing to your position, based on your share of the pool you choose — this is pool growth, <strong className="text-white/50">not a fee paid out to you</strong>, and you cannot claim it as income. Providing LP requires matching value of the paired token, which is <strong className="text-white/50">not included</strong> in the investment amount above, and LP providers are exposed to impermanent loss, which can reduce your position's value. Holder reflections exclude tokens locked in LP from the eligible supply.</p>
+                    <p className="mt-2">UFO holder reflections (1%) are shared across eligible holders; tokens locked in LP contracts are excluded from the eligible supply used in that calculation.</p>
                     <p className="mt-2 text-yellow-500/40">This tool does not constitute financial advice. Always do your own research (DYOR), consult with a qualified financial advisor before making investment decisions, and <strong className="text-white/50">never invest more than you can afford to lose</strong>. Cryptocurrency investments carry significant risk including the potential loss of your entire investment.</p>
                   </div>
                 </div>
