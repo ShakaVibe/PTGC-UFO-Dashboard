@@ -1,11 +1,15 @@
 name: Update Burn and Holder History
 on:
   schedule:
-    # Run every hour
-    - cron: '0 * * * *'
+    # Hourly at :15 — moved off :00, which collided with CoinGecko + Metrics + Token Allocation
+    - cron: '15 * * * *'
   workflow_dispatch: # Allow manual trigger
 permissions:
   contents: write
+
+concurrency:
+  group: update-burn-history
+  cancel-in-progress: false
 jobs:
   update-burn-history:
     runs-on: ubuntu-latest
@@ -24,11 +28,29 @@ jobs:
       - name: Fetch burn history
         run: node scripts/fetch-burn-history.js
       
-      - name: Commit and push if changed
+      - name: Commit if changed (race-proof rebase + retry)
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git diff --staged --quiet || git commit -m "Update burn history data [automated]"
-          git pull --rebase
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes — nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update burn history data [automated] [skip ci]"
+          # RACE-PROOF PUSH: many workflows in this repo commit to main on overlapping
+          # schedules, so the remote may move while this job runs. Rebase our single
+          # data commit onto whatever landed, then push; retry with jitter in case yet
+          # another push lands mid-attempt. During a rebase, '-X theirs' keeps THIS
+          # job's freshly generated file if the same path ever conflicts — each
+          # pipeline owns its own JSON, so that is always the right resolution.
+          for i in 1 2 3 4 5; do
+            git rebase --abort 2>/dev/null || true
+            git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" \
+              && git push origin "${GITHUB_REF_NAME}" \
+              && { echo "pushed on attempt $i"; exit 0; }
+            echo "push attempt $i failed; retrying…"
+            sleep $((RANDOM % 8 + 2))
+          done
+          echo "ERROR: could not push after 5 attempts"
+          exit 1
