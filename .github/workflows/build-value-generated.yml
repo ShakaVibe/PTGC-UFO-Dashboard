@@ -1,0 +1,47 @@
+name: Build Value Generated
+
+# Rebuilds data/value-generated.json every hour so the UFO dashboard's "Value Generated" and
+# "PTGC burned by UFO" boxes load from a static file instead of scanning the chain per visitor.
+# The builder writes ONLY on a successful scan; a failed run leaves the last good file in place
+# (and the dashboard falls back to a live scan if the file is missing or stale).
+
+on:
+  schedule:
+    - cron: '5 * * * *'   # hourly, at :05 (off the top-of-hour rush)
+  workflow_dispatch: {}    # manual "Run workflow" button
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-value-generated
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build value-generated.json
+        run: node scripts/build-value-generated.mjs
+        env:
+          OUT_PATH: data/value-generated.json
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [[ -n "$(git status --porcelain data/value-generated.json)" ]]; then
+            git add data/value-generated.json
+            git commit -m "chore: refresh value-generated.json [skip ci]"
+            git push
+          else
+            echo "value-generated.json unchanged — nothing to commit"
+          fi
