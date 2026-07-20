@@ -45,8 +45,11 @@
         stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
         taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
-      UFO:{name:'UFO',address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xbeA0e55b82Eb975280041F3b49C4D0bD937b72d5',pulseScanUrl:'https://scan.pulsechain.com/token/0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
-        taxBreakdown:[{name:'LP Providers',pct:3,emoji:'\u{1F4A7}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Burn UFO',pct:1,emoji:'\u{1F525}'},{name:'Burn PTGC',pct:1,emoji:'\u{1F525}'}]
+      UFO:{name:'UFO',address:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xE221e6fC30e5787F0d551f980B4da1055D832A03',pulseScanUrl:'https://scan.pulsechain.com/token/0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',totalSupply:999999999051,taxRate:0.06,hasDAO:false,
+        // MIGRATION: new UFO fee model = 6% split 1% each. The three LP buckets are AUTO-LIQUIDITY
+        // injected into the named pool (WPLS/PLSX/WETH), not a payout to providers. pairSym maps each
+        // LP bucket to its pool so the Capital Simulator can price the per-pair benefit.
+        taxBreakdown:[{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Burn UFO',pct:1,emoji:'\u{1F525}'},{name:'Burn PTGC',pct:1,emoji:'\u{1F525}'},{name:'LP PLS',pct:1,emoji:'\u{1F4A7}',isLP:true,pairSym:'WPLS'},{name:'LP PLSX',pct:1,emoji:'\u{1F4A7}',isLP:true,pairSym:'PLSX'},{name:'LP WETH',pct:1,emoji:'\u{1F4A7}',isLP:true,pairSym:'WETH'}]
       }
     };
     
@@ -69,25 +72,24 @@
     // UFO LP Staking contract — tracks share rates for LP provider rewards
     const UFO_LP_STAKING='0x5958b1f2113a81EE68b65C0c7102425D41b53bfd';
     
+    // MIGRATION: PTGC pools static; UFO's new pools below (old UFO pools are dead).
     const LP_ADDRESSES=[
       '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', // PTGC/WPLS main pair
-      '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', // UFO/WPLS main pair
-      '0x31c77e0519a0347aa547aeab6e866c30a1a32123', // UFO/PLSX
-      '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', // UFO/INC
-      '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', // UFO/HEX
-      '0xd3a87bda2238ee28b424d38991df1fbadd2be666', // UFO/EHEX
-      '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca'  // UFO/PTGC (also PTGC LP)
+      '0x975c7ab1dae5c97327ef7019587dffc66096f5d8', // PTGC/PRVX
+      '0xe221e6fc30e5787f0d551f980b4da1055d832a03', // UFO/WPLS  (new)
+      '0x145bc3a8a5ec0c84061511a5db6023360cadf654', // UFO/PLSX  (new)
+      '0xc4434600f1f263ee38c38dfe32c8def8c0047c0b'  // UFO/WETH  (new)
     ];
     
     // Hardcoded UFO pairs that should always show (even if DexScreener doesn't return them)
     // Note: PTGC is NOT an RH core, but we still want to show that pair
+    // MIGRATION: old UFO pools are dead. These are the new token's pools (WPLS/PLSX/WETH created by
+    // the contract constructor; EHEX resolved on-chain — DexScreener doesn't index it).
     const HARDCODED_UFO_PAIRS = [
-      { address: '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS', quoteAddress: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', isRHCore: true, version: 'v2' },
-      { address: '0x31c77e0519a0347aa547aeab6e866c30a1a32123', quoteSymbol: 'PLSX', quoteName: 'PulseX', quoteAddress: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', isRHCore: true, version: 'v2' },
-      { address: '0x3ed0e39d9de5341ac511249517099c3e5d8b92bf', quoteSymbol: 'INC', quoteName: 'Incentive', quoteAddress: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', isRHCore: true, version: 'v2' },
-      { address: '0x2cabcba08e69449f9acf3dd69f7a7cd2f9ddc0db', quoteSymbol: 'HEX', quoteName: 'HEX', quoteAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', isRHCore: true, version: 'v2' },
-      { address: '0xd3a87bda2238ee28b424d38991df1fbadd2be666', quoteSymbol: 'EHEX', quoteName: 'HEX from Ethereum', quoteAddress: '0x57fde0a71132198BBeC939B98976993d8D89D225', isRHCore: true, version: 'v2' },
-      { address: '0x5b002c8ad3c23b4021f75003fecf01a10b11f6ca', quoteSymbol: 'PTGC', quoteName: 'PTGC', quoteAddress: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', isRHCore: false, version: 'v2' }
+      { address: '0xE221e6fC30e5787F0d551f980B4da1055D832A03', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS',  quoteAddress: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', isRHCore: true, version: 'v2' },
+      { address: '0x145BC3a8a5EC0C84061511a5DB6023360caDF654', quoteSymbol: 'PLSX', quoteName: 'PulseX',       quoteAddress: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', isRHCore: true, version: 'v2' },
+      { address: '0xc4434600F1f263Ee38c38dfe32c8DEf8c0047C0b', quoteSymbol: 'WETH', quoteName: 'Wrapped Ether',quoteAddress: '0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C', isRHCore: true, version: 'v2' },
+      { address: '0xe61aA9a9b7a13ceedEAa8D26bfF5222003a40634', quoteSymbol: 'EHEX', quoteName: 'eHEX',         quoteAddress: '0x57fdE0a71132198BBeC939B98976993d8D89D225', isRHCore: true, version: 'v2' }
     ];
     
     // Fetch LP data directly from blockchain (for pairs DexScreener doesn't track)
@@ -2199,6 +2201,7 @@
       const[freshUfoStrategy,setFreshUfoStrategy]=useState('hold'); // 'hold' or 'lp'
       const[freshPtgcStakePct,setFreshPtgcStakePct]=useState(100); // % of PTGC tokens to stake (rest just held)
       const[freshUfoLpPct,setFreshUfoLpPct]=useState(100); // % of UFO tokens to provide as LP (rest just held)
+      const[freshUfoLpPair,setFreshUfoLpPair]=useState('WPLS'); // which UFO pool you LP into: WPLS | PLSX | WETH (new per-pair auto-liq model)
       const[freshVolSource,setFreshVolSource]=useState('live24h');
       const[freshVolCustom,setFreshVolCustom]=useState(''); // PTGC custom vol (or both when preset)
       const[freshVolCustomUfo,setFreshVolCustomUfo]=useState(''); // UFO custom vol
@@ -3887,7 +3890,6 @@
             const ptgcBurnData=token==='PTGC'?burn:freshOtherBurn;
             const ufoBurnData=token==='UFO'?burn:freshOtherBurn;
             const ptgcStaking=token==='PTGC'?stakingData:(freshOtherStaking||{staked:0,locked:0});
-            const ufoShareRate=token==='UFO'?totalUFOShareRate:freshOtherShareRate;
             const ptgcVol=token==='PTGC'?volumeByPeriod:(freshOtherVolume||{vol24h:0,vol7d:0,vol30d:0,vol90d:0});
             const ufoVol=token==='UFO'?volumeByPeriod:(freshOtherVolume||{vol24h:0,vol7d:0,vol30d:0,vol90d:0});
             
@@ -3898,6 +3900,25 @@
             const ufoTokensInLP=ufoData?.tokensInLP||0;
             const ufoEligibleSupply=Math.max(ufoCirc-ufoTokensInLP,1);
             const ptgcTotalStaked=(ptgcStaking?.staked||0)+(ptgcStaking?.locked||0);
+
+            // ── UFO LP: new per-pair AUTO-LIQUIDITY model ───────────────────────────────
+            // New UFO fee = 6%, split 1% each. Three of those buckets (LP PLS/PLSX/WETH) are
+            // auto-liquidity injected into the UFO/WPLS, UFO/PLSX, UFO/WETH pools — not a payout.
+            // Providing LP into a chosen pool captures a share of that pool's daily 1% injection,
+            // proportional to your share of the pool (smaller pool ⇒ bigger share of the same 1%).
+            const ufoLpBucketByPair={WPLS:'LP PLS',PLSX:'LP PLSX',WETH:'LP WETH'};
+            const ufoLpAutoPct=((ufoCfg.taxBreakdown.find(t=>t.name===(ufoLpBucketByPair[freshUfoLpPair]||'LP PLS'))?.pct)||0)/100;
+            const getUfoPairReserveTokens=(sym)=>{
+              const arr=ufoData?.pairs||[];
+              const p=arr.find(pp=>(((pp.quoteToken?.symbol)||pp.quote||'')+'').toUpperCase()===sym);
+              if(!p)return 0;
+              const ufoIsBase=((p.baseToken?.address||'').toLowerCase()===ufoCfg.address.toLowerCase());
+              if(ufoIsBase&&p.liquidity?.base)return p.liquidity.base;   // UFO tokens on the base side of the pool
+              if(!ufoIsBase&&p.liquidity?.quote)return p.liquidity.quote; // UFO tokens on the quote side of the pool
+              const usd=p.liq||p.liquidity?.usd||0;                      // fallback: half the USD liq, priced in UFO
+              return ufoPrice>0?(usd/2)/ufoPrice:0;
+            };
+            const ufoLpPairReserve=getUfoPairReserveTokens(freshUfoLpPair);
             
             const inputUSD=parseFloat(freshUSD)||0;
             const displayFreshUSD=freshUSD?(parseFloat(freshUSD)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
@@ -3952,11 +3973,11 @@
             // Reward calculations handled by calcRewardsSplit below
             
             // Updated calcRewards to handle split percentages
-            const calcRewardsSplit=(isPTGC,tokens,dailyVol,tokenPrice,circSupply,eligibleSupply,totalStakedPool,shareRate,strategy,splitPct)=>{
+            const calcRewardsSplit=(isPTGC,tokens,dailyVol,tokenPrice,circSupply,eligibleSupply,totalStakedPool,shareRate,strategy,splitPct,lpAutoPct=0,lpPairReserve=0)=>{
               const feeConfig=isPTGC?ptgcCfg:ufoCfg;
               const holderPct=(feeConfig.taxBreakdown.find(t=>t.name==='Holders')?.pct||0)/100;
               const stakerPct=isPTGC?(feeConfig.taxBreakdown.find(t=>t.name==='Stakers')?.pct||0)/100:0;
-              const lpProviderPct=!isPTGC?(feeConfig.taxBreakdown.find(t=>t.name==='LP Providers')?.pct||0)/100:0;
+              const lpProviderPct=!isPTGC?lpAutoPct:0; // new UFO: per-pair auto-liq rate (1%), passed in per selected pool
               const dailyVolTokens=tokenPrice>0?dailyVol/tokenPrice:0;
               
               // For UFO LP: tokens in LP do NOT earn holder reflections
@@ -3978,12 +3999,15 @@
                 dailyStakerUSD=dailyStakerTokens*tokenPrice;
               }
               
-              // LP: only the splitPct portion goes to LP
+              // LP (new UFO per-pair AUTO-LIQUIDITY model): the splitPct portion is provided into
+              // the chosen pool. Each day the contract injects lpAutoPct (1%) of UFO volume into that
+              // pool; your share of the pool captures that fraction. This is pool-growth value
+              // accruing to your LP position, not a direct payout. dailyLpPLS is retired (old model).
               let dailyLpUSD=0,dailyLpPLS=0;
-              if(!isPTGC&&strategy==='lp'&&shareRate>0&&lpTokens>0){
-                const userLpShare=lpTokens/(shareRate+lpTokens);
-                dailyLpUSD=dailyVol*lpProviderPct*userLpShare;
-                dailyLpPLS=pls>0?dailyLpUSD/pls:0;
+              if(!isPTGC&&strategy==='lp'&&lpAutoPct>0&&lpTokens>0&&lpPairReserve>0){
+                const userLpShare=lpTokens/(lpPairReserve+lpTokens);
+                const dailyAutoLiqTokens=dailyVolTokens*lpAutoPct; // 1% of daily volume, in UFO tokens
+                dailyLpUSD=userLpShare*dailyAutoLiqTokens*tokenPrice;
               }
               
               return{
@@ -3996,8 +4020,8 @@
               };
             };
             
-            const ptgcRewards=calcRewardsSplit(true,ptgcTokens,ptgcDailyVol,ptgcPrice,ptgcCirc,ptgcCirc,ptgcTotalStaked,0,freshPtgcStrategy,freshPtgcStakePct);
-            const ufoRewards=calcRewardsSplit(false,ufoTokens,ufoDailyVol,ufoPrice,ufoCirc,ufoEligibleSupply,0,ufoShareRate,freshUfoStrategy,freshUfoLpPct);
+            const ptgcRewards=calcRewardsSplit(true,ptgcTokens,ptgcDailyVol,ptgcPrice,ptgcCirc,ptgcCirc,ptgcTotalStaked,0,freshPtgcStrategy,freshPtgcStakePct,0,0);
+            const ufoRewards=calcRewardsSplit(false,ufoTokens,ufoDailyVol,ufoPrice,ufoCirc,ufoEligibleSupply,0,0,freshUfoStrategy,freshUfoLpPct,ufoLpAutoPct,ufoLpPairReserve);
             
             const showPTGC=freshMode==='vs'||freshMode==='split'||(freshMode==='allin'&&freshAllinToken==='PTGC');
             const showUFO=freshMode==='vs'||freshMode==='split'||(freshMode==='allin'&&freshAllinToken==='UFO');
@@ -4105,19 +4129,25 @@
                         </div>
                         ):(<div className="h-[60px]"></div>)}
                       </div>
-                      {/* LP Warning area — ALWAYS reserve space for UFO */}
+                      {/* UFO LP: pool selector + requirement note (new per-pair auto-liq model). Reserve space always. */}
                       {!isPTGC&&(
-                      <div style={{minHeight:'38px'}}>
-                        {strategy==='lp'?(
+                      <div style={{minHeight:'76px'}}>
+                        {strategy==='lp'?(<>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <span className="text-white/40 text-xs font-semibold uppercase tracking-wider mr-0.5">Pool</span>
+                          {['WPLS','PLSX','WETH'].map(sym=>(
+                            <button key={sym} onClick={()=>setFreshUfoLpPair(sym)} className="px-2.5 py-1 rounded-md text-xs font-bold transition-all" style={freshUfoLpPair===sym?{background:`${tGlow}0.2)`,border:`1.5px solid ${tGlow}0.6)`,color:tSolid}:{background:'rgba(255,255,255,0.03)',border:'1.5px solid rgba(255,255,255,0.08)',color:'rgba(255,255,255,0.35)'}}>UFO/{sym}</button>
+                          ))}
+                        </div>
                         <div className="flex items-start gap-1.5 px-3 py-2 rounded-lg bg-yellow-500/8 border border-yellow-500/15">
                           <span className="text-yellow-500/70 text-xs mt-px">{'\u26A0\uFE0F'}</span>
-                          <span className="text-yellow-400/60 text-xs leading-snug">LP requires ~{fmtDollar(netUSD*(splitPct/100))} of a paired token (WPLS, PLSX, INC, HEX, or EHEX)</span>
+                          <span className="text-yellow-400/60 text-xs leading-snug">Also needs ~{fmtDollar(netUSD*(splitPct/100))} of {freshUfoLpPair} to pair with your UFO. Reward = your share of the UFO/{freshUfoLpPair} pool times the 1% daily auto-liquidity (pool growth, not a payout).</span>
                         </div>
-                        ):(<div className="h-[38px]"></div>)}
+                        </>):(<div style={{height:'76px'}}></div>)}
                       </div>
                       )}
-                      {/* PTGC spacer to match UFO's warning area */}
-                      {isPTGC&&<div style={{minHeight:'38px'}}></div>}
+                      {/* PTGC spacer to match UFO's LP area */}
+                      {isPTGC&&<div style={{minHeight:'76px'}}></div>}
                     </div>
                     
                     {/* Reward Projections — ALWAYS show */}
@@ -4130,7 +4160,7 @@
                         ):(<>
                           {rewards.dailyHolderUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDC8E'} Reflections ({(rewards.holderPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyHolderUSD)}/day</span></div>}
                           {isPTGC&&strategy==='holdstake'&&rewards.dailyStakerUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDC8E\uD83D\uDC8E'} Staking ({(rewards.stakerPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyStakerUSD)}/day</span></div>}
-                          {!isPTGC&&strategy==='lp'&&rewards.dailyLpUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDCA7'} LP ({(rewards.lpProviderPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyLpUSD)}/day</span></div>}
+                          {!isPTGC&&strategy==='lp'&&rewards.dailyLpUSD>0&&<div className="flex justify-between py-1"><span className="text-white/50 text-base">{'\uD83D\uDCA7'} LP · UFO/{freshUfoLpPair} ({(rewards.lpProviderPct*100)}%)</span><span className={`text-lg font-bold ${tText}`}>{fmtDollarCompact(rewards.dailyLpUSD)}/day</span></div>}
                         </>)}
                       </div>
                       {/* Time span grid */}
@@ -4410,7 +4440,7 @@
                     <p className="mt-2">The New Capital Simulator calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. All projections shown are hypothetical and based on current conditions at the time of calculation. Token amounts are calculated using live prices and account for buy fees (PTGC {(ptgcCfg.taxRate*100)}%, UFO {(ufoCfg.taxRate*100)}%).</p>
                     <p className="mt-2"><strong className="text-yellow-500/50">Results will NOT match reality.</strong> There are countless real-world factors that will cause actual outcomes to differ significantly from these projections, including but not limited to: changes in trading volume (which fluctuates constantly and can drop to near zero), price volatility and market crashes, changes in the number of holders and their proportional share of supply, staking pool size changes as other users stake or unstake, LP pool composition changes, arbitrage bot activity, MEV and front-running, slippage on large trades, sell pressure from other holders, overall crypto market cycles and sentiment, regulatory changes, smart contract risks, liquidity additions and removals, token burns affecting supply, whale activity, exchange listings or delistings, and general macroeconomic conditions.</p>
                     <p className="mt-2"><strong className="text-white/50">Past performance does not guarantee future results.</strong> Historical volume averages shown here reflect past activity and should not be interpreted as a prediction of future volume. A token that had $5M daily volume last month could have $50K daily volume next month, or vice versa. Reward projections scale linearly with volume — if volume drops 90%, your rewards drop 90%.</p>
-                    <p className="mt-2">For UFO LP rewards, your share rate equals the UFO tokens you deposit. LP requires matching value on the other side of the pair, which is <strong className="text-white/50">not included</strong> in the investment calculation above. LP providers are also exposed to impermanent loss, which can reduce the total value of your position. Holder reflections exclude tokens locked in LP contracts from the eligible supply calculation.</p>
+                    <p className="mt-2">UFO's fee sends 1% of every transfer into each of the UFO/WPLS, UFO/PLSX, and UFO/WETH pools as <strong className="text-white/50">auto-liquidity</strong>. The "LP" figures estimate the value of that daily 1% injection accruing to your position, based on your share of the pool you choose — this is pool growth, <strong className="text-white/50">not a fee paid out to you</strong>, and you cannot claim it as income. Providing LP requires matching value of the paired token, which is <strong className="text-white/50">not included</strong> in the investment amount above, and LP providers are exposed to impermanent loss, which can reduce your position's value. Holder reflections exclude tokens locked in LP from the eligible supply.</p>
                     <p className="mt-2 text-yellow-500/40">This tool does not constitute financial advice. Always do your own research (DYOR), consult with a qualified financial advisor before making investment decisions, and <strong className="text-white/50">never invest more than you can afford to lose</strong>. Cryptocurrency investments carry significant risk including the potential loss of your entire investment.</p>
                   </div>
                 </div>
