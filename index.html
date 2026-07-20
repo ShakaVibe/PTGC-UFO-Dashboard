@@ -1798,6 +1798,11 @@
     let burnHistoryCacheTime=0;
     const BURN_CACHE_TTL=10*60*1000; // 10 minutes
     const BURN_HISTORY_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/burn-summary.json';
+    /* Prebuilt hourly snapshot for the Value Generated + PTGC-burned-by-UFO boxes. Built by
+       scripts/build-value-generated.mjs. If missing/stale, the dashboard falls back to the
+       live on-chain scan, so this is safe to ship in any order. */
+    const VALUE_GEN_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/value-generated.json';
+    const VALUE_GEN_STALE_MS=3*60*60*1000; // 3 missed hourly builds -> fall back to live
     // (removed) HOLDER_HISTORY_URL / fetchHolderHistory — the old root holder-history.json
     // and its reader were only used by the now-deleted HolderChartModal. The live holder
     // chart reads data/holder-history.json via fetchHolderHistoryNew() / snapshotsFor().
@@ -4188,6 +4193,7 @@
         const firstPoolMs=(_fp&&isFinite(_fp))?_fp:UFO_LAUNCH_FALLBACK_MS;
         let cancelled=false;
         setRealizedLoading(true);
+        const runLiveScan=()=>{
         if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;}
         /* Transient RPC failures should never reach the user as a button. Try up to three
            times, backing off, keeping the loading state up. Only a persistent failure gets
@@ -4228,6 +4234,32 @@
                 .then(r=>{if(!cancelled&&r)setPtgcByUfoLive(r);}).catch(()=>{});
             }
           }).catch(()=>{});
+        }; /* ---- end runLiveScan ---- */
+        /* Prebuilt hourly snapshot first (data/value-generated.json): if present, fresh, and
+           built for THIS UFO contract, use it and skip the live scans — both the Value Generated
+           and PTGC-burned-by-UFO boxes load instantly. On an explicit RETRY, or a missing / stale /
+           foreign-contract file, fall through to the live scan (identical to before). */
+        (async()=>{
+          if(feeRetry===0){
+            try{
+              const res=await fetch(VALUE_GEN_URL+'?t='+cacheBucket());
+              if(res.ok){
+                const j=await res.json();
+                const okFile=j&&j.meta&&j.delivered&&j.delivered.ok&&j.realizedFees&&j.realizedFees.ok
+                  &&(j.meta.ufoAddress||'').toLowerCase()===TOKENS.UFO.address.toLowerCase()
+                  &&j.meta.generatedAt&&(Date.now()-Date.parse(j.meta.generatedAt))<VALUE_GEN_STALE_MS;
+                if(okFile&&!cancelled){
+                  setRealizedFees(j.realizedFees);
+                  setDelivered(j.delivered);
+                  setRealizedLoading(false);
+                  fetchContractHealth(TOKENS.UFO.address).then(h=>{if(!cancelled)setHealth(h&&h.ok?h:null);}).catch(()=>{});
+                  return;   // snapshot served both boxes; no on-chain scan this load
+                }
+              }
+            }catch(e){/* fall through to the live scan */}
+          }
+          runLiveScan();
+        })();
         return()=>{cancelled=true;};
       },[token,data?.pairs,feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
