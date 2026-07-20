@@ -67,7 +67,7 @@
     //         fetched, and a secret dot in the bottom-right corner is the only way in.
     // false = LIVE. The maintenance screen and the secret dot both disappear and the page
     //         loads the calculators normally.
-    const CALCULATORS_MAINTENANCE=true;   // HIDDEN. Flip to false to make Calculators public.
+    const CALCULATORS_MAINTENANCE=false;   // LIVE. Page loads normally; maintenance screen + secret dot are gone.
 
     // UFO LP Staking contract — tracks share rates for LP provider rewards
     const UFO_LP_STAKING='0x5958b1f2113a81EE68b65C0c7102425D41b53bfd';
@@ -2142,7 +2142,7 @@
     };
 
     const CalculatorsTab=({token,cfg,data,burn,pls,theme,stakingData,volumeByPeriod,totalUFOShareRate,stakingPairs,onBack})=>{
-      const[calcTab,setCalcTab]=useState('xmult');
+      const[calcTab,setCalcTab]=useState('fresh'); // only the New Capital Simulator is live for now; others greyed out
       const isGold=cfg.color==='gold';
       const price=data?.price||0;
       const totalSupply=cfg.totalSupply;
@@ -2682,16 +2682,31 @@
             <div className="inline-flex gap-2 flex-wrap justify-center">
               {[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact'},{id:'growth',label:'10 Yr Projection',isNew:true,standout:true}].map(b=>{
                 const active=calcTab===b.id;
+                const live=b.id==='fresh';        // only the New Capital Simulator is live for now
+                const disabled=!live;             // the rest are greyed out until migrated, one at a time
                 return(
-                  <button key={b.id} onClick={()=>setCalcTab(b.id)} className={`relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110 ${b.standout && !active ? 'animate-grow-btn' : ''}`} style={{
+                  <button key={b.id} disabled={disabled} onClick={disabled?undefined:()=>setCalcTab(b.id)} title={disabled?'Coming soon':undefined} className={`relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all ${disabled?'cursor-not-allowed':'hover:brightness-110'} ${b.standout && !active && !disabled ? 'animate-grow-btn' : ''}`} style={{
                     padding:'10px 24px',
-                    background:active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:b.standout?'linear-gradient(135deg, rgba(212,175,55,0.20), rgba(124,252,0,0.22))':b.isNew?'rgba(124,252,0,0.06)':'rgba(255,255,255,0.03)',
-                    border:active?`1px solid ${glowColor}0.6)`:b.standout?'1px solid rgba(124,252,0,0.5)':b.isNew?'1px solid rgba(124,252,0,0.25)':'1px solid rgba(255,255,255,0.08)',
-                    boxShadow:active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:b.standout?undefined:b.isNew?'0 0 14px rgba(124,252,0,0.08)':'none',
-                    color:active?'white':b.standout?'white':b.isNew?'rgba(124,252,0,0.7)':'rgba(255,255,255,0.35)'
+                    background:disabled?'rgba(255,255,255,0.02)':active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:b.standout?'linear-gradient(135deg, rgba(212,175,55,0.20), rgba(124,252,0,0.22))':b.isNew?'rgba(124,252,0,0.06)':'rgba(255,255,255,0.03)',
+                    border:disabled?'1px solid rgba(255,255,255,0.06)':active?`1px solid ${glowColor}0.6)`:b.standout?'1px solid rgba(124,252,0,0.5)':b.isNew?'1px solid rgba(124,252,0,0.25)':'1px solid rgba(255,255,255,0.08)',
+                    boxShadow:disabled?'none':active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:b.standout?undefined:b.isNew?'0 0 14px rgba(124,252,0,0.08)':'none',
+                    color:disabled?'rgba(255,255,255,0.28)':active?'white':b.standout?'white':b.isNew?'rgba(124,252,0,0.7)':'rgba(255,255,255,0.35)',
+                    opacity:disabled?0.6:1
                   }}>
                     {b.label}
-                    {b.isNew&&!active&&(
+                    {disabled&&(
+                      <span style={{
+                        position:'absolute',top:'-1px',right:'-1px',
+                        background:'rgba(255,255,255,0.12)',
+                        color:'rgba(255,255,255,0.5)',
+                        fontSize:'9px',fontWeight:900,
+                        padding:'2px 6px',
+                        borderRadius:'0 10px 0 6px',
+                        letterSpacing:'0.08em',lineHeight:1.4,
+                        fontFamily:"'Orbitron',monospace"
+                      }}>SOON</span>
+                    )}
+                    {!disabled&&b.isNew&&!active&&(
                       <span style={{
                         position:'absolute',top:'-1px',right:'-1px',
                         background: b.standout ? 'linear-gradient(135deg,#FFD700,#7CFC00)' : 'linear-gradient(135deg,#7CFC00,#4ade80)',
