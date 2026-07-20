@@ -3273,7 +3273,7 @@
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
-            onClick={()=>onSelect('UFO')}
+            onClick={()=>{try{sessionStorage.setItem('ufo_operator','1')}catch(e){}onSelect('UFO')}}
             aria-label="."
             title=""
             className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none"
@@ -4179,7 +4179,7 @@
     };
 
 
-    const Dashboard=({token,onBack,onSwitch,onAffiliates})=>{
+    const Dashboard=({token,onBack,onSwitch,onAffiliates,routeTab='dashboard',onTabRoute})=>{
       const[showMaintNotice,setShowMaintNotice]=useState(false); // MAINT-MIGRATION
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const theme={text:isGold?'text-[#F0DC78]':'text-[#7CFC00]',border:isGold?'border-[#D4AF37]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D4AF37]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
@@ -4221,7 +4221,21 @@
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
       const _initTab=(()=>{try{const t=localStorage.getItem('ptgc_nav_tab');if(t&&['dashboard','kpi','social','calculators'].includes(t)){localStorage.removeItem('ptgc_nav_tab');if(t==='calculators'){window.location.href='./calculators.html';return'dashboard'}return t}}catch(e){}return'dashboard'})();
-      const[activeTab,setActiveTab]=useState(_initTab);
+      /* ROUTING: the hash (routeTab) wins over the legacy localStorage handoff when it
+         names a specific tab; otherwise the handoff value seeds the initial tab and is
+         pushed back into the hash by the sync effect below. */
+      const[activeTab,setActiveTab]=useState(routeTab!=='dashboard'?routeTab:_initTab);
+      /* User tab clicks go through here so the hash always mirrors the visible tab —
+         that's what makes tabs deep-linkable and the back button step between them. */
+      const gotoTab=(t)=>{setActiveTab(t);if(onTabRoute&&['dashboard','kpi','social'].includes(t))onTabRoute(t);};
+      const _tabMounted=useRef(false);
+      useEffect(()=>{ // follow back/forward navigation: route changed → reflect it
+        if(!_tabMounted.current){_tabMounted.current=true;return;}
+        if(routeTab!==activeTab)setActiveTab(routeTab);
+      },[routeTab]);
+      useEffect(()=>{ // mount: if the legacy handoff picked a tab the hash doesn't show, sync the hash
+        if(activeTab!==routeTab&&onTabRoute&&['kpi','social'].includes(activeTab))onTabRoute(activeTab);
+      },[]);
       const[socialReturn,setSocialReturn]=useState(false);
       const[socialPreview,setSocialPreview]=useState(false); // MAINT-MIGRATION: operator-only preview of gated Socials (revealed via faint dot; delete with the dot + gate edits to revert)
       const[showRHCoresShareModal,setShowRHCoresShareModal]=useState(false);
@@ -4253,7 +4267,7 @@
       const closeModalAndReturn=(setModalFn)=>{
         setModalFn(false);
         if(socialReturn){
-          setActiveTab('social');
+          gotoTab('social');
           setSocialReturn(false);
         }
       };
@@ -5230,15 +5244,15 @@
 
               {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator. */}
               <div className="flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-wrap overflow-x-auto">
-                <button onClick={()=>setActiveTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
+                <button onClick={()=>gotoTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
                   Dashboard
                   {activeTab==='dashboard' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
-                <button onClick={()=>setActiveTab('kpi')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55 hover:text-white'}`}>
+                <button onClick={()=>gotoTab('kpi')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55 hover:text-white'}`}>
                   KPI Report
                   {activeTab==='kpi' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
-                <button onClick={()=>setActiveTab('social')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='social'?theme.text:'text-white/55 hover:text-white'}`}>
+                <button onClick={()=>gotoTab('social')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='social'?theme.text:'text-white/55 hover:text-white'}`}>
                   Socials
                   {activeTab==='social' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
@@ -6016,7 +6030,7 @@
             })();
             return(
               <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>setActiveTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>gotoTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
               </div>
             );
           })())}
@@ -6210,7 +6224,7 @@
               </div>
               
               <div className="mt-8 text-center">
-                <button onClick={()=>setActiveTab('dashboard')} className="px-6 py-2 rounded-lg border border-white/20 text-white/60 hover:text-white hover:border-white/40 transition-all">
+                <button onClick={()=>gotoTab('dashboard')} className="px-6 py-2 rounded-lg border border-white/20 text-white/60 hover:text-white hover:border-white/40 transition-all">
                   ← Back to Dashboard
                 </button>
               </div>
@@ -7306,16 +7320,16 @@
           
           {/* Combined KPI Modal - triggers Twitter mode */}
           {showCombinedKPI&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}}>
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
               <button 
-                onClick={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} 
+                onClick={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} 
                 className="fixed top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600"
               >
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){setActiveTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
               </div>
             </div>
           )}
@@ -9991,21 +10005,65 @@
       );
     };
     
+    /* ===== HASH ROUTING =====
+     * Routes:  #/            → home
+     *          #/ptgc        → PTGC dashboard    #/ptgc/kpi    #/ptgc/social
+     *          #/ufo         → UFO dashboard     #/ufo/kpi     #/ufo/social
+     *          #/affiliates  → affiliates page
+     * The hash is the single source of truth for view/token/tab. Every navigation
+     * assigns location.hash (which creates a history entry, so the browser back/
+     * forward buttons work), and one hashchange listener maps the hash back into
+     * state. Legacy ?token= links — still emitted by calculators.html and
+     * portfolio.html to return here — are converted to the equivalent hash once at
+     * boot, so the sibling pages and any old bookmarks keep working unchanged. */
+    const routeFromHash=()=>{
+      const h=(window.location.hash||'').replace(/^#\/?/,'').toLowerCase();
+      const[seg1,seg2]=h.split('/');
+      if(seg1==='affiliates')return{view:'affiliates',token:null,tab:'dashboard'};
+      if(seg1==='ptgc'||seg1==='ufo'){
+        const tok=seg1.toUpperCase();
+        /* MAINT-MIGRATION: while UFO is hidden a shared #/ufo deep link must not leak
+           the dashboard. The secret dot sets a session flag before navigating so the
+           operator still gets in. This guard is inert while UFO_MAINTENANCE is false. */
+        if(tok==='UFO'&&UFO_MAINTENANCE){
+          let op=false;try{op=sessionStorage.getItem('ufo_operator')==='1'}catch(e){}
+          if(!op)return{view:'home',token:null,tab:'dashboard'};
+        }
+        return{view:'dashboard',token:tok,tab:(seg2==='kpi'||seg2==='social')?seg2:'dashboard'};
+      }
+      return{view:'home',token:null,tab:'dashboard'};
+    };
+    const hashForRoute=(view,token,tab)=>{
+      if(view==='affiliates')return'#/affiliates';
+      if(view==='dashboard'&&token)return'#/'+token.toLowerCase()+((tab&&tab!=='dashboard')?('/'+tab):'');
+      return'#/';
+    };
+
     const App=()=>{
-      const[view,setView]=useState(()=>{
+      const[route,setRoute]=useState(()=>{
+        /* Legacy handoff: calculators.html / portfolio.html send the user back with
+           ?token=X (+ optional localStorage view flag). Convert it to a hash once,
+           then the hash rules from here on. */
         const p=new URLSearchParams(window.location.search).get('token');
         if(p==='PTGC'||p==='UFO'){
-          try{const v=localStorage.getItem('ptgc_nav_view');if(v==='affiliates'){localStorage.removeItem('ptgc_nav_view');window.history.replaceState({},'',window.location.pathname);return'affiliates'}}catch(e){}
-          window.history.replaceState({},'',window.location.pathname);return'dashboard'
+          let target={view:'dashboard',token:p,tab:'dashboard'};
+          try{const v=localStorage.getItem('ptgc_nav_view');if(v==='affiliates'){localStorage.removeItem('ptgc_nav_view');target={view:'affiliates',token:null,tab:'dashboard'};}}catch(e){}
+          window.history.replaceState({},'',window.location.pathname+hashForRoute(target.view,target.token,target.tab));
+          return target;
         }
-        return'home';
-      });
-      const[token,setToken]=useState(()=>{
-        const p=new URLSearchParams(window.location.search).get('token');
-        if(p==='PTGC'||p==='UFO')return p;
-        return null;
+        return routeFromHash();
       });
       const[lastToken,setLastToken]=useState(null);
+      useEffect(()=>{
+        const onHash=()=>setRoute(routeFromHash());
+        window.addEventListener('hashchange',onHash);
+        return()=>window.removeEventListener('hashchange',onHash);
+      },[]);
+      const navigate=(view,token,tab)=>{
+        const h=hashForRoute(view,token,tab);
+        if(window.location.hash===h){setRoute(routeFromHash());return;}
+        window.location.hash=h;   // fires hashchange → setRoute
+      };
       const[disclaimerAccepted,setDisclaimerAccepted]=useState(()=>{
         try{return localStorage.getItem('ptgc_ufo_disclaimer_accepted')==='true';}catch(e){return false;}
       });
@@ -10019,15 +10077,20 @@
         return<DisclaimerModal onAccept={handleAcceptDisclaimer}/>;
       }
       
+      const{view,token,tab}=route;
       if(view==='affiliates')return(
-        <AffiliatesPage onBack={()=>{const t=token||lastToken;if(t){setToken(t);setView('dashboard');try{localStorage.setItem('ptgc_last_token',t)}catch(e){}}else{setView('home')}}}/>
+        <AffiliatesPage onBack={()=>{const t=lastToken;if(t){try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}else{navigate('home')}}}/>
       );
       
       if(view==='dashboard'&&token)return(
-          <Dashboard token={token} onBack={()=>{setView('home');setToken(null);try{localStorage.removeItem('ptgc_last_token')}catch(e){}}} onSwitch={(t)=>{setToken(t);try{localStorage.setItem('ptgc_last_token',t)}catch(e){}}} onAffiliates={()=>{setLastToken(token);setView('affiliates')}}/>
+          <Dashboard token={token} routeTab={tab}
+            onTabRoute={(t)=>navigate('dashboard',token,t)}
+            onBack={()=>{try{localStorage.removeItem('ptgc_last_token')}catch(e){}navigate('home')}}
+            onSwitch={(t)=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,tab)}}
+            onAffiliates={()=>{setLastToken(token);navigate('affiliates')}}/>
       );
       return(
-          <Home onSelect={t=>{setToken(t);setView('dashboard');try{localStorage.setItem('ptgc_last_token',t)}catch(e){}}}/>
+          <Home onSelect={t=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}}/>
       );
     };
     
