@@ -1551,11 +1551,11 @@
       useEffect(()=>{const id=setInterval(()=>tick(t=>t+1),10000);return()=>clearInterval(id)},[]);
       const ageSec=lastUpdate?Math.max(0,Math.round((Date.now()-lastUpdate.getTime())/1000)):null;
       const ageTxt=ageSec==null?'\u2014':ageSec<10?'just now':ageSec<60?`${ageSec}s ago`:ageSec<3600?`${Math.floor(ageSec/60)}m ago`:`${Math.floor(ageSec/3600)}h ago`;
-      const state=error?'err':(ageSec!=null&&ageSec>150)?'stale':'ok';
+      const state=error?'err':(ageSec!=null&&ageSec>450)?'stale':'ok'; // amber = a 5-min refresh cycle was missed
       const dot=state==='err'?'#f87171':state==='stale'?'#fbbf24':'#34d399';
       const txt=state==='err'?'text-red-300/80':state==='stale'?'text-amber-300/80':'text-white/40';
       return(
-        <div className={`inline-flex items-center gap-1.5 text-[11px] ${txt} ${className}`} title={error?'Last refresh failed — data may be stale. Click to retry.':'Live data auto-refreshes every 60s'}>
+        <div className={`inline-flex items-center gap-1.5 text-[11px] ${txt} ${className}`} title={error?'Last refresh failed — data may be stale. Click to retry.':'Live data auto-refreshes every 5 minutes'}>
           <span className="w-1.5 h-1.5 rounded-full" style={{background:dot,boxShadow:refreshing?`0 0 6px ${dot}`:'none'}}></span>
           <span className="tabular-nums whitespace-nowrap">{error?'refresh failed':'Updated '+ageTxt}</span>
           {onRefresh&&<button onClick={onRefresh} disabled={refreshing} aria-label="Refresh data now" className={`hover:text-white transition-colors disabled:opacity-50 ${refreshing?'animate-spin':''}`} style={{lineHeight:1}}>
@@ -3175,7 +3175,7 @@
         ]);
         setData({PTGC:p,UFO:u});setPls(plsPrice);setLastUpdate(new Date());setLoading(false)};load()},[]);
       /* AUTO-REFRESH: same quick-path pattern as the Dashboard — cheap live fetches every
-         60s + on tab re-focus; a failed refresh keeps the last good numbers on screen. */
+         5 minutes + on tab re-focus; a failed refresh keeps the last good numbers on screen. */
       const refreshBusyRef=useRef(false);
       const lastUpdateRef=useRef(Date.now());
       useEffect(()=>{lastUpdateRef.current=lastUpdate?.getTime?.()||Date.now()},[lastUpdate]);
@@ -3195,8 +3195,8 @@
       };
       const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
       useEffect(()=>{
-        const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},60000);
-        const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>60000)quickRefreshRef.current();};
+        const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},300000); // 5 min — per site owner's preference
+        const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>300000)quickRefreshRef.current();};
         document.addEventListener('visibilitychange',onVis);
         return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
       },[]);
@@ -4993,8 +4993,8 @@
       /* ===== AUTO-REFRESH (quick path) =====
        * The full load() above runs log scans and cache comparisons — far too heavy to
        * repeat. This quick path re-fetches only the cheap live numbers (DexScreener,
-       * holder counter, burn balance, PLS price) every 60s, plus on tab re-focus after
-       * >60s away. Failures NEVER overwrite good data: a null fetchDex keeps the last
+       * holder counter, burn balance, PLS price) every 5 minutes, plus on tab re-focus
+       * after >5 min away. Failures NEVER overwrite good data: a null fetchDex keeps the last
        * result on screen and flips the freshness badge to "refresh failed" instead. */
       const[refreshing,setRefreshing]=useState(false);
       const[refreshError,setRefreshError]=useState(false);
@@ -5020,8 +5020,8 @@
       };
       const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
       useEffect(()=>{
-        const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},60000);
-        const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>60000)quickRefreshRef.current();};
+        const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},300000); // 5 min — per site owner's preference
+        const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>300000)quickRefreshRef.current();};
         document.addEventListener('visibilitychange',onVis);
         return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
       },[token]);
