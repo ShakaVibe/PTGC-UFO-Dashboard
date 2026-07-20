@@ -1543,6 +1543,27 @@
         </span>
       );
     };
+    /* Data-freshness pill: "Updated Xs ago" + a manual refresh button. Ticks every 10s.
+       Turns amber once the data is older than ~2.5 minutes (i.e. a refresh cycle was
+       missed) and red when the last refresh attempt failed. Shared by Home + Dashboard. */
+    const FreshnessBadge=({lastUpdate,refreshing,error,onRefresh,className=''})=>{
+      const[,tick]=useState(0);
+      useEffect(()=>{const id=setInterval(()=>tick(t=>t+1),10000);return()=>clearInterval(id)},[]);
+      const ageSec=lastUpdate?Math.max(0,Math.round((Date.now()-lastUpdate.getTime())/1000)):null;
+      const ageTxt=ageSec==null?'\u2014':ageSec<10?'just now':ageSec<60?`${ageSec}s ago`:ageSec<3600?`${Math.floor(ageSec/60)}m ago`:`${Math.floor(ageSec/3600)}h ago`;
+      const state=error?'err':(ageSec!=null&&ageSec>150)?'stale':'ok';
+      const dot=state==='err'?'#f87171':state==='stale'?'#fbbf24':'#34d399';
+      const txt=state==='err'?'text-red-300/80':state==='stale'?'text-amber-300/80':'text-white/40';
+      return(
+        <div className={`inline-flex items-center gap-1.5 text-[11px] ${txt} ${className}`} title={error?'Last refresh failed — data may be stale. Click to retry.':'Live data auto-refreshes every 60s'}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{background:dot,boxShadow:refreshing?`0 0 6px ${dot}`:'none'}}></span>
+          <span className="tabular-nums whitespace-nowrap">{error?'refresh failed':'Updated '+ageTxt}</span>
+          {onRefresh&&<button onClick={onRefresh} disabled={refreshing} aria-label="Refresh data now" className={`hover:text-white transition-colors disabled:opacity-50 ${refreshing?'animate-spin':''}`} style={{lineHeight:1}}>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0119 7.5M18.5 15A7.5 7.5 0 015 16.5"/></svg>
+          </button>}
+        </div>
+      );
+    };
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     // Get highest tier creature with count for period burns
@@ -3134,6 +3155,9 @@
       const[showMaint,setShowMaint]=useState(false); // MAINT-MIGRATION
       const[pls,setPls]=useState(0);
       const[loading,setLoading]=useState(true);
+      const[lastUpdate,setLastUpdate]=useState(null);
+      const[refreshing,setRefreshing]=useState(false);
+      const[refreshError,setRefreshError]=useState(false);
       useEffect(()=>{const load=async()=>{
         // MAINT-MIGRATION: while hidden, don't even request UFO data — a masked card
         // with a visible network call in devtools would still leak the numbers.
@@ -3149,7 +3173,33 @@
           UFO_MAINTENANCE?Promise.resolve(null):fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair),
           fetchPLS()
         ]);
-        setData({PTGC:p,UFO:u});setPls(plsPrice);setLoading(false)};load()},[]);
+        setData({PTGC:p,UFO:u});setPls(plsPrice);setLastUpdate(new Date());setLoading(false)};load()},[]);
+      /* AUTO-REFRESH: same quick-path pattern as the Dashboard — cheap live fetches every
+         60s + on tab re-focus; a failed refresh keeps the last good numbers on screen. */
+      const refreshBusyRef=useRef(false);
+      const lastUpdateRef=useRef(Date.now());
+      useEffect(()=>{lastUpdateRef.current=lastUpdate?.getTime?.()||Date.now()},[lastUpdate]);
+      const quickRefresh=async()=>{
+        if(refreshBusyRef.current)return;
+        refreshBusyRef.current=true;setRefreshing(true);
+        try{
+          const[p,u,plsPrice]=await Promise.all([
+            fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair).catch(()=>null),
+            UFO_MAINTENANCE?Promise.resolve(null):fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair).catch(()=>null),
+            fetchPLS().catch(()=>0)
+          ]);
+          if(p||u){setData(prev=>({PTGC:p||prev.PTGC,UFO:u||prev.UFO}));setLastUpdate(new Date());setRefreshError(false);}
+          else setRefreshError(true);
+          if(plsPrice>0)setPls(plsPrice);
+        }finally{refreshBusyRef.current=false;setRefreshing(false);}
+      };
+      const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
+      useEffect(()=>{
+        const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},60000);
+        const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>60000)quickRefreshRef.current();};
+        document.addEventListener('visibilitychange',onVis);
+        return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
+      },[]);
       const Card=({token,d})=>{
         const cfg=TOKENS[token],isGold=cfg.color==='gold';
         const masked=(token==='UFO'&&UFO_MAINTENANCE); // MAINT-MIGRATION: hide all live figures
@@ -3219,7 +3269,7 @@
       return(
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
-          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl w-full">{loading?<><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/></>}</div></div>
+          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl w-full">{loading?<><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div><div className="animate-pulse bg-white/10 rounded-2xl h-32"></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/><div className="flex justify-center"><FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/></div></>}</div></div>
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
@@ -4939,6 +4989,43 @@
         };
         load();
       },[token]);
+
+      /* ===== AUTO-REFRESH (quick path) =====
+       * The full load() above runs log scans and cache comparisons — far too heavy to
+       * repeat. This quick path re-fetches only the cheap live numbers (DexScreener,
+       * holder counter, burn balance, PLS price) every 60s, plus on tab re-focus after
+       * >60s away. Failures NEVER overwrite good data: a null fetchDex keeps the last
+       * result on screen and flips the freshness badge to "refresh failed" instead. */
+      const[refreshing,setRefreshing]=useState(false);
+      const[refreshError,setRefreshError]=useState(false);
+      const refreshBusyRef=useRef(false);
+      const lastUpdateRef=useRef(Date.now());
+      useEffect(()=>{lastUpdateRef.current=lastUpdate?.getTime?.()||Date.now()},[lastUpdate]);
+      const quickRefresh=async()=>{
+        if(refreshBusyRef.current)return;
+        refreshBusyRef.current=true;setRefreshing(true);
+        try{
+          const[d,h,b,p]=await Promise.all([
+            fetchDex(cfg.address,cfg.mainPair).catch(()=>null),
+            fetchHolders(cfg.address).catch(()=>null),
+            fetchBurn(cfg.address,cfg.decimals).catch(()=>null),
+            fetchPLS().catch(()=>0)
+          ]);
+          if(d){setData(d);setLastUpdate(new Date());setRefreshError(false);}
+          else setRefreshError(true);
+          if(h!=null)setHolders(h);
+          if(b&&b.supply>0)setBurn(b);
+          if(p>0)setPls(p);
+        }finally{refreshBusyRef.current=false;setRefreshing(false);}
+      };
+      const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
+      useEffect(()=>{
+        const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},60000);
+        const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>60000)quickRefreshRef.current();};
+        document.addEventListener('visibilitychange',onVis);
+        return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
+      },[token]);
+      /* ===== END AUTO-REFRESH ===== */
       
       const sorted=useMemo(()=>{if(!data?.pairs)return[];return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':av=a.vol;bv=b.vol;break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=a.priceChange?.h24||0;bv=b.priceChange?.h24||0;break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir]);
       
@@ -5161,6 +5248,7 @@
                   <span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span>
                 </a>
                 <button onClick={onAffiliates} className="px-3.5 py-3 text-sm font-semibold text-purple-300 hover:text-purple-200 transition-colors shrink-0">Affiliates</button>
+                <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()} className="ml-auto shrink-0 pl-2"/>
               </div>
 
             </div>
