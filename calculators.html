@@ -58,6 +58,14 @@
       UFO: 0.000113     // from Moon Math calculator in portfolio.html
     };
     
+    // ===== CALCULATORS-MAINTENANCE flag =====
+    // true  = Calculators is hidden from the public: visiting this page shows a full-screen
+    //         "Under Maintenance" notice instead of the calculators, no calculator data is
+    //         fetched, and a secret dot in the bottom-right corner is the only way in.
+    // false = LIVE. The maintenance screen and the secret dot both disappear and the page
+    //         loads the calculators normally.
+    const CALCULATORS_MAINTENANCE=true;   // HIDDEN. Flip to false to make Calculators public.
+
     // UFO LP Staking contract — tracks share rates for LP provider rewards
     const UFO_LP_STAKING='0x5958b1f2113a81EE68b65C0c7102425D41b53bfd';
     
@@ -4431,6 +4439,32 @@
       );
     };
 
+    // ===== CALCULATORS-MAINTENANCE: full-screen notice + secret entry dot.
+    //       Rendered by CalculatorsPage while CALCULATORS_MAINTENANCE is true and the
+    //       page hasn't been revealed. The dot (bottom-right) flips reveal on. =====
+    const CALC_MAINT_MSG="This section is temporarily under maintenance while we finalize some updates. Please check back soon.";
+    const CalcMaintenance=({onReveal})=>(
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-4 relative">
+        <div className="max-w-md w-full rounded-2xl border border-yellow-400/30 bg-[#141414] p-8 sm:p-12 text-center" style={{boxShadow:'0 0 40px rgba(234,179,8,0.1)'}}>
+          <div className="text-5xl sm:text-6xl mb-4">🛠️</div>
+          <h2 className="font-orbitron text-2xl sm:text-3xl font-bold text-yellow-300 mb-2">Calculators — Under Maintenance</h2>
+          <p className="text-white/60 text-xs uppercase tracking-[0.2em] mb-5">Updates in Progress</p>
+          <p className="text-white/75 text-sm sm:text-base leading-relaxed mb-7">{CALC_MAINT_MSG}</p>
+          <a href="./index.html" className="inline-block px-6 py-2.5 rounded-xl bg-yellow-500/20 border border-yellow-400/40 text-yellow-200 font-semibold hover:bg-yellow-500/30 transition-all">Back to Dashboard</a>
+        </div>
+        {/* ===== SECRET-ACCESS: hidden entry to the calculators during maintenance.
+             Controlled by CALCULATORS_MAINTENANCE — set that to false and this disappears. ===== */}
+        <button
+          onClick={onReveal}
+          aria-label="."
+          title=""
+          className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none"
+          style={{background:'#7CFC00',opacity:0.18,border:'none',padding:0,lineHeight:0}}
+        />
+        {/* ===== END SECRET-ACCESS ===== */}
+      </div>
+    );
+
     // ===== CALCULATORS PAGE WRAPPER =====
     const CalculatorsPage=()=>{
       const[token,setToken]=useState(()=>{
@@ -4452,8 +4486,11 @@
       const[stakingPairs,setStakingPairs]=useState([]); // pair addresses from staking contract
       const[loading,setLoading]=useState(true);
       const[copied,setCopied]=useState(false);
+      const[revealed,setRevealed]=useState(false); // CALCULATORS-MAINTENANCE: flipped by the secret dot
+      const gated=CALCULATORS_MAINTENANCE&&!revealed; // CALCULATORS-MAINTENANCE
       
       useEffect(()=>{
+        if(gated)return; // CALCULATORS-MAINTENANCE: don't fetch anything while hidden
         setData(null);
         setBurn({total:0,pct:0,supply:0});
         setLoading(true);
@@ -4512,7 +4549,7 @@
           }
         };
         load();
-      },[token]);
+      },[token,gated]);
       
       const goBack=()=>{
         try{localStorage.setItem('ptgc_last_token',token)}catch(e){}
@@ -4551,6 +4588,10 @@
       const xToATH=data?.price>0&&athPrice>data.price?(athPrice/data.price).toFixed(1):'\u2014';
       const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';
       const hdrFmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};
+      
+      if(gated){ // CALCULATORS-MAINTENANCE: hidden — show the notice + secret dot, nothing else
+        return <CalcMaintenance onReveal={()=>setRevealed(true)}/>;
+      }
       
       if(loading){
         return(
