@@ -1954,6 +1954,28 @@
        '—' instead, which is honest. A hardcoded fallback here silently displayed a wrong
        PLS ratio whenever DexScreener hiccuped. */
     const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0}catch{return 0}};
+    /* JANK GUARD for auto-refresh: merge a fresh fetchDex result into the previous one,
+       PRESERVING OBJECT IDENTITY wherever nothing actually changed.
+       Why it matters: setData(freshObject) hands React a new `pairs` array every 5 min
+       even when its contents are byte-identical. Effects and memos that depend on
+       data.pairs (the realized-fee scan, the sorted LP table, launch-date derivations)
+       see "changed" and re-run — the fee scan alone fires several progress state
+       updates, which is the visible 4-5x page jerk on each refresh.
+       Rules: identical scalars + identical pair set → return prev untouched (zero
+       re-render). Changed scalars but same pair set → new object that REUSES prev.pairs,
+       so pairs-dependent work stays quiet. Pair set actually changed → full update. */
+    const mergeDex=(prev,next)=>{
+      if(!next)return prev;
+      if(!prev)return next;
+      const sig=a=>(a?.pairs||[]).map(p=>p.pairAddress+':'+p.liq+':'+p.vol).join('|');
+      const samePairs=sig(prev)===sig(next);
+      const sameScalars=prev.price===next.price&&prev.change===next.change&&prev.mcap===next.mcap
+        &&prev.liq===next.liq&&prev.vol===next.vol&&prev.buys===next.buys&&prev.sells===next.sells
+        &&prev.tokensInLP===next.tokensInLP
+        &&JSON.stringify(prev.priceChange)===JSON.stringify(next.priceChange);
+      if(sameScalars&&samePairs)return prev;
+      return samePairs?{...next,pairs:prev.pairs}:next;
+    };
 
     // ===== CoinGecko Pre-fetched Data (from GitHub) =====
     const COINGECKO_DATA_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/coingecko-data.json';
@@ -3198,9 +3220,9 @@
             UFO_MAINTENANCE?Promise.resolve(null):fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair).catch(()=>null),
             fetchPLS().catch(()=>0)
           ]);
-          if(p||u){setData(prev=>({PTGC:p||prev.PTGC,UFO:u||prev.UFO}));setLastUpdate(new Date());setRefreshError(false);}
+          if(p||u){setData(prev=>({PTGC:mergeDex(prev.PTGC,p),UFO:mergeDex(prev.UFO,u)}));setLastUpdate(new Date());setRefreshError(false);}
           else setRefreshError(true);
-          if(plsPrice>0)setPls(plsPrice);
+          if(plsPrice>0)setPls(prev=>plsPrice===prev?prev:plsPrice);
         }finally{refreshBusyRef.current=false;setRefreshing(false);}
       };
       const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
@@ -4380,7 +4402,13 @@
           runLiveScan();
         })();
         return()=>{cancelled=true;};
-      },[token,data?.pairs,feeRetry]);
+      /* Depend on a SIGNATURE of the pair set, not the array identity: the scan only
+         reads pair addresses + creation timestamps, and auto-refresh delivers a new
+         array object every 5 min even when the set is unchanged. Keying on identity
+         re-ran the whole fee scan after every refresh (the main source of the visible
+         refresh jank); keying on the signature re-runs it only when a pair is actually
+         added or removed. */
+      },[token,(data?.pairs||[]).map(p=>p.pairAddress+':'+(p.pairCreatedAt||0)).join('|'),feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
@@ -5035,11 +5063,12 @@
             fetchBurn(cfg.address,cfg.decimals).catch(()=>null),
             fetchPLS().catch(()=>0)
           ]);
-          if(d){setData(d);setLastUpdate(new Date());setRefreshError(false);}
+          if(d){setData(prev=>mergeDex(prev,d));setLastUpdate(new Date());setRefreshError(false);}
           else setRefreshError(true);
-          if(h!=null)setHolders(h);
-          if(b&&b.supply>0)setBurn(b);
-          if(p>0)setPls(p);
+          // No-op guards: identical values return the previous reference → no re-render.
+          if(h!=null)setHolders(prev=>h===prev?prev:h);
+          if(b&&b.supply>0)setBurn(prev=>(prev&&prev.burned===b.burned&&prev.supply===b.supply)?prev:b);
+          if(p>0)setPls(prev=>p===prev?prev:p);
         }finally{refreshBusyRef.current=false;setRefreshing(false);}
       };
       const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
