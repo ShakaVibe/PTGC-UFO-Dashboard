@@ -4268,6 +4268,20 @@
       useEffect(()=>{ // mount: if the legacy handoff picked a tab the hash doesn't show, sync the hash
         if(activeTab!==routeTab&&onTabRoute&&['kpi','social'].includes(activeTab))onTabRoute(activeTab);
       },[]);
+      /* MOBILE HEADER (Option A): the slim bar shows its mini identity line (logo ·
+         token · price) only after the full header has scrolled out of view, so
+         nothing is duplicated while the user is at the top of the page. */
+      const[mobScrolled,setMobScrolled]=useState(false);
+      useEffect(()=>{
+        const on=()=>setMobScrolled(window.scrollY>140);
+        on();window.addEventListener('scroll',on,{passive:true});
+        return()=>window.removeEventListener('scroll',on);
+      },[]);
+      const mobNavRef=useRef(null);
+      useEffect(()=>{ // keep the active tab visible in the swipeable row
+        const el=mobNavRef.current&&mobNavRef.current.querySelector('[data-active="1"]');
+        if(el&&el.scrollIntoView)try{el.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}
+      },[activeTab]);
       const[socialReturn,setSocialReturn]=useState(false);
       const[socialPreview,setSocialPreview]=useState(false); // MAINT-MIGRATION: operator-only preview of gated Socials (revealed via faint dot; delete with the dot + gate edits to revert)
       const[showRHCoresShareModal,setShowRHCoresShareModal]=useState(false);
@@ -5188,7 +5202,12 @@
       return(
         <div className="min-h-screen">
           
-          <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
+          {/* ===== HEADER (Option A mobile layout) =====
+              Desktop/tablet (sm+): this header is sticky, exactly as before.
+              Phones: it is NOT sticky — the identity block, Buy/Switch, and ratio
+              stats scroll away with the page, and the slim bar below (sm:hidden)
+              is what stays pinned. */}
+          <header className="sm:sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
 
               {/* Row 1: ONE continuous data strip — packed, no justify-between. Stats use flex-1 to absorb slack. */}
@@ -5281,8 +5300,9 @@
                 </div>
               </div>
 
-              {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator. */}
-              <div className="flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-wrap overflow-x-auto">
+              {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator.
+                  Hidden on phones — the mobile slim bar below renders the same tabs as a single swipeable row. */}
+              <div className="hidden sm:flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-wrap overflow-x-auto">
                 <button onClick={()=>gotoTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
                   Dashboard
                   {activeTab==='dashboard' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
@@ -5306,6 +5326,35 @@
 
             </div>
           </header>
+
+          {/* ===== MOBILE SLIM STICKY BAR (Option A) =====
+              Phones only (sm:hidden). This is the ONLY pinned chrome on mobile:
+              a single swipeable row of the same tabs, plus a mini identity line
+              (logo · token · live price · %) that fades in once the full header
+              has scrolled away. ~90px pinned instead of ~half the screen. */}
+          <div className="sm:hidden sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
+            {mobScrolled&&(
+              <div className="flex items-center gap-2 px-4 pt-2 pb-1">
+                <img src={cfg.logo} alt={token} className="w-6 h-6"/>
+                <span className={`font-orbitron text-sm font-bold tracking-wide ${isGold?'metallic-gold':theme.text}`}>{token}</span>
+                <div className="ml-auto flex items-baseline gap-2">
+                  <Price p={data?.price} c={`font-bold tabular-nums text-sm ${isGold?'metallic-gold':theme.text}`}/>
+                  <span className={`text-xs font-bold tabular-nums ${priceUp?'text-emerald-400':'text-rose-400'}`}>{priceUp?'\u2191':'\u2193'}{Math.abs(data?.change||0).toFixed(2)}%</span>
+                </div>
+              </div>
+            )}
+            <div ref={mobNavRef} className="flex items-center gap-0.5 px-2 overflow-x-auto" style={{scrollbarWidth:'none',WebkitOverflowScrolling:'touch'}}>
+              {/* Same destinations as the desktop Row 2 nav above — keep the two lists in sync. */}
+              <button data-active={activeTab==='dashboard'?'1':'0'} onClick={()=>gotoTab('dashboard')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55'}`}>Dashboard{activeTab==='dashboard'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
+              <button data-active={activeTab==='kpi'?'1':'0'} onClick={()=>gotoTab('kpi')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55'}`}>KPI Report{activeTab==='kpi'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
+              <button data-active={activeTab==='social'?'1':'0'} onClick={()=>gotoTab('social')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='social'?theme.text:'text-white/55'}`}>Socials{activeTab==='social'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
+              <a href={`./calculators.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Calculators</a>
+              <a href="./charts.html" className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Charts</a>
+              <a href={`portfolio.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0"><span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
+              <button onClick={onAffiliates} className="px-3 py-2.5 text-[13px] font-semibold text-purple-300 whitespace-nowrap shrink-0">Affiliates</button>
+              <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()} className="shrink-0 pl-2 pr-2"/>
+            </div>
+          </div>
           
           {/* Dashboard Tab Content */}
           {activeTab==='dashboard'&&(<>
