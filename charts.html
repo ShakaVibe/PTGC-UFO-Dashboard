@@ -678,7 +678,14 @@ const dexLogo = a => `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.t
 
 const TOKENS = {
   PTGC: { name: 'PTGC', sym: 'PTGC', color: '#D4AF37', pairAddr: '0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11', dexAddr: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', logo: dexLogo('0x94534EeEe131840b1c0F61847c572228bdfDDE93'), on: true, source: 'moralis' },
-  UFO: { name: 'UFO', sym: 'UFO', color: '#7CFC00', pairAddr: '0xE221e6fC30e5787F0d551f980B4da1055D832A03', dexAddr: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6', logo: '07_Ufo_transparent.png' /* hard-coded: new UFO DexScreener image not live yet; same logo as before */, on: true, source: 'moralis' },
+  UFO: { name: 'UFO', sym: 'UFO', color: '#7CFC00', pairAddr: '0xE221e6fC30e5787F0d551f980B4da1055D832A03', dexAddr: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6', logo: '07_Ufo_transparent.png' /* hard-coded: new UFO DexScreener image not live yet; same logo as before */, on: true, source: 'moralis',
+    /* MIGRATION: new UFO/WPLS pool was created 2026-07-09 14:26 UTC. The first hours of
+       trading are a launch wick (~$0.0000069 → ~$0.0000037) that poisons the "% change
+       from start" baseline on any range that reaches back to pool creation (14D showed
+       -35% while 7D showed +36% for the same token). minTs floors every series at
+       2026-07-10 00:00 UTC so the baseline starts from stable trading. Data older than
+       this is real new-token data — just price discovery, not the old contract. */
+    minTs: Date.UTC(2026, 6, 10) },
   WPLS: { name: 'WPLS', sym: 'WPLS', color: '#E84DE4', dexAddr: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', logo: dexLogo('0xA1077a294dDE1B09bB078844df40758a5D0f9a27'), on: true, source: 'moralis' },
   PLSX: { name: 'PulseX', sym: 'PLSX', color: '#E63946', pairAddr: '0x1b45b9148791d3a104184Cd5DFE5CE57193a3ee9', dexAddr: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', logo: dexLogo('0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'), on: false, source: 'moralis' },
   HEX: { name: 'HEX', sym: 'HEX', color: '#FF7849', pairAddr: '0xf1F4ee610b2bAbB05C635F726eF8B0C568c8dc65', dexAddr: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', logo: dexLogo('0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'), on: false, source: 'moralis' },
@@ -1102,6 +1109,16 @@ function filterToRange(data, days) {
   return data.filter(d => d.ts >= cutoff);
 }
 
+/* Drop candles older than a token's minTs (see UFO's MIGRATION note in TOKENS).
+   Applied at data-apply time — cached series stay full, so changing minTs later
+   takes effect without a cache-version bump. */
+function clampToTokenStart(k, data) {
+  const minTs = TOKENS[k] && TOKENS[k].minTs;
+  if (!minTs || !data || !data.length) return data;
+  const clamped = data.filter(d => d.ts >= minTs);
+  return clamped.length >= 2 ? clamped : data; // never clamp a series into unusability
+}
+
 /* Build chart datasets from active tokens — each token uses its own full data range independently */
 function buildDatasets() {
   const datasets = [];
@@ -1225,7 +1242,7 @@ function startWatchdog() {
 
 /* Apply cached/fetched data to a token for the current range */
 function applyTokenData(k, data, limited, days) {
-  const filtered = filterToRange(data, days);
+  const filtered = filterToRange(clampToTokenStart(k, data), days);
   if (filtered && filtered.length >= 2) {
     TOKENS[k]._data = filtered;
     TOKENS[k]._limited = limited;
@@ -1370,7 +1387,7 @@ async function go() {
           if (data && data.length >= 2) {
             setCached(k, tier, data, true);
             TOKENS[k]._limited = true;
-            TOKENS[k]._data = data;
+            TOKENS[k]._data = clampToTokenStart(k, data);
             continue;
           }
         }
