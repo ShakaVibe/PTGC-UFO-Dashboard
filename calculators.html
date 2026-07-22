@@ -3859,6 +3859,30 @@
                     </div>
                   </div>
                   
+                  {/* All Time Spans at a Glance — sits above the breakdown so the headline
+                      numbers read top-down before the fee mechanics */}
+                  <div className="rounded-xl p-5 mb-5" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                      {[
+                        {label:'Daily',days:1},
+                        {label:'Weekly',days:7},
+                        {label:'Monthly',days:30},
+                        {label:'Yearly',days:365}
+                      ].map((p,i)=>{
+                        const pUSD=dailyTotalUSD*p.days;
+                        const isActive=p.label.toLowerCase()===rwdTimeSpan;
+                        return(
+                        <div key={i}>
+                          <div className="text-white/40 text-base uppercase mb-1.5 font-semibold tracking-wide">{p.label}</div>
+                          <div className={`text-2xl font-bold ${isActive?theme.text:'text-white'}`} style={isActive?{textShadow:`0 0 15px ${glowColor}0.3)`}:{}}>{fmtDollar(pUSD)}</div>
+                          {isPTGC&&<div className="text-white/35 text-base mt-0.5">{fmtComma(Math.round((dailyHolderTokens+dailyStakerTokens)*p.days),0)} {cfg.name}</div>}
+                          {!isPTGC&&<div className="text-white/35 text-base mt-0.5">{fmtComma(Math.round(dailyHolderTokens*p.days),0)} UFO</div>}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
                   {/* Reward Breakdown — PTGC (staking) */}
                   {isPTGC&&rwdStaked>0&&totalStakedPool>0&&(
                   <div className="rounded-xl p-5 mb-5" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
@@ -3912,49 +3936,24 @@
                       <div className="text-white/40 text-sm uppercase tracking-widest font-bold mb-3 text-center">{spanLabel} Ecosystem Impact at This Volume</div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,140,0,0.25)'}}>
-                          <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">UFO Bought & Burned</span></div>
+                          <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.UFO.logo} alt="UFO" className="w-5 h-5" style={{filter:'drop-shadow(0 0 4px rgba(124,252,0,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">UFO Bought & Burned</span></div>
                           <div className="text-orange-400 text-3xl font-bold">{fmtDollar(ecoUfoBurnUSD)}</div>
                           <div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoUfoBurnTokens),0)} UFO</div>
-                          <div className="text-white/30 text-sm mt-1">{(burnUfoPct*100)}% of volume {'\u2192'} permanent supply reduction</div>
                         </div>
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(212,175,55,0.25)'}}>
-                          <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">PTGC Bought & Burned</span></div>
+                          <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.PTGC.logo} alt="PTGC" className="w-5 h-5" style={{filter:'drop-shadow(0 0 4px rgba(212,175,55,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">PTGC Bought & Burned</span></div>
                           <div className="text-[#D4AF37] text-3xl font-bold">{fmtDollar(ecoPtgcBurnUSD)}</div>
-                          <div className="text-white/30 text-sm mt-1">{(burnPtgcPct*100)}% of volume {'\u2192'} buy pressure + burn on PTGC</div>
                         </div>
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.3)`}}>
                           <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDCA7'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Total LP Added</span></div>
                           <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(ecoLpTotalUSD)}</div>
                           <div className="text-white/40 text-base font-semibold mt-1">{fmtDollar(ecoLpUfoSideUSD)} buys UFO ({'\u2248'} {fmtComma(Math.round(ecoLpUfoTokens),0)}) + {fmtDollar(ecoLpPairedSideUSD)} paired</div>
-                          <div className="text-white/30 text-sm mt-1">{(autoLpPct*100)}% of volume {'\u2192'} {lpBuckets.map(t=>t.pairSym).join(' / ')} pools, locked as depth</div>
                         </div>
                       </div>
                     </div>
                   </div>
                   )}
                   
-                  {/* All Time Spans at a Glance */}
-                  <div className="rounded-xl p-5" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                      {[
-                        {label:'Daily',days:1},
-                        {label:'Weekly',days:7},
-                        {label:'Monthly',days:30},
-                        {label:'Yearly',days:365}
-                      ].map((p,i)=>{
-                        const pUSD=dailyTotalUSD*p.days;
-                        const isActive=p.label.toLowerCase()===rwdTimeSpan;
-                        return(
-                        <div key={i}>
-                          <div className="text-white/40 text-base uppercase mb-1.5 font-semibold tracking-wide">{p.label}</div>
-                          <div className={`text-2xl font-bold ${isActive?theme.text:'text-white'}`} style={isActive?{textShadow:`0 0 15px ${glowColor}0.3)`}:{}}>{fmtDollar(pUSD)}</div>
-                          {isPTGC&&<div className="text-white/35 text-base mt-0.5">{fmtComma(Math.round((dailyHolderTokens+dailyStakerTokens)*p.days),0)} {cfg.name}</div>}
-                          {!isPTGC&&<div className="text-white/35 text-base mt-0.5">{fmtComma(Math.round(dailyHolderTokens*p.days),0)} UFO</div>}
-                        </div>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
               </div>
               )}
