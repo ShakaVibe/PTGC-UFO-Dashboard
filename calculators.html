@@ -3090,48 +3090,52 @@
                         </div>
                       </div>
                     </div>
-                    
-                    {/* GOAL SEEKER — reverse mode. A pure readout: one dollar input, the
-                        forward equation inverted. Never writes back to the inputs above. */}
-                    {bagCurrentValue>0&&(
-                    <div className="rounded-xl p-5 mt-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
-                      <div className="flex items-center gap-2.5 mb-4 flex-wrap">
-                        <span className="text-xl">{'\uD83C\uDFAF'}</span>
-                        <span className="text-white/70 text-lg font-bold uppercase tracking-widest">Goal Seeker</span>
-                        <span className="text-white/30 text-sm">{'\u2014'} what would it take?</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
-                        <div>
-                          <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">I want my bag to be worth</div>
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                            <input type="text" inputMode="numeric" value={displayGoalValue} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setGoalValue(raw)}} placeholder="Enter a dollar goal" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {[{v:'10000',l:'$10K'},{v:'100000',l:'$100K'},{v:'500000',l:'$500K'},{v:'1000000',l:'$1M'}].map(b=>(
-                              <button key={b.v} onClick={()=>setGoalValue(b.v)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${goalValue===b.v?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={goalValue===b.v?{background:solidColor}:{background:'rgba(255,255,255,0.05)'}}>{b.l}</button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.2)`}}>
-                          {goalUSD<=0?(
-                            <div className="text-white/25 text-base">Enter a goal to see what it takes from here.</div>
-                          ):goalCombined<=1?(
-                            <div className="text-green-400 text-lg font-bold">Already there {'\uD83C\uDF89'} {'\u2014'} your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
-                          ):(
-                            <div className="space-y-2.5">
-                              <div className="text-white/80 text-lg">Needs <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined.toFixed(1))}</span> combined from today</div>
-                              <div className="text-white/60 text-base">{'\u2192'} <span className="text-white font-semibold">{selectedPairSymbol} to <Price p={goalPairedPrice} c="text-white font-semibold"/></span> <span className="text-white/40">({fmtX(goalPairedMult.toFixed(1))})</span> with your {xNum}x factor</div>
-                              {goalNeededX>0&&<div className="text-white/60 text-base">{'\u2192'} or a <span className="text-white font-semibold">{fmtX(goalNeededX.toFixed(1))} X factor</span> at your current {selectedPairSymbol} target</div>}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    )}
+
                   </div>
                 </div>
               )}
+              
+              {/* GOAL SEEKER — reverse mode, ALWAYS on screen (per site owner) so people
+                  discover it before filling anything in. A pure readout: one dollar input,
+                  the forward equation inverted. Never writes back to the inputs above. */}
+              <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
+                <div className="px-6 py-3 border-b border-white/[0.06] flex items-center gap-2.5 flex-wrap">
+                  <span className="text-xl">{'\uD83C\uDFAF'}</span>
+                  <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Goal Seeker</span>
+                  <span className="text-white/30 text-sm">{'\u2014'} what would it take?</span>
+                </div>
+                <div className="p-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
+                    <div>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">I want my bag to be worth</div>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
+                        <input type="text" inputMode="numeric" value={displayGoalValue} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setGoalValue(raw)}} placeholder="Enter a dollar goal" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {[{v:'10000',l:'$10K'},{v:'100000',l:'$100K'},{v:'500000',l:'$500K'},{v:'1000000',l:'$1M'}].map(b=>(
+                          <button key={b.v} onClick={()=>setGoalValue(b.v)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${goalValue===b.v?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={goalValue===b.v?{background:solidColor}:{background:'rgba(255,255,255,0.05)'}}>{b.l}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.2)`}}>
+                      {bagCurrentValue<=0?(
+                        <div className="text-white/25 text-base">Enter your {cfg.name} token amount above{goalUSD>0?' to see what this goal takes':''} {'\u2014'} the Goal Seeker works backward from your bag.</div>
+                      ):goalUSD<=0?(
+                        <div className="text-white/25 text-base">Enter a goal to see what it takes from here. Your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
+                      ):goalCombined<=1?(
+                        <div className="text-green-400 text-lg font-bold">Already there {'\uD83C\uDF89'} {'\u2014'} your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
+                      ):(
+                        <div className="space-y-2.5">
+                          <div className="text-white/80 text-lg">Needs <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined.toFixed(1))}</span> combined from today</div>
+                          <div className="text-white/60 text-base">{'\u2192'} <span className="text-white font-semibold">{selectedPairSymbol} to <Price p={goalPairedPrice} c="text-white font-semibold"/></span> <span className="text-white/40">({fmtX(goalPairedMult.toFixed(1))})</span> with your {xNum}x factor</div>
+                          {goalNeededX>0&&<div className="text-white/60 text-base">{'\u2192'} or a <span className="text-white font-semibold">{fmtX(goalNeededX.toFixed(1))} X factor</span> at your current {selectedPairSymbol} target</div>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               {/* Disclaimer */}
               <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-5">
