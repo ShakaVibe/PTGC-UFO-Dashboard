@@ -3128,14 +3128,22 @@
                       ):goalCombined<=1?(
                         <div className="text-green-400 text-lg font-bold">Already there {'\uD83C\uDF89'} {'\u2014'} your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
                       ):(
-                        <div className="space-y-2.5">
-                          {/* MATH-CONSISTENCY: pass RAW values to fmtX — pre-rounding with
-                              toFixed(1) made 1.0177 display as "1.00x" and 7.337 as "7.30x",
-                              so the lines no longer multiplied back to the combined figure. */}
-                          <div className="text-white/80 text-lg">Needs <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined)}</span> combined (pair move {'\u00D7'} X factor) from today</div>
-                          <div className="text-white/60 text-base">{'\u2192'} <span className="text-white font-semibold">{selectedPairSymbol} to <Price p={goalPairedPrice} c="text-white font-semibold"/></span> <span className="text-white/40">({fmtX(goalPairedMult)})</span> with your {xNum}x factor</div>
-                          {goalNeededX>0&&<div className="text-white/60 text-base">{'\u2192'} or a <span className="text-white font-semibold">{fmtX(goalNeededX)} X factor</span> at your current {selectedPairSymbol} target</div>}
-                          {finalPotential>=goalCombined&&bagFinalValue>0&&<div className="text-green-400/80 text-sm">{'\u2713'} Your scenario above ({fmtX(finalPotential)} combined {'\u2192'} {fmtDollar(bagFinalValue)}) already clears this goal</div>}
+                        <div className="space-y-3">
+                          {/* PLAIN-ENGLISH FRAMING (per site owner): dollars and dials, not
+                              multiples-jargon. Anchor on the two dollar amounts, report how
+                              close the CURRENT scenario gets, then phrase the two paths as
+                              literal adjustments to the two inputs above. Raw values go to
+                              fmtX — pre-rounding once made the lines contradict each other. */}
+                          <div className="text-white/80 text-lg">{fmtDollar(bagCurrentValue)} today {'\u2192'} {fmtDollar(goalUSD)} goal = <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined)}</span> growth needed</div>
+                          {bagFinalValue>0&&(finalPotential>=goalCombined?(
+                            <div className="text-green-400 text-base font-semibold">{'\u2713'} Your scenario above already gets there {'\u2014'} it reaches {fmtDollar(bagFinalValue)}</div>
+                          ):(
+                            <div className="text-white/50 text-base">Your scenario above reaches {fmtDollar(bagFinalValue)} {'\u2014'} <span className="text-white/80 font-semibold">{Math.round(bagFinalValue/goalUSD*100)}%</span> of this goal. Two ways to close the gap:</div>
+                          ))}
+                          {(bagFinalValue<=0||finalPotential<goalCombined)&&(<React.Fragment>
+                          <div className="text-white/60 text-base">{'\u2022'} Set the <span className="text-white font-semibold">{selectedPairSymbol} target</span> to <Price p={goalPairedPrice} c="text-white font-semibold"/> <span className="text-white/40">({fmtX(goalPairedMult)} move {'\u00B7'} keeps your {xNum}x factor)</span></div>
+                          {goalNeededX>0&&<div className="text-white/60 text-base">{'\u2022'} Or set the <span className="text-white font-semibold">X factor</span> to <span className="text-white font-semibold">{fmtX(goalNeededX)}</span> <span className="text-white/40">(keeps your current {selectedPairSymbol} target)</span></div>}
+                          </React.Fragment>)}
                         </div>
                       )}
                       </div>
