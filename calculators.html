@@ -5018,10 +5018,17 @@
 
                 {/* Actions — packed right next to stats, no gap created by justify-between */}
                 <div className="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
-                  <a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
+                  {/* MIGRATION: BUY hidden for UFO — the founder's onboarding page
+                      (goptgc.com/#/ufo-onboarding) still routes buyers to the OLD token.
+                      Sending anyone there right now buys them a dead contract. Restore by
+                      changing this condition back to always-render once the founder's site
+                      points at the new UFO. PTGC's button is unaffected. */}
+                  {token==='PTGC'&&(
+                  <a href={'https://goptgc.com/#/ptgc-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
                     <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9"/>
                     <span className={`font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] ${isGold?'metallic-gold':theme.text}`}>BUY</span>
                   </a>
+                  )}
                   <button onClick={switchToken} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
                     <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-6 h-6 sm:w-8 sm:h-8"/>
                     <span className="text-white/70 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em]">Switch</span>
