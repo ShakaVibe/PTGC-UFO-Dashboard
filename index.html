@@ -1967,7 +1967,11 @@
     const mergeDex=(prev,next)=>{
       if(!next)return prev;
       if(!prev)return next;
-      const sig=a=>(a?.pairs||[]).map(p=>p.pairAddress+':'+p.liq+':'+p.vol).join('|');
+      /* SORTED: DexScreener returns pairs ranked by volume/liquidity, and that ranking
+         shuffles between refreshes. An order-sensitive signature treated a reshuffle of
+         the SAME pairs as "pair set changed", defeating this guard. Sort so only real
+         content changes count. */
+      const sig=a=>(a?.pairs||[]).map(p=>p.pairAddress+':'+p.liq+':'+p.vol).sort().join('|');
       const samePairs=sig(prev)===sig(next);
       const sameScalars=prev.price===next.price&&prev.change===next.change&&prev.mcap===next.mcap
         &&prev.liq===next.liq&&prev.vol===next.vol&&prev.buys===next.buys&&prev.sells===next.sells
@@ -4422,7 +4426,10 @@
          re-ran the whole fee scan after every refresh (the main source of the visible
          refresh jank); keying on the signature re-runs it only when a pair is actually
          added or removed. */
-      },[token,(data?.pairs||[]).map(p=>p.pairAddress+':'+(p.pairCreatedAt||0)).join('|'),feeRetry]);
+      /* SORTED: same reasoning as mergeDex's sig — DexScreener reshuffles pair order
+         between refreshes, and an order-sensitive dep re-ran this entire scan (and its
+         loading flips) on a mere reorder. Sorting keys it to the actual pair SET. */
+      },[token,(data?.pairs||[]).map(p=>p.pairAddress+':'+(p.pairCreatedAt||0)).sort().join('|'),feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
