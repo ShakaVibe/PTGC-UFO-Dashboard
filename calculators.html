@@ -2545,6 +2545,7 @@
       const goalPairedMult=(goalCombined>0&&xNum>0)?goalCombined/xNum:0;
       const goalPairedPrice=pairedCurrentPrice*goalPairedMult;
       const goalNeededX=(goalCombined>0&&pairedXNeeded>0)?goalCombined/pairedXNeeded:0;
+      const goalScenarioPct=(goalUSD>0&&bagFinalValue>0)?(bagFinalValue/goalUSD*100):0;
       
       const glowColor=isGold?'rgba(212,175,55,':'rgba(124,252,0,';
       const solidColor=isGold?'#D4AF37':'#7CFC00';
@@ -3104,56 +3105,84 @@
                   <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Goal Seeker</span>
                   <span className="text-white/30 text-sm">{'\u2014'} what would it take?</span>
                 </div>
-                <div className="p-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
-                    <div>
+                <div className="p-5 space-y-5">
+                  {/* Row 1: goal input with quick chips beside it */}
+                  <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+                    <div className="grow max-w-md min-w-[260px]">
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">I want my bag to be worth</div>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
                         <input type="text" inputMode="numeric" value={displayGoalValue} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setGoalValue(raw)}} placeholder="Enter a dollar goal" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {[{v:'10000',l:'$10K'},{v:'100000',l:'$100K'},{v:'500000',l:'$500K'},{v:'1000000',l:'$1M'}].map(b=>(
-                          <button key={b.v} onClick={()=>setGoalValue(b.v)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${goalValue===b.v?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={goalValue===b.v?{background:solidColor}:{background:'rgba(255,255,255,0.05)'}}>{b.l}</button>
-                        ))}
-                      </div>
                     </div>
-                    <div>
-                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">What it takes</div>
-                      <div className="rounded-xl p-4 min-h-[72px] flex items-center" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.2)`}}>
-                      {bagCurrentValue<=0?(
-                        <div className="text-white/25 text-base">Enter your {cfg.name} token amount above{goalUSD>0?' to see what this goal takes':''} {'\u2014'} the Goal Seeker works backward from your bag.</div>
-                      ):goalUSD<=0?(
-                        <div className="text-white/25 text-base">Enter a goal to see what it takes from here. Your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
-                      ):goalCombined<=1?(
-                        <div className="text-green-400 text-lg font-bold">Already there {'\uD83C\uDF89'} {'\u2014'} your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
-                      ):(
-                        <div className="space-y-3">
-                          {/* PLAIN-ENGLISH FRAMING (per site owner): dollars and dials, not
-                              multiples-jargon. Anchor on the two dollar amounts, report how
-                              close the CURRENT scenario gets, then phrase the two paths as
-                              literal adjustments to the two inputs above. Raw values go to
-                              fmtX — pre-rounding once made the lines contradict each other. */}
-                          {/* Paths read as MARKET EVENTS ("WPLS does a 14.7x"), not user
-                              instructions ("set the target to...") — per site owner. */}
-                          <div className="text-white/80 text-lg">{fmtDollar(bagCurrentValue)} today {'\u2192'} {fmtDollar(goalUSD)} goal = <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined)}</span> growth of {cfg.name} needed</div>
-                          {bagFinalValue>0&&(finalPotential>=goalCombined?(
-                            <div className="text-green-400 text-base font-semibold">{'\u2713'} Your scenario above already gets there {'\u2014'} it reaches {fmtDollar(bagFinalValue)}</div>
-                          ):(
-                            <div className="text-white/50 text-base">Your scenario above reaches {fmtDollar(bagFinalValue)} {'\u2014'} <span className="text-white/80 font-semibold">{Math.round(bagFinalValue/goalUSD*100)}%</span> of this goal. Two ways to close the gap:</div>
-                          ))}
-                          {(bagFinalValue<=0||finalPotential<goalCombined)&&(<React.Fragment>
-                          <div className="text-white/60 text-base">{'\u2022'} <span className="text-white font-semibold">{selectedPairSymbol}</span> does a <span className="text-white font-semibold">{fmtX(goalPairedMult)}</span> to <Price p={goalPairedPrice} c="text-white font-semibold"/> <span className="text-white/70">and {cfg.name} keeps pace</span> <span className="text-white/40">(with your {xNum}x factor)</span></div>
-                          {goalNeededX>0&&targetPaired>0&&<div className="text-white/60 text-base">{'\u2022'} Or <span className="text-white font-semibold">{cfg.name}</span> does a <span className="text-white font-semibold">{fmtX(goalNeededX)}</span> X factor <span className="text-white/40">(with {selectedPairSymbol} hitting your <Price p={targetPaired} c="text-white/60"/> target)</span></div>}
-                          {/* THE ASSUMPTION, stated plainly: a pair pump doesn't drag the token
-                              with it — the token needs its own buyers across ALL its pools. */}
-                          <div className="text-white/30 text-sm pt-1 border-t border-white/[0.06]">{'\u26A0\uFE0F'} A {selectedPairSymbol} move alone doesn't lift {cfg.name} {'\u2014'} {cfg.name} needs its own buying across all its pools to keep pace. That's the bet behind these numbers.</div>
-                          </React.Fragment>)}
-                        </div>
-                      )}
-                      </div>
+                    <div className="flex flex-wrap gap-2 pb-2">
+                      {[{v:'10000',l:'$10K'},{v:'100000',l:'$100K'},{v:'500000',l:'$500K'},{v:'1000000',l:'$1M'}].map(b=>(
+                        <button key={b.v} onClick={()=>setGoalValue(b.v)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${goalValue===b.v?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={goalValue===b.v?{background:solidColor}:{background:'rgba(255,255,255,0.05)'}}>{b.l}</button>
+                      ))}
                     </div>
                   </div>
+                  
+                  {/* Row 2: the answer, in the page's own stat-strip + card language */}
+                  {bagCurrentValue<=0?(
+                    <div className="text-white/25 text-base">Enter your {cfg.name} token amount above{goalUSD>0?' to see what this goal takes':''} {'\u2014'} the Goal Seeker works backward from your bag.</div>
+                  ):goalUSD<=0?(
+                    <div className="text-white/25 text-base">Enter a goal to see what it takes from here. Your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
+                  ):goalCombined<=1?(
+                    <div className="text-green-400 text-lg font-bold">Already there {'\uD83C\uDF89'} {'\u2014'} your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
+                  ):(
+                    <React.Fragment>
+                      {/* equation strip: Today -> Goal -> Growth needed, plus scenario progress bar */}
+                      <div className="rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.25)`}}>
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <div className="text-white/40 text-sm uppercase mb-1.5 font-semibold tracking-wide">Today</div>
+                            <div className="text-white text-2xl font-bold">{fmtDollar(bagCurrentValue)}</div>
+                          </div>
+                          <div>
+                            <div className="text-white/40 text-sm uppercase mb-1.5 font-semibold tracking-wide">Goal</div>
+                            <div className="text-white text-2xl font-bold">{fmtDollar(goalUSD)}</div>
+                          </div>
+                          <div>
+                            <div className="text-white/40 text-sm uppercase mb-1.5 font-semibold tracking-wide">{cfg.name} growth needed</div>
+                            <div className={`text-2xl font-bold ${theme.text}`} style={{textShadow:`0 0 15px ${glowColor}0.3)`}}>{fmtX(goalCombined)}</div>
+                          </div>
+                        </div>
+                        {bagFinalValue>0&&(
+                          <div className="mt-4">
+                            <div className="flex justify-between items-baseline text-sm mb-1.5 gap-2 flex-wrap">
+                              <span className="text-white/40">Your scenario above reaches <span className="text-white/70 font-semibold">{fmtDollar(bagFinalValue)}</span></span>
+                              <span className={goalScenarioPct>=100?'text-green-400 font-bold':'text-white/60 font-bold'}>{goalScenarioPct>=100?'\u2713 goal cleared':Math.round(goalScenarioPct)+'% of goal'}</span>
+                            </div>
+                            <div className="h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{width:`${Math.min(100,goalScenarioPct)}%`,background:goalScenarioPct>=100?'#4ade80':`linear-gradient(90deg, ${solidColor}, #4ade80)`}}></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {(bagFinalValue<=0||finalPotential<goalCombined)&&(
+                        <React.Fragment>
+                          <div className="text-white/40 text-sm uppercase tracking-widest font-bold text-center">Two ways to close the gap</div>
+                          <div className={`grid grid-cols-1 ${goalNeededX>0&&targetPaired>0?'sm:grid-cols-2':''} gap-4`}>
+                            <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.3)`}}>
+                              <div className="text-white/50 text-sm uppercase tracking-wide font-bold mb-1.5">{selectedPairSymbol} does a</div>
+                              <div className={`text-3xl font-bold ${theme.text}`}>{fmtX(goalPairedMult)}</div>
+                              <div className="text-white/60 text-base mt-1.5">to <Price p={goalPairedPrice} c="text-white font-semibold"/> and {cfg.name} keeps pace</div>
+                              <div className="text-white/30 text-sm mt-1">with your {xNum}x factor</div>
+                            </div>
+                            {goalNeededX>0&&targetPaired>0&&(
+                            <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.3)`}}>
+                              <div className="text-white/50 text-sm uppercase tracking-wide font-bold mb-1.5">or {cfg.name} does a</div>
+                              <div className={`text-3xl font-bold ${theme.text}`}>{fmtX(goalNeededX)} <span className="text-lg text-white/50 font-semibold">X factor</span></div>
+                              <div className="text-white/60 text-base mt-1.5">with {selectedPairSymbol} hitting your <Price p={targetPaired} c="text-white font-semibold"/> target</div>
+                            </div>
+                            )}
+                          </div>
+                          <div className="text-white/30 text-sm text-center">{'\u26A0\uFE0F'} A {selectedPairSymbol} move alone doesn't lift {cfg.name} {'\u2014'} {cfg.name} needs its own buying across all its pools to keep pace. That's the bet behind these numbers.</div>
+                        </React.Fragment>
+                      )}
+                    </React.Fragment>
+                  )}
                 </div>
               </div>
               
