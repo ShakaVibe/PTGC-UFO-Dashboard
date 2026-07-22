@@ -2195,7 +2195,20 @@
     };
 
     const CalculatorsTab=({token,cfg,data,burn,pls,theme,stakingData,volumeByPeriod,totalUFOShareRate,stakingPairs,onBack,onSwitchToken})=>{
-      const[calcTab,setCalcTab]=useState('fresh'); // only the New Capital Simulator is live for now; others greyed out
+      /* Default tab: last calculator the visitor used (localStorage), falling back to
+         the New Capital Simulator for first-timers. Landing on an OPEN calculator beats
+         an empty page; remembering the last one makes it feel personal. Only live tabs
+         are restorable so a remembered preview tab can't resurface after the dot moves.
+         MAINTENANCE: when adding a calculator to LIVE_CALC_IDS (CalculatorsPage), add its
+         id to the allowlist below too. */
+      const[calcTab,setCalcTab]=useState(()=>{
+        try{
+          const t=localStorage.getItem('grays_calc_last_tab');
+          if(t&&['fresh','rewards','xmult'].includes(t))return t;
+        }catch(e){}
+        return 'fresh';
+      });
+      useEffect(()=>{try{localStorage.setItem('grays_calc_last_tab',calcTab)}catch(e){}},[calcTab]);
       const isGold=cfg.color==='gold';
       const price=data?.price||0;
       const totalSupply=cfg.totalSupply;
@@ -2834,13 +2847,16 @@
               drowned the one that works. To launch a calculator, add its id to
               LIVE_CALC_IDS and it graduates from the strip to a real tab automatically. */}
           <div className="flex flex-col items-center mb-10">
-            <div className="inline-flex gap-2 flex-wrap justify-center">
+            {/* SEGMENTED CONTROL: equal-width tabs regardless of label length — natural
+                pill widths made the three live tabs three different sizes. flex-1 with a
+                min-width keeps them uniform and wraps gracefully on mobile. */}
+            <div className="flex gap-2 flex-wrap justify-center w-full max-w-2xl">
               {liveCalcs.map(b=>{
                 const active=calcTab===b.id;
                 const disabled=false;             // everything rendered here is live by construction
                 return(
-                  <button key={b.id} disabled={disabled} onClick={disabled?undefined:()=>setCalcTab(b.id)} title={disabled?'Coming soon':undefined} className={`relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all ${disabled?'cursor-not-allowed':'hover:brightness-110'} ${b.standout && !active && !disabled ? 'animate-grow-btn' : ''}`} style={{
-                    padding:'10px 24px',
+                  <button key={b.id} disabled={disabled} onClick={disabled?undefined:()=>setCalcTab(b.id)} title={disabled?'Coming soon':undefined} className={`relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all flex-1 min-w-[170px] text-center ${disabled?'cursor-not-allowed':'hover:brightness-110'} ${b.standout && !active && !disabled ? 'animate-grow-btn' : ''}`} style={{
+                    padding:'10px 12px',
                     background:disabled?'rgba(255,255,255,0.02)':active?`linear-gradient(135deg, ${glowColor}0.45), ${glowColor}0.2))`:b.standout?'linear-gradient(135deg, rgba(212,175,55,0.20), rgba(124,252,0,0.22))':b.isNew?'rgba(124,252,0,0.06)':'rgba(255,255,255,0.03)',
                     border:disabled?'1px solid rgba(255,255,255,0.06)':active?`1px solid ${glowColor}0.6)`:b.standout?'1px solid rgba(124,252,0,0.5)':b.isNew?'1px solid rgba(124,252,0,0.25)':'1px solid rgba(255,255,255,0.08)',
                     boxShadow:disabled?'none':active?`0 0 20px ${glowColor}0.25), inset 0 1px 0 rgba(255,255,255,0.15)`:b.standout?undefined:b.isNew?'0 0 14px rgba(124,252,0,0.08)':'none',
