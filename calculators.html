@@ -3027,7 +3027,7 @@
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                       <div className="rounded-xl p-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
                         <div className={`text-base uppercase tracking-wide mb-0.5 font-bold ${theme.text}`}>{cfg.name} at {selectedPairSymbol} Target</div>
-                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and ratio holds</div>
+                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and <span className="border-b border-dotted border-white/30 cursor-help" title={`${cfg.name} doesn't automatically follow ${selectedPairSymbol} — this assumes ${cfg.name}'s own buyers keep the ${cfg.name}/${selectedPairSymbol} ratio steady across all its pools.`}>ratio holds</span></div>
                         <div className={`text-4xl font-bold ${theme.text} mb-2`}><Price p={basePrice} c={theme.text}/></div>
                         <div className="flex items-center gap-3 text-base">
                           <span className="text-green-400 font-bold">{fmtX(basePotential.toFixed(1))} Potential</span>
@@ -3143,8 +3143,11 @@
                             <div className="text-white/50 text-base">Your scenario above reaches {fmtDollar(bagFinalValue)} {'\u2014'} <span className="text-white/80 font-semibold">{Math.round(bagFinalValue/goalUSD*100)}%</span> of this goal. Two ways to close the gap:</div>
                           ))}
                           {(bagFinalValue<=0||finalPotential<goalCombined)&&(<React.Fragment>
-                          <div className="text-white/60 text-base">{'\u2022'} <span className="text-white font-semibold">{selectedPairSymbol}</span> does a <span className="text-white font-semibold">{fmtX(goalPairedMult)}</span> to <Price p={goalPairedPrice} c="text-white font-semibold"/> <span className="text-white/40">(with your {xNum}x factor)</span></div>
+                          <div className="text-white/60 text-base">{'\u2022'} <span className="text-white font-semibold">{selectedPairSymbol}</span> does a <span className="text-white font-semibold">{fmtX(goalPairedMult)}</span> to <Price p={goalPairedPrice} c="text-white font-semibold"/> <span className="text-white/70">and {cfg.name} keeps pace</span> <span className="text-white/40">(with your {xNum}x factor)</span></div>
                           {goalNeededX>0&&targetPaired>0&&<div className="text-white/60 text-base">{'\u2022'} Or <span className="text-white font-semibold">{cfg.name}</span> does a <span className="text-white font-semibold">{fmtX(goalNeededX)}</span> X factor <span className="text-white/40">(with {selectedPairSymbol} hitting your <Price p={targetPaired} c="text-white/60"/> target)</span></div>}
+                          {/* THE ASSUMPTION, stated plainly: a pair pump doesn't drag the token
+                              with it — the token needs its own buyers across ALL its pools. */}
+                          <div className="text-white/30 text-sm pt-1 border-t border-white/[0.06]">{'\u26A0\uFE0F'} A {selectedPairSymbol} move alone doesn't lift {cfg.name} {'\u2014'} {cfg.name} needs its own buying across all its pools to keep pace. That's the bet behind these numbers.</div>
                           </React.Fragment>)}
                         </div>
                       )}
