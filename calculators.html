@@ -3118,7 +3118,9 @@
                         ))}
                       </div>
                     </div>
-                    <div className="rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.2)`}}>
+                    <div>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">What it takes</div>
+                      <div className="rounded-xl p-4 min-h-[72px] flex items-center" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.2)`}}>
                       {bagCurrentValue<=0?(
                         <div className="text-white/25 text-base">Enter your {cfg.name} token amount above{goalUSD>0?' to see what this goal takes':''} {'\u2014'} the Goal Seeker works backward from your bag.</div>
                       ):goalUSD<=0?(
@@ -3127,11 +3129,16 @@
                         <div className="text-green-400 text-lg font-bold">Already there {'\uD83C\uDF89'} {'\u2014'} your bag is worth {fmtDollar(bagCurrentValue)} today.</div>
                       ):(
                         <div className="space-y-2.5">
-                          <div className="text-white/80 text-lg">Needs <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined.toFixed(1))}</span> combined from today</div>
-                          <div className="text-white/60 text-base">{'\u2192'} <span className="text-white font-semibold">{selectedPairSymbol} to <Price p={goalPairedPrice} c="text-white font-semibold"/></span> <span className="text-white/40">({fmtX(goalPairedMult.toFixed(1))})</span> with your {xNum}x factor</div>
-                          {goalNeededX>0&&<div className="text-white/60 text-base">{'\u2192'} or a <span className="text-white font-semibold">{fmtX(goalNeededX.toFixed(1))} X factor</span> at your current {selectedPairSymbol} target</div>}
+                          {/* MATH-CONSISTENCY: pass RAW values to fmtX — pre-rounding with
+                              toFixed(1) made 1.0177 display as "1.00x" and 7.337 as "7.30x",
+                              so the lines no longer multiplied back to the combined figure. */}
+                          <div className="text-white/80 text-lg">Needs <span className={`font-bold ${theme.text}`}>{fmtX(goalCombined)}</span> combined (pair move {'\u00D7'} X factor) from today</div>
+                          <div className="text-white/60 text-base">{'\u2192'} <span className="text-white font-semibold">{selectedPairSymbol} to <Price p={goalPairedPrice} c="text-white font-semibold"/></span> <span className="text-white/40">({fmtX(goalPairedMult)})</span> with your {xNum}x factor</div>
+                          {goalNeededX>0&&<div className="text-white/60 text-base">{'\u2192'} or a <span className="text-white font-semibold">{fmtX(goalNeededX)} X factor</span> at your current {selectedPairSymbol} target</div>}
+                          {finalPotential>=goalCombined&&bagFinalValue>0&&<div className="text-green-400/80 text-sm">{'\u2713'} Your scenario above ({fmtX(finalPotential)} combined {'\u2192'} {fmtDollar(bagFinalValue)}) already clears this goal</div>}
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
                 </div>
