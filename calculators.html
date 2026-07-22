@@ -2253,6 +2253,19 @@
       const[freshOtherLoading,setFreshOtherLoading]=useState(false);
       
       // Fetch other token data when Fresh Capital tab is active
+      /* PTGC price for the Rewards tab's ecosystem box (token-count under "PTGC Bought &
+         Burned" when viewing UFO). One cheap pair call — the full fetchDex isn't needed. */
+      const[rwdPtgcPrice,setRwdPtgcPrice]=useState(0);
+      useEffect(()=>{
+        if(calcTab!=='rewards'||token!=='UFO'||rwdPtgcPrice>0)return;
+        (async()=>{
+          try{
+            const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`);
+            const p=parseFloat((await r.json()).pair?.priceUsd)||0;
+            if(p>0)setRwdPtgcPrice(p);
+          }catch(e){/* box just omits the token count */}
+        })();
+      },[calcTab,token]);
       useEffect(()=>{
         if(calcTab!=='fresh')return;
         const otherKey=token==='PTGC'?'UFO':'PTGC';
@@ -3927,22 +3940,22 @@
                       <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDC8E'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Your Holder Reflections</span></div>
                       <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(periodHolderUSD)}</div>
                       <div className="text-white/40 text-base font-semibold mt-1">{fmtComma(Math.round(periodHolderTokens),0)} UFO</div>
-                      <div className="text-white/30 text-sm mt-1">{(holderPct*100)}% fee {'\u00D7'} {(userShareOfSupply*100).toFixed(6)}% eligible supply (excl. LP)</div>
                     </div>
                     )}
                     
                     {/* Ecosystem Impact — what this volume does for every holder, not a payout */}
                     <div className="border-t border-white/[0.08] pt-4">
-                      <div className="text-white/40 text-sm uppercase tracking-widest font-bold mb-3 text-center">{spanLabel} Ecosystem Impact at This Volume</div>
+                      <div className="text-white/40 text-sm uppercase tracking-widest font-bold mb-3 text-center">{spanLabel} Ecosystem Impact {'\u00B7'} {fmtUSD(periodVolUSD)} Volume</div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,140,0,0.25)'}}>
-                          <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.UFO.logo} alt="UFO" className="w-5 h-5" style={{filter:'drop-shadow(0 0 4px rgba(124,252,0,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">UFO Bought & Burned</span></div>
+                          <div className="flex items-center justify-center gap-2 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.UFO.logo} alt="UFO" className="w-8 h-8" style={{filter:'drop-shadow(0 0 5px rgba(124,252,0,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">UFO Bought & Burned</span></div>
                           <div className="text-orange-400 text-3xl font-bold">{fmtDollar(ecoUfoBurnUSD)}</div>
                           <div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoUfoBurnTokens),0)} UFO</div>
                         </div>
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(212,175,55,0.25)'}}>
-                          <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.PTGC.logo} alt="PTGC" className="w-5 h-5" style={{filter:'drop-shadow(0 0 4px rgba(212,175,55,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">PTGC Bought & Burned</span></div>
+                          <div className="flex items-center justify-center gap-2 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.PTGC.logo} alt="PTGC" className="w-8 h-8" style={{filter:'drop-shadow(0 0 5px rgba(212,175,55,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">PTGC Bought & Burned</span></div>
                           <div className="text-[#D4AF37] text-3xl font-bold">{fmtDollar(ecoPtgcBurnUSD)}</div>
+                          {rwdPtgcPrice>0&&<div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoPtgcBurnUSD/rwdPtgcPrice),0)} PTGC</div>}
                         </div>
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.3)`}}>
                           <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDCA7'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Total LP Added</span></div>
