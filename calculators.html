@@ -2213,8 +2213,9 @@
       const fmtMcap=v=>{if(!v||isNaN(v))return'\u2014';if(v>=1e12)return'$'+(v/1e12).toFixed(2)+'T';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(2)+'K';return fmtDollar(v);};
       
       const[xFactor,setXFactor]=useState('2');
-      /* Target starts EMPTY and autofills with the selected pair's live price — the old
-         hardcoded '0.0001' default was nonsense for high-priced pairs like WETH. */
+      /* Target starts EMPTY and STAYS empty until the user types or taps a multiplier
+         chip (per site owner — autofilling forced people to type over it). The pair's
+         current price is shown in the card label instead. */
       const[targetPairedPrice,setTargetPairedPrice]=useState('');
       const[selectedPairSymbol,setSelectedPairSymbol]=useState('WPLS');
       /* Format a price for the target input with enough significant digits for anything
@@ -2519,9 +2520,7 @@
       const pairData=pairedPrices[selectedPairSymbol]||null;
       const ratio=pairData?.ratio||0;
       const pairedCurrentPrice=pairData?.pairedPriceUSD||0;
-      /* Autofill the empty target with the pair's current price on first load. Pair-button
-         clicks refill it explicitly; a value the user typed is never stomped. */
-      useEffect(()=>{if(targetPairedPrice===''&&pairedCurrentPrice>0)setTargetPairedPrice(fmtTargetVal(pairedCurrentPrice));},[pairedCurrentPrice,selectedPairSymbol]);
+
       const xNum=parseFloat(xFactor)||0;
       const targetPaired=parseFloat(targetPairedPrice)||0;
       const basePrice=ratio*targetPaired;
@@ -2958,7 +2957,7 @@
                           const hasPair=!!pairedPrices[t.symbol];
                           const isActive=selectedPairSymbol===t.symbol;
                           return(
-                            <button key={t.symbol} onClick={()=>{if(hasPair){setSelectedPairSymbol(t.symbol);setTargetPairedPrice(fmtTargetVal(pairedPrices[t.symbol]?.pairedPriceUSD||0))}}} disabled={!hasPair} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-base font-bold transition-all ${!hasPair?'opacity-25 cursor-not-allowed border border-white/5':'cursor-pointer'} ${isActive&&hasPair?'text-black shadow-lg':'border border-white/10 text-white/60 hover:bg-white/10'}`} style={isActive&&hasPair?{background:solidColor}:{}}>
+                            <button key={t.symbol} onClick={()=>{if(hasPair){setSelectedPairSymbol(t.symbol);setTargetPairedPrice('')}}} disabled={!hasPair} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-base font-bold transition-all ${!hasPair?'opacity-25 cursor-not-allowed border border-white/5':'cursor-pointer'} ${isActive&&hasPair?'text-black shadow-lg':'border border-white/10 text-white/60 hover:bg-white/10'}`} style={isActive&&hasPair?{background:solidColor}:{}}>
                               <img src={getLogo(t.address)} alt={t.symbol} className="w-5 h-5 rounded-full" onError={e=>{e.target.style.display='none'}}/>
                               {t.symbol}
                             </button>
@@ -2982,15 +2981,12 @@
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
-                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{selectedPairSymbol} Target Price</div>
+                      <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{selectedPairSymbol} Target Price {pairedCurrentPrice>0&&<span className="text-white/35 normal-case tracking-normal font-normal">(current: <Price p={pairedCurrentPrice} c="text-white/50 font-semibold"/>)</span>}</div>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
                         <input type="number" step="any" min="0" value={targetPairedPrice} onChange={e=>setTargetPairedPrice(e.target.value)} placeholder="Enter target price" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
-                      <div className="flex items-center justify-between mt-2 ml-1 flex-wrap gap-x-3 gap-y-1">
-                        {pairedXNeeded>0&&<div className="text-[#7CFC00] text-sm font-semibold">{fmtX(pairedXNeeded.toFixed(1))} from current {selectedPairSymbol} price</div>}
-                        {pairedCurrentPrice>0&&<div className="text-white/35 text-sm">Current: <Price p={pairedCurrentPrice} c="text-white/60 font-semibold"/></div>}
-                      </div>
+                      {pairedXNeeded>0&&<div className="text-[#7CFC00] text-sm mt-2 ml-1 font-semibold">{fmtX(pairedXNeeded.toFixed(1))} from current {selectedPairSymbol} price</div>}
                       {/* One-tap targets anchored to the CURRENT price — works for any pair
                           magnitude, from WPLS to WETH */}
                       {pairedCurrentPrice>0&&<div className="flex flex-wrap gap-2 mt-2">
@@ -3028,7 +3024,7 @@
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                       <div className="rounded-xl p-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
                         <div className={`text-base uppercase tracking-wide mb-0.5 font-bold ${theme.text}`}>{cfg.name} at {selectedPairSymbol} Target</div>
-                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and <span className="border-b border-dotted border-white/30 cursor-help" title={`${cfg.name} doesn't automatically follow ${selectedPairSymbol} — this assumes ${cfg.name}'s own buyers keep the ${cfg.name}/${selectedPairSymbol} ratio steady across all its pools.`}>ratio holds</span></div>
+                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and <span title={`${cfg.name} doesn't automatically follow ${selectedPairSymbol} — this assumes ${cfg.name}'s own buyers keep the ${cfg.name}/${selectedPairSymbol} ratio steady across all its pools.`}>ratio holds</span></div>
                         <div className={`text-4xl font-bold ${theme.text} mb-2`}><Price p={basePrice} c={theme.text}/></div>
                         <div className="flex items-center gap-3 text-base">
                           <span className="text-green-400 font-bold">{fmtX(basePotential.toFixed(1))} Potential</span>
@@ -3178,7 +3174,7 @@
                             </div>
                             )}
                           </div>
-                          <div className="text-white/30 text-sm text-center">{'\u26A0\uFE0F'} A {selectedPairSymbol} move alone doesn't lift {cfg.name} {'\u2014'} {cfg.name} needs its own buying across all its pools to keep pace. That's the bet behind these numbers.</div>
+                          <div className="text-white/50 text-sm text-center">{'\u26A0\uFE0F'} A {selectedPairSymbol} move alone doesn't lift {cfg.name} {'\u2014'} {cfg.name} needs its own buying across all its pools to keep pace. That's the bet behind these numbers.</div>
                         </React.Fragment>
                       )}
                     </React.Fragment>
