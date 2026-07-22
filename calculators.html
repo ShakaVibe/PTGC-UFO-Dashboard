@@ -56,6 +56,9 @@
     // ===== ALL-TIME HIGH PRICES =====
     // Update these values from the Moon Math calculator in Portfolio
     // These are fallbacks; coingeckoDataCache ATH will be used if available
+    // MIGRATION (per site owner): UFO's ATH carries over from the old token — the
+    // migration is one continuous asset. The value below (old-token ATH) is the baseline;
+    // ufoNewTokenAthCache (new pools' highs) supersedes it automatically once exceeded.
     const ATH_PRICES = {
       PTGC: 0.00133,    // from Moon Math calculator in portfolio.html
       UFO: 0.000113     // from Moon Math calculator in portfolio.html
@@ -341,18 +344,26 @@
        many days each window actually covers so a 2-week-old token can't fake a "30 day
        avg" — the UI collapses uncovered windows into an honest "Since Launch Avg".
        PTGC (unchanged token, deep history) keeps using the prebuilt file. */
+    let ufoNewTokenAthCache=0; /* ATH of the NEW UFO token, from its main pool's daily
+       candle highs (set by fetchUfoVolumeByPeriod). The CoinGecko ATH and the ATH_PRICES
+       fallback both belong to the OLD contract and must never be shown for the new one. */
     const fetchUfoVolumeByPeriod=async(vol24hLive)=>{
       const todayStartSec=Math.floor(Date.now()/86400000)*86400; // UTC start of today
       const byDay={}; // unix day-start (s) -> summed USD volume across pools
+      const mainPairAddr=(TOKENS.UFO.mainPair||'').toLowerCase();
       await Promise.all(HARDCODED_UFO_PAIRS.map(async p=>{
         try{
           const r=await fetch(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${p.address.toLowerCase()}/ohlcv/day?aggregate=1&limit=95&currency=usd`);
           if(!r.ok)return;
           const j=await r.json();
+          const isMain=p.address.toLowerCase()===mainPairAddr;
           (j?.data?.attributes?.ohlcv_list||[]).forEach(c=>{
-            const ts=c[0],vol=parseFloat(c[5])||0;
+            const ts=c[0],high=parseFloat(c[2])||0,vol=parseFloat(c[5])||0;
+            /* ATH from the MAIN pool only (thin pools wick to silly highs), and it
+               INCLUDES today — an ATH set an hour ago counts. */
+            if(isMain&&high>ufoNewTokenAthCache)ufoNewTokenAthCache=high;
             const dayStart=Math.floor(ts/86400)*86400;
-            if(dayStart>=todayStartSec)return; // skip today's partial candle
+            if(dayStart>=todayStartSec)return; // skip today's partial candle (volume averages only)
             byDay[dayStart]=(byDay[dayStart]||0)+vol;
           });
         }catch(e){/* one pool failing shouldn't kill the rest */}
@@ -426,7 +437,8 @@
       {symbol:'PLSX',name:'PulseX',address:'0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'},
       {symbol:'INC',name:'Incentive',address:'0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d'},
       {symbol:'HEX',name:'HEX',address:'0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39'},
-      {symbol:'EHEX',name:'HEX from Ethereum',address:'0x57fde0a71132198BBeC939B98976993d8D89D225'}
+      {symbol:'EHEX',name:'HEX from Ethereum',address:'0x57fde0a71132198BBeC939B98976993d8D89D225'},
+      {symbol:'PRVX',name:'ProveX',address:'0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11'} // new RH core — matches the dashboard's core list
     ];
     
 
@@ -2185,7 +2197,13 @@
       const totalSupply=cfg.totalSupply;
       const circulatingSupply=totalSupply-(burn?.total||0);
       const mcap=data?.mcap||0;
-      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      /* MIGRATION (per site owner): UFO's ATH carries over from the OLD token — the
+         migration is treated as one continuous asset, so the pre-migration high remains
+         the mark to beat. The moment the new token's own pools (ufoNewTokenAthCache) or
+         the live price exceed it, the larger number takes over automatically. */
+      const athPrice=token==='UFO'
+        ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache,price||0)
+        :(coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0);
       
       const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'Mx';if(n>=1e4)return(n/1e3).toFixed(0)+'Kx';if(n>=1e3)return(n/1e3).toFixed(1)+'Kx';if(n>=100)return Math.round(n).toLocaleString()+'x';if(n>=10)return n.toFixed(1)+'x';return n.toFixed(2)+'x';};
       const fmtMcap=v=>{if(!v||isNaN(v))return'\u2014';if(v>=1e12)return'$'+(v/1e12).toFixed(2)+'T';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(2)+'K';return fmtDollar(v);};
@@ -2421,24 +2439,42 @@
       // Format number with commas for display
       const displayTokenAmount=tokenAmount?(parseFloat(tokenAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
       
+      /* MIGRATION AUDIT (X Multiplier) — three fixes:
+         — WETH added as a pair option: UFO/WETH is one of the new token's three auto-LP
+           pools and deserves a ratio target like WPLS/PLSX. Added HERE only, not to
+           RH_CORE_TOKENS, which other tools use for RH-specific logic.
+         — Dust guard: a pair only qualifies with ≥ $250 liquidity. NOTE: the new token's
+           HEX/INC/PRVX pools are REAL ($40K–$210K liq) and sail past this floor — the
+           guard exists only so a genuinely empty joke pool can't enable a button.
+         — Quote-side fix: when our token is the pair's QUOTE, DexScreener's priceUsd is
+           the OTHER token's price, so the paired USD price is priceUsd directly; the old
+           code multiplied by priceNative, corrupting the ratio for quote-side pairs. The
+           ratio itself is now always displayedPrice ÷ pairedPrice, so the ratio on screen
+           always agrees with the two prices shown beside it. */
+      const XMULT_PAIR_TOKENS=[...RH_CORE_TOKENS,{symbol:'WETH',name:'Wrapped Ether',address:'0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C'}];
+      const XMULT_MIN_PAIR_LIQ=250; // USD — below this a pool's ratio is noise
       const pairedPrices=useMemo(()=>{
         const prices={};
         if(!data?.pairs?.length)return prices;
         const tokenAddr=cfg.address.toLowerCase();
         data.pairs.forEach(p=>{
           if(!p.baseToken||!p.quoteToken)return;
+          if((p.liq||0)<XMULT_MIN_PAIR_LIQ)return;
           const isBase=p.baseToken.address?.toLowerCase()===tokenAddr;
           const pairedToken=isBase?p.quoteToken:p.baseToken;
           const sym=(pairedToken.symbol||'').toUpperCase();
-          if(!RH_CORE_TOKENS.find(t=>t.symbol===sym))return;
-          if(prices[sym])return;
-          const tokenPriceUSD=parseFloat(p.priceUsd)||0;
-          const priceNative=parseFloat(p.priceNative)||0;
+          if(!XMULT_PAIR_TOKENS.find(t=>t.symbol===sym))return;
+          if(prices[sym])return; // pairs arrive sorted by liquidity desc — first hit is the deepest pool
           let pairedPriceUSD=0;
-          if(isBase&&priceNative>0&&tokenPriceUSD>0)pairedPriceUSD=tokenPriceUSD/priceNative;
-          else if(!isBase&&priceNative>0)pairedPriceUSD=tokenPriceUSD*priceNative;
+          if(isBase){
+            const tokenPriceUSD=parseFloat(p.priceUsd)||0;
+            const priceNative=parseFloat(p.priceNative)||0;
+            if(priceNative>0&&tokenPriceUSD>0)pairedPriceUSD=tokenPriceUSD/priceNative;
+          }else{
+            pairedPriceUSD=parseFloat(p.priceUsd)||0; // priceUsd IS the paired (base) token's price here
+          }
           if(sym==='WPLS'&&pairedPriceUSD===0)pairedPriceUSD=pls;
-          const ratio=pairedPriceUSD>0?tokenPriceUSD/pairedPriceUSD:0;
+          const ratio=(pairedPriceUSD>0&&price>0)?price/pairedPriceUSD:0;
           if(ratio>0)prices[sym]={pairedPriceUSD,ratio,logo:getLogo(pairedToken.address)};
         });
         // Force WPLS to use same pls prop as dashboard for consistent ratio
@@ -2831,7 +2867,7 @@
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <img src={getLogo(RH_CORE_TOKENS.find(t=>t.symbol===selectedPairSymbol)?.address)} alt={selectedPairSymbol} className="w-9 h-9 rounded-full" onError={e=>{e.target.style.display='none'}}/>
+                      <img src={getLogo(XMULT_PAIR_TOKENS.find(t=>t.symbol===selectedPairSymbol)?.address)} alt={selectedPairSymbol} className="w-9 h-9 rounded-full" onError={e=>{e.target.style.display='none'}}/>
                       <div>
                         <div className="text-white/40 text-xs uppercase tracking-wide">{selectedPairSymbol} Price</div>
                         <div className="text-3xl font-bold text-white"><Price p={pairedCurrentPrice}/></div>
@@ -2856,7 +2892,7 @@
                     <div>
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">Paired Token</div>
                       <div className="flex flex-wrap gap-2">
-                        {RH_CORE_TOKENS.map(t=>{
+                        {XMULT_PAIR_TOKENS.map(t=>{
                           const hasPair=!!pairedPrices[t.symbol];
                           const isActive=selectedPairSymbol===t.symbol;
                           return(
@@ -3136,7 +3172,10 @@
             const moonBagNew=moonBag*moonWeightedPrice;
             const moonBagGain=moonBagNew-moonBagCurrent;
             const moonTotalLiq=moonResultsList.reduce((s,r)=>s+(r.poolLiq||0),0);
-            const mAthPrice=coingeckoDataCache?.[moonToken]?.ath||ATH_PRICES[moonToken]||0;
+            /* MIGRATION: ATH continuity across the migration (see CalculatorsTab athPrice). */
+            const mAthPrice=moonToken==='UFO'
+              ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache)
+              :(coingeckoDataCache?.[moonToken]?.ath||ATH_PRICES[moonToken]||0);
             const mMcap=mPrice*mCirc;
             
             return(
@@ -4714,7 +4753,10 @@
       const priceUp=(data?.change||0)>=0;
       const _hdrFirstPool=data?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
       const hdrDaysOld=(_hdrFirstPool&&isFinite(_hdrFirstPool))?Math.max(0,Math.floor((Date.now()-_hdrFirstPool)/86400000)):null;
-      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      /* MIGRATION: ATH continuity across the migration (see CalculatorsTab athPrice). */
+      const athPrice=token==='UFO'
+        ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache,data?.price||0)
+        :(coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0);
       const xToATH=data?.price>0&&athPrice>data.price?(athPrice/data.price).toFixed(1):'\u2014';
       const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';
       const hdrFmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};
