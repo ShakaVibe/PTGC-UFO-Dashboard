@@ -180,7 +180,11 @@
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
-    const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
+    /* WETH has no logo on dd.dexscreener for PulseChain — use the same inline ETH
+       diamond the dashboard uses (see ETH_LOGO in index.html). */
+    const WETH_ADDR_LC='0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c';
+    const ETH_LOGO='data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI1MCIgZmlsbD0iIzYyN0VFQSIvPjxwb2x5Z29uIHBvaW50cz0iNTAsMTIgMjcsNTIgNTAsNDMiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMSkiLz48cG9seWdvbiBwb2ludHM9IjUwLDEyIDczLDUyIDUwLDQzIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjI3LDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjczLDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMikiLz48cG9seWdvbiBwb2ludHM9IjUwLDYwIDI3LDU2IDUwLDg4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDEpIi8+PHBvbHlnb24gcG9pbnRzPSI1MCw2MCA3Myw1NiA1MCw4OCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjYpIi8+PC9zdmc+';
+    const getLogo=a=>{if(!a)return null;const lc=a.toLowerCase();return lc===WETH_ADDR_LC?ETH_LOGO:`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${lc}.png`;};
     const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const fetchDex=async(addr,mainPair)=>{
       try{
@@ -2209,8 +2213,13 @@
       const fmtMcap=v=>{if(!v||isNaN(v))return'\u2014';if(v>=1e12)return'$'+(v/1e12).toFixed(2)+'T';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(2)+'K';return fmtDollar(v);};
       
       const[xFactor,setXFactor]=useState('2');
-      const[targetPairedPrice,setTargetPairedPrice]=useState('0.0001');
+      /* Target starts EMPTY and autofills with the selected pair's live price — the old
+         hardcoded '0.0001' default was nonsense for high-priced pairs like WETH. */
+      const[targetPairedPrice,setTargetPairedPrice]=useState('');
       const[selectedPairSymbol,setSelectedPairSymbol]=useState('WPLS');
+      /* Format a price for the target input with enough significant digits for anything
+         from WPLS (~1e-6) to WETH (~3e3). */
+      const fmtTargetVal=p=>{if(!p||p<=0||!isFinite(p))return'';if(p>=1)return String(Math.round(p*100)/100);const d=Math.min(Math.ceil(-Math.log10(p))+3,12);return p.toFixed(d);};
       const[tokenAmount,setTokenAmount]=useState('');
       const[portfolioLoading,setPortfolioLoading]=useState(false);
       
@@ -2487,6 +2496,9 @@
       const pairData=pairedPrices[selectedPairSymbol]||null;
       const ratio=pairData?.ratio||0;
       const pairedCurrentPrice=pairData?.pairedPriceUSD||0;
+      /* Autofill the empty target with the pair's current price on first load. Pair-button
+         clicks refill it explicitly; a value the user typed is never stomped. */
+      useEffect(()=>{if(targetPairedPrice===''&&pairedCurrentPrice>0)setTargetPairedPrice(fmtTargetVal(pairedCurrentPrice));},[pairedCurrentPrice,selectedPairSymbol]);
       const xNum=parseFloat(xFactor)||0;
       const targetPaired=parseFloat(targetPairedPrice)||0;
       const basePrice=ratio*targetPaired;
@@ -2848,6 +2860,22 @@
           {calcTab==='xmult'&&(
             <div className="space-y-6">
               
+              {/* Token switcher — same page-level switch as the Rewards calculator */}
+              <div className="flex justify-center">
+                <div className="inline-flex rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                  {['PTGC','UFO'].map(t=>{
+                    const on=token===t;
+                    const clr=t==='PTGC'?'#D4AF37':'#7CFC00';
+                    return(
+                      <button key={t} onClick={()=>{if(!on&&onSwitchToken)onSwitchToken();}} className="px-6 py-2.5 font-orbitron font-bold text-sm sm:text-base transition-all flex items-center gap-2" style={on?{background:`linear-gradient(135deg, ${clr}40, ${clr}18)`,color:'#fff',boxShadow:`inset 0 0 18px ${clr}22`}:{color:'rgba(255,255,255,0.35)'}}>
+                        <img src={TOKENS[t].logo} alt={t} className="w-5 h-5" style={on?{filter:`drop-shadow(0 0 5px ${clr})`}:{opacity:0.4}}/>
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              
               {/* Current Market Prices - with logos */}
               <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
                 <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
@@ -2896,7 +2924,7 @@
                           const hasPair=!!pairedPrices[t.symbol];
                           const isActive=selectedPairSymbol===t.symbol;
                           return(
-                            <button key={t.symbol} onClick={()=>{if(hasPair){setSelectedPairSymbol(t.symbol);setTargetPairedPrice('0.0001')}}} disabled={!hasPair} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-base font-bold transition-all ${!hasPair?'opacity-25 cursor-not-allowed border border-white/5':'cursor-pointer'} ${isActive&&hasPair?'text-black shadow-lg':'border border-white/10 text-white/60 hover:bg-white/10'}`} style={isActive&&hasPair?{background:solidColor}:{}}>
+                            <button key={t.symbol} onClick={()=>{if(hasPair){setSelectedPairSymbol(t.symbol);setTargetPairedPrice(fmtTargetVal(pairedPrices[t.symbol]?.pairedPriceUSD||0))}}} disabled={!hasPair} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-base font-bold transition-all ${!hasPair?'opacity-25 cursor-not-allowed border border-white/5':'cursor-pointer'} ${isActive&&hasPair?'text-black shadow-lg':'border border-white/10 text-white/60 hover:bg-white/10'}`} style={isActive&&hasPair?{background:solidColor}:{}}>
                               <img src={getLogo(t.address)} alt={t.symbol} className="w-5 h-5 rounded-full" onError={e=>{e.target.style.display='none'}}/>
                               {t.symbol}
                             </button>
@@ -2925,7 +2953,20 @@
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
                         <input type="number" step="any" min="0" value={targetPairedPrice} onChange={e=>setTargetPairedPrice(e.target.value)} placeholder="Enter target price" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
-                      {pairedXNeeded>0&&<div className="text-[#7CFC00] text-sm mt-2 ml-1 font-semibold">{fmtX(pairedXNeeded.toFixed(1))} from current {selectedPairSymbol} price</div>}
+                      <div className="flex items-center justify-between mt-2 ml-1 flex-wrap gap-x-3 gap-y-1">
+                        {pairedXNeeded>0&&<div className="text-[#7CFC00] text-sm font-semibold">{fmtX(pairedXNeeded.toFixed(1))} from current {selectedPairSymbol} price</div>}
+                        {pairedCurrentPrice>0&&<div className="text-white/35 text-sm">Current: <Price p={pairedCurrentPrice} c="text-white/60 font-semibold"/></div>}
+                      </div>
+                      {/* One-tap targets anchored to the CURRENT price — works for any pair
+                          magnitude, from WPLS to WETH */}
+                      {pairedCurrentPrice>0&&<div className="flex flex-wrap gap-2 mt-2">
+                        {[2,5,10,25,50].map(x=>{
+                          const active=targetPaired>0&&Math.abs(targetPaired/(pairedCurrentPrice*x)-1)<0.001;
+                          return(
+                          <button key={x} onClick={()=>setTargetPairedPrice(fmtTargetVal(pairedCurrentPrice*x))} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${active?'text-black':'text-white/40 hover:text-white/70 hover:bg-white/10'}`} style={active?{background:solidColor}:{background:'rgba(255,255,255,0.05)'}}>{x}x price</button>
+                          );
+                        })}
+                      </div>}
                     </div>
                     <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{cfg.name} X Factor</div>
