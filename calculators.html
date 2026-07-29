@@ -464,7 +464,10 @@
     const LV_RH_CORE_SYMBOLS = new Set(['PRVX', 'PRVC']);
     const LV_TOKEN_CFG = {
       PTGC: { name:'PTGC', address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93', logo:'06_PTGC_V1_transparent_bg.png', colorHex:'#D4AF37', colorRgb:'212,175,55' },
-      UFO:  { name:'UFO',  address:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018', logo:'07_Ufo_transparent.png',          colorHex:'#7CFC00', colorRgb:'124,252,0'  }
+      /* MIGRATION: was still the OLD UFO contract (0x456548A9...04018), so every live
+         L/V figure for UFO was read from the dead token's drained pools. Sourced from
+         TOKENS.UFO so the two configs cannot diverge again. */
+      UFO:  { name:'UFO',  address:TOKENS.UFO.address,                              logo:'07_Ufo_transparent.png',          colorHex:'#7CFC00', colorRgb:'124,252,0'  }
     };
     // Public repo — fetch directly, no proxy needed
     const LV_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/lv-snapshots.json';
@@ -1180,6 +1183,28 @@
 
     // ===== Growth Projection — hoisted helper components (module-scope so React preserves their identity between renders, otherwise text inputs lose focus on every keystroke) =====
     // ===== Growth Projection — live L/V scenarios helper =====
+    /* ===== MIGRATION BLOCKER — READ BEFORE SETTING UFO's EPOCH =====
+       lv-snapshots.json is written by .github/workflows/lv-snapshot.yml, and that workflow
+       still has the OLD UFO contract hardcoded:
+           OLD (in the workflow) 0x456548A9B56eFBbD89Ca0309edd17a9E20b04018
+           NEW (this file)       0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6
+       So every UFO row in the file describes the dead token. Its liquidity reads ~$4-5K
+       against the live dashboard's ~$1.16M, because it is measuring drained pools.
+       There is currently NO valid new-token L/V history at any date, which is why the
+       epoch below is null rather than a migration date — there is nothing to cut TO.
+
+       To bring UFO's scenarios online:
+         1. repoint the address in lv-snapshot.yml and let it run (4x daily),
+         2. wait for LV_MIN_WEEKS complete weeks to accumulate,
+         3. set UFO's epoch to the first FULL day the corrected builder ran (YYYY-MM-DD).
+       Until then UFO renders an honest "not enough post-migration history" state instead
+       of percentiles over old-contract data. PTGC did not migrate, so its history is
+       continuous and its epoch stays null-with-no-block (handled below). */
+    const LV_EPOCH = {
+      PTGC: '2026-02-28',   // unchanged token — full file is valid; earliest date in the file
+      UFO:  null,           // BLOCKED: see above. Set to 'YYYY-MM-DD' once the builder is fixed.
+    };
+    const LV_MIN_WEEKS = 4; // complete weeks required before percentiles mean anything
     // Pulls the same lv-snapshots.json that the LV Analyser uses, builds daily averages,
     // groups them into ISO weeks, filters complete weeks, and returns per-token percentile
     // stats: { PTGC: {conservative, median, strong, peak, count}, UFO: {...} }
@@ -1224,17 +1249,6 @@
           if (!weekMap[wk]) weekMap[wk] = [];
           weekMap[wk].push(d);
         });
-        const weeks = Object.values(weekMap).map(days => {
-          const avgL = (tok) => days.reduce((s, d) => s + (d[tok]?.liq || 0), 0) / days.length;
-          const sumV = (tok) => days.reduce((s, d) => s + (d[tok]?.vol || 0), 0);
-          return {
-            isPartial: days.length < 7,
-            PTGC: { lvr: avgL('PTGC') > 0 ? sumV('PTGC') / avgL('PTGC') : 0 },
-            UFO:  { lvr: avgL('UFO')  > 0 ? sumV('UFO')  / avgL('UFO')  : 0 },
-          };
-        });
-        const complete = weeks.filter(w => !w.isPartial);
-        if (!complete.length) return null;
 
         const pctile = (arr, p) => {
           if (arr.length === 1) return arr[0];
@@ -1242,9 +1256,21 @@
           const lo = Math.floor(idx), hi = Math.ceil(idx);
           return lo === hi ? arr[lo] : arr[lo] + (arr[hi] - arr[lo]) * (idx - lo);
         };
-        const stats = (tok) => {
-          const lvrs = complete.map(w => w[tok].lvr).filter(v => v > 0).sort((a, b) => a - b);
-          if (!lvrs.length) return null;
+        /* MIGRATION: weeks are now built PER TOKEN so each one can be cut to its own
+           valid history window (see LV_EPOCH). Previously one shared week list was used
+           for both, which meant UFO's percentiles were computed over the whole file. */
+        const statsFor = (tok) => {
+          const epoch = LV_EPOCH[tok];
+          const lvrs = Object.values(weekMap).map(allDays => {
+            const days = epoch ? allDays.filter(d => d.date >= epoch) : allDays;
+            if (days.length < 7) return null;                 // partial week — drop it
+            const avgL = days.reduce((s, d) => s + (d[tok]?.liq || 0), 0) / days.length;
+            const sumV = days.reduce((s, d) => s + (d[tok]?.vol || 0), 0);
+            return avgL > 0 ? sumV / avgL : 0;
+          }).filter(v => v != null && v > 0).sort((a, b) => a - b);
+
+          if (epoch === null)        return { blocked: 'no-epoch', weeks: 0 };
+          if (lvrs.length < LV_MIN_WEEKS) return { blocked: 'too-few', weeks: lvrs.length, need: LV_MIN_WEEKS };
           return {
             conservative: pctile(lvrs, 0.25),
             median:       pctile(lvrs, 0.50),
@@ -1253,7 +1279,7 @@
             count:        lvrs.length,
           };
         };
-        return { PTGC: stats('PTGC'), UFO: stats('UFO') };
+        return { PTGC: statsFor('PTGC'), UFO: statsFor('UFO') };
       } catch (e) {
         console.error('fetchLVScenarios error:', e);
         return null;
@@ -1268,24 +1294,40 @@
     };
 
     // ===== Growth Projection — fee breakdown per token =====
-    // Each row: how much of the trade fee goes to this allocation (`pct` of total fee),
-    // and the % of that allocation routed to code buyback for the active token.
-    // `locked:true` means the user cannot edit this value — it renders as static text
-    // (these are either automatic mechanisms or non-discretionary protocol flows).
-    const FEE_BREAKDOWN = {
-      PTGC: [
-        { id:'bnb', label:'Buy & Burn',      pct:0.5, defaultBuyback:100, locked:true  },
-        { id:'lp',  label:'Add LP',           pct:0.5, defaultBuyback:50,  locked:true  },
-        { id:'hld', label:'Holders/Stakers',  pct:2,   defaultBuyback:0,   locked:true  },
-        { id:'dao', label:'DAO',              pct:2,   defaultBuyback:50,  locked:false },
-      ],
-      UFO: [
-        { id:'lp',   label:'LP Providers',     pct:3, defaultBuyback:0,   locked:true },
-        { id:'hld',  label:'Holders',          pct:1, defaultBuyback:0,   locked:true },
-        { id:'bnbU', label:'Buy & Burn UFO',   pct:1, defaultBuyback:100, locked:true },
-        { id:'bnbP', label:'Buy & Burn PTGC',  pct:1, defaultBuyback:0,   locked:true },
-      ],
+    /* MIGRATION: these rows are now DERIVED from TOKENS[tk].taxBreakdown so this panel can
+       never drift from the published fee model again. It was still hardcoded to the
+       PRE-migration UFO shape — "LP Providers 3%", a payout that does not exist on the new
+       token — while the rest of the site had already moved to the 6 x 1% model.
+
+       BUYBACK_POLICY says what share of each bucket becomes a code-driven BUY of the token
+       being projected, and whether the user may edit it. `locked` = an automatic mechanism
+       or non-discretionary protocol flow, so it renders as static text.
+         Buy & Burn / Burn UFO  100% — the entire bucket buys the token and burns it
+         Burn PTGC                0% — buys PTGC, not UFO: no UFO buy pressure
+         Add LP / LP *           50% — AUTO-LIQUIDITY: half of the bucket buys the token,
+                                       half is the paired asset, and the full bucket lands
+                                       in the pool as permanent depth
+         Holders / Stakers        0% — reflections, not buys
+         DAO                     50% — discretionary, so this one stays editable
+       LP buckets are matched by the isLP flag, so adding a fourth pool to taxBreakdown
+       picks up the right policy automatically. */
+    const BUYBACK_POLICY = {
+      PTGC: { 'Buy & Burn':{buyback:100,locked:true}, 'Add LP':{buyback:50,locked:true}, 'Holders':{buyback:0,locked:true}, 'Stakers':{buyback:0,locked:true}, 'DAO':{buyback:50,locked:false} },
+      UFO:  { 'Holders':{buyback:0,locked:true}, 'Burn UFO':{buyback:100,locked:true}, 'Burn PTGC':{buyback:0,locked:true} },
     };
+    const LP_BUCKET_POLICY = { buyback:50, locked:true };   // any taxBreakdown row with isLP:true
+    const buildFeeBreakdown = (tk) => (TOKENS[tk].taxBreakdown || []).map(t => {
+      const pol = t.isLP ? LP_BUCKET_POLICY : (BUYBACK_POLICY[tk]?.[t.name] || { buyback:0, locked:true });
+      return {
+        id: t.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
+        label: t.name,
+        pct: t.pct,
+        defaultBuyback: pol.buyback,
+        locked: pol.locked,
+        isLP: !!t.isLP,
+      };
+    });
+    const FEE_BREAKDOWN = { PTGC: buildFeeBreakdown('PTGC'), UFO: buildFeeBreakdown('UFO') };
     const computeInitialAllocations = (tk) => {
       const out = {};
       FEE_BREAKDOWN[tk].forEach(r => { out[r.id] = r.defaultBuyback; });
@@ -1431,8 +1473,12 @@
         }).catch(() => setLvLoadState('error'));
       }, []);
       const tokenScenarios = liveScenarios[growthToken];
-      const lvRatio = tokenScenarios ? (tokenScenarios[lvScenarioKey] || 0) : 0;
-      const scenariosAreLive = tokenScenarios != null;
+      /* A token whose history is blocked (see LV_EPOCH) comes back as {blocked:...} rather
+         than percentiles. Treat that as "no scenarios" so the tab can say why, instead of
+         rendering live-looking pills against a 0.0000 ratio. */
+      const lvBlocked = tokenScenarios?.blocked || null;
+      const scenariosAreLive = tokenScenarios != null && !lvBlocked;
+      const lvRatio = scenariosAreLive ? (tokenScenarios[lvScenarioKey] || 0) : 0;
 
       // Baseline values — derived from liveData (no longer user-editable)
       const currentPrice = liveData?.price || 0;
@@ -1918,17 +1964,30 @@
                 <div className="mb-5">
                   <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <label className="text-white/70 text-sm uppercase tracking-wide font-bold">Volume Scenario (L/V Ratio)</label>
-                    {lvLoadState === 'loaded' && (
+                    {lvLoadState === 'loaded' && scenariosAreLive && (
                       <span className="flex items-center gap-1.5 text-[11px] text-white/45">
                         <span className="text-green-400/80">{'\u25CF'}</span>
                         <span className="uppercase tracking-widest font-bold text-[10px]">Live</span>
                       </span>
                     )}
                   </div>
-                  {lvLoadState === 'loaded' ? (
+                  {lvLoadState === 'loaded' && scenariosAreLive ? (
                     <div className="flex items-center gap-2 flex-wrap">
                       {[{key:'conservative',label:'Conservative'},{key:'median',label:'Median'},{key:'strong',label:'Strong'},{key:'peak',label:'Peak'}].map(o => <GP_Pill glowColor={glowColor} key={o.key} active={lvScenarioKey===o.key} onClick={()=>setLvScenarioKey(o.key)}>{o.label}</GP_Pill>)}
                       <span className="text-[11px] ml-1"><span className="text-white/45">Ratio </span><span className={`${theme.text} font-bold`}>{lvRatio.toFixed(4)}</span></span>
+                    </div>
+                  ) : lvLoadState === 'loaded' && lvBlocked ? (
+                    /* MIGRATION: no post-migration L/V history for this token yet. Say so
+                       plainly rather than showing percentiles built on the old contract. */
+                    <div className="flex items-start gap-2.5 py-2.5 px-3 rounded-md bg-amber-500/10 border border-amber-500/30">
+                      <span className="text-amber-400 text-sm leading-none mt-0.5">{'\u26A0'}</span>
+                      <div className="text-amber-200/80 text-xs leading-relaxed">
+                        {lvBlocked === 'no-epoch' ? (
+                          <>No post-migration volume history for {growthToken} yet. The snapshot builder is still recording the old contract, so every projection below that depends on volume is unavailable for this token.</>
+                        ) : (
+                          <>Only {tokenScenarios.weeks} complete {tokenScenarios.weeks === 1 ? 'week' : 'weeks'} of post-migration history {tokenScenarios.weeks === 1 ? 'is' : 'are'} available for {growthToken} {'\u2014'} {tokenScenarios.need} are needed before L/V percentiles mean anything.</>
+                        )}
+                      </div>
                     </div>
                   ) : lvLoadState === 'loading' ? (
                     <div className="flex items-center gap-2.5 py-3 px-1">
@@ -4202,8 +4261,12 @@
                     </>
                     ):(
                     <>
-                    <p className="mt-1.5">This calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. Actual rewards depend on real-time volume, the total number of holders, your proportional share of circulating supply, and the total share rate pool. Rewards are not guaranteed and fluctuate constantly with market conditions.</p>
-                    <p className="mt-1.5">Holder reflections (1% fee) are distributed in UFO proportionally based on your share of the eligible circulating supply. LP provider rewards (3% fee) are distributed in PLS proportionally based on your UFO share rate (the UFO you originally deposited into LP, tracked by the staking contract). Volume assumptions used here may not reflect actual future trading activity. <strong className="text-white/50">Always DYOR</strong> and never invest more than you can afford to lose.</p>
+                    <p className="mt-1.5">This calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. Actual rewards depend on real-time volume, the total number of holders, and your proportional share of the eligible circulating supply. Rewards are not guaranteed and fluctuate constantly with market conditions.</p>
+                    {/* MIGRATION: this paragraph still described the OLD token — an LP-provider
+                        payout of 3% settled in PLS against a share rate tracked by the staking
+                        contract. None of that exists on the new contract: the fee is 6% split
+                        1% six ways, and the three LP buckets are auto-liquidity, not a payout. */}
+                    <p className="mt-1.5">Holder reflections (1% fee) are distributed in UFO proportionally based on your share of the eligible circulating supply {'\u2014'} UFO held inside LP pools does not earn reflections and is excluded from that calculation. The remaining 5% of the fee does not pay out to wallets: 1% buys and burns UFO, 1% buys and burns PTGC, and 3% is auto-liquidity split evenly across the PLS, PLSX and WETH pools, where it becomes permanent depth rather than a claimable reward. Volume assumptions used here may not reflect actual future trading activity. <strong className="text-white/50">Always DYOR</strong> and never invest more than you can afford to lose.</p>
                     </>
                     )}
                   </div>
