@@ -51,9 +51,17 @@
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
-    ::-webkit-scrollbar{width:8px}
+    ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-track{background:#1a1a1a}
     ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+    /* LAYOUT-SHIFT FIX: containers that may scroll horizontally but must NEVER
+       change height. A visible h-scrollbar reserves ~15px of layout height, so it
+       appearing/disappearing on a data refresh shoves the whole page down and back. */
+    .no-scrollbar{scrollbar-width:none;-ms-overflow-style:none}
+    .no-scrollbar::-webkit-scrollbar{display:none;width:0;height:0}
+    /* Keep the page gutter reserved so the window scrollbar toggling never nudges
+       content sideways between renders. */
+    html{scrollbar-gutter:stable}
     .buyer-dist-wallets::-webkit-scrollbar{width:6px}
     .buyer-dist-wallets::-webkit-scrollbar-track{background:#1a1a1a;border-radius:3px}
     .buyer-dist-wallets::-webkit-scrollbar-thumb{background:#D4AF37;border-radius:3px}
@@ -1567,7 +1575,11 @@
       return(
         <div className={`inline-flex items-center gap-1.5 text-[11px] ${txt} ${className}`} title={error?'Last refresh failed — data may be stale. Click to retry.':'Live data auto-refreshes every 5 minutes'}>
           <span className="w-1.5 h-1.5 rounded-full" style={{background:dot,boxShadow:refreshing?`0 0 6px ${dot}`:'none'}}></span>
-          <span className="tabular-nums whitespace-nowrap">{error?'refresh failed':'Updated '+ageTxt}</span>
+          {/* Fixed min-width + right-align: the label swings between 'just now',
+              '17s ago', '4m ago' and 'refresh failed' on every tick. Letting it
+              resize changed the nav row's total width, which was flipping the
+              header's h-scrollbar on and off and jolting the page vertically. */}
+          <span className="tabular-nums whitespace-nowrap inline-block text-right" style={{minWidth:'6.75rem'}}>{error?'refresh failed':'Updated '+ageTxt}</span>
           {onRefresh&&<button onClick={onRefresh} disabled={refreshing} aria-label="Refresh data now" className={`hover:text-white transition-colors disabled:opacity-50 ${refreshing?'animate-spin':''}`} style={{lineHeight:1}}>
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0119 7.5M18.5 15A7.5 7.5 0 015 16.5"/></svg>
           </button>}
@@ -3505,7 +3517,7 @@
                     <div className="text-lg sm:text-2xl font-bold text-orange-400 truncate">{fmt(b.total)} <span className="text-sm sm:text-base text-orange-400/70">{t}</span></div>
                     <div className="text-gray-400 text-xs sm:text-sm mt-1 truncate">{fmtUSD(burnUSD)}<span className="text-orange-400/60 ml-2">{burnPctNum.toFixed(2)}%</span></div>
                     <div className="mt-3">
-                      <div className="flex items-center gap-1.5 mb-2 overflow-x-auto">{creatures.length>0?creatures.map((cr,i)=>(<span key={i} className="flex items-center gap-0.5 shrink-0"><span className="text-base">{cr.e}</span><span className="text-white text-xs font-bold">x{cr.cnt}</span></span>)):<span className="text-gray-500 text-xs">Building...</span>}</div>
+                      <div className="flex items-center gap-1.5 mb-2 overflow-x-auto overflow-y-hidden no-scrollbar">{creatures.length>0?creatures.map((cr,i)=>(<span key={i} className="flex items-center gap-0.5 shrink-0"><span className="text-base">{cr.e}</span><span className="text-white text-xs font-bold">x{cr.cnt}</span></span>)):<span className="text-gray-500 text-xs">Building...</span>}</div>
                       <div className="flex items-center gap-2">
                         <div className="w-[50%] h-1.5 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleP.progress}%`}}/></div>
                         <span className="text-xs text-gray-500 whitespace-nowrap">{whaleP.progress.toFixed(0)}%</span>
@@ -5309,7 +5321,7 @@
 
               {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator.
                   Hidden on phones — the mobile slim bar below renders the same tabs as a single swipeable row. */}
-              <div className="hidden sm:flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-wrap overflow-x-auto">
+              <div className="hidden sm:flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-nowrap overflow-x-auto overflow-y-hidden no-scrollbar">
                 <button onClick={()=>gotoTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
                   Dashboard
                   {activeTab==='dashboard' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
@@ -5350,7 +5362,7 @@
                 </div>
               </div>
             )}
-            <div ref={mobNavRef} className="flex items-center gap-0.5 px-2 overflow-x-auto" style={{scrollbarWidth:'none',WebkitOverflowScrolling:'touch'}}>
+            <div ref={mobNavRef} className="flex items-center gap-0.5 px-2 overflow-x-auto overflow-y-hidden no-scrollbar" style={{scrollbarWidth:'none',WebkitOverflowScrolling:'touch'}}>
               {/* Same destinations as the desktop Row 2 nav above — keep the two lists in sync. */}
               <button data-active={activeTab==='dashboard'?'1':'0'} onClick={()=>gotoTab('dashboard')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55'}`}>Dashboard{activeTab==='dashboard'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
               <button data-active={activeTab==='kpi'?'1':'0'} onClick={()=>gotoTab('kpi')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55'}`}>KPI Report{activeTab==='kpi'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
