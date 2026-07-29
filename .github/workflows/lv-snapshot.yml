@@ -29,9 +29,15 @@ jobs:
           const https = require('https');
 
           // Config
+          // MIGRATION: UFO's address was still the pre-migration contract, so every UFO
+          // row written to lv-snapshots.json described the dead token's drained pools
+          // (~$4-5K liquidity against the live token's ~$1.16M). Anything computing an
+          // L/V ratio for UFO was therefore reading a ratio for a different asset.
+          //   OLD 0x456548A9B56eFBbD89Ca0309edd17a9E20b04018
+          //   NEW 0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6  <- matches TOKENS.UFO in index.html / calculators.html
           const TOKENS = {
             PTGC: { address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93' },
-            UFO:  { address: '0x456548A9B56eFBbD89Ca0309edd17a9E20b04018' }
+            UFO:  { address: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6' }
           };
 
           const RH_CORES = new Set([
