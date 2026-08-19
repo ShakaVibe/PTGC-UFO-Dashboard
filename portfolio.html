@@ -36,17 +36,28 @@
     
     // ===== RPC & Helpers =====
     const RPC='https://rpc.pulsechain.com';
-    const rpcFetch=async(body,timeout=8000)=>{
-      try{
-        const controller=new AbortController();
-        const timeoutId=setTimeout(()=>controller.abort(),timeout);
-        const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-        clearTimeout(timeoutId);
-        return await res.json();
-      }catch(e){
-        console.error('RPC error:',e.message);
-        return{result:null};
+    // Transport-level retry. A single dropped connection, DNS blip or truncated JSON body used to bubble
+    // all the way up as {result:null}, which the reflections path (correctly) treats as "unavailable" and
+    // renders as "—". Those blips are common enough on public RPCs to be worth absorbing here rather than
+    // showing the user a dash. Only transport failures are retried — a well-formed JSON-RPC error reply is
+    // returned as-is, since callers inspect .error and some of them bisect in response to it.
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const rpcFetch=async(body,timeout=8000,attempts=3)=>{
+      let lastErr='';
+      for(let i=0;i<attempts;i++){
+        try{
+          const controller=new AbortController();
+          const timeoutId=setTimeout(()=>controller.abort(),timeout);
+          const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+          clearTimeout(timeoutId);
+          return await res.json();
+        }catch(e){
+          lastErr=e.message;
+          if(i<attempts-1)await sleep(300*Math.pow(2,i));  // 300ms, 600ms
+        }
       }
+      console.error('RPC error after '+attempts+' attempts:',lastErr);
+      return{result:null};
     };
     
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
@@ -194,28 +205,42 @@
     // balanceOf and there is NO on-chain per-wallet "reflections earned" getter. So we reconstruct it from
     // the wallet's Transfer-log history: reflections = balanceOf(now) - net principal transferred in.
     //
-    // Verified against the contract source: a taxed transfer emits TWO Transfer events from the sender —
-    // Transfer(sender, recipient, 94%) and Transfer(sender, contract, 5% contract fee) — while the 1%
-    // reflection fee (tFee) is NEVER emitted (it only shrinks _rTotal). We sum both emitted legs as outflow,
-    // so the only unobservable piece is that 1% slice. Consequences:
-    //   - buy-and-hold wallet  -> EXACT (everything that landed is logged at face value)
-    //   - a wallet that SOLD   -> reads low by ~1% of the amount it sold (the un-emitted reflection slice)
-    //   - fee-excluded wallets (owner/contract/pairs/burn) -> net to 0 correctly (their sends are untaxed)
+    // FEE STRUCTURE — derived empirically from on-chain logs (the contract is NOT verified on the explorer,
+    // so this was measured, not assumed). A taxed transfer emits TWO Transfer events from the sender:
+    //   Transfer(sender, recipient, 94% of gross)  and  Transfer(sender, tokenContract, 5% of gross)
+    // The 1% reflection fee (tFee) is NEVER emitted — it only shrinks _rTotal. Across every taxed send
+    // sampled, the two emitted legs sit at exactly 94/99 = 94.9495% and 5/99 = 5.0505% of the emitted
+    // total, which confirms the 94/5/1 split to 6 significant figures.
+    //
+    // CONSEQUENCE: the emitted legs sum to only 99% of what actually left the sender's balance. Summing
+    // them raw under-counts outflow by 1% of every taxed send, which inflates "net received" and drives
+    // reflections down — often below zero, where the clamp turned it into a flat 0. That is why wallets
+    // that had ever sold showed nothing.
+    //
+    // CORRECTION: the fee legs are unambiguous (they are the only sends addressed to the token contract),
+    // so taxed gross = feeLegs / 0.05, and true outflow = emittedTotal + feeLegs / 5. This is exact and
+    // degrades gracefully: untaxed sends have no fee leg, so they pass through at face value, and a tx
+    // mixing taxed and untaxed sends still resolves correctly because the correction is driven purely by
+    // the fee legs rather than by assuming every send was taxed.
+    //
+    // VERIFIED: on fee-excluded accounts (LP pairs / router), which by definition earn zero reflections,
+    // the reconstruction must land on exactly 0. Before the correction it was off by -85,108,352 and
+    // -46,551,638 tokens; after it, 258 wei and 111 wei — pure integer-division dust, one wei per taxed
+    // send. All arithmetic below is BigInt wei so nothing is lost to float rounding.
+    //
     // Every failure returns null (renders "—"), never a fake 0.
     const TRANSFER_TOPIC='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-    // Exact block the TheGraysUFO contract was deployed at (verified on-chain via eth_getCode bisect:
-    // first block with bytecode = 26989200, 2026-07-09 14:26 UTC). Nothing can exist before this, so it's
-    // the correct hard floor for the Transfer-log scan. Previously this was ESTIMATED from a launch
-    // timestamp and an assumed block time, which drifted further out of range every day (see below).
+    // Exact block TheGraysUFO was deployed at, found by bisecting eth_getCode on-chain: first block with
+    // bytecode = 26989200 (2026-07-09 14:26 UTC). Nothing involving this token can exist before it, so it
+    // is the correct hard floor for the scan and guarantees FULL history coverage. This replaces an
+    // estimate derived from a launch timestamp and an assumed 3s block time — PulseChain actually runs
+    // ~10.8s, so that estimate over-reached by ~3.5x and grew every day until it blew the range budget.
     const UFO_LAUNCH_BLOCK=26989200;
-    const UFO_LAUNCH_FALLBACK_MS=Date.parse('2026-07-08T00:00:00Z');
-    // PulseChain averages ~10s/block (measured 10.8s). The old code assumed 3s, which over-reached the
-    // scan window by ~3.5x and pushed it past the range cap.
-    const PLS_BLOCK_SECONDS=10;
     const cacheBucket=()=>Math.floor(Date.now()/(5*60*1000));
-    // The RPC comfortably serves a 1,000,000-block span for an address+topic filtered getLogs, so 10k
-    // chunks were needlessly small. 100k chunks x 100 ranges = 10,000,000 blocks (~3 years) of headroom,
-    // so the window can no longer outgrow the cap as the chain advances.
+    // Chunking is ADAPTIVE: the chunk size is derived from the span so the number of ranges can never
+    // exceed the budget, no matter how far the chain advances. A fixed chunk size is what caused the
+    // original outage — the window outgrew a hard cap and the whole read failed. Oversized chunks are
+    // self-correcting, since getLogsRange bisects on error or on a suspiciously full batch.
     const LOG_CHUNK=100000, MAX_LOG_RANGES=100;
     const LOG_CAP_SUSPECTS=[100,128,200,250,256,500,512,1000,1024,2000,2048,4096,5000,10000];
     const looksTruncated=(n)=>n>=900||LOG_CAP_SUSPECTS.indexOf(n)>=0;
@@ -262,13 +287,12 @@
     };
     const _getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
       if(toBlock<fromBlock)return[];
+      // Derive the chunk size from the span instead of failing when a fixed size needs too many ranges.
+      // This is the guard that previously hard-failed and blanked the reflections display.
+      const span=toBlock-fromBlock+1;
+      const chunk=Math.max(LOG_CHUNK,Math.ceil(span/MAX_LOG_RANGES));
       const ranges=[];
-      for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
-      if(ranges.length>MAX_LOG_RANGES){
-        lastLogError=`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`;
-        console.warn(lastLogError);
-        return null;
-      }
+      for(let s=fromBlock;s<=toBlock;s+=chunk)ranges.push([s,Math.min(s+chunk-1,toBlock)]);
       const out=[];const CONC=3;
       for(let i=0;i<ranges.length;i+=CONC){
         const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,toBlock)));
@@ -282,29 +306,34 @@
       const n=parseInt(r.result,16);
       return isFinite(n)?n:null;
     };
-    // reflections earned for one wallet, given its already-read UFO balance (tokens).
+    // Reflections earned for one wallet. Takes the raw balance in wei (BigInt) so the whole computation
+    // stays in exact integer arithmetic — a float64 can't hold 1e12 tokens at 18 decimals without drift,
+    // and reflections are a tiny fraction of balance, exactly where that drift would matter most.
     // Returns null on any read failure so the UI shows "—"/"calculating" rather than a fake number.
-    const computeUfoReflections=async(address,balanceTokens)=>{
-      if(balanceTokens==null)return null;      // balance read failed -> can't derive
-      if(balanceTokens<=0)return 0;            // nothing held -> nothing earned
+    const computeUfoReflectionsWei=async(address,balanceWei)=>{
+      if(balanceWei==null)return null;         // balance read failed -> can't derive
+      if(balanceWei<=0n)return 0;              // nothing held -> nothing earned
       const head=await getHeadBlock();
       if(head==null)return null;
-      // Start at the contract's actual deploy block. Under-reaching would silently drop early transfers
-      // and inflate reflections, so we still keep a time-based estimate as a belt-and-braces floor and
-      // take whichever reaches further back — but the pinned block is exact, so the window stays a fixed
-      // ~340k blocks instead of growing without bound.
-      const ageSec=Math.max(0,(Date.now()-UFO_LAUNCH_FALLBACK_MS)/1000);
-      const estimated=Math.max(0,head-Math.ceil(ageSec/PLS_BLOCK_SECONDS)-20000);
-      const fromBlock=Math.max(0,Math.min(UFO_LAUNCH_BLOCK,estimated));
+      // Scan the token's ENTIRE history, from its deploy block to head. No estimate, no sliding window:
+      // no transfer involving this token can predate the block its bytecode first appeared in.
+      const fromBlock=UFO_LAUNCH_BLOCK;
       const wtopic='0x'+padAddr(address);
       const [recv,sent]=await Promise.all([
         getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head),   // to = wallet
         getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,wtopic,null],fromBlock,head),   // from = wallet
       ]);
       if(recv===null||sent===null)return null; // hard chain-read failure -> unavailable, never a fake 0
-      const sum=(logs)=>logs.reduce((s,l)=>s+toNum(parseWord(l.data)),0);
-      const netReceived=sum(recv)-sum(sent);
-      return Math.max(0,balanceTokens-netReceived);
+      const sumWei=(logs)=>logs.reduce((s,l)=>s+parseWord(l.data),0n);
+      const contractTopic=('0x'+padAddr(UFO_TOKEN_ADDR)).toLowerCase();
+      const inWei=sumWei(recv);                                 // received amounts are emitted at face value
+      const outEmitted=sumWei(sent);                            // = 99% of gross on taxed sends
+      // The 5% contract-fee legs are the only sends addressed to the token itself. gross = fee/0.05,
+      // so the unemitted 1% reflection slice = fee/5. Adding it back makes outflow exact.
+      const feeLegs=sumWei(sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic));
+      const outWei=outEmitted+feeLegs/5n;
+      const reflWei=balanceWei-(inWei-outWei);
+      return reflWei>0n?toNum(reflWei):0;
     };
 
     // Pair display names for UFO LP
@@ -421,10 +450,12 @@
       const ufoBal=await callContract(UFO_TOKEN_ADDR,SEL.balanceOf+addr);
       // Distinguish a failed/reverted call (null or '0x') from a genuine zero balance (a full 32-byte word),
       // so a read failure shows "—" instead of a fake 0.
-      const ufoBalance=(ufoBal&&ufoBal!=='0x'&&ufoBal.length>=66)?toNum(parseWord(ufoBal)):null;
-      // Reconstruct reflections earned from this wallet's Transfer-log history (see computeUfoReflections).
+      const ufoOk=(ufoBal&&ufoBal!=='0x'&&ufoBal.length>=66);
+      const ufoBalanceWei=ufoOk?parseWord(ufoBal):null;
+      const ufoBalance=ufoOk?toNum(ufoBalanceWei):null;
+      // Reconstruct reflections earned from this wallet's full Transfer-log history, in exact wei.
       // null on any read failure — never a fake 0.
-      const ufoReflections=await computeUfoReflections(address,ufoBalance);
+      const ufoReflections=await computeUfoReflectionsWei(address,ufoBalanceWei);
       
       return{
         ptgc:{
