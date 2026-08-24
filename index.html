@@ -1892,16 +1892,18 @@
              pool (their edge answers in 6ms precisely because it's a frozen copy).
              Reserves cannot be stale — they ARE the market. DexScreener is still used
              for everything the chain can't give us: 24h change, volume, txn counts. */
+          /* PRICE SOURCE = DEXSCREENER, so the tiles match the chart the community checks.
+             DexScreener stamps a pair's USD price at its last trade, so on a quiet pair it
+             can sit a few % away from the live pool — that is expected and matches what
+             dexscreener.com itself shows. The chain is kept ONLY as an outage fallback:
+             if DexScreener returns nothing, we price off reserves instead of showing "—". */
           const _dsPrice = parseFloat(pp.priceUsd) || 0;
           let _price = _dsPrice;
-          if(mainPair){
+          if(!_price && mainPair){
             const _chain = await priceFromChain(mainPair, addr);
             if(_chain > 0){
               _price = _chain;
-              if(_dsPrice > 0){
-                const drift = Math.abs(_chain-_dsPrice)/_chain*100;
-                if(drift > 1) console.warn(`${addr.slice(0,8)}: DexScreener $${_dsPrice.toPrecision(6)} is ${drift.toFixed(1)}% off the pool ($${_chain.toPrecision(6)}) — using chain.`);
-              }
+              console.warn(`${addr.slice(0,8)}: DexScreener had no price — fell back to on-chain $${_chain.toPrecision(6)}`);
             }
           }
           return {
@@ -1910,9 +1912,9 @@
             priceChange: pp.priceChange || null, // {m5,h1,h6,h24} — used for real home sparklines
             mcap: (()=>{
               const m = pp.marketCap || pp.fdv || 0;
-              /* mcap from DexScreener was derived from ITS price. We display the chain
-                 price, so rescale or the two numbers contradict each other on screen. */
-              if(m > 0 && _dsPrice > 0 && _price > 0) return m * (_price/_dsPrice);
+              /* Only rescale in the fallback case, where the displayed price came from the
+                 chain and DexScreener's mcap would otherwise contradict it. */
+              if(m > 0 && _dsPrice > 0 && _price > 0 && _price !== _dsPrice) return m * (_price/_dsPrice);
               return m;
             })(),
             liq: pairs.reduce((s, p) => s + p.liq, 0),
@@ -2096,7 +2098,7 @@
     /* On failure return 0, never a made-up price: every consumer checks pls>0 and renders
        '—' instead, which is honest. A hardcoded fallback here silently displayed a wrong
        PLS ratio whenever DexScreener hiccuped. */
-    const fetchPLS=async()=>{const c=await plsUsdFromChain();if(c>0)return c;const d=await dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+DAI_WPLS_PAIR,6000);return parseFloat(dsOnePair(d)?.priceUsd)||0;};
+    const fetchPLS=async()=>{const d=await dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+DAI_WPLS_PAIR,6000);const p=parseFloat(dsOnePair(d)?.priceUsd)||0;if(p>0)return p;return await plsUsdFromChain();};
     /* JANK GUARD for auto-refresh: merge a fresh fetchDex result into the previous one,
        PRESERVING OBJECT IDENTITY wherever nothing actually changed.
        Why it matters: setData(freshObject) hands React a new `pairs` array every 5 min
@@ -3881,11 +3883,8 @@
             ]);
             let pP=parseFloat(dsOnePair(ptgcData)?.priceUsd)||0;
             let uP=parseFloat(dsOnePair(ufoData)?.priceUsd)||0;
-            const[_cP,_cU]=await Promise.all([
-              priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address),
-              priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address)
-            ]);
-            if(_cP>0)pP=_cP; if(_cU>0)uP=_cU;   // chain wins
+            if(!pP)pP=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
+            if(!uP)uP=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);   // chain = fallback only
             setPrices({ptgc:pP,ufo:uP});
           }catch(e){
             console.error('Error fetching prices:',e);
@@ -4698,11 +4697,8 @@
             const _pP=dsOnePair(ptgcDexRaw), _uP=dsOnePair(ufoDexRaw);
             let ptgcPrice=parseFloat(_pP?.priceUsd||0);
             let ufoPrice=parseFloat(_uP?.priceUsd||0);
-            const[_chP,_chU]=await Promise.all([
-              priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address),
-              priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address)
-            ]);
-            if(_chP>0)ptgcPrice=_chP; if(_chU>0)ufoPrice=_chU;   // chain wins
+            if(!ptgcPrice)ptgcPrice=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
+            if(!ufoPrice)ufoPrice=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);   // fallback only
             const ptgc24h=parseFloat(_pP?.priceChange?.h24||0);
             const ufo24h=parseFloat(_uP?.priceChange?.h24||0);
             
