@@ -1754,10 +1754,16 @@
         // Combine pairs from both endpoints, dedupe by pairAddress
         const allPairsMap = new Map();
         
+        /* The main-pair response IS a pair, with marketCap / volume / priceChange /
+           liquidity attached. During the Aug-2026 outage it was the ONLY thing answering,
+           and the old code discarded it whenever the token-address endpoints failed —
+           which zeroed MCap and Vol on the tiles. Seed it first, always. */
+        if(mp && mp.pairAddress) allPairsMap.set(mp.pairAddress.toLowerCase(), mp);
+        
         // Add pairs from tokens endpoint
         if(tokensData.pairs && tokensData.pairs.length > 0) {
           tokensData.pairs.forEach(p => {
-            allPairsMap.set(p.pairAddress?.toLowerCase(), p);
+            if(p && p.pairAddress) allPairsMap.set(p.pairAddress.toLowerCase(), p);
           });
         }
         
@@ -1902,7 +1908,13 @@
             price: _price,
             change: pp.priceChange?.h24 || 0,
             priceChange: pp.priceChange || null, // {m5,h1,h6,h24} — used for real home sparklines
-            mcap: pp.marketCap || pp.fdv || 0,
+            mcap: (()=>{
+              const m = pp.marketCap || pp.fdv || 0;
+              /* mcap from DexScreener was derived from ITS price. We display the chain
+                 price, so rescale or the two numbers contradict each other on screen. */
+              if(m > 0 && _dsPrice > 0 && _price > 0) return m * (_price/_dsPrice);
+              return m;
+            })(),
             liq: pairs.reduce((s, p) => s + p.liq, 0),
             vol: pairs.reduce((s, p) => s + p.vol, 0),
             buys: pairs.reduce((s, p) => s + (p.txns?.h24?.buys || 0), 0),
