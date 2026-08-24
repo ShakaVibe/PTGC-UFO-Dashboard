@@ -1635,28 +1635,104 @@
       if(burn24h>=t.WHALE)return'🐋';if(burn24h>=t.SHARK)return'🦈';if(burn24h>=t.DOLPHIN)return'🐬';if(burn24h>=t.SQUID)return'🦑';if(burn24h>=t.TURTLE)return'🐢';if(burn24h>=t.SHRIMP)return'🦐';return'🐚';
     };
     
+    /* ===================== HARDENED DEXSCREENER LAYER =====================
+     * Three things bit us:
+     *   1. /latest/dex/tokens/{addr} is no longer in DexScreener's published API
+     *      reference. The documented replacement is /tokens/v1/{chain}/{addrs}.
+     *   2. /latest/dex/pairs/{chain}/{pair} does not reliably populate the singular
+     *      `pair` field any more — the data arrives under `pairs[]`. Reading
+     *      d.pair?.priceUsd therefore yields undefined -> 0.
+     *   3. A single non-JSON response (429 body, HTML 404, CF challenge) used to throw
+     *      out of the whole fetchDex and blank BOTH tokens.
+     * dsGet never throws and never returns non-JSON. dsPairsFor tries the endpoints in
+     * order of how current they are. priceFromChain is the last line of defence and
+     * needs no third party at all. ===================================================== */
+    const dsGet=async(url,timeout=8000)=>{
+      try{
+        const c=new AbortController();
+        const t=setTimeout(()=>c.abort(),timeout);
+        const res=await fetch(url,{signal:c.signal});
+        clearTimeout(t);
+        if(!res.ok){console.warn('DexScreener '+res.status+' on '+url);return null;}
+        const txt=await res.text();
+        try{return JSON.parse(txt);}
+        catch{console.warn('DexScreener sent non-JSON from '+url+': '+txt.slice(0,120));return null;}
+      }catch(e){console.warn('DexScreener unreachable: '+url,e.message);return null;}
+    };
+    // Accepts BOTH the legacy {pair:{...}} shape and the current {pairs:[...]} shape.
+    const dsOnePair=d=>{
+      if(!d)return null;
+      if(d.pair)return d.pair;
+      if(Array.isArray(d.pairs)&&d.pairs.length)return d.pairs.find(p=>parseFloat(p.priceUsd)>0)||d.pairs[0];
+      if(Array.isArray(d)&&d.length)return d.find(p=>parseFloat(p.priceUsd)>0)||d[0];
+      return null;
+    };
+    // Every pair for a token, newest documented endpoint first, legacy last.
+    const dsPairsFor=async addr=>{
+      /* All three in PARALLEL with a short leash. During the Aug-2026 outage these hung
+         for 15s+ apiece on a cache miss; sequential fallbacks stacked to 45s of dead air
+         and the tiles stayed empty the whole time. Whichever generation answers, we take.
+         Cache hits come back in single-digit ms, so 6s is generous. */
+      const [v1,tp,legacy]=await Promise.all([
+        dsGet(`https://api.dexscreener.com/tokens/v1/pulsechain/${addr}`,6000),
+        dsGet(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${addr}`,6000),
+        dsGet(`https://api.dexscreener.com/latest/dex/tokens/${addr}`,6000)
+      ]);
+      const out=[],seen=new Set();
+      const add=arr=>{(arr||[]).forEach(p=>{
+        const k=p&&p.pairAddress&&p.pairAddress.toLowerCase();
+        if(k&&!seen.has(k)){seen.add(k);out.push(p);}
+      });};
+      if(Array.isArray(v1))add(v1);
+      if(Array.isArray(tp))add(tp);
+      if(legacy&&Array.isArray(legacy.pairs))add(legacy.pairs);
+      return out;
+    };
+    /* Reads a PulseX pair's reserves directly. No DexScreener involved. Returns USD price
+       of `token` given the pair's other side is WPLS and we know PLS/USD. */
+    const WPLS_ADDR='0xa1077a294dde1b09bb078844df40758a5d0f9a27';
+    const DAI_WPLS_PAIR='0xe56043671df55de5cdf8459710433c10324de0ae';
+    const readPair=async pair=>{
+      const c=d=>rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:pair,data:d},'latest'],id:1});
+      const[t0,rs]=await Promise.all([c('0x0dfe1681'),c('0x0902f1ac')]);
+      if(!t0?.result||!rs?.result||rs.result.length<194)return null;
+      const h=rs.result.slice(2);
+      return{
+        token0:'0x'+t0.result.slice(-40),
+        r0:BigInt('0x'+h.slice(0,64)),
+        r1:BigInt('0x'+h.slice(64,128))
+      };
+    };
+    const plsUsdFromChain=async()=>{
+      const p=await readPair(DAI_WPLS_PAIR);
+      if(!p)return 0;
+      // token0 is WPLS, token1 is DAI (both 18dp) — DAI per WPLS is the USD price.
+      const wplsIs0=p.token0.toLowerCase()===WPLS_ADDR;
+      const[wpls,dai]=wplsIs0?[p.r0,p.r1]:[p.r1,p.r0];
+      return wpls>0n?Number(dai)/Number(wpls):0;
+    };
+    const priceFromChain=async(pairAddr,tokenAddr)=>{
+      try{
+        const[p,pls]=await Promise.all([readPair(pairAddr),plsUsdFromChain()]);
+        if(!p||!pls)return 0;
+        const tokenIs0=p.token0.toLowerCase()===tokenAddr.toLowerCase();
+        const[tok,wpls]=tokenIs0?[p.r0,p.r1]:[p.r1,p.r0];
+        if(tok<=0n)return 0;
+        return(Number(wpls)/Number(tok))*pls;
+      }catch(e){console.warn('on-chain price failed',e.message);return 0;}
+    };
+
     const fetchDex=async(addr,mainPair)=>{
       try{
         let mp=null;
         if(mainPair){
-          const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);
-          const d=await r.json();
-          if(d.pair)mp=d.pair;
+          mp=dsOnePair(await dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`,6000));
         }
         
-        // Fetch from both endpoints to ensure we get all pairs
-        const [tokensRes, pairsRes] = await Promise.all([
-          fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`),
-          fetch(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${addr}`)
-        ]);
-        
-        const tokensData = await tokensRes.json();
-        let pairsData = [];
-        try {
-          pairsData = await pairsRes.json();
-        } catch(e) {
-          pairsData = [];
-        }
+        // Every pair DexScreener will admit to, across all endpoint generations.
+        const combined = await dsPairsFor(addr);
+        const tokensData = { pairs: combined };
+        const pairsData = [];
         
         // Combine pairs from both endpoints, dedupe by pairAddress
         const allPairsMap = new Map();
@@ -1779,7 +1855,7 @@
             vol: p.volume?.h24 || 0
           })).sort((a, b) => b.liq - a.liq);
           
-          const pp = mp || pairs[0];
+          const pp = mp || pairs.find(p=>parseFloat(p.priceUsd)>0) || pairs[0];
           let totalTokensInLP = 0;
           
           pairs.forEach(p => {
@@ -1788,8 +1864,13 @@
             else if(!isBase && p.liquidity?.quote) totalTokensInLP += p.liquidity.quote;
           });
           
+          let _price = parseFloat(pp.priceUsd) || 0;
+          if(!_price && mainPair){
+            _price = await priceFromChain(mainPair, addr);
+            if(_price) console.warn(`DexScreener gave no price for ${addr.slice(0,8)} — using on-chain reserves: $${_price}`);
+          }
           return {
-            price: parseFloat(pp.priceUsd) || 0,
+            price: _price,
             change: pp.priceChange?.h24 || 0,
             priceChange: pp.priceChange || null, // {m5,h1,h6,h24} — used for real home sparklines
             mcap: pp.marketCap || pp.fdv || 0,
@@ -1800,6 +1881,15 @@
             tokensInLP: totalTokensInLP,
             pairs
           };
+        }
+        /* DexScreener returned nothing at all. Rather than blanking the tile, price the
+           token off its own pool. Liquidity/volume stay 0 so nothing downstream lies. */
+        if(mainPair){
+          const cp = await priceFromChain(mainPair, addr);
+          if(cp){
+            console.warn(`DexScreener returned no pairs for ${addr.slice(0,8)} — on-chain price $${cp}`);
+            return {price:cp,change:0,priceChange:null,mcap:0,liq:0,vol:0,buys:0,sells:0,tokensInLP:0,pairs:[],_fromChain:true};
+          }
         }
         return null;
       } catch(e) {
@@ -1965,7 +2055,7 @@
     /* On failure return 0, never a made-up price: every consumer checks pls>0 and renders
        '—' instead, which is honest. A hardcoded fallback here silently displayed a wrong
        PLS ratio whenever DexScreener hiccuped. */
-    const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0}catch{return 0}};
+    const fetchPLS=async()=>{const d=await dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+DAI_WPLS_PAIR);const p=parseFloat(dsOnePair(d)?.priceUsd)||0;return p||await plsUsdFromChain();};
     /* JANK GUARD for auto-refresh: merge a fresh fetchDex result into the previous one,
        PRESERVING OBJECT IDENTITY wherever nothing actually changed.
        Why it matters: setData(freshObject) hands React a new `pairs` array every 5 min
@@ -2326,8 +2416,7 @@
     // Fetch token price from DexScreener
     const fetchTokenPrice = async (tokenAddress) => {
       try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
-        const data = await res.json();
+        const data = { pairs: await dsPairsFor(tokenAddress) };
         if (data.pairs && data.pairs.length > 0) {
           // Find the pair with highest liquidity for most accurate price
           const sortedPairs = data.pairs
@@ -3745,16 +3834,15 @@
         setLoading(true);
         const fetchPrices=async()=>{
           try{
-            const[ptgcRes,ufoRes]=await Promise.all([
-              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.PTGC.mainPair),
-              fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.UFO.mainPair) /* MIGRATION: resolved at boot */
+            const[ptgcData,ufoData]=await Promise.all([
+              dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.PTGC.mainPair),
+              dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.UFO.mainPair) /* MIGRATION: resolved at boot */
             ]);
-            const ptgcData=await ptgcRes.json();
-            const ufoData=await ufoRes.json();
-            setPrices({
-              ptgc:parseFloat(ptgcData?.pair?.priceUsd)||0,
-              ufo:parseFloat(ufoData?.pair?.priceUsd)||0
-            });
+            let pP=parseFloat(dsOnePair(ptgcData)?.priceUsd)||0;
+            let uP=parseFloat(dsOnePair(ufoData)?.priceUsd)||0;
+            if(!pP)pP=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
+            if(!uP)uP=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);
+            setPrices({ptgc:pP,ufo:uP});
           }catch(e){
             console.error('Error fetching prices:',e);
           }
@@ -4498,8 +4586,7 @@
           // Then use cached coingeckoDataCache for 7d, 30d, 90d changes
           Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
             try{
-              const dexRes=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
-              const dexData=await dexRes.json();
+              const dexData={ pairs: await dsPairsFor(addr) };
               const pair=dexData?.pairs?.find(p=>p.chainId==='pulsechain');
               return{
                 name,
@@ -4561,13 +4648,16 @@
           
           // Fetch PTGC and UFO prices from DexScreener, use cache for 7d/30d/90d
           Promise.all([
-            fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`).then(r=>r.json()),
-            fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`).then(r=>r.json())
-          ]).then(async ([ptgcDex,ufoDex])=>{
-            const ptgcPrice=parseFloat(ptgcDex?.pair?.priceUsd||0);
-            const ufoPrice=parseFloat(ufoDex?.pair?.priceUsd||0);
-            const ptgc24h=parseFloat(ptgcDex?.pair?.priceChange?.h24||0);
-            const ufo24h=parseFloat(ufoDex?.pair?.priceChange?.h24||0);
+            dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`),
+            dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`)
+          ]).then(async ([ptgcDexRaw,ufoDexRaw])=>{
+            const _pP=dsOnePair(ptgcDexRaw), _uP=dsOnePair(ufoDexRaw);
+            let ptgcPrice=parseFloat(_pP?.priceUsd||0);
+            let ufoPrice=parseFloat(_uP?.priceUsd||0);
+            if(!ptgcPrice)ptgcPrice=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
+            if(!ufoPrice)ufoPrice=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);
+            const ptgc24h=parseFloat(_pP?.priceChange?.h24||0);
+            const ufo24h=parseFloat(_uP?.priceChange?.h24||0);
             
             // Use cached price changes from coingeckoDataCache
             const ptgcCached=coingeckoDataCache?.PTGC?.priceChanges;
@@ -4969,8 +5059,7 @@
                so a missing field would silently zero every PTGC USD on the page. */
             const usdOf=async(addr)=>{
               try{
-                const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
-                const d=await r.json();
+                const d={pairs:await dsPairsFor(addr)};
                 const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0);
                 if(!ps.length)return 0;
                 ps.sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
@@ -6261,7 +6350,7 @@
                       const otherCfg=TOKENS[otherToken];
                       Promise.all([
                         fetchBurn(otherCfg.address,otherCfg.decimals),
-                        fetch(`https://api.dexscreener.com/latest/dex/tokens/${otherCfg.address}`).then(r=>r.json()).then(d=>{const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));return ps.length?parseFloat(ps[0].priceUsd)||0:0}).catch(()=>0)/* MIGRATION: was fragile /pairs/{mainPair} .pair?.priceUsd — hardened to robust /tokens/ best-pair (matches usdOf) */
+                        dsPairsFor(otherCfg.address).then(ps0=>({pairs:ps0})).then(d=>{const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));return ps.length?parseFloat(ps[0].priceUsd)||0:0}).catch(()=>0)/* MIGRATION: was fragile /pairs/{mainPair} .pair?.priceUsd — hardened to robust /tokens/ best-pair (matches usdOf) */
                       ]).then(([burnData,price])=>{
                         const bp=getBurnPeriods(otherToken);
                         setCombinedBurnOtherData({burn:burnData,burnPeriods:bp,price});
@@ -6281,7 +6370,7 @@
                       const otherToken=token==='PTGC'?'UFO':'PTGC';
                       const otherCfg=TOKENS[otherToken];
                       Promise.all([
-                        fetch(`https://api.dexscreener.com/latest/dex/tokens/${otherCfg.address}`).then(r=>r.json())/* MIGRATION: robust /tokens/ best-pair (was fragile /pairs/{mainPair}) */,
+                        dsPairsFor(otherCfg.address).then(ps0=>({pairs:ps0}))/* MIGRATION: robust best-pair across endpoint generations */,
                         fetchCoingeckoData().catch(()=>null)/* ensure the volume cache is loaded; reading the module var directly gave $0 when it hadn't loaded yet */
                       ])
                         .then(([d,cg])=>{
