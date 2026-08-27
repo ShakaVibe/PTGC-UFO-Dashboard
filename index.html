@@ -1517,6 +1517,8 @@
     const fmtComma=(n,dec=2)=>n==null||isNaN(n)?'\u2014':Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
+    /* RESILIENCE: human age for the "as of" freshness label ("14m ago", "5.5h ago"). */
+    const fmtSnapshotAge=ms=>{if(ms==null||!isFinite(ms))return'';const m=ms/60000;if(m<90)return Math.max(1,Math.round(m))+'m ago';return(m/60).toFixed(1).replace(/\.0$/,'')+'h ago';};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
@@ -2003,6 +2005,12 @@
        live on-chain scan, so this is safe to ship in any order. */
     const VALUE_GEN_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/value-generated.json';
     const VALUE_GEN_STALE_MS=3*60*60*1000; // 3 missed hourly builds -> fall back to live
+    /* RESILIENCE (Aug 27 incident): a stale snapshot used to be discarded entirely, so a
+       stalled builder meant every visitor stared at dashes for the multi-minute live scan.
+       Now a stale-but-valid file is SHOWN immediately as interim data (with an "as of" label)
+       while the live scan refreshes it in the background. Hour-old numbers beat dashes.
+       Beyond this age the file is too old to responsibly display even as interim. */
+    const VALUE_GEN_INTERIM_MS=48*60*60*1000;
     // (removed) HOLDER_HISTORY_URL / fetchHolderHistory — the old root holder-history.json
     // and its reader were only used by the now-deleted HolderChartModal. The live holder
     // chart reads data/holder-history.json via fetchHolderHistoryNew() / snapshotsFor().
@@ -4382,6 +4390,11 @@
       const[feeAudit,setFeeAudit]=useState(null); // MIGRATION: were any swaps untaxed, and by whom?
       // MIGRATION: what each fee bucket ACTUALLY delivered, measured at the point of delivery.
       const[delivered,setDelivered]=useState(null);
+      /* RESILIENCE: when the panels are rendering from a prebuilt snapshot, this records how
+         old it was ({ageMs, interim}) so the UI can say "as of Xh ago" instead of implying
+         live data. `interim:true` means a STALE snapshot is on screen while the live scan
+         refreshes it in the background; cleared the moment live data lands. */
+      const[snapshotInfo,setSnapshotInfo]=useState(null);
       // Cheap: four eth_calls. Always fetched. The full audit is dev-only.
       const[health,setHealth]=useState(null);
       const[valueGenShowTokens,setValueGenShowTokens]=useState(false);
@@ -4485,7 +4498,7 @@
       /* MIGRATION: one scan covers every period, so switching 24h/7d/30d/90d never
          refetches and the four numbers can never contradict each other. */
       useEffect(()=>{
-        if(token!=='UFO'){setRealizedFees(null);return;}
+        if(token!=='UFO'){setRealizedFees(null);setSnapshotInfo(null);return;}
         const _fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
         /* SPEED: this effect fires once before DexScreener has delivered pairCreatedAt.
            With firstPoolMs=null the launch clamp is 0, so the 90d window scans ~740,000
@@ -4494,6 +4507,10 @@
            it is earlier than the real launch, so nothing is ever missed. */
         const firstPoolMs=(_fp&&isFinite(_fp))?_fp:UFO_LAUNCH_FALLBACK_MS;
         let cancelled=false;
+        /* RESILIENCE: true when a stale snapshot has been put on screen as interim data.
+           The live-scan failure paths check it so a failed refresh degrades to "keep the
+           interim numbers" instead of replacing them with an error/blank state. */
+        let seededInterim=false;
         setRealizedLoading(true);
         const runLiveScan=()=>{
         if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;}
@@ -4513,7 +4530,14 @@
             catch(e){ r={ok:false,error:e.message||'error'}; }
             if(cancelled)return;
             if(r&&r.ok){setRealizedFees(r);setRealizedLoading(false);return;}
-            if(attempt===2){setRealizedFees(r);setRealizedLoading(false);return;}
+            if(attempt===2){
+              /* RESILIENCE: if a stale snapshot is on screen, a failed background refresh
+                 must not replace its ok:true data with an error object — keep the interim
+                 numbers and their "as of" label. Without interim data, surface the error
+                 (and its RETRY) exactly as before. */
+              if(!seededInterim)setRealizedFees(r);
+              setRealizedLoading(false);return;
+            }
             console.warn(`fee read failed (${r&&r.error}); retrying ${attempt+1}/2`);
           }
         })();
@@ -4526,16 +4550,47 @@
           fetchFeeExemptionAudit(TOKENS.UFO.address,firstPoolMs)
             .then(a=>{if(!cancelled)setFeeAudit(a);}).catch(()=>{});
         }
-        fetchDeliveredValue(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs,HARDCODED_UFO_PAIRS)
-          .then(d=>{
-            if(cancelled)return;
-            setDelivered(d);
-            if(!d||!d.ok){
-              console.warn('delivered-value scan failed; falling back to fetchPtgcBurnedByUfo');
-              fetchPtgcBurnedByUfo(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs)
-                .then(r=>{if(!cancelled&&r)setPtgcByUfoLive(r);}).catch(()=>{});
+        /* RESILIENCE (Aug 27 incident): fetchDeliveredValue used to get ONE attempt while
+           fetchRealizedFees got three. One transient RPC hiccup in this (much heavier) scan
+           left the five delivered buckets and the PTGC period boxes dashed for the entire
+           session, since nothing ever retried. Same 3-attempt backoff loop as the fee read;
+           the fallback and the failure state only apply after the FINAL attempt. */
+        (async()=>{
+          for(let attempt=0;attempt<3;attempt++){
+            if(attempt){
+              await new Promise(r=>setTimeout(r,600*attempt));
+              Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);
+              boundariesCache=null;
             }
-          }).catch(()=>{});
+            if(cancelled)return;
+            let d;
+            try{ d=await fetchDeliveredValue(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs,HARDCODED_UFO_PAIRS); }
+            catch(e){ d={ok:false,error:e.message||'error'}; }
+            if(cancelled)return;
+            if(d&&d.ok){
+              setDelivered(d);
+              setSnapshotInfo(null);   // live data on screen; retire any "as of" label
+              return;
+            }
+            if(attempt===2){
+              console.warn('delivered-value scan failed after 3 attempts; falling back to fetchPtgcBurnedByUfo');
+              /* Keep interim snapshot data if it's on screen — it is strictly better than
+                 an error state. Only set the failed result (and run the PTGC fallback)
+                 when there is nothing better to show. */
+              if(!seededInterim){
+                setDelivered(d);
+                fetchPtgcBurnedByUfo(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs)
+                  .then(r=>{if(!cancelled&&r)setPtgcByUfoLive(r);}).catch(()=>{});
+              }else{
+                /* Refresh failed but interim data is still on screen: stop claiming
+                   "refreshing…" and leave the honest quiet "as of Xh ago" label. */
+                setSnapshotInfo(s=>s?{...s,interim:false}:s);
+              }
+              return;
+            }
+            console.warn(`delivered-value scan failed (${d&&d.error}); retrying ${attempt+1}/2`);
+          }
+        })();
         }; /* ---- end runLiveScan ---- */
         /* Prebuilt hourly snapshot first (data/value-generated.json): if present, fresh, and
            built for THIS UFO contract, use it and skip the live scans — both the Value Generated
@@ -4547,15 +4602,29 @@
               const res=await fetch(VALUE_GEN_URL+'?t='+cacheBucket());
               if(res.ok){
                 const j=await res.json();
-                const okFile=j&&j.meta&&j.delivered&&j.delivered.ok&&j.realizedFees&&j.realizedFees.ok
+                const validFile=j&&j.meta&&j.delivered&&j.delivered.ok&&j.realizedFees&&j.realizedFees.ok
                   &&(j.meta.ufoAddress||'').toLowerCase()===TOKENS.UFO.address.toLowerCase()
-                  &&j.meta.generatedAt&&(Date.now()-Date.parse(j.meta.generatedAt))<VALUE_GEN_STALE_MS;
-                if(okFile&&!cancelled){
+                  &&j.meta.generatedAt;
+                const ageMs=validFile?(Date.now()-Date.parse(j.meta.generatedAt)):Infinity;
+                if(validFile&&ageMs<VALUE_GEN_STALE_MS&&!cancelled){
                   setRealizedFees(j.realizedFees);
                   setDelivered(j.delivered);
+                  setSnapshotInfo({ageMs,interim:false});
                   setRealizedLoading(false);
                   fetchContractHealth(TOKENS.UFO.address).then(h=>{if(!cancelled)setHealth(h&&h.ok?h:null);}).catch(()=>{});
                   return;   // snapshot served both boxes; no on-chain scan this load
+                }
+                /* RESILIENCE (Aug 27 incident): a STALE-but-valid file used to be discarded,
+                   leaving dashes for the full multi-minute live scan (or forever, if the scan
+                   failed). Show it immediately as interim data with an "as of" label, then let
+                   the live scan replace it in the background. */
+                if(validFile&&ageMs<VALUE_GEN_INTERIM_MS&&!cancelled){
+                  console.warn(`value-generated snapshot is ${(ageMs/3600000).toFixed(1)}h old; showing as interim while the live scan refreshes`);
+                  seededInterim=true;
+                  setRealizedFees(j.realizedFees);
+                  setDelivered(j.delivered);
+                  setSnapshotInfo({ageMs,interim:true});
+                  setRealizedLoading(false);
                 }
               }
             }catch(e){/* fall through to the live scan */}
@@ -5801,6 +5870,11 @@
                               </span>
                               {priceless&&<span className="text-amber-300/70 text-[11px]">price feed unavailable — token amounts are still exact</span>}
                               {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in this window</span>}
+                              {/* RESILIENCE: honest freshness. Fresh snapshot → quiet "as of";
+                                  stale interim → amber note that a live refresh is running. */}
+                              {snapshotInfo&&(snapshotInfo.interim
+                                ?<span className="text-amber-300/70 text-[10px]">as of {fmtSnapshotAge(snapshotInfo.ageMs)} — refreshing from chain…</span>
+                                :<span className="text-white/35 text-[10px]">as of {fmtSnapshotAge(snapshotInfo.ageMs)}</span>)}
                             </>
                           ):realizedLoading&&token==='UFO'?(
                             <span className="text-base text-white/40">Reading fees from chain…</span>
@@ -6122,7 +6196,12 @@
                         PTGC Burned by UFO
                         <button onClick={()=>setShowDAOShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
                       </h3>
-                      <span className="text-sky-400/50 text-[10px] uppercase tracking-[0.18em]">Lifetime</span>
+                      <span className="text-sky-400/50 text-[10px] uppercase tracking-[0.18em] text-right">
+                        Lifetime
+                        {/* RESILIENCE: same freshness label as Value Generated — both panels
+                            render from the same snapshot/live data. */}
+                        {snapshotInfo&&<span className={`block normal-case tracking-normal ${snapshotInfo.interim?'text-amber-300/70':'text-white/35'}`}>as of {fmtSnapshotAge(snapshotInfo.ageMs)}{snapshotInfo.interim?' — refreshing…':''}</span>}
+                      </span>
                     </div>
                     {(()=>{
                       /* MIGRATION: combined OLD + NEW. The old contract is retired, so its
