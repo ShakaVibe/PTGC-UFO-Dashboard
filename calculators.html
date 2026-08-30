@@ -1183,26 +1183,17 @@
 
     // ===== Growth Projection — hoisted helper components (module-scope so React preserves their identity between renders, otherwise text inputs lose focus on every keystroke) =====
     // ===== Growth Projection — live L/V scenarios helper =====
-    /* ===== MIGRATION BLOCKER — READ BEFORE SETTING UFO's EPOCH =====
-       lv-snapshots.json is written by .github/workflows/lv-snapshot.yml, and that workflow
-       still has the OLD UFO contract hardcoded:
-           OLD (in the workflow) 0x456548A9B56eFBbD89Ca0309edd17a9E20b04018
-           NEW (this file)       0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6
-       So every UFO row in the file describes the dead token. Its liquidity reads ~$4-5K
-       against the live dashboard's ~$1.16M, because it is measuring drained pools.
-       There is currently NO valid new-token L/V history at any date, which is why the
-       epoch below is null rather than a migration date — there is nothing to cut TO.
-
-       To bring UFO's scenarios online:
-         1. repoint the address in lv-snapshot.yml and let it run (4x daily),
-         2. wait for LV_MIN_WEEKS complete weeks to accumulate,
-         3. set UFO's epoch to the first FULL day the corrected builder ran (YYYY-MM-DD).
-       Until then UFO renders an honest "not enough post-migration history" state instead
-       of percentiles over old-contract data. PTGC did not migrate, so its history is
-       continuous and its epoch stays null-with-no-block (handled below). */
+    /* ===== MIGRATION NOTE — UFO L/V history window =====
+       UFO migrated to a new contract (0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6) in late
+       July 2026. lv-snapshots.json rows before 2026-07-30 describe the OLD contract's
+       drained pools (~$4-5K liquidity) and are excluded from UFO's percentiles. The
+       snapshot builder was repointed and 2026-07-30 is the first FULL day it recorded the
+       new token, so that is UFO's epoch. PTGC did not migrate, so its history is
+       continuous. LV_EPOCH cuts each token's week list to its own valid window; a token
+       with epoch null is treated as blocked (no valid history at all). */
     const LV_EPOCH = {
       PTGC: '2026-02-28',   // unchanged token — full file is valid; earliest date in the file
-      UFO:  null,           // BLOCKED: see above. Set to 'YYYY-MM-DD' once the builder is fixed.
+      UFO:  '2026-07-30',   // first full day of new-contract snapshots (went live 2026-08-30 with 4 clean weeks)
     };
     const LV_MIN_WEEKS = 4; // complete weeks required before percentiles mean anything
     // Pulls the same lv-snapshots.json that the LV Analyser uses, builds daily averages,
@@ -1378,7 +1369,7 @@
       </div>
     );
 
-    // ===== GROWTH PROJECTION CALCULATOR (hidden — dot trigger) =====
+    // ===== GROWTH PROJECTION CALCULATOR =====
     const GrowthProjectionTab = (props) => {
       // Internal token toggle — independent of the page's selected token
       const [growthToken, setGrowthToken] = React.useState(props.cfg.name);
@@ -2263,7 +2254,7 @@
       const[calcTab,setCalcTab]=useState(()=>{
         try{
           const t=localStorage.getItem('grays_calc_last_tab');
-          if(t&&['fresh','rewards','xmult'].includes(t))return t;
+          if(t&&['fresh','rewards','xmult','growth'].includes(t))return t;
         }catch(e){}
         return 'fresh';
       });
@@ -2872,26 +2863,12 @@
       };
       /* Single source of truth for the calculator nav. To launch a calculator, add its
          id to LIVE_CALC_IDS — it moves from the "coming soon" strip to a full tab. */
-      const LIVE_CALC_IDS=['fresh','rewards','xmult'];    // New Capital Simulator + Rewards + X Multiplier are live
+      const LIVE_CALC_IDS=['fresh','rewards','xmult','growth'];    // New Capital Simulator + Rewards + X Multiplier + 10 Yr Projection are live
       const ALL_CALCS=[{id:'xmult',label:'X Multiplier'},{id:'moon',label:'Moon Math'},{id:'rewards',label:'Rewards'},{id:'fresh',label:'New Capital Simulator'},{id:'lv',label:'Liquidity Impact'},{id:'growth',label:'10 Yr Projection',isNew:true,standout:true}];
       const liveCalcs=ALL_CALCS.filter(b=>LIVE_CALC_IDS.includes(b.id));
       const upcomingCalcs=ALL_CALCS.filter(b=>!LIVE_CALC_IDS.includes(b.id));
       return(
         <div className="max-w-5xl mx-auto px-3 sm:px-6 py-8">
-          {/* ===== CALC-PREVIEW: operator-only entry to the NEXT calculator being migrated
-               (currently 10 Yr Projection, id 'growth') while listed under "coming soon". Same
-               faint-dot pattern as the maintenance gate (2px, low-opacity green, fixed
-               corner). Opens the tab for THIS visit only — nothing public changes. When
-               it goes live (added to LIVE_CALC_IDS), point this at the next calculator
-               or delete it. ===== */}
-          <button
-            onClick={()=>setCalcTab('growth')}
-            aria-label="."
-            title=""
-            className="fixed top-1.5 right-1.5 w-2 h-2 rounded-full z-[60] focus:outline-none"
-            style={{background:'#7CFC00',opacity:0.18,border:'none',padding:0,lineHeight:0}}
-          />
-          {/* ===== END CALC-PREVIEW ===== */}
           
           {/* ===== HEADER ===== */}
           <div className="text-center mb-8">
@@ -4828,7 +4805,7 @@
             <LVAnalyserTab />
           )}
 
-          {/* ====== GROWTH PROJECTION (hidden, dot-triggered) ====== */}
+          {/* ====== GROWTH PROJECTION TAB ====== */}
           {calcTab==='growth'&&(
             <GrowthProjectionTab cfg={cfg} theme={theme} />
           )}
