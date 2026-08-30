@@ -2332,6 +2332,7 @@
       const[moonBagLoading,setMoonBagLoading]=useState(false);
       const[moonToken,setMoonToken]=useState(token);
       const[moonOtherPairs,setMoonOtherPairs]=useState(null);
+      const[moonOtherBurn,setMoonOtherBurn]=useState(0); // MIGRATION AUDIT: burn of the non-parent token, fetched on toggle
       const[moonDirectAmount,setMoonDirectAmount]=useState('');
       const[moonCrossWeights,setMoonCrossWeights]=useState({}); // {coreSymbol: {otherCoreSymbol: weight}}
       const[moonXInputs,setMoonXInputs]=useState({}); // {pairAddress: string} — user-typed X targets per core row
@@ -2341,7 +2342,21 @@
       const[moonDirectMcapInput,setMoonDirectMcapInput]=useState(''); // user-typed mcap target for direct buy
       const[moonApplyAllAmount,setMoonApplyAllAmount]=useState(''); // apply-all dollar amount
       const[moonApplyAllX,setMoonApplyAllX]=useState(''); // apply-all X target
-      const CORE_DECIMALS={'WPLS':18,'PLSX':18,'INC':18,'HEX':8,'EHEX':8};
+      const CORE_DECIMALS={'WPLS':18,'PLSX':18,'INC':18,'HEX':8,'EHEX':8,'WETH':18,'PRVX':18};
+      /* MIGRATION AUDIT (Moon Math) — reviewed 2026-08-30 before go-live:
+         — Pool math verified on-chain: getReserves() on all four new UFO pools (WPLS/PLSX/
+           WETH/EHEX) and both PTGC pools returns live reserves, and the address-sort rule
+           used to pick token0 agrees with each pool's token0() call.
+         — WETH added as a core row. UFO/WETH is one of the new token's three auto-LP pools;
+           previously it was filtered out of the DexScreener scan (not an RH core) and only
+           crept back in through the hardcoded fallback with $0 liquidity, so it sorted last
+           and never joined the cross-core reflexivity weights. Same pattern as X Multiplier:
+           added HERE only, RH_CORE_TOKENS is untouched.
+         — Non-parent token burn: when Moon Math is toggled to the OTHER token, burn used to be
+           hardwired to 0 (circulating = total supply). It is now fetched on toggle so market
+           cap uses the same circulating supply the rest of the site does.
+         — ATH continuity (old-token ATH carries over) was already wired in below. */
+      const MOON_CORE_TOKENS=[...RH_CORE_TOKENS,{symbol:'WETH',name:'Wrapped Ether',address:'0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C'}];
       
       // Fresh Capital Calculator state
       const[freshUSD,setFreshUSD]=useState('');
@@ -2622,12 +2637,13 @@
       
       // Fetch other token pairs from DexScreener when moonToken differs from parent
       useEffect(()=>{
-        if(moonToken===token){setMoonOtherPairs(null);return;}
+        if(moonToken===token){setMoonOtherPairs(null);setMoonOtherBurn(0);return;}
         const otherCfg=TOKENS[moonToken];
         if(!otherCfg)return;
         fetchDex(otherCfg.address,otherCfg.mainPair).then(d=>{
           setMoonOtherPairs(d?.pairs||[]);
         }).catch(()=>setMoonOtherPairs([]));
+        fetchBurn(otherCfg.address,otherCfg.decimals).then(b=>setMoonOtherBurn(b?.total||0)).catch(()=>setMoonOtherBurn(0));
       },[moonToken,token]);
       
       const moonPairs=useMemo(()=>{
@@ -2649,7 +2665,7 @@
           const core=isBase?p.quoteToken:p.baseToken;
           if(!core?.address)return;
           const sym=(core.symbol||'').toUpperCase();
-          const isRH=!!RH_CORE_TOKENS.find(t=>t.symbol===sym);
+          const isRH=!!MOON_CORE_TOKENS.find(t=>t.symbol===sym);
           if(!isRH)return;
           // Deduplicate per core symbol (keep highest liquidity = V2)
           if(seenCore.has(sym))return;
@@ -2715,9 +2731,9 @@
           // Also capture cross-core pool weights for reflexivity model
           const coreLiqResults={};
           const crossWeights={}; // {coreSymbol: {otherCoreSymbol: weight}}
-          const coreAddressSet=new Set(RH_CORE_TOKENS.map(t=>t.address.toLowerCase()));
+          const coreAddressSet=new Set(MOON_CORE_TOKENS.map(t=>t.address.toLowerCase()));
           const coreAddrToSymbol={};
-          RH_CORE_TOKENS.forEach(t=>{coreAddrToSymbol[t.address.toLowerCase()]=t.symbol;});
+          MOON_CORE_TOKENS.forEach(t=>{coreAddrToSymbol[t.address.toLowerCase()]=t.symbol;});
           const fetchedCores=new Set();
           for(const pair of moonPairs){
             if(fetchedCores.has(pair.coreSymbol))continue;
@@ -3253,7 +3269,7 @@
             // Moon Math uses moonToken which can differ from parent token
             const mCfg=TOKENS[moonToken]||cfg;
             const mTotalSupply=mCfg.totalSupply;
-            const mBurnTotal=moonToken===token?(burn?.total||0):0;
+            const mBurnTotal=moonToken===token?(burn?.total||0):moonOtherBurn;
             const mCirc=mTotalSupply-mBurnTotal;
             let mPrice=moonToken===token?price:0;
             if(mPrice<=0&&pls>0){
