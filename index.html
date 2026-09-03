@@ -3227,6 +3227,16 @@
            also carries a pool Swap are already on the tape as that swap; the rest are TRANSFER
            contacts, and the leg IS the fee, so the amount is exact. */
         const feeTopic='0x'+encodeAddress(cfg.address);
+        /* Only part of each fee reaches the contract as a Transfer leg. Verified on chain (Sep 2026):
+             UFO  — 1% reflection adjusts balances with no event; the other 5% lands on the contract.
+             PTGC — 0.5% burn and 1% stakers go straight to their wallets, 1% reflects, and only
+                    DAO 2% + LP 0.5% = 2.5% reaches the contract.
+           So a transfer's true size = contract leg ÷ that share, and its fee = size × the full rate. */
+        const contractShare=(()=>{
+          const items=cfg.taxBreakdown||[];
+          if(token==='UFO')return items.filter(b=>b.key!=='reflection').reduce((a,b)=>a+(b.pct||0),0)/100;
+          return items.filter(b=>b.name==='DAO'||b.name==='Add LP').reduce((a,b)=>a+(b.pct||0),0)/100;
+        })()||st.tax;
         const pairSet=new Set(pairs.map(p=>p.pairAddress.toLowerCase()));
         const fetchBoth=async(from,to,head)=>{
           const[sw,fl]=await Promise.all([
@@ -3247,9 +3257,9 @@
             byTx[k].feeTokens+=fee;
           });
           Object.values(byTx).forEach(x=>{
-            const gen=x.feeTokens*st.price;
-            const usd=st.tax>0?gen/st.tax:0;
-            out.push({...x,tokens:st.tax>0?x.feeTokens/st.tax:x.feeTokens,usd,gen,pool:'transfer',logo:cfg.logo,initial:token[0]});
+            const size=contractShare>0?x.feeTokens/contractShare:x.feeTokens;   // tokens the sender actually sent
+            const usd=size*st.price;
+            out.push({...x,tokens:size,usd,gen:usd*st.tax,pool:'transfer',logo:cfg.logo,initial:token[0]});
           });
           return out;
         };
@@ -3600,7 +3610,7 @@
               </div>
             </div>
             <div className="mt-3 text-[11px] text-white/30 leading-relaxed">
-              Contacts are PulseX swaps on this token's pools plus taxed wallet transfers (spotted by their fee leg), read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (for transfers the fee leg itself), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
+              Contacts are PulseX swaps on this token's pools plus taxed wallet transfers (spotted by their fee leg), read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
             </div>
           </div>
         </div>
