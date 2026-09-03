@@ -211,22 +211,66 @@
      * ========================================= */
     const UFO_MAINTENANCE=false;   // LIVE. Home UFO card, dashboard access, the secret dot, and operator-only data all follow this flag.
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
-    const RPC='https://rpc.pulsechain.com';
-    const MIN_LIQ=1000;
-    
-    // Simple RPC fetch with timeout
-    const rpcFetch=async(body,timeout=8000)=>{
+    /* ===================== RESILIENCE: RPC ENDPOINT POOL =====================
+     * Every on-chain read on this page — prices when DexScreener is down, burns,
+     * balances, the fee scans, holder tiers — rode on ONE free public endpoint.
+     * rpc.pulsechain.com throttles bursts, and when it did, rpcFetch returned
+     * {result:null} and the whole page silently read zero. There was no fallback,
+     * so the "outage fallback" price path failed at exactly the moment it was needed.
+     *
+     * Now: three independent PulseChain endpoints, tried in order. Failover is
+     * TRANSPORT-ONLY (network error, timeout, non-2xx, non-JSON). A well-formed
+     * JSON-RPC *error* object is passed straight back to the caller untouched,
+     * because getLogsRange reads those errors to decide how to split a range —
+     * rotating on them would break the log-cap logic.
+     *
+     * The chosen endpoint is sticky (so a log scan doesn't hop between endpoints
+     * with different caps mid-scan) but drifts back to the primary after 2 min.
+     * ========================================================================= */
+    const RPC_ENDPOINTS=[
+      'https://rpc.pulsechain.com',
+      'https://rpc-pulsechain.g4mm4.io',
+      'https://pulsechain-rpc.publicnode.com'
+    ];
+    const RPC=RPC_ENDPOINTS[0];
+    let _rpcIdx=0,_rpcSince=0;
+    const RPC_STICKY_MS=120000;
+    const _rpcOnce=async(url,body,timeout)=>{
+      const controller=new AbortController();
+      const timeoutId=setTimeout(()=>controller.abort(),timeout);
       try{
-        const controller=new AbortController();
-        const timeoutId=setTimeout(()=>controller.abort(),timeout);
-        const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-        clearTimeout(timeoutId);
-        return await res.json();
-      }catch(e){
-        console.error('RPC error:',e.message);
-        return{result:null};
-      }
+        const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+        if(!res.ok)throw new Error('HTTP '+res.status);
+        const txt=await res.text();
+        let j;
+        try{j=JSON.parse(txt);}catch{throw new Error('non-JSON response');}
+        if(!j||typeof j!=='object')throw new Error('bad payload');
+        return j;                       // may legitimately carry {error:{...}}
+      }finally{clearTimeout(timeoutId);}
     };
+    const rpcFetch=async(body,timeout=8000)=>{
+      // Drift back to the primary once the sticky window on a fallback has expired.
+      if(_rpcIdx!==0&&Date.now()-_rpcSince>RPC_STICKY_MS){_rpcIdx=0;}
+      const n=RPC_ENDPOINTS.length;
+      let lastErr=null;
+      for(let i=0;i<n;i++){
+        const idx=(_rpcIdx+i)%n;
+        try{
+          const j=await _rpcOnce(RPC_ENDPOINTS[idx],body,timeout);
+          if(idx!==_rpcIdx){
+            _rpcIdx=idx;_rpcSince=Date.now();
+            console.warn('RPC failover → '+RPC_ENDPOINTS[idx]);
+          }
+          return j;
+        }catch(e){
+          lastErr=e;
+          console.warn('RPC '+RPC_ENDPOINTS[idx]+' failed: '+e.message);
+        }
+      }
+      console.error('RPC error (all '+n+' endpoints failed):',lastErr&&lastErr.message);
+      return{result:null};
+    };
+    const MIN_LIQ=1000;
     
     /* ===================== MIGRATION: UFO on-chain fee reader ===================== *
      * The new UFO contract exposes each fee as a public variable, so Solidity gives us
@@ -1477,6 +1521,31 @@
       return cfg.taxBreakdown.filter(b=>(b.pct||0)>0);
     };
 
+    /* BUGFIX — "only a couple boxes change to tokens".
+       The Value Generated tiles fall back to USD whenever valueGenParts can't price a
+       bucket, and valueGenParts returns null when the bucket's token price is 0.
+
+       `ptgcPrice` / `plsxPrice` / `wethPrice` are only ever fetched inside an
+       `if(token==='UFO')` block — they exist so the UFO dashboard can price its PTGC-burn
+       and LP buckets. On the PTGC dashboard nothing fills them, so vgPrices.PTGC was 0 and
+       the four PTGC-denominated buckets (Buy & Burn, Holders, Stakers, Total H&S) silently
+       stayed in USD, while DAO and Add LP — priced in PLS, which IS loaded — flipped. Two
+       of six changed. That is the whole bug.
+
+       The dashboard already knows the active token's price: it's data.price. So map the
+       active token's own symbol onto it and only fall back to the fetched cross-price when
+       the active token is the other one. */
+    const vgPriceMap=(token,data,ptgcPrice,pls,plsxPrice,wethPrice)=>{
+      const own=data?.price||0;
+      return{
+        UFO:  token==='UFO' ?own:0,
+        PTGC:(token==='PTGC'?own:0)||ptgcPrice||0,
+        PLS:  pls||0,
+        PLSX: plsxPrice||0,
+        WETH: wethPrice||0
+      };
+    };
+
     // Converts a bucket's USD value into token amounts. LP buckets return TWO parts
     // (half UFO + half partner) because that is what the contract actually pairs.
     const valueGenParts=(token,item,dollarVal,prices)=>{
@@ -1649,17 +1718,84 @@
      * dsGet never throws and never returns non-JSON. dsPairsFor tries the endpoints in
      * order of how current they are. priceFromChain is the last line of defence and
      * needs no third party at all. ===================================================== */
-    const dsGet=async(url,timeout=8000)=>{
+    /* RESILIENCE (the "sometimes prices don't load" bug):
+     * The old dsGet made exactly ONE attempt per call and returned null on any
+     * hiccup. A single 429 or a 6s timeout therefore blanked a tile for a full
+     * five minutes, until the next auto-refresh. And a page load fires ~15-25
+     * DexScreener requests in one burst (2 tokens x 4 endpoints, PLS, the other
+     * token, the modals), several of them for the SAME url — which is what was
+     * triggering the 429s in the first place.
+     *
+     * Four things now sit in front of the network:
+     *   1. IN-FLIGHT DEDUPE — concurrent callers of the same url share one request.
+     *   2. FRESH CACHE (30s) — a repeat within the refresh window is free.
+     *   3. THROTTLE — at most DS_MAX_CONC in flight, spaced DS_MIN_GAP apart, so a
+     *      page load trickles instead of bursting.
+     *   4. RETRY + STALE FALLBACK — up to 3 attempts with jittered backoff (honouring
+     *      Retry-After on a 429); if all fail, serve the last good copy for up to
+     *      15 minutes rather than returning null. A slightly old price beats "—".
+     * Only after all of that does it return null, and the on-chain path takes over. */
+    const DS_FRESH_MS=30000, DS_STALE_MS=900000, DS_MAX_CONC=4, DS_MIN_GAP=90;
+    const _dsCache=new Map();       // url -> {t, v}
+    const _dsInflight=new Map();    // url -> promise
+    let _dsActive=0,_dsLastAt=0;
+    const _sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const _dsSlot=async()=>{
+      while(_dsActive>=DS_MAX_CONC)await _sleep(40);
+      const wait=_dsLastAt+DS_MIN_GAP-Date.now();
+      if(wait>0)await _sleep(wait);
+      _dsActive++;_dsLastAt=Date.now();
+    };
+    // -> {ok:true,data} | {ok:false,retry:boolean,after?:ms}
+    const _dsOnce=async(url,timeout)=>{
+      await _dsSlot();
       try{
         const c=new AbortController();
         const t=setTimeout(()=>c.abort(),timeout);
-        const res=await fetch(url,{signal:c.signal});
-        clearTimeout(t);
-        if(!res.ok){console.warn('DexScreener '+res.status+' on '+url);return null;}
+        let res;
+        try{res=await fetch(url,{signal:c.signal});}
+        finally{clearTimeout(t);}
+        if(res.status===429){
+          const ra=parseFloat(res.headers.get('retry-after'));
+          console.warn('DexScreener 429 (rate limited) on '+url);
+          return{ok:false,retry:true,after:isFinite(ra)?Math.min(ra*1000,4000):1500};
+        }
+        if(!res.ok){
+          console.warn('DexScreener '+res.status+' on '+url);
+          return{ok:false,retry:res.status>=500};   // 4xx other than 429 won't fix itself
+        }
         const txt=await res.text();
-        try{return JSON.parse(txt);}
-        catch{console.warn('DexScreener sent non-JSON from '+url+': '+txt.slice(0,120));return null;}
-      }catch(e){console.warn('DexScreener unreachable: '+url,e.message);return null;}
+        try{return{ok:true,data:JSON.parse(txt)};}
+        catch{
+          console.warn('DexScreener sent non-JSON from '+url+': '+txt.slice(0,120));
+          return{ok:false,retry:true};              // usually a CF challenge page
+        }
+      }catch(e){
+        console.warn('DexScreener unreachable: '+url,e.message);
+        return{ok:false,retry:true};                // network error / abort
+      }finally{_dsActive--;}
+    };
+    const dsGet=(url,timeout=8000)=>{
+      const hit=_dsCache.get(url);
+      if(hit&&Date.now()-hit.t<DS_FRESH_MS)return Promise.resolve(hit.v);
+      if(_dsInflight.has(url))return _dsInflight.get(url);
+      const p=(async()=>{
+        for(let a=0;a<3;a++){
+          const r=await _dsOnce(url,timeout);
+          if(r.ok){_dsCache.set(url,{t:Date.now(),v:r.data});return r.data;}
+          if(!r.retry)break;
+          if(a<2)await _sleep((r.after||350*Math.pow(2,a))+Math.random()*250);
+        }
+        const stale=_dsCache.get(url);
+        if(stale&&Date.now()-stale.t<DS_STALE_MS){
+          console.warn('DexScreener failed — serving cached copy ('+Math.round((Date.now()-stale.t)/1000)+'s old): '+url);
+          return stale.v;
+        }
+        return null;
+      })();
+      _dsInflight.set(url,p);
+      p.then(()=>_dsInflight.delete(url),()=>_dsInflight.delete(url));
+      return p;
     };
     // Accepts BOTH the legacy {pair:{...}} shape and the current {pairs:[...]} shape.
     const dsOnePair=d=>{
@@ -3382,6 +3518,22 @@
         }finally{refreshBusyRef.current=false;setRefreshing(false);}
       };
       const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
+      /* RESILIENCE: a failed FIRST load used to sit there for five full minutes before the
+         interval below had its next go — which is what "sometimes the prices don't load"
+         looks like from the outside. Retry on a short escalating ladder instead, and stop
+         as soon as a price arrives (or after four tries, so a real outage isn't hammered). */
+      const bootRetryRef=useRef(0);
+      useEffect(()=>{
+        if(loading)return;
+        const ok=(data?.PTGC?.price>0)||(!UFO_MAINTENANCE&&data?.UFO?.price>0);
+        if(ok){bootRetryRef.current=0;return;}
+        const ladder=[4000,10000,25000,60000];
+        if(bootRetryRef.current>=ladder.length)return;
+        const wait=ladder[bootRetryRef.current++];
+        console.warn(`no price data yet — retrying in ${wait/1000}s`);
+        const id=setTimeout(()=>quickRefreshRef.current&&quickRefreshRef.current(),wait);
+        return()=>clearTimeout(id);
+      },[data,loading]);
       useEffect(()=>{
         const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},300000); // 5 min — per site owner's preference
         const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>300000)quickRefreshRef.current();};
@@ -5306,6 +5458,20 @@
         }finally{refreshBusyRef.current=false;setRefreshing(false);}
       };
       const quickRefreshRef=useRef();quickRefreshRef.current=quickRefresh;
+      /* RESILIENCE: same short retry ladder as the home page. Without it a single
+         DexScreener 429 or RPC blip on mount left the whole dashboard reading "—" until
+         the 5-minute interval came round. */
+      const bootRetryRef=useRef(0);
+      useEffect(()=>{
+        if(loading)return;
+        if(data&&data.price>0){bootRetryRef.current=0;return;}
+        const ladder=[4000,10000,25000,60000];
+        if(bootRetryRef.current>=ladder.length)return;
+        const wait=ladder[bootRetryRef.current++];
+        console.warn(`${token}: no price data yet — retrying in ${wait/1000}s`);
+        const id=setTimeout(()=>quickRefreshRef.current&&quickRefreshRef.current(),wait);
+        return()=>clearTimeout(id);
+      },[data,loading]);
       useEffect(()=>{
         const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},300000); // 5 min — per site owner's preference
         const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>300000)quickRefreshRef.current();};
@@ -5750,7 +5916,7 @@
                     const totalGen=hasData?periodVol*cfg.taxRate:0;
 
                     const orderedItems=buildValueGenItems(token,cfg);
-                    const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
+                    const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
 
                     /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
                        attributed with the fee rates actually in force at each block.
@@ -7016,7 +7182,7 @@
             // card use for UFO (delivered + realizedFees -> computeValueGenBuckets), not the
             // volume x tax estimate. Available for UFO only when it's the active token and the
             // scan has completed; the PTGC side and any not-ready case fall back to the estimate.
-            const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
+            const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
             const ufoMeasured=(token==='UFO')?computeValueGenBuckets(combinedValueGenPeriod,delivered,realizedFees,vgPrices):null;
             const ptgcTotal=ptgcVol*ptgcCfg.taxRate;
             const ufoTotal=ufoMeasured?ufoMeasured.total:(ufoVol*ufoCfg.taxRate);
@@ -7177,7 +7343,7 @@
                       const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
                       const periodVol=volAmounts[valueGenPeriod]||0;
                       const orderedItems=buildValueGenItems(token,cfg);
-                      const vgPrices={UFO:data?.price||0,PTGC:ptgcPrice,PLS:pls,PLSX:plsxPrice,WETH:wethPrice};
+                      const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
                       /* Measured on-chain value, same basis as the panel and KPI card. The old
                          volume×tax estimate reads $0 while a young token has no volume baseline,
                          which is why this card came out all $0. Falls back to the estimate only
