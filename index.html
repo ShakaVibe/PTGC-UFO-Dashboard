@@ -3122,6 +3122,7 @@
     const DECK_POLL_MS=6000;             // ~one block; each tick is one eth_blockNumber + one eth_getLogs only when a block landed
     const DECK_MAX_ROWS=40;
     const DECK_REPLAY=5;
+    const DECK_RECEIPT_CAP=40;           // fee-leg txs per fetch that get a receipt lookup (newest first)
     const DECK_LIFT_MS=2300;             // contact → ship
     const DECK_DISPATCH_MS=1900;         // ship → each pod
     const DECK_DISPATCH_STAGGER=220;     // pods receive one after another
@@ -3238,6 +3239,51 @@
           return items.filter(b=>b.name==='DAO'||b.name==='Add LP').reduce((a,b)=>a+(b.pct||0),0)/100;
         })()||st.tax;
         const pairSet=new Set(pairs.map(p=>p.pairAddress.toLowerCase()));
+        /* UNKNOWN POOLS. A trade can route through a pool DexScreener never told us about (the
+           PTGC/WPLS v2 pool, for one). Its fee legs would otherwise be mistaken for a transfer.
+           So for every fee-leg tx with no swap on a known pool, read the receipt once: if a Swap
+           event's pool also moved the token in that tx, it was a buy or sell on that pool. The
+           pool is then remembered, so its later trades are caught by the normal swap query. */
+        const abiString=hex=>{try{const h=hex.slice(2);const len=parseInt(h.slice(64,128),16);const b=h.slice(128,128+len*2);let o='';for(let i=0;i<b.length;i+=2)o+=String.fromCharCode(parseInt(b.slice(i,i+2),16));return o.replace(/[^\x20-\x7e]/g,'');}catch(e){return'';}};
+        const learnPool=async(pa)=>{
+          if(pairSet.has(pa))return;
+          pairSet.add(pa);addrs.push(pa);
+          try{
+            const[t0,t1]=await Promise.all([ethCallRead(pa,SEL_TOKEN0),ethCallRead(pa,'0xd21220a7')]);
+            const a0=wordToAddress(t0),a1=wordToAddress(t1);
+            const isT0=!!a0&&a0.toLowerCase()===mainAddr;
+            const other=(isT0?a1:a0)||'';
+            const symRaw=other?await ethCallRead(other,'0x95d89b41'):null;
+            const sym=(symRaw&&abiString(symRaw))||'pool';
+            const oa=other.toLowerCase();
+            meta[pa]={isT0,symbol:sym,logo:oa===WETH_ADDRESS?ETH_LOGO:(oa?getLogo(oa):null),initial:sym.slice(0,1)};
+          }catch(e){meta[pa]={isT0:true,symbol:'pool',logo:null,initial:'?'};}
+        };
+        const resolveViaReceipt=async(x)=>{
+          const rc=await rpcFetch({jsonrpc:'2.0',method:'eth_getTransactionReceipt',params:[x.tx],id:1});
+          const logs=(rc&&rc.result&&rc.result.logs)||[];
+          const tok=logs.filter(l=>l.address&&l.address.toLowerCase()===mainAddr&&l.topics&&l.topics[0]===TRANSFER_TOPIC&&l.topics.length>=3)
+            .map(l=>({from:('0x'+l.topics[1].slice(26)).toLowerCase(),to:('0x'+l.topics[2].slice(26)).toLowerCase(),amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
+          const pools=[...new Set(logs.filter(l=>l.topics&&l.topics[0]===PAIR_SWAP_TOPIC).map(l=>l.address.toLowerCase()))];
+          const trades=[];const consumed=new Set();
+          for(const pa of pools){
+            const outOf=tok.filter(t=>t.from===pa).reduce((a,t)=>a+t.amt,0);
+            const into=tok.filter(t=>t.to===pa).reduce((a,t)=>a+t.amt,0);
+            if(!(outOf>0)&&!(into>0))continue;               // a hop in another token, not ours
+            await learnPool(pa);
+            const m=meta[pa]||{symbol:'pool',logo:null,initial:'?'};
+            if(outOf>=into){                                   // token left the pool → a BUY; the pool's fee legs belong to it
+              tok.filter(t=>t.from===pa&&t.to===mainAddr).forEach(t=>consumed.add(pa));
+              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'BUY',tokens:outOf,usd:outOf*st.price,gen:outOf*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial});
+            }else{                                             // token entered the pool → a SELL; the seller's fee legs belong to it
+              const seller=(tok.find(t=>t.to===pa)||{}).from;const gross=st.tax<1?into/(1-st.tax):into;
+              if(seller)consumed.add(seller);
+              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'SELL',tokens:gross,usd:gross*st.price,gen:gross*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial});
+            }
+          }
+          const rest=x.legs.filter(l=>!consumed.has(l.from)).reduce((a,l)=>a+l.fee,0);
+          return{trades,restFee:rest};
+        };
         const fetchBoth=async(from,to,head)=>{
           const[sw,fl]=await Promise.all([
             getLogsRange(addrs,[PAIR_SWAP_TOPIC],from,to,0,head),
@@ -3253,13 +3299,23 @@
             if(pairSet.has(from)||from===mainAddr)return;
             const fee=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));if(!(fee>0))return;
             const k=l.transactionHash;
-            byTx[k]=byTx[k]||{id:k+':xfer',tx:k,block:parseInt(l.blockNumber,16),side:'XFER',feeTokens:0};
-            byTx[k].feeTokens+=fee;
+            byTx[k]=byTx[k]||{id:k+':xfer',tx:k,block:parseInt(l.blockNumber,16),side:'XFER',feeTokens:0,legs:[]};
+            byTx[k].feeTokens+=fee;byTx[k].legs.push({from,fee});
           });
-          Object.values(byTx).forEach(x=>{
+          /* receipts: newest first, a few at a time, capped so a long backfill can't stall the deck */
+          const list=Object.values(byTx).sort((a,b)=>b.block-a.block);
+          const toResolve=list.slice(0,DECK_RECEIPT_CAP);
+          for(let i=0;i<toResolve.length;i+=4){
+            await Promise.all(toResolve.slice(i,i+4).map(async x=>{
+              try{const r=await resolveViaReceipt(x);x._trades=r.trades;x.feeTokens=r.restFee;}catch(e){}
+            }));
+          }
+          list.forEach(x=>{
+            if(x._trades&&x._trades.length)out.push(...x._trades);
+            if(!(x.feeTokens>0))return;
             const size=contractShare>0?x.feeTokens/contractShare:x.feeTokens;   // tokens the sender actually sent
             const usd=size*st.price;
-            out.push({...x,tokens:size,usd,gen:usd*st.tax,pool:'transfer',logo:cfg.logo,initial:token[0]});
+            out.push({id:x.id,tx:x.tx,block:x.block,side:'XFER',tokens:size,usd,gen:usd*st.tax,pool:'transfer',logo:cfg.logo,initial:token[0]});
           });
           return out;
         };
@@ -3280,7 +3336,7 @@
             if(stop)return;
             const now=Date.now();
             const seeded=(logs||[]).map(r=>({...r,ts:now-(head-r.block)*10000,est:true}));
-            seeded.sort((a,b)=>b.block-a.block||0);
+            seeded.sort((a,b)=>b.block-a.block||(a.side==='XFER')-(b.side==='XFER'));
             seeded.forEach(r=>st.seen.add(r.id));
             /* opening sequence: the newest few contacts replay one by one (oldest first), then the deck goes live */
             const replay=reduced?[]:seeded.slice(0,DECK_REPLAY).reverse();
@@ -3610,7 +3666,7 @@
               </div>
             </div>
             <div className="mt-3 text-[11px] text-white/30 leading-relaxed">
-              Contacts are PulseX swaps on this token's pools plus taxed wallet transfers (spotted by their fee leg), read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
+              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus taxed wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
             </div>
           </div>
         </div>
