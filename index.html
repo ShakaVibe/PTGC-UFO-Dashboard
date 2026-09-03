@@ -3104,6 +3104,516 @@
       );
     };
     
+    // ===== LIVE FEED / ABDUCTION DECK — opened from the nav (Live Feed) =====
+    /* The live value tape, staged in The Grays' world:
+         the token logo hovers over the chain; every swap on any of its pools lands on the
+         ground as a CONTACT; the beam lifts that trade's tax into the ship, and the ship
+         dispatches it to the pods (one per tax bucket) that hold the 24h totals.
+       DATA
+         · swaps: PulseX Swap events on every pool DexScreener knows for the token, read
+           straight from the chain (eth_getLogs, same helpers the fee scan uses). A short
+           backfill fills the tape on open; then every ~12s new blocks are polled.
+         · a trade's USD = the token-side amount × the dashboard's live price. Its value
+           generated = USD × the live tax rate, split by the live bucket weights.
+         · pod totals start from the 24h figure the Value Generated panel shows (on-chain
+           realized for UFO, volume × tax for PTGC) and grow as live contacts land.
+       Contacts link to PulseScan. Static (no chips) when the visitor prefers reduced motion. */
+    const DECK_BACKFILL_BLOCKS=900;      // ~2.5h of PulseChain at 10s blocks
+    const DECK_POLL_MS=6000;             // ~one block; each tick is one eth_blockNumber + one eth_getLogs only when a block landed
+    const DECK_MAX_ROWS=40;
+    const DECK_REPLAY=5;
+    const DECK_LIFT_MS=2300;             // contact → ship
+    const DECK_DISPATCH_MS=1900;         // ship → each pod
+    const DECK_DISPATCH_STAGGER=220;     // pods receive one after another
+    const DECK_REPLAY_GAP_MS=7000;       // one full lift-and-dispatch now takes ~5.5s; leave a beat between them
+    const DECK_MOTES=[[22,5.2,0],[31,6.1,1.1],[38,4.6,2.3],[44,5.8,0.6],[49,4.2,3.1],[53,6.4,1.7],[58,4.9,2.8],[64,5.5,0.3],[71,6.0,3.6],[78,4.4,1.4],[35,5.0,4.2],[62,5.3,4.8]]; // x%, duration s, delay s                 // contacts replayed on open before going live
+    const deckHexA=(hex,a)=>{const h=hex.replace('#','');const n=parseInt(h,16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;};
+    const DECK_POD_POS={5:[[12,74],[31,34],[50,14],[69,34],[88,74]],6:[[9,84],[25.5,40],[42,14],[58,14],[74.5,40],[91,84]],4:[[15,60],[38,14],[62,14],[85,60]],3:[[20,40],[50,14],[80,40]],2:[[30,24],[70,24]],1:[[50,14]]};
+
+    const AbductionDeckModal=({open,close,token,cfg,data,windows,onSwitch})=>{
+      const[win,setWin]=useState('30d');
+      const windowGen=(windows&&windows[win])||null;
+      const isGold=cfg.color==='gold';
+      const ac=cfg.colorHex,hi=isGold?'#F0DC78':'#bfff80';
+      const deckRef=useRef(null),shipRef=useRef(null),feedRef=useRef(null),starsRef=useRef(null),skyRef=useRef(null),linksRef=useRef(null);
+      const podRefs=useRef({});
+      const dispRef=useRef({});
+      const[rows,setRows]=useState([]);           // newest first: {id,tx,block,ts,side,usd,gen,pool}
+      const[status,setStatus]=useState('connecting');
+      const[totals,setTotals]=useState({});
+      const[disp,setDisp]=useState({});             // what the pods show — eases toward `totals` so landings count up
+      const[contacts,setContacts]=useState(0);
+      const[scan,setScan]=useState({block:0,n:0});   // bumps every poll → ripple + block readout
+      const[lastScan,setLastScan]=useState(null);   // {block,found,at} — what the last look found
+      const[tickNow,setTickNow]=useState(Date.now());
+      /* READY GATE. The window figure (and for UFO the per-bucket delivery) arrives a few seconds
+         after the dashboard mounts. Until then the pods read "loading" and nothing lifts, so the
+         opening replay never counts into a total that hasn't landed yet. A 20s fallback shows
+         whatever is available rather than waiting forever on a failed scan. */
+      const[ready,setReady]=useState(false);
+      const readyRef=useRef(false);readyRef.current=ready;
+      useEffect(()=>{
+        if(!open){setReady(false);return;}
+        const wg=windows&&windows[win];
+        const ok=!!wg&&(token!=='UFO'||!!wg.byKey);
+        if(ok){setReady(true);return;}
+        const id=setTimeout(()=>setReady(true),20000);
+        return()=>clearTimeout(id);
+      },[open,windows,win,token]);
+      useEffect(()=>{if(!open)return;const id=setInterval(()=>setTickNow(Date.now()),500);return()=>clearInterval(id);},[open]);
+      const[reduced]=useState(()=>{try{return window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){return false;}});
+      const stateRef=useRef({seen:new Set(),last:0,price:0,tax:0,pods:[],pending:[]});
+      const[replayQueue,setReplayQueue]=useState(null);
+      const replayTimersRef=useRef([]);
+      useEffect(()=>{ // the opening replay starts only once the pods have their real totals
+        if(!open||!ready||!replayQueue||!replayQueue.length)return;
+        replayQueue.forEach((r,i)=>replayTimersRef.current.push(setTimeout(()=>{setRows(prev=>[{...r,fresh:true,replay:true},...prev].slice(0,DECK_MAX_ROWS));},800+i*DECK_REPLAY_GAP_MS)));
+        setReplayQueue(null);   // consumed — the timers live in the ref so this state change does not cancel them
+      },[open,ready,replayQueue]);
+      useEffect(()=>{if(open)return;replayTimersRef.current.forEach(clearTimeout);replayTimersRef.current=[];setReplayQueue(null);},[open]);
+
+      /* pods = live tax buckets, all in the token's colour */
+      const pods=useMemo(()=>{
+        const items=(cfg.taxBreakdown||[]).filter(b=>(b.pct||0)>0);
+        const tot=items.reduce((s,b)=>s+b.pct,0)||1;
+        const unit=b=>{
+          if(token==='PTGC')return(b.name==='DAO'||b.name==='Add LP')?'PLS':'PTGC';
+          if(b.isLP)return'UFO+'+(b.priceKey==='PLS'?'PLS':b.priceKey);
+          return b.priceKey||'UFO';
+        };
+        return items.map(b=>({key:b.key||b.name,name:b.name,frac:b.pct/tot,unit:unit(b)}));
+      },[cfg,cfg.taxRate,cfg.taxBreakdown,token]);
+      stateRef.current.pods=pods;stateRef.current.price=data?.price||0;stateRef.current.tax=cfg.taxRate||0;
+
+      /* pod totals seed from the window figure the panel shows (30d when available); the
+         replayed opening contacts are subtracted here and added back as each one lands,
+         so the totals end exactly on the panel's number. */
+      const seedTotals=(replayRows)=>{
+        const wg=(windows&&windows[win])||null;
+        const base=(wg&&wg.total)||((data?.vol||0)*(cfg.taxRate||0));
+        const byKey=wg&&wg.byKey;
+        const t={};pods.forEach(p=>{
+          const v=(byKey&&byKey[p.key]!=null)?byKey[p.key]:base*p.frac;
+          const replayed=(replayRows||[]).reduce((s,r)=>s+r.gen*p.frac,0);
+          t[p.key]=Math.max(0,v-replayed);
+        });
+        setTotals(t);
+      };
+      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts((data?.buys||0)+(data?.sells||0));},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.taxRate]);
+
+      /* ---------- chain feed ---------- */
+      useEffect(()=>{
+        if(!open)return;
+        const st=stateRef.current;st.seen=new Set();st.last=0;
+        let stop=false,timer=null;const replayTimers=[];
+        const mainAddr=cfg.address.toLowerCase();
+        const pairs=(data?.pairs||[]).filter(p=>p.pairAddress&&(p.liq>0||p.vol>0)).slice(0,20);
+        if(!pairs.length){setStatus('no pools');return;}
+        const meta={};   // pairAddr -> {isT0, symbol}
+        const addrs=pairs.map(p=>p.pairAddress);
+        const decode=(l)=>{
+          const m=meta[(l.address||'').toLowerCase()];if(!m)return null;
+          const h=l.data&&l.data.startsWith('0x')?l.data.slice(2):(l.data||'');
+          if(h.length<256)return null;
+          const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // amount0In, amount1In, amount0Out, amount1Out
+          const tokIn=weiToTokens(m.isT0?w(0):w(1)),tokOut=weiToTokens(m.isT0?w(2):w(3));
+          const amt=tokIn+tokOut;if(!(amt>0))return null;
+          const side=tokOut>=tokIn?'BUY':'SELL';    // token leaving the pool = someone bought it
+          const usd=amt*st.price;
+          return{id:l.transactionHash+':'+l.logIndex,tx:l.transactionHash,block:parseInt(l.blockNumber,16),side,tokens:amt,usd,gen:usd*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial};
+        };
+        /* Fee legs: Transfer(from → token contract). Every taxed move emits one — buys (from the
+           pair), sells (from the wallet) and plain wallet-to-wallet transfers. Legs in a tx that
+           also carries a pool Swap are already on the tape as that swap; the rest are TRANSFER
+           contacts, and the leg IS the fee, so the amount is exact. */
+        const feeTopic='0x'+encodeAddress(cfg.address);
+        const pairSet=new Set(pairs.map(p=>p.pairAddress.toLowerCase()));
+        const fetchBoth=async(from,to,head)=>{
+          const[sw,fl]=await Promise.all([
+            getLogsRange(addrs,[PAIR_SWAP_TOPIC],from,to,0,head),
+            getLogsRange(cfg.address,[TRANSFER_TOPIC,null,feeTopic],from,to,0,head)
+          ]);
+          if(!sw)return null;
+          const out=sw.map(decode).filter(Boolean);
+          const swapTx=new Set(sw.map(l=>l.transactionHash));
+          const byTx={};
+          (fl||[]).forEach(l=>{
+            if(!l.topics||l.topics.length<3||swapTx.has(l.transactionHash))return;
+            const from=('0x'+l.topics[1].slice(26)).toLowerCase();
+            if(pairSet.has(from)||from===mainAddr)return;
+            const fee=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));if(!(fee>0))return;
+            const k=l.transactionHash;
+            byTx[k]=byTx[k]||{id:k+':xfer',tx:k,block:parseInt(l.blockNumber,16),side:'XFER',feeTokens:0};
+            byTx[k].feeTokens+=fee;
+          });
+          Object.values(byTx).forEach(x=>{
+            const gen=x.feeTokens*st.price;
+            const usd=st.tax>0?gen/st.tax:0;
+            out.push({...x,tokens:st.tax>0?x.feeTokens/st.tax:x.feeTokens,usd,gen,pool:'transfer',logo:cfg.logo,initial:token[0]});
+          });
+          return out;
+        };
+        const run=async()=>{
+          try{
+            await Promise.all(pairs.map(async p=>{
+              const t0=wordToAddress(await ethCallRead(p.pairAddress,SEL_TOKEN0));
+              const isBase=p.baseToken?.address?.toLowerCase()===mainAddr;
+              const other=isBase?p.quoteToken:p.baseToken;
+              const oa=(other?.address||'').toLowerCase();
+              meta[p.pairAddress.toLowerCase()]={isT0:t0?t0.toLowerCase()===mainAddr:isBase,symbol:(other?.symbol||'?')+(p.labels&&p.labels.length?' '+p.labels[0]:''),
+                logo:oa===WETH_ADDRESS?ETH_LOGO:(oa?getLogo(oa):null),initial:(other?.symbol||'?').slice(0,1)};
+            }));
+            const headR=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+            if(stop)return;
+            let head=parseInt(headR.result,16);if(!(head>0)){setStatus('chain read failed');return;}
+            const logs=await fetchBoth(Math.max(0,head-DECK_BACKFILL_BLOCKS),head,head);
+            if(stop)return;
+            const now=Date.now();
+            const seeded=(logs||[]).map(r=>({...r,ts:now-(head-r.block)*10000,est:true}));
+            seeded.sort((a,b)=>b.block-a.block||0);
+            seeded.forEach(r=>st.seen.add(r.id));
+            /* opening sequence: the newest few contacts replay one by one (oldest first), then the deck goes live */
+            const replay=reduced?[]:seeded.slice(0,DECK_REPLAY).reverse();
+            st.pending=replay.slice();seedTotals(replay);
+            setRows(seeded.slice(replay.length,DECK_MAX_ROWS));
+            setReplayQueue(replay);
+            st.last=head;setStatus(logs?'live':'partial');setScan({block:head,n:1});
+            const tick=async()=>{
+              if(stop)return;
+              try{
+                const hr=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+                const cur=parseInt(hr.result,16);
+                if(cur>0)setScan(sc=>({block:cur,n:sc.n+1}));
+                if(cur>st.last){
+                  const nl=await fetchBoth(st.last+1,cur,cur);
+                  if(stop)return;
+                  if(nl){
+                    const fresh=nl.filter(r=>r&&!st.seen.has(r.id));
+                    setLastScan({block:cur,found:fresh.length,at:Date.now()});
+                    fresh.forEach(r=>st.seen.add(r.id));
+                    if(fresh.length){
+                      const stamped=fresh.map(r=>({...r,ts:Date.now(),fresh:readyRef.current}));
+                      setRows(prev=>[...stamped.reverse(),...prev].slice(0,DECK_MAX_ROWS));
+                    }
+                    st.last=cur;setStatus('live');
+                  }else setStatus('retrying');
+                }else if(cur>0)setLastScan({block:cur,found:0,at:Date.now(),same:true});
+              }catch(e){setStatus('retrying');}
+              timer=setTimeout(tick,DECK_POLL_MS);
+            };
+            timer=setTimeout(tick,DECK_POLL_MS);
+          }catch(e){console.warn('deck feed:',e);setStatus('chain read failed');}
+        };
+        run();
+        return()=>{stop=true;if(timer)clearTimeout(timer);replayTimers.forEach(clearTimeout);};
+      },[open,token,cfg.address,data?.pairs]);
+
+      /* ---------- animation: a fresh contact is lifted into the ship, then dispatched to the pods ---------- */
+      useEffect(()=>{
+        if(!open||reduced||!ready)return;
+        const deck=deckRef.current,ship=shipRef.current,feed=feedRef.current;if(!deck||!ship||!feed)return;
+        const fresh=rows.filter(r=>r.fresh&&!r._animated);
+        if(!fresh.length)return;
+        const P=(el,fx,fy)=>{const d=deck.getBoundingClientRect(),r=el.getBoundingClientRect();return[r.left-d.left+r.width*fx,r.top-d.top+r.height*fy];};
+        const chip=(text,color,cls)=>{const c=document.createElement('span');c.className='deck-chip'+(cls?' '+cls:'');c.style.background=color;c.style.boxShadow='0 0 16px '+color;c.textContent=text;deck.appendChild(c);return c;};
+        /* a chip travels a shallow arc and leaves a fading trail of sparks behind it */
+        const fly=(c,x0,y0,x1,y1,dur,delay,arc,trailColor)=>{
+          c.style.left=x0+'px';c.style.top=y0+'px';c.style.opacity='0';
+          const mx=(x1-x0)*0.5,my=(y1-y0)*0.5+arc;
+          const a=c.animate([
+            {transform:'translate(-50%,-50%) scale(.5)',opacity:0,offset:0},
+            {transform:'translate(-50%,-50%) scale(1.15)',opacity:1,offset:.14},
+            {transform:`translate(calc(-50% + ${mx}px),calc(-50% + ${my}px)) scale(1.05)`,opacity:1,offset:.55},
+            {transform:`translate(calc(-50% + ${x1-x0}px),calc(-50% + ${y1-y0}px)) scale(.7)`,opacity:.95,offset:1}
+          ],{duration:dur,delay,easing:'cubic-bezier(.45,.05,.25,1)',fill:'forwards'});
+          if(trailColor){
+            const t0=performance.now()+delay;const bez=(p0,p1,p2,t)=>(1-t)*(1-t)*p0+2*(1-t)*t*p1+t*t*p2;
+            const iv=setInterval(()=>{
+              const t=(performance.now()-t0)/dur;if(t<0)return;if(t>=1){clearInterval(iv);return;}
+              const x=bez(x0,x0+mx,x1,t),y=bez(y0,y0+my,y1,t);
+              const sp=document.createElement('span');sp.className='deck-spark';sp.style.left=x+'px';sp.style.top=y+'px';sp.style.background=trailColor;sp.style.boxShadow='0 0 8px '+trailColor;
+              deck.appendChild(sp);setTimeout(()=>sp.remove(),650);
+            },45);
+            a.addEventListener('cancel',()=>clearInterval(iv));
+          }
+          return a;
+        };
+        fresh.forEach((r,n)=>{
+          r._animated=true;
+          const rowEl=feed.querySelector(`[data-id="${CSS.escape(r.id)}"] .deck-gen`);if(!rowEl)return;
+          const[x0,y0]=P(rowEl,0.7,0.5);const[sx,sy]=P(ship,0.5,0.5);
+          const up=chip('+'+fmtUSD2(r.gen),hi,'up');
+          fly(up,x0,y0,sx,sy,DECK_LIFT_MS,300+n*600,0,hi).onfinish=()=>{
+            up.remove();
+            ship.classList.add('deck-pulse');setTimeout(()=>ship.classList.remove('deck-pulse'),900);
+            stateRef.current.pods.forEach((p,i)=>{
+              const pod=podRefs.current[p.key];if(!pod)return;
+              const[px,py]=P(pod,0.5,0.6);
+              const c=chip(fmtUSD2(r.gen*p.frac),ac);
+              fly(c,sx,sy,px,py,DECK_DISPATCH_MS,350+i*DECK_DISPATCH_STAGGER,-48,ac).onfinish=()=>{
+                c.remove();
+                setTotals(t=>({...t,[p.key]:(t[p.key]||0)+r.gen*p.frac}));
+                if(r.replay&&i===stateRef.current.pods.length-1)stateRef.current.pending=stateRef.current.pending.filter(x=>x.id!==r.id);
+                pod.classList.add('deck-hit');setTimeout(()=>pod.classList.remove('deck-hit'),900);
+                const cell=feed.querySelector(`[data-id="${CSS.escape(r.id)}"] .deck-cell[data-k="${p.key}"] .deck-a`);if(cell)cell.classList.add('on');
+              };
+            });
+            if(!r.replay)setContacts(c=>c+1);
+          };
+        });
+      },[rows,open,reduced,ready,ac,hi]);
+      useEffect(()=>{ // reduced motion / seeded rows: totals still move, just without the flight
+        if(!open||!reduced||!ready)return;
+        const fresh=rows.filter(r=>r.fresh&&!r._animated);
+        if(!fresh.length)return;
+        fresh.forEach(r=>{r._animated=true;setTotals(t=>{const n={...t};pods.forEach(p=>{n[p.key]=(n[p.key]||0)+r.gen*p.frac;});return n;});if(!r.replay)setContacts(c=>c+1);});
+      },[rows,open,reduced,ready,pods]);
+
+      /* ---------- stars + signal lines ---------- */
+      useEffect(()=>{
+        if(!open)return;
+        const deck=deckRef.current,cv=starsRef.current,sky=skyRef.current,svg=linksRef.current,ship=shipRef.current;
+        if(!deck||!cv)return;
+        const draw=()=>{
+          const dpr=Math.min(2,window.devicePixelRatio||1),W=deck.clientWidth,H=deck.clientHeight;
+          cv.width=W*dpr;cv.height=H*dpr;const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
+          c.fillStyle='#0b0d12';c.fillRect(0,0,W,H);
+          const g=c.createRadialGradient(W/2,200,20,W/2,200,W*0.5);g.addColorStop(0,deckHexA(ac,0.10));g.addColorStop(1,deckHexA(ac,0));c.fillStyle=g;c.fillRect(0,0,W,H);
+          let s=7;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};
+          for(let i=0;i<260;i++){const x=rnd()*W,y=rnd()*H,r=rnd()*1.1+0.2,a=rnd()*0.55+0.15;c.fillStyle=`rgba(255,255,255,${a})`;c.beginPath();c.arc(x,y,r,0,6.283);c.fill();}
+          if(sky&&svg&&ship){
+            const sr=sky.getBoundingClientRect();svg.setAttribute('viewBox',`0 0 ${sr.width} ${sr.height}`);
+            const sh=ship.getBoundingClientRect();const sx=sh.left-sr.left+sh.width/2,sy=sh.top-sr.top+sh.height*0.5;
+            let html='';
+            Object.values(podRefs.current).forEach(p=>{if(!p)return;const r=p.getBoundingClientRect();const x=r.left-sr.left+r.width/2,y=r.top-sr.top+r.height;
+              html+=`<path d="M${sx},${sy} Q${(sx+x)/2},${(sy+y)/2-30} ${x},${y}" fill="none" stroke="${ac}" stroke-opacity=".28" stroke-width="1" stroke-dasharray="3 5"/>`;});
+            svg.innerHTML=html;
+          }
+        };
+        draw();
+        const ro=new ResizeObserver(draw);ro.observe(deck);
+        return()=>ro.disconnect();
+      },[open,ac,pods.length]);
+
+      useEffect(()=>{ // count-up: ease the displayed totals toward the real ones over ~1.1s
+        if(!open)return;
+        let raf=0;const start=performance.now();const from={...dispRef.current};const to=totals;
+        const keys=Object.keys(to);
+        const big=keys.some(k=>Math.abs((to[k]||0)-(from[k]||0))>Math.max(50,(to[k]||0)*0.2)); // a reseed (window/token change) jumps instead of counting
+        if(big||reduced){dispRef.current=to;setDisp(to);return;}
+        const step=(now)=>{
+          const t=Math.min(1,(now-start)/1100);const e=1-Math.pow(1-t,3);
+          const cur={};keys.forEach(k=>{cur[k]=(from[k]||0)+((to[k]||0)-(from[k]||0))*e;});
+          dispRef.current=cur;setDisp(cur);
+          if(t<1)raf=requestAnimationFrame(step);
+        };
+        raf=requestAnimationFrame(step);
+        return()=>cancelAnimationFrame(raf);
+      },[totals,open,reduced]);
+      useEffect(()=>{
+        if(!open)return;
+        const k=e=>{if(e.key==='Escape')close();};
+        window.addEventListener('keydown',k);return()=>window.removeEventListener('keydown',k);
+      },[open,close]);
+
+      if(!open)return null;
+      const pos=DECK_POD_POS[pods.length]||DECK_POD_POS[5];
+      const gen24=Object.values(disp).length?Object.values(disp).reduce((s,v)=>s+v,0):Object.values(totals).reduce((s,v)=>s+v,0);
+      const windowLabel=(windowGen&&windowGen.label)||'24h';
+      const timeOf=r=>{const d=new Date(r.ts);const t=d.toTimeString().slice(0,8);return r.est?'~'+t:t;};
+      const shipSize=150;
+      const statusText={connecting:'reading chain',live:'live · every block',partial:'live · backfill incomplete',retrying:'retrying',
+        'no pools':'no pools loaded','chain read failed':'chain read failed'}[status]||status;
+      const cols=`64px 44px minmax(230px,1.4fr) 108px repeat(${pods.length},minmax(84px,1fr))`;
+      return(
+        <div className="fixed inset-0 z-[60] bg-[#06070a] overflow-y-auto" onClick={close}>
+          <style>{`
+            .deck-pod{position:absolute;width:150px;transform:translateX(-50%);padding:11px 14px 10px;background:rgba(6,7,10,0.74);border:1px solid rgba(255,255,255,0.08);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);transition:box-shadow .3s,background .3s}
+            .deck-pod:before,.deck-pod:after{content:'';position:absolute;width:14px;height:14px;border:1px solid ${ac};opacity:.9}
+            .deck-pod:before{left:0;bottom:0;border-right:0;border-top:0}
+            .deck-pod:after{right:0;top:0;border-left:0;border-bottom:0}
+            .deck-pod.deck-hit{background:${deckHexA(ac,0.14)};box-shadow:0 0 30px -6px ${ac}}
+            .deck-ship img{filter:drop-shadow(0 0 22px ${deckHexA(ac,0.55)})}
+            .deck-ship.deck-pulse img{animation:deckPulse .6s ease-out}
+            @keyframes deckPulse{0%{filter:drop-shadow(0 0 22px ${deckHexA(ac,0.55)})}40%{filter:drop-shadow(0 0 44px ${hi})}100%{filter:drop-shadow(0 0 22px ${deckHexA(ac,0.55)})}}
+            .deck-ground{background:linear-gradient(180deg,transparent,${deckHexA(ac,0.07)})}
+            .deck-ground:before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,${deckHexA(ac,0.12)} 1px,transparent 1px) 0 0/72px 100%,linear-gradient(180deg,${deckHexA(ac,0.12)} 1px,transparent 1px) 0 0/100% 24px;mask-image:linear-gradient(180deg,transparent,#000 70%);-webkit-mask-image:linear-gradient(180deg,transparent,#000 70%)}
+            .deck-row{display:grid;grid-template-columns:${cols};gap:0 10px;align-items:center;padding:10px 18px;border-top:1px solid rgba(255,255,255,0.05)}
+            .deck-row:first-child{background:linear-gradient(90deg,transparent,${deckHexA(ac,0.12)} 50%,transparent);border-top-color:${deckHexA(ac,0.35)}}
+            .deck-row.deck-new{animation:deckDrop .5s cubic-bezier(.2,.8,.2,1)}
+            @keyframes deckDrop{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:none}}
+            .deck-a{opacity:.35;transition:opacity .3s}.deck-a.on{opacity:1}
+            .deck-chip{position:absolute;z-index:6;pointer-events:none;font-family:Orbitron,monospace;font-size:15px;font-weight:700;color:#06070a;padding:5px 11px;letter-spacing:.02em;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);transform:translate(-50%,-50%);will-change:transform,opacity;white-space:nowrap}
+            .deck-hover{animation:deckHover 4.5s ease-in-out infinite}
+            @keyframes deckHover{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+            .deck-links path{animation:deckDash 1.4s linear infinite}
+            @keyframes deckDash{to{stroke-dashoffset:-8}}
+            .deck-beamclip{position:absolute;left:0;right:0;bottom:0;height:120px;pointer-events:none;clip-path:polygon(45.2% 0,54.8% 0,98.5% 100%,1.5% 100%);overflow:hidden}
+            .deck-sweep{position:absolute;left:0;right:0;height:26px;background:linear-gradient(180deg,transparent,${deckHexA(hi,0.22)},transparent);animation:deckSweep 3.2s linear infinite}
+            @keyframes deckSweep{from{top:-30px}to{top:120px}}
+            .deck-mote{position:absolute;bottom:-6px;width:3px;height:3px;border-radius:50%;background:${hi};box-shadow:0 0 6px ${hi};opacity:0;animation:deckMote linear infinite}
+            @keyframes deckMote{0%{transform:translateY(0);opacity:0}15%{opacity:.9}100%{transform:translateY(-130px);opacity:0}}
+            .deck-spark{position:absolute;z-index:5;pointer-events:none;width:5px;height:5px;border-radius:50%;transform:translate(-50%,-50%);animation:deckSpark .65s ease-out forwards}
+            @keyframes deckSpark{from{opacity:.9;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-50%) scale(.2)}}
+            .deck-ping{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;border-radius:50%;border:1.5px solid ${hi};pointer-events:none;animation:deckPing 1.3s ease-out forwards}
+            .deck-scanring{position:absolute;left:50%;top:50%;width:176px;height:176px;margin:-88px 0 0 -88px;border-radius:50%;pointer-events:none;
+              background:conic-gradient(from -90deg,${deckHexA(hi,0.85)} var(--p),transparent 0);-webkit-mask:radial-gradient(circle,transparent 84px,#000 85px,#000 87px,transparent 88px);mask:radial-gradient(circle,transparent 84px,#000 85px,#000 87px,transparent 88px);
+              animation:deckScanFill ${DECK_POLL_MS}ms linear forwards}
+            @property --p{syntax:'<percentage>';inherits:false;initial-value:0%}
+            @keyframes deckScanFill{from{--p:0%}to{--p:100%}}
+            .deck-scanline.flash{animation:deckFlash .9s ease-out}
+            @keyframes deckFlash{0%{background:${deckHexA(hi,0.16)}}100%{background:transparent}}
+            @keyframes deckPing{from{transform:scale(1);opacity:.7}to{transform:scale(2.4);opacity:0}}
+            @media(prefers-reduced-motion:reduce){.deck-hover,.deck-links path,.deck-sweep,.deck-mote,.deck-ping{animation:none}.deck-sweep,.deck-mote,.deck-ping{display:none}}
+            .deck-chip.up{font-size:18px;padding:6px 14px}
+            .deck-loading{animation:deckLoad 1.4s ease-in-out infinite}
+            @keyframes deckLoad{50%{opacity:.35}}
+            .deck-scan{background:repeating-linear-gradient(180deg,rgba(255,255,255,0.025) 0 1px,transparent 1px 4px);mix-blend-mode:overlay}
+            @media(prefers-reduced-motion:reduce){.deck-row.deck-new{animation:none}.deck-chip{display:none}}
+            .deck-pods{position:absolute;inset:0;pointer-events:none}.deck-pod{pointer-events:auto}
+            @media(max-width:900px){.deck-pod{width:112px;padding:9px 10px 8px}.deck-pod .deck-tot{font-size:14px}.deck-pod .deck-n{font-size:9px;letter-spacing:.12em}}
+            @media(max-width:640px){
+              .deck-pods{position:relative;inset:auto;display:grid;grid-template-columns:repeat(${pods.length},1fr);gap:6px;padding:10px 10px 0}
+              .deck-pod{position:static;transform:none;width:auto;padding:8px 5px 7px;text-align:center}
+              .deck-pod .deck-n{font-size:8px;letter-spacing:.06em;white-space:normal;line-height:1.2}
+              .deck-pod .deck-tot{font-size:12px;margin-top:4px}
+              .deck-ship{width:110px!important;height:110px!important;top:118px!important}
+            }
+          `}</style>
+          <div className="min-h-full max-w-[1180px] mx-auto px-3 sm:px-5 py-4" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="font-orbitron text-sm sm:text-base font-bold tracking-[0.14em]" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>LIVE FEED</div>
+              <span className="hidden sm:inline text-[11px] text-white/40 tracking-[0.08em]">every fee, as it lands on the chain</span>
+              <div className="ml-auto flex items-center gap-2">
+                {/* token toggle: switching loads the other dashboard and re-opens the deck there (see grays_deck_reopen) */}
+                <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1" role="group" aria-label="Token">
+                  {['PTGC','UFO'].map(t=>{const c=TOKENS[t];const on=t===token;const gold=c.color==='gold';return(
+                    <button key={t} onClick={()=>{if(on)return;try{sessionStorage.setItem('grays_deck_reopen','1');}catch(e){}onSwitch&&onSwitch(t);}}
+                      className={`flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-lg transition-all ${on?'':'opacity-50 hover:opacity-90'}`}
+                      style={on?{background:gold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:`1px solid ${deckHexA(c.colorHex,0.5)}`,boxShadow:`0 0 18px ${deckHexA(c.colorHex,0.25)}, inset 0 1px 0 rgba(255,255,255,0.15)`}:{border:'1px solid transparent'}}>
+                      <img src={c.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7"/>
+                      <span className={`font-orbitron font-bold text-[10px] sm:text-[11px] tracking-[0.2em] ${on?(gold?'metallic-gold':'text-[#7CFC00]'):'text-white/70'}`}>{t}</span>
+                    </button>);})}
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1" role="group" aria-label="Window">
+                  {['7d','30d','90d'].map(w=>{const ok=!!(windows&&windows[w]);const on=w===win;return(
+                    <button key={w} disabled={!ok} onClick={()=>setWin(w)} title={ok?'':'No data for this window yet'}
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition-all ${ok?'':'cursor-not-allowed'}`}
+                      style={on?{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:`1px solid ${deckHexA(ac,0.5)}`,boxShadow:`0 0 18px ${deckHexA(ac,0.25)}, inset 0 1px 0 rgba(255,255,255,0.15)`}:{border:'1px solid transparent'}}>
+                      <span className={`font-orbitron font-bold text-[10px] sm:text-[11px] tracking-[0.18em] ${on?(isGold?'metallic-gold':'text-[#7CFC00]'):ok?'text-white/50 hover:text-white':'text-white/20'}`}>{w.toUpperCase()}</span></button>);})}
+                </div>
+              </div>
+              <button onClick={close} className="text-white/60 hover:text-white text-2xl leading-none px-2" aria-label="Close">{'×'}</button>
+            </div>
+
+            <div ref={deckRef} className="relative rounded-2xl overflow-hidden" style={{background:'#0b0d12',border:`1px solid ${deckHexA(ac,0.18)}`,boxShadow:`0 0 60px -24px ${deckHexA(ac,0.45)}`}}>
+              <canvas ref={starsRef} className="absolute inset-0 w-full h-full block"/>
+              <div className="deck-scan absolute inset-0 pointer-events-none"></div>
+
+              {/* HUD */}
+              <div className="relative flex items-center gap-3 px-4 py-2.5 text-[12px] uppercase tracking-[0.2em] text-white/75" style={{borderBottom:`1px solid ${deckHexA(ac,0.18)}`}}>
+                <span className="inline-flex items-center gap-2 text-[#7CFC00]"><i className="w-[7px] h-[7px] rounded-full bg-[#7CFC00] animate-pulse" style={{boxShadow:'0 0 10px #7CFC00'}}></i>Signal lock · {token}</span>
+                <span className="ml-auto flex gap-4 sm:gap-6 text-white/35 normal-case tracking-[0.08em] font-mono text-[11px] sm:text-[12px]">
+                  <span>Generated {windowLabel} <b className="font-normal" style={{color:hi}}>{ready?fmtUSD(gen24):'…'}</b></span>
+                  <span className="hidden sm:inline">Contacts 24h <b className="font-normal" style={{color:hi}}>{contacts.toLocaleString()}</b></span>
+                  <span>Fee <b className="font-normal" style={{color:hi}}>{(cfg.taxRate*100).toFixed(2)}%</b></span>
+                  <span className="hidden md:inline">{status==='live'&&scan.block>0?`block ${scan.block.toLocaleString('en-US')} · next scan ${Math.max(0,Math.ceil((DECK_POLL_MS-(tickNow-(lastScan?lastScan.at:tickNow)))/1000))}s`:statusText}</span>
+                </span>
+              </div>
+
+              {/* SKY */}
+              <div ref={skyRef} className="relative" style={{height:380}}>
+                <svg ref={linksRef} className="deck-links absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none"></svg>
+                <div className="deck-pods">
+                {pods.map((p,i)=>(
+                  <div key={p.key} ref={el=>{podRefs.current[p.key]=el;}} className="deck-pod text-center" style={{left:pos[i][0]+'%',top:pos[i][1]+'px'}}>
+                    <div className="deck-n font-orbitron text-[10px] tracking-[0.18em] uppercase whitespace-nowrap" style={{color:ac}}>{p.name}</div>
+                    {ready
+                      ?<div className="deck-tot font-orbitron font-bold text-[18px] mt-2 tabular-nums" style={{color:hi}}>{fmtUSD(disp[p.key]!=null?disp[p.key]:(totals[p.key]||0))}</div>
+                      :<div className="deck-tot deck-loading font-mono text-[11px] tracking-[0.18em] uppercase mt-2 text-white/40">loading</div>}
+                  </div>
+                ))}
+                </div>
+                <div ref={shipRef} className="deck-ship absolute left-1/2 -translate-x-1/2" style={{top:132,width:shipSize,height:shipSize}}>
+                  <div className="deck-hover w-full h-full relative">
+                    {scan.n>0&&<div key={'p'+scan.n} className="deck-ping"></div>}
+                    {scan.n>0&&!reduced&&<div key={'r'+scan.n} className="deck-scanring"></div>}
+                    <img src={cfg.logo} alt={token} className="block w-full h-full relative"/>
+                  </div>
+                </div>
+                <div className="absolute left-0 right-0 bottom-0 pointer-events-none" style={{height:120}}>
+                  <svg viewBox="0 0 1000 120" preserveAspectRatio="none" className="w-full h-full block" aria-hidden="true">
+                    <defs><linearGradient id="deckBeam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={hi} stopOpacity=".5"/><stop offset="1" stopColor={ac} stopOpacity=".04"/></linearGradient></defs>
+                    <polygon points="452,0 548,0 985,120 15,120" fill="url(#deckBeam)"/>
+                    <polygon points="478,0 522,0 745,120 255,120" fill={hi} opacity=".07"/>
+                  </svg>
+                </div>
+                <div className="deck-beamclip">
+                  <div className="deck-sweep"></div>
+                  {DECK_MOTES.map((m,i)=><span key={i} className="deck-mote" style={{left:m[0]+'%',animationDuration:m[1]+'s',animationDelay:m[2]+'s'}}></span>)}
+                </div>
+                <div className="deck-ground absolute left-0 right-0 bottom-0 pointer-events-none" style={{height:110}}></div>
+              </div>
+
+              {/* GROUND TAPE */}
+              <div className="relative overflow-x-auto">
+                <div style={{minWidth:1040}}>
+                  <div className="grid font-mono text-[10px] tracking-[0.18em] uppercase text-white/35 px-[18px] pt-2 pb-1.5" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.18)}`}}>
+                    <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5">Lifted</span>
+                    {pods.map(p=><span key={p.key} className="text-center">→ {p.name}</span>)}
+                  </div>
+                  <div key={lastScan?lastScan.at:0} className="deck-scanline flash flex items-center gap-2 px-[18px] py-1.5 font-mono text-[11px] text-white/45" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                    <span className="inline-block w-[6px] h-[6px] rounded-full" style={{background:lastScan&&lastScan.found>0?'#7CFC00':hi,boxShadow:`0 0 8px ${lastScan&&lastScan.found>0?'#7CFC00':hi}`}}></span>
+                    {lastScan
+                      ?(lastScan.found>0
+                        ?<span><b className="font-normal" style={{color:'#7CFC00'}}>{lastScan.found} new contact{lastScan.found===1?'':'s'}</b> · block {lastScan.block.toLocaleString('en-US')}</span>
+                        :<span>{lastScan.same?'no new block yet':'scanned block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'} · looking again in a moment</span>)
+                      :<span>{status==='connecting'?'reading the chain…':'scanning for contacts…'}</span>}
+                  </div>
+                  <div ref={feedRef} className="relative overflow-hidden" style={{maxHeight:520}}>
+                    {rows.length===0&&(
+                      <div className="px-[18px] py-8 text-white/40 text-sm font-mono">{status==='connecting'?'Reading the last few hours of swaps from the chain…':status==='no pools'?'No pools loaded for this token yet.':'No swaps in the last '+DECK_BACKFILL_BLOCKS+' blocks. Waiting for the next contact.'}</div>
+                    )}
+                    {rows.map(r=>(
+                      <div key={r.id} data-id={r.id} className={`deck-row${r.fresh?' deck-new':''}`}>
+                        <div className="text-white/35 font-mono text-[12px] tabular-nums">{timeOf(r)}</div>
+                        <div className="font-orbitron text-[10px] tracking-[0.1em] py-[3px] text-center" style={{color:r.side==='BUY'?'#34d399':r.side==='SELL'?'#fb7185':'#fbbf24',background:r.side==='BUY'?'rgba(52,211,153,0.12)':r.side==='SELL'?'rgba(251,113,133,0.12)':'rgba(251,191,36,0.12)',clipPath:'polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px)'}}>{r.side}</div>
+                        <div className="min-w-0 flex items-center gap-3 text-white">
+                          <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
+                          <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
+                            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
+                            <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/35 font-normal font-mono hover:text-white/70">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
+                          </div>
+                        </div>
+                        <div className="deck-gen flex items-center justify-end gap-2 pr-1.5"><span className="font-orbitron font-bold text-[15px] tabular-nums" style={{color:hi}}>+{fmtUSD2(r.gen)}</span><span style={{color:ac}}>{'⇧'}</span></div>
+                        {pods.map(p=>(
+                          <div key={p.key} data-k={p.key} className="deck-cell text-center">
+                            <span className={`deck-a font-orbitron text-[13px] font-bold tabular-nums${r.fresh?'':' on'}`} style={{color:ac}}>{fmtUSD2(r.gen*p.frac)}</span>
+                            <span className="block font-mono text-[10px] text-white/35">{p.unit}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    <div className="absolute left-0 right-0 bottom-0 h-20 pointer-events-none" style={{background:'linear-gradient(180deg,rgba(11,13,18,0),#0b0d12)'}}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 text-[11px] text-white/30 leading-relaxed">
+              Contacts are PulseX swaps on this token's pools plus taxed wallet transfers (spotted by their fee leg), read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (for transfers the fee leg itself), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
+            </div>
+          </div>
+        </div>
+      );
+    };
+    const DeckPairLogo=({src,initial,title})=>{
+      const[err,setErr]=useState(false);
+      return(src&&!err)
+        ?<img src={src} alt={title} title={title} onError={()=>setErr(true)} className="w-7 h-7 rounded-full bg-black/50 shrink-0"/>
+        :<span title={title} className="w-7 h-7 rounded-full bg-gray-700 text-[11px] font-bold flex items-center justify-center shrink-0">{initial||'?'}</span>;
+    };
+    const fmtUSD2=n=>{if(n==null||isNaN(n))return'—';if(n>0&&n<0.01)return'$'+n.toFixed(3);const d=Math.floor(n),c=Math.round((n-d)*100);return'$'+d.toLocaleString('en-US')+(d<1000&&c?'.'+String(c).padStart(2,'0'):'');};
+
     // ===== HOLDER ANALYTICS MODAL =====
     const HolderAnalyticsModal=({open,close,token,cfg,theme,holders,holderChange,holdersByPeriod})=>{
       const[chartPeriod,setChartPeriod]=useState('30D');
@@ -4631,6 +5141,7 @@
       };
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
+      const[showBeam,setShowBeam]=useState(()=>{try{if(sessionStorage.getItem('grays_deck_reopen')==='1'){sessionStorage.removeItem('grays_deck_reopen');return true;}}catch(e){}return false;}); // LIVE FEED: the Abduction Deck overlay, opened from the nav (or re-opened after its own token toggle)
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       // MIGRATION: a brand-new token has no 7d/30d/90d history. Don't strand the user on
       // an empty panel — drop to the longest window that actually has data.
@@ -5703,6 +6214,11 @@
                 </button>
                 <a href={`./calculators.html?from=${token}`} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Calculators</a>
                 <a href="./charts.html" className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
+                {/* LIVE FEED — opens the Abduction Deck (live value tape) as a full-screen overlay */}
+                <button onClick={()=>setShowBeam(true)} className="relative flex items-center gap-1.5 px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">
+                  Live Feed
+                  <span className="font-orbitron text-[8px] font-bold tracking-[0.18em] px-1.5 py-[2px] rounded-full leading-none" style={{background:cfg.colorHex,color:'#0a0a0a',boxShadow:`0 0 10px ${cfg.colorHex}`}}>NEW</span>
+                </button>
                 <a href={`portfolio.html?from=${token}`} className="px-3.5 py-3 text-sm font-semibold transition-opacity hover:opacity-80 shrink-0">
                   <span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span>
                 </a>
@@ -5736,6 +6252,7 @@
               <button data-active={activeTab==='social'?'1':'0'} onClick={()=>gotoTab('social')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='social'?theme.text:'text-white/55'}`}>Socials{activeTab==='social'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
               <a href={`./calculators.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Calculators</a>
               <a href="./charts.html" className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Charts</a>
+              <button onClick={()=>setShowBeam(true)} className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Live Feed<span className="font-orbitron text-[7px] font-bold tracking-[0.18em] px-1.5 py-[2px] rounded-full leading-none" style={{background:cfg.colorHex,color:'#0a0a0a',boxShadow:`0 0 8px ${cfg.colorHex}`}}>NEW</span></button>
               <a href={`portfolio.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0"><span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
               <button onClick={onAffiliates} className="px-3 py-2.5 text-[13px] font-semibold text-purple-300 whitespace-nowrap shrink-0">Affiliates</button>
               <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()} className="shrink-0 pl-2 pr-2"/>
@@ -6901,6 +7418,31 @@
             </div>
           )}
           
+          {/* LIVE FEED — the Abduction Deck, live value tape */}
+          <AbductionDeckModal
+            open={showBeam}
+            close={()=>setShowBeam(false)}
+            token={token}
+            cfg={cfg}
+            data={data}
+            onSwitch={onSwitch}
+            windows={(()=>{
+              /* one figure per window, from the same sources as the Value Generated panel */
+              const prices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
+              const out={};
+              ['7d','30d','90d'].forEach(w=>{
+                if(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod&&realizedFees.byPeriod[w]){
+                  const b=computeValueGenBuckets(w,delivered,realizedFees,prices);
+                  if(b&&b.total>0){out[w]={label:w,total:b.total,byKey:b.byKey};return;}
+                  const px=data?.price||0,t=realizedFees.byPeriod[w].totalTokens||0;if(px>0&&t>0){out[w]={label:w,total:t*px,byKey:null};return;}
+                }
+                const v=volumeByPeriod&&volumeByPeriod['vol'+w];
+                if(v>0)out[w]={label:w,total:v*cfg.taxRate,byKey:null};
+              });
+              return out;
+            })()}
+          />
+
           {/* Holder Analytics Modal */}
           <HolderAnalyticsModal
             open={showHolderModal}
