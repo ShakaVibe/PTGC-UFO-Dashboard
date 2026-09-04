@@ -3123,12 +3123,111 @@
     const DECK_MAX_ROWS=40;
     const DECK_REPLAY=5;
     const DECK_RECEIPT_CAP=40;           // fee-leg txs per fetch that get a receipt lookup (newest first)
+    const DECK_MIN_XFER_USD=0.10;        // wallet transfers below this are dust (skim bots, airdrop splits) — not shown
     const DECK_LIFT_MS=2300;             // contact → ship
     const DECK_DISPATCH_MS=1900;         // ship → each pod
     const DECK_DISPATCH_STAGGER=220;     // pods receive one after another
+    const DECK_NEXT_GAP_MS=700;          // beat between one contact's dispatch finishing and the next lift
     const DECK_REPLAY_GAP_MS=7000;       // one full lift-and-dispatch now takes ~5.5s; leave a beat between them
     const DECK_MOTES=[[22,5.2,0],[31,6.1,1.1],[38,4.6,2.3],[44,5.8,0.6],[49,4.2,3.1],[53,6.4,1.7],[58,4.9,2.8],[64,5.5,0.3],[71,6.0,3.6],[78,4.4,1.4],[35,5.0,4.2],[62,5.3,4.8]]; // x%, duration s, delay s                 // contacts replayed on open before going live
     const deckHexA=(hex,a)=>{const h=hex.replace('#','');const n=parseInt(h,16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;};
+
+    /* TOP POOLS (the ticker beside the signal lock). Per-pool swap volume over the deck's
+       windows, read straight from the chain: Swap logs across every known pool, bucketed by
+       block into ~12h slices, in TOKENS so the live price applies at render time. Buys and
+       sells both count — a pool's share is its share of all taxed swap volume.
+
+       SPEED. A 90d scan over ~20 pools is ~80 eth_getLogs ranges on a public RPC, and the
+       first version made the ticker wait for all of them. Now:
+         · newest-first, published as it goes — the 7d ranking lands in seconds, 30d and 90d
+           fill in behind it, and the ticker shows how far the scan has got;
+         · remembered in localStorage per token (block-bucketed, pruned to 90d), so a return
+           visit scans only the blocks since the last visit and shows the ranking at once;
+         · four ranges in flight instead of three.
+       Runs once per token per page load, never blocks the tape, and every contact the deck
+       sees after the scan's head block is added on top, live. */
+    const DECK_POOL_WINDOWS=['7d','30d','90d'];
+    const DECK_POOL_BUCKET=2160;                 // blocks per stored slice (~6h at 10s); windows resolve to slice edges
+    const DECK_POOL_CONC=4;
+    const DECK_POOL_STORE='grays_deck_pools_v1';
+    const deckPoolsLoad=token=>{try{const j=JSON.parse(localStorage.getItem(DECK_POOL_STORE+':'+token));if(j&&j.buckets&&j.head>0)return j;}catch(e){}return null;};
+    const deckPoolsSave=(token,v)=>{try{localStorage.setItem(DECK_POOL_STORE+':'+token,JSON.stringify(v));}catch(e){}};
+    const deckPoolsCache={};
+    const fetchDeckPoolVolumes=async(token,addrs,meta,head,firstPoolMs,onProgress)=>{
+      const key=`${token}-pools`;
+      if(deckPoolsCache[key])return deckPoolsCache[key];
+      const p=(async()=>{
+        const B=await getPeriodBoundaries(head,firstPoolMs);
+        if(!B)return null;
+        const from=Math.max(0,B['90d'],B.launch||0);
+        const stored=deckPoolsLoad(token);
+        const buckets={},metaOut={};
+        const bucketEnd=k=>(+k)*DECK_POOL_BUCKET+DECK_POOL_BUCKET-1;
+        let storedTo=-1;                          // highest block the store already covers (within the window)
+        if(stored&&stored.head>=from){
+          Object.keys(stored.buckets).forEach(k=>{if(bucketEnd(k)>=from)buckets[k]=stored.buckets[k];});
+          Object.assign(metaOut,stored.meta||{});
+          storedTo=stored.head;
+        }
+        Object.keys(meta).forEach(pa=>{metaOut[pa]={symbol:meta[pa].symbol,logo:meta[pa].logo,initial:meta[pa].initial};});
+        const scanFrom=storedTo>=from?storedTo+1:from;
+        const ranges=[];for(let e=head;e>=scanFrom;e-=LOG_CHUNK)ranges.push([Math.max(scanFrom,e-LOG_CHUNK+1),e]);
+        const apply=logs=>{
+          for(const l of logs){
+            const pa=(l.address||'').toLowerCase();const m=meta[pa];if(!m)continue;
+            const h=l.data&&l.data.startsWith('0x')?l.data.slice(2):(l.data||'');if(h.length<256)continue;
+            const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64));
+            const tokIn=weiToTokens(m.isT0?w(0):w(1)),tokOut=weiToTokens(m.isT0?w(2):w(3));
+            const amt=tokIn+tokOut;if(!(amt>0))continue;
+            const k=Math.floor(parseInt(l.blockNumber,16)/DECK_POOL_BUCKET);
+            const bk=buckets[k]||(buckets[k]={});const a=bk[pa]||(bk[pa]={t:0,b:0,s:0});
+            a.t+=amt;if(tokOut>=tokIn)a.b++;else a.s++;
+          }
+        };
+        /* a snapshot the ticker can render: per pool per window, plus how much of each window is covered */
+        const snapshot=(coveredFrom,complete)=>{
+          const per={},coverage={};
+          DECK_POOL_WINDOWS.forEach(win=>{
+            const lo=Math.max(B[win],from);
+            /* covered = the newest part this scan has reached + whatever the store already held */
+            const scanned=Math.max(0,head-Math.max(coveredFrom,lo)+1);
+            const kept=storedTo>=lo?Math.max(0,Math.min(storedTo,head)-lo+1):0;
+            coverage[win]=head>lo?Math.min(1,(scanned+kept)/(head-lo+1)):1;
+            Object.keys(buckets).forEach(k=>{
+              if(bucketEnd(k)<lo)return;
+              const bk=buckets[k];Object.keys(bk).forEach(pa=>{
+                const o=per[pa]||(per[pa]={});const a=o[win]||(o[win]={tokens:0,buys:0,sells:0});
+                a.tokens+=bk[pa].t;a.buys+=bk[pa].b;a.sells+=bk[pa].s;
+              });
+            });
+          });
+          Object.keys(per).forEach(pa=>{DECK_POOL_WINDOWS.forEach(win=>{if(!per[pa][win])per[pa][win]={tokens:0,buys:0,sells:0};});});
+          return{per,coverage,head,from,meta:metaOut,complete};
+        };
+        let coveredFrom=head+1,logsSeen=0;
+        if(!ranges.length){const snap=snapshot(from,true);onProgress&&onProgress(snap);return snap;}
+        onProgress&&onProgress(snapshot(coveredFrom,false));   // the stored history, instantly
+        for(let i=0;i<ranges.length;i+=DECK_POOL_CONC){
+          const batch=ranges.slice(i,i+DECK_POOL_CONC);
+          const res=await Promise.all(batch.map(([a,b])=>getLogsRange(addrs,[PAIR_SWAP_TOPIC],a,b,0,head)));
+          for(let j=0;j<res.length;j++){
+            if(res[j]===null){          // a range failed: keep what we have, mark incomplete, don't persist
+              console.warn(`Top pools (${token}): range ${batch[j][0]}-${batch[j][1]} failed; ranking partial`);
+              const snap=snapshot(coveredFrom,false);onProgress&&onProgress(snap);return snap;
+            }
+            apply(res[j]);logsSeen+=res[j].length;
+          }
+          coveredFrom=batch[batch.length-1][0];
+          onProgress&&onProgress(snapshot(coveredFrom,false));
+        }
+        deckPoolsSave(token,{head,buckets,meta:metaOut});
+        console.log(`Top pools (${token}): ${logsSeen} new swaps scanned (${ranges.length} ranges from ${scanFrom}); ${Object.keys(buckets).length} slices stored`);
+        const snap=snapshot(from,true);onProgress&&onProgress(snap);return snap;
+      })();
+      deckPoolsCache[key]=p;
+      p.then(r=>{if(!r||!r.complete)delete deckPoolsCache[key];},()=>{delete deckPoolsCache[key];});
+      return p;
+    };
     const DECK_POD_POS={5:[[12,74],[31,34],[50,14],[69,34],[88,74]],6:[[9,84],[25.5,40],[42,14],[58,14],[74.5,40],[91,84]],4:[[15,60],[38,14],[62,14],[85,60]],3:[[20,40],[50,14],[80,40]],2:[[30,24],[70,24]],1:[[50,14]]};
 
     const AbductionDeckModal=({open,close,token,cfg,data,windows,onSwitch})=>{
@@ -3147,6 +3246,38 @@
       const[scan,setScan]=useState({block:0,n:0});   // bumps every poll → ripple + block readout
       const[lastScan,setLastScan]=useState(null);   // {block,found,at} — what the last look found
       const[tickNow,setTickNow]=useState(Date.now());
+      /* TOP POOLS. What the ticker renders: {status:'scanning'|'ok'|'failed', per:{pairAddr:{'7d':{tokens,buys,sells},...}}, meta:{pairAddr:{symbol,logo,initial}}}
+         It is a VIEW, rebuilt by publishPools() from two sources that are never reset by a
+         dashboard refresh (the chain-feed effect re-runs on every one):
+           base — the one-off 90d scan for this token (poolBaseRef), and
+           live — every swap contact the deck has seen (poolLiveRef.rows, de-duplicated by id);
+                  only rows from blocks after the scan's head count, so nothing is counted twice
+                  whichever of the two arrives first. */
+      const[poolVol,setPoolVol]=useState({status:'scanning',per:{},meta:{},coverage:null,complete:false});
+      const poolBaseRef=useRef(null);                       // {token,per,head,meta,coverage,complete} | null — grows as the scan publishes
+      const poolLiveRef=useRef({token:null,rows:[],ids:new Set(),failed:false});
+      const publishPools=()=>{
+        const base=poolBaseRef.current,live=poolLiveRef.current;
+        const per={},meta={};
+        const mk=()=>{const o={};DECK_POOL_WINDOWS.forEach(w=>{o[w]={tokens:0,buys:0,sells:0};});return o;};
+        if(base){Object.keys(base.per).forEach(pa=>{per[pa]={};DECK_POOL_WINDOWS.forEach(w=>{per[pa][w]={...base.per[pa][w]};});});Object.assign(meta,base.meta);}
+        live.rows.forEach(r=>{
+          if(base&&r.block<=base.head)return;                // already inside the scan
+          const acc=per[r.pair]||(per[r.pair]=mk());
+          DECK_POOL_WINDOWS.forEach(w=>{const a=acc[w];a.tokens+=r.tokens;if(r.side==='BUY')a.buys++;else a.sells++;});
+          if(!meta[r.pair])meta[r.pair]={symbol:r.pool,logo:r.logo,initial:r.initial};
+        });
+        setPoolVol({status:base?'ok':(live.failed?'failed':'scanning'),per,meta,coverage:base?base.coverage:null,complete:!!(base&&base.complete)});
+      };
+      const addLiveToPools=(list)=>{
+        const live=poolLiveRef.current;let n=0;
+        list.forEach(r=>{
+          if(!r.pair||!(r.side==='BUY'||r.side==='SELL')||!(r.tokens>0)||live.ids.has(r.id))return;
+          live.ids.add(r.id);live.rows.push({id:r.id,pair:r.pair,block:r.block,tokens:r.tokens,side:r.side,pool:r.pool,logo:r.logo,initial:r.initial});n++;
+        });
+        if(live.rows.length>5000){const drop=live.rows.splice(0,live.rows.length-5000);drop.forEach(d=>live.ids.delete(d.id));}
+        if(n)publishPools();
+      };
       /* READY GATE. The window figure (and for UFO the per-bucket delivery) arrives a few seconds
          after the dashboard mounts. Until then the pods read "loading" and nothing lifts, so the
          opening replay never counts into a total that hasn't landed yet. A 20s fallback shows
@@ -3194,6 +3325,7 @@
       /* pod totals seed from the window figure the panel shows (30d when available); the
          replayed opening contacts are subtracted here and added back as each one lands,
          so the totals end exactly on the panel's number. */
+      const liftedSinceSeedRef=useRef(0);   // fees added to the pods by landed contacts since the last reseed (console reconciliation)
       const seedTotals=(replayRows)=>{
         const wg=(windows&&windows[win])||null;
         const base=(wg&&wg.total)||((data?.vol||0)*(cfg.taxRate||0));
@@ -3203,14 +3335,28 @@
           const replayed=(replayRows||[]).reduce((s,r)=>s+r.gen*p.frac,0);
           t[p.key]=Math.max(0,v-replayed);
         });
+        /* RECONCILIATION (console). The deck must equal the panel's figure for this window at
+           every reseed, less the replays still in flight. Between reseeds it grows by live lifts.
+           If the ship's number and the panel disagree by more than a few minutes of fees, this
+           line says which input moved. */
+        const seeded=Object.values(t).reduce((a,b)=>a+b,0);
+        const replayedTotal=(replayRows||[]).reduce((s,r)=>s+r.gen,0);
+        const before=Object.values(totalsRef.current||{}).reduce((a,b)=>a+b,0);
+        console.log(`Deck reseed ${win} (${token}): panel figure ${fmtUSD2(base)} [${byKey?'per-bucket delivered':'estimate'}] − replays in flight ${fmtUSD2(replayedTotal)} (${(replayRows||[]).length}) = pods ${fmtUSD2(seeded)} · pods before reseed ${fmtUSD2(before)} · lifted since last seed ${fmtUSD2(liftedSinceSeedRef.current)}`);
+        liftedSinceSeedRef.current=0;
         setTotals(t);
       };
+      const totalsRef=useRef({});totalsRef.current=totals;
       useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts((data?.buys||0)+(data?.sells||0));},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.taxRate]);
 
       /* ---------- chain feed ---------- */
       useEffect(()=>{
         if(!open)return;
         const st=stateRef.current;st.seen=new Set();st.last=0;
+        if(poolLiveRef.current.token!==token){            // a token switch starts the ranking over; a refresh keeps it
+          poolBaseRef.current=null;poolLiveRef.current={token,rows:[],ids:new Set(),failed:false};
+        }
+        publishPools();
         let stop=false,timer=null;const replayTimers=[];
         const mainAddr=cfg.address.toLowerCase();
         const pairs=(data?.pairs||[]).filter(p=>p.pairAddress&&(p.liq>0||p.vol>0)).slice(0,20);
@@ -3226,7 +3372,7 @@
           const amt=tokIn+tokOut;if(!(amt>0))return null;
           const side=tokOut>=tokIn?'BUY':'SELL';    // token leaving the pool = someone bought it
           const usd=amt*st.price;
-          return{id:l.transactionHash+':'+l.logIndex,tx:l.transactionHash,block:parseInt(l.blockNumber,16),side,tokens:amt,usd,gen:usd*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial};
+          return{id:l.transactionHash+':'+l.logIndex,tx:l.transactionHash,block:parseInt(l.blockNumber,16),side,tokens:amt,usd,gen:usd*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial,pair:(l.address||'').toLowerCase()};
         };
         /* Fee legs: Transfer(from → token contract). Every taxed move emits one — buys (from the
            pair), sells (from the wallet) and plain wallet-to-wallet transfers. Legs in a tx that
@@ -3279,11 +3425,11 @@
             const m=meta[pa]||{symbol:'pool',logo:null,initial:'?'};
             if(outOf>=into){                                   // token left the pool → a BUY; the pool's fee legs belong to it
               tok.filter(t=>t.from===pa&&t.to===mainAddr).forEach(t=>consumed.add(pa));
-              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'BUY',tokens:outOf,usd:outOf*st.price,gen:outOf*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial});
+              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'BUY',tokens:outOf,usd:outOf*st.price,gen:outOf*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
             }else{                                             // token entered the pool → a SELL; the seller's fee legs belong to it
               const seller=(tok.find(t=>t.to===pa)||{}).from;const gross=st.tax<1?into/(1-st.tax):into;
               if(seller)consumed.add(seller);
-              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'SELL',tokens:gross,usd:gross*st.price,gen:gross*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial});
+              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'SELL',tokens:gross,usd:gross*st.price,gen:gross*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
             }
           }
           const rest=x.legs.filter(l=>!consumed.has(l.from)).reduce((a,l)=>a+l.fee,0);
@@ -3320,6 +3466,7 @@
             if(!(x.feeTokens>0))return;
             const size=contractShare>0?x.feeTokens/contractShare:x.feeTokens;   // tokens the sender actually sent
             const usd=size*st.price;
+            if(st.price>0&&usd<DECK_MIN_XFER_USD)return;   // dust transfer: a $0.01 skim lifting $0.001 is noise on the tape
             out.push({id:x.id,tx:x.tx,block:x.block,side:'XFER',tokens:size,usd,gen:usd*st.tax,pool:'transfer',logo:cfg.logo,initial:token[0]});
           });
           return out;
@@ -3337,12 +3484,32 @@
             const headR=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
             if(stop)return;
             let head=parseInt(headR.result,16);if(!(head>0)){setStatus('chain read failed');return;}
+            /* TOP POOLS: the one-off 90d per-pool scan, started here — before the backfill, in
+               parallel with it — and never awaited, so the tape is not held up. Once per token
+               per page load (fetchDeckPoolVolumes caches); a refresh re-entering this effect gets
+               the cached result instantly and the ticker never blanks. */
+            if(!poolBaseRef.current||!poolBaseRef.current.complete){
+              (async()=>{
+                const _fp=(data?.pairs||[]).reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+                const firstPoolMs=(_fp&&isFinite(_fp))?_fp:(token==='UFO'?UFO_LAUNCH_FALLBACK_MS:null);
+                /* progress snapshots are keyed on the token, not on this effect run, so a dashboard
+                   refresh mid-scan (which re-enters the effect) doesn't silence them */
+                const take=r=>{if(poolLiveRef.current.token!==token)return;poolBaseRef.current={token,per:r.per,head:r.head,meta:r.meta,coverage:r.coverage,complete:!!r.complete};publishPools();};
+                try{
+                  const r=await fetchDeckPoolVolumes(token,addrs,meta,head,firstPoolMs,take);
+                  if(poolLiveRef.current.token!==token)return;
+                  if(!r){poolLiveRef.current.failed=true;publishPools();return;}
+                  take(r);
+                }catch(e){console.warn('top pools scan:',e);if(poolLiveRef.current.token===token){poolLiveRef.current.failed=true;publishPools();}}
+              })();
+            }
             const logs=await fetchBoth(Math.max(0,head-DECK_BACKFILL_BLOCKS),head,head);
             if(stop)return;
             const now=Date.now();
             const seeded=(logs||[]).map(r=>({...r,ts:now-(head-r.block)*10000,est:true}));
             seeded.sort((a,b)=>b.block-a.block||(a.side==='XFER')-(b.side==='XFER'));
             seeded.forEach(r=>st.seen.add(r.id));
+            addLiveToPools(seeded);   // backfill contacts newer than the scan head count toward the ranking (de-duplicated by id)
             /* opening sequence: the newest few contacts replay one by one (oldest first), then the deck goes live */
             const replay=reduced?[]:seeded.slice(0,DECK_REPLAY).reverse();
             st.pending=replay.slice();seedTotals(replay);
@@ -3365,6 +3532,7 @@
                     if(fresh.length){
                       const stamped=fresh.map(r=>({...r,ts:Date.now(),fresh:readyRef.current}));
                       setRows(prev=>[...stamped.reverse(),...prev].slice(0,DECK_MAX_ROWS));
+                      addLiveToPools(fresh);
                     }
                     st.last=cur;setStatus('live');
                   }else setStatus('retrying');
@@ -3380,6 +3548,14 @@
       },[open,token,cfg.address,data?.pairs]);
 
       /* ---------- animation: a fresh contact is lifted into the ship, then dispatched to the pods ---------- */
+      const animQRef=useRef([]),animBusyRef=useRef(false),playRef=useRef(null),pumpRef=useRef(()=>{});
+      pumpRef.current=()=>{
+        if(animBusyRef.current)return;
+        const r=animQRef.current.shift();if(!r||!playRef.current)return;
+        animBusyRef.current=true;
+        playRef.current(r,()=>{animBusyRef.current=false;setTimeout(()=>pumpRef.current(),DECK_NEXT_GAP_MS);});
+      };
+      useEffect(()=>{if(open)return;animQRef.current=[];animBusyRef.current=false;},[open]); // closing the deck drops whatever was waiting
       useEffect(()=>{
         if(!open||reduced||!ready)return;
         const deck=deckRef.current,ship=shipRef.current,feed=feedRef.current;if(!deck||!ship||!feed)return;
@@ -3409,14 +3585,27 @@
           }
           return a;
         };
-        fresh.forEach((r,n)=>{
-          r._animated=true;
-          const rowEl=feed.querySelector(`[data-id="${CSS.escape(r.id)}"] .deck-gen`);if(!rowEl)return;
+        /* ONE AT A TIME. Contacts that land in the same block used to lift 600ms apart with a
+           2.3s flight each, so three or four were in the air at once and the dispatches tangled.
+           Now every fresh contact joins a queue and plays its whole lift-and-dispatch before the
+           next one starts, with a beat in between. The queue lives in refs so it survives
+           re-renders; `playRef` always points at the latest closure (fresh DOM refs, colours). */
+        const playOne=(r,done)=>{
+          let finished=false;const finish=()=>{if(finished)return;finished=true;done();};
+          const rowEl=feed.querySelector(`[data-id="${CSS.escape(r.id)}"] .deck-gen`);if(!rowEl){finish();return;}
           const[x0,y0]=P(rowEl,0.7,0.5);const[sx,sy]=P(ship,0.5,0.5);
           const up=chip('+'+fmtUSD2(r.gen),hi,'up');
-          fly(up,x0,y0,sx,sy,DECK_LIFT_MS,300+n*600,0,hi).onfinish=()=>{
+          const podsNow=stateRef.current.pods.filter(p=>podRefs.current[p.key]);
+          const lastIdx=stateRef.current.pods.length-1;
+          let landed=0;
+          /* watchdog: if an animation is cancelled (row scrolled out, deck resized) onfinish never
+             fires; never let one stuck flight freeze the whole queue */
+          const total=300+DECK_LIFT_MS+350+(podsNow.length?(podsNow.length-1)*DECK_DISPATCH_STAGGER:0)+DECK_DISPATCH_MS;
+          setTimeout(finish,total+1500);
+          fly(up,x0,y0,sx,sy,DECK_LIFT_MS,300,0,hi).onfinish=()=>{
             up.remove();
             ship.classList.add('deck-pulse');setTimeout(()=>ship.classList.remove('deck-pulse'),900);
+            if(!podsNow.length){finish();return;}
             stateRef.current.pods.forEach((p,i)=>{
               const pod=podRefs.current[p.key];if(!pod)return;
               const[px,py]=P(pod,0.5,0.6);
@@ -3424,14 +3613,19 @@
               fly(c,sx,sy,px,py,DECK_DISPATCH_MS,350+i*DECK_DISPATCH_STAGGER,-48,ac).onfinish=()=>{
                 c.remove();
                 setTotals(t=>({...t,[p.key]:(t[p.key]||0)+r.gen*p.frac}));
-                if(r.replay&&i===stateRef.current.pods.length-1)stateRef.current.pending=stateRef.current.pending.filter(x=>x.id!==r.id);
+                if(!r.replay)liftedSinceSeedRef.current+=r.gen*p.frac;
+                if(r.replay&&i===lastIdx)stateRef.current.pending=stateRef.current.pending.filter(x=>x.id!==r.id);
                 pod.classList.add('deck-hit');setTimeout(()=>pod.classList.remove('deck-hit'),900);
                 const cell=feed.querySelector(`[data-id="${CSS.escape(r.id)}"] .deck-cell[data-k="${p.key}"] .deck-a`);if(cell)cell.classList.add('on');
+                if(++landed>=podsNow.length)finish();
               };
             });
             if(!r.replay)setContacts(c=>c+1);
           };
-        });
+        };
+        playRef.current=playOne;
+        fresh.forEach(r=>{r._animated=true;animQRef.current.push(r);});
+        pumpRef.current();
       },[rows,open,reduced,ready,ac,hi]);
       useEffect(()=>{ // reduced motion / seeded rows: totals still move, just without the flight
         if(!open||!reduced||!ready)return;
@@ -3487,7 +3681,26 @@
         window.addEventListener('keydown',k);return()=>window.removeEventListener('keydown',k);
       },[open,close]);
 
+      /* TOP POOLS ranking for the selected window. Shares are token-denominated (price cancels),
+         so they are right even before the price arrives. The USD a pool "lifted" is its share of
+         the window's generated figure — the same number the HUD shows — so the three pools plus
+         the "+n others" trailer always add back up to it. Before that figure is ready the USD
+         falls back to volume × price × fee rate, and reads "…" if there is no price yet. */
+      const poolRank=useMemo(()=>{
+        const wg=(windows&&windows[win])||null;
+        const entries=Object.keys(poolVol.per).map(pa=>({pa,...(poolVol.per[pa][win]||{tokens:0,buys:0,sells:0}),meta:poolVol.meta[pa]||{}})).filter(e=>e.tokens>0);
+        const totTok=entries.reduce((s,e)=>s+e.tokens,0);
+        entries.sort((a,b)=>b.tokens-a.tokens);
+        const price=data?.price||0,tax=cfg.taxRate||0;
+        const base=(ready&&!missingSet.size&&wg&&wg.total>0)?wg.total:(totTok*price*tax);
+        const top=entries.slice(0,3).map(e=>({...e,share:totTok>0?e.tokens/totTok:0,usd:totTok>0?base*e.tokens/totTok:0}));
+        const rest=entries.slice(3);
+        const restShare=totTok>0?rest.reduce((s,e)=>s+e.tokens,0)/totTok:0;
+        return{top,restN:rest.length,restUsd:base*restShare,restShare,totTok,usdOk:base>0};
+      },[poolVol,win,windows,ready,missingSet,data?.price,cfg.taxRate]);
+
       if(!open)return null;
+      const poolCov=(poolVol.coverage&&poolVol.coverage[win]!=null)?poolVol.coverage[win]:(poolVol.status==='ok'?1:0);
       const pos=DECK_POD_POS[pods.length]||DECK_POD_POS[5];
       const gen24=Object.values(disp).length?Object.values(disp).reduce((s,v)=>s+v,0):Object.values(totals).reduce((s,v)=>s+v,0);
       const windowLabel=(windowGen&&windowGen.label)||'24h';
@@ -3549,6 +3762,7 @@
               .deck-pod .deck-n{font-size:8px;letter-spacing:.06em;white-space:normal;line-height:1.2}
               .deck-pod .deck-tot{font-size:12px;margin-top:4px}
               .deck-ship{width:110px!important;height:110px!important;top:118px!important}
+              .deck-readout{top:268px!important}.deck-readout-n{font-size:18px}
             }
           `}</style>
           <div className="min-h-full max-w-[1180px] mx-auto px-3 sm:px-5 py-4" onClick={e=>e.stopPropagation()}>
@@ -3581,14 +3795,35 @@
               <canvas ref={starsRef} className="absolute inset-0 w-full h-full block"/>
               <div className="deck-scan absolute inset-0 pointer-events-none"></div>
 
-              {/* HUD */}
-              <div className="relative flex items-center gap-3 px-4 py-2.5 text-[12px] uppercase tracking-[0.2em] text-white/75" style={{borderBottom:`1px solid ${deckHexA(ac,0.18)}`}}>
-                <span className="inline-flex items-center gap-2 text-[#7CFC00]"><i className="w-[7px] h-[7px] rounded-full bg-[#7CFC00] animate-pulse" style={{boxShadow:'0 0 10px #7CFC00'}}></i>Signal lock · {token}</span>
-                <span className="ml-auto flex gap-4 sm:gap-6 text-white/35 normal-case tracking-[0.08em] font-mono text-[11px] sm:text-[12px]">
-                  <span>Generated {windowLabel} <b className="font-normal" style={{color:hi}}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</b></span>
-                  <span className="hidden sm:inline">Contacts 24h <b className="font-normal" style={{color:hi}}>{contacts.toLocaleString()}</b></span>
-                  <span>Fee <b className="font-normal" style={{color:hi}}>{(cfg.taxRate*100).toFixed(2)}%</b></span>
-                  <span className="hidden md:inline">{status==='live'&&scan.block>0?`block ${scan.block.toLocaleString('en-US')} · next scan ${Math.max(0,Math.ceil((DECK_POLL_MS-(tickNow-(lastScan?lastScan.at:tickNow)))/1000))}s`:statusText}</span>
+              {/* HUD — one line: the signal lock on the left, the Top Pools ticker on the right.
+                  The headline numbers that used to live here now sit where they belong: the
+                  generated figure on the ship (it is the sum of the pods), contacts and chain
+                  telemetry on the scan line, and the fee rate in the Lifted column header. */}
+              <div className="relative flex items-center gap-4 px-4 py-2.5 whitespace-nowrap overflow-x-auto" style={{borderBottom:`1px solid ${deckHexA(ac,0.18)}`}}>
+                <span className="inline-flex items-center gap-2 shrink-0 text-[12px] uppercase tracking-[0.2em] text-[#7CFC00]" title={statusText}>
+                  <i className={`w-[7px] h-[7px] rounded-full ${status==='live'?'bg-[#7CFC00] animate-pulse':status==='retrying'||status==='connecting'?'bg-[#fbbf24]':'bg-[#fb7185]'}`} style={{boxShadow:status==='live'?'0 0 10px #7CFC00':'none'}}></i>
+                  <span className="hidden lg:inline">Signal lock · </span>{token}
+                </span>
+                {/* TOP POOLS ticker. Each pool's figure is its share of the fees generated in the
+                    window (the ship's number), attributed by share of swap volume — volume in the hover. */}
+                <span className="ml-auto inline-flex items-center gap-4 sm:gap-5 font-mono text-[11px] text-white/40 tracking-[0.06em]">
+                  <span className="inline-flex items-baseline gap-2.5 shrink-0">
+                    <span className="font-orbitron font-bold text-[12px] tracking-[0.22em]" style={{color:ac,textShadow:`0 0 10px ${deckHexA(ac,0.45)}`}}>TOP POOLS</span>
+                    <span className="text-[10px] tracking-[0.18em] uppercase text-white/45">fees generated <b className="font-normal" style={{color:hi}}>{win.toUpperCase()}</b></span>
+                  </span>
+                  {(poolVol.status==='scanning'||!poolRank.top.length)
+                    ?<span className={poolVol.status==='scanning'||poolCov<1?'deck-loading':''}>{poolVol.status==='scanning'?'scanning pools…':poolVol.status==='failed'?'pool ranking unavailable':poolCov<1?`scanning ${win} · ${Math.round(poolCov*100)}%`:'no swaps in this window yet'}</span>
+                    :poolRank.top.map((e,i)=>(
+                        <span key={e.pa} className="inline-flex items-center gap-[6px] shrink-0" title={`${e.meta.symbol||'pool'} · ${(e.share*100).toFixed(1)}% of swap volume · ${fmtAbbr(e.tokens)} ${token} · ${e.buys.toLocaleString()} buys · ${e.sells.toLocaleString()} sells`}>
+                          <span className="font-orbitron text-[11px] font-bold" style={{color:i===0?ac:'rgba(255,255,255,0.25)',textShadow:i===0?`0 0 8px ${deckHexA(ac,0.5)}`:'none'}}>{i+1}</span>
+                          <DeckTickerLogo src={e.meta.logo} initial={e.meta.initial}/>
+                          <span className="text-white font-semibold font-sans text-[12px]">{e.meta.symbol||'pool'}</span>
+                          <b className="font-orbitron font-bold text-[12px] tabular-nums" style={{color:hi}}>{poolRank.usdOk?fmtUSD(e.usd):'…'}</b>
+                          <span className="inline-block w-[44px] h-[3px] bg-white/[0.07] overflow-hidden"><i className="block h-full" style={{width:(e.share*100).toFixed(1)+'%',background:ac,boxShadow:`0 0 6px ${ac}`}}></i></span>
+                          <span className="tabular-nums">{(e.share*100).toFixed(0)}%</span>
+                        </span>
+                      ))}
+                  {poolVol.status==='ok'&&poolRank.top.length>0&&poolCov<1&&<span className="deck-loading text-white/30 shrink-0">scanning {Math.round(poolCov*100)}%</span>}
                 </span>
               </div>
 
@@ -3612,6 +3847,12 @@
                     <img src={cfg.logo} alt={token} className="block w-full h-full relative"/>
                   </div>
                 </div>
+                {/* the ship's payload readout — the generated figure for the window, i.e. the sum of the pods */}
+                {/* sits below the scan ring (176px, centred on the 150px ship → 13px past its edge) with a clear gap */}
+                <div className="deck-readout absolute left-1/2 -translate-x-1/2 text-center pointer-events-none" style={{top:132+shipSize+20}}>
+                  <div className="font-mono text-[9.5px] tracking-[0.22em] uppercase text-white/45">Generated {windowLabel}</div>
+                  <div className="deck-readout-n font-orbitron font-bold text-[22px] leading-tight tabular-nums" style={{color:hi,textShadow:`0 0 16px ${deckHexA(hi,0.55)}, 0 1px 2px rgba(0,0,0,.9)`}}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</div>
+                </div>
                 <div className="absolute left-0 right-0 bottom-0 pointer-events-none" style={{height:120}}>
                   <svg viewBox="0 0 1000 120" preserveAspectRatio="none" className="w-full h-full block" aria-hidden="true">
                     <defs><linearGradient id="deckBeam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={hi} stopOpacity=".5"/><stop offset="1" stopColor={ac} stopOpacity=".04"/></linearGradient></defs>
@@ -3630,16 +3871,21 @@
               <div className="relative overflow-x-auto">
                 <div style={{minWidth:1040}}>
                   <div className="grid font-mono text-[10px] tracking-[0.18em] uppercase text-white/35 px-[18px] pt-2 pb-1.5" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.18)}`}}>
-                    <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5">Lifted</span>
+                    <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5 whitespace-nowrap">Lifted <span className="normal-case tracking-normal" style={{color:hi}}>@ {(cfg.taxRate*100).toFixed(2)}%</span></span>
                     {pods.map(p=><span key={p.key} className="text-center">→ {p.name}</span>)}
                   </div>
-                  <div key={lastScan?lastScan.at:0} className="deck-scanline flash flex items-center gap-2 px-[18px] py-1.5 font-mono text-[11px] text-white/45" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
-                    <span className="inline-block w-[6px] h-[6px] rounded-full" style={{background:lastScan&&lastScan.found>0?'#7CFC00':hi,boxShadow:`0 0 8px ${lastScan&&lastScan.found>0?'#7CFC00':hi}`}}></span>
+                  <div key={lastScan?lastScan.at:0} className="deck-scanline flash flex items-center gap-2 px-[18px] py-1.5 font-mono text-[11px] text-white/45 whitespace-nowrap overflow-hidden" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                    <span className="inline-block w-[6px] h-[6px] rounded-full shrink-0" style={{background:lastScan&&lastScan.found>0?'#7CFC00':hi,boxShadow:`0 0 8px ${lastScan&&lastScan.found>0?'#7CFC00':hi}`}}></span>
+                    <span className="shrink-0">Contacts 24h <b className="font-normal" style={{color:hi}}>{contacts.toLocaleString()}</b></span>
+                    <span className="text-white/20">·</span>
                     {lastScan
                       ?(lastScan.found>0
                         ?<span><b className="font-normal" style={{color:'#7CFC00'}}>{lastScan.found} new contact{lastScan.found===1?'':'s'}</b> · block {lastScan.block.toLocaleString('en-US')}</span>
-                        :<span>{lastScan.same?'no new block yet':'scanned block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'} · looking again in a moment</span>)
+                        :<span>{lastScan.same?'no new block yet':'block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'}</span>)
                       :<span>{status==='connecting'?'reading the chain…':'scanning for contacts…'}</span>}
+                    {status==='live'&&lastScan
+                      ?<span className="text-white/30">· next scan {Math.max(0,Math.ceil((DECK_POLL_MS-(tickNow-lastScan.at))/1000))}s</span>
+                      :status!=='connecting'&&<span className="text-white/30">· {statusText}</span>}
                   </div>
                   <div ref={feedRef} className="relative overflow-hidden" style={{maxHeight:520}}>
                     {rows.length===0&&(
@@ -3682,6 +3928,12 @@
       return(src&&!err)
         ?<img src={src} alt={title} title={title} onError={()=>setErr(true)} className="w-7 h-7 rounded-full bg-black/50 shrink-0"/>
         :<span title={title} className="w-7 h-7 rounded-full bg-gray-700 text-[11px] font-bold flex items-center justify-center shrink-0">{initial||'?'}</span>;
+    };
+    const DeckTickerLogo=({src,initial})=>{ // 16px version for the Top Pools ticker
+      const[err,setErr]=useState(false);
+      return(src&&!err)
+        ?<img src={src} alt="" onError={()=>setErr(true)} className="w-4 h-4 rounded-full bg-black/50 shrink-0"/>
+        :<span className="w-4 h-4 rounded-full bg-gray-700 text-[8px] font-bold flex items-center justify-center shrink-0 text-white/85">{initial||'?'}</span>;
     };
     const fmtUSD2=n=>{if(n==null||isNaN(n))return'—';if(n>0&&n<0.01)return'$'+n.toFixed(3);const d=Math.floor(n),c=Math.round((n-d)*100);return'$'+d.toLocaleString('en-US')+(d<1000&&c?'.'+String(c).padStart(2,'0'):'');};
 
