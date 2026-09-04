@@ -3150,13 +3150,18 @@
       /* READY GATE. The window figure (and for UFO the per-bucket delivery) arrives a few seconds
          after the dashboard mounts. Until then the pods read "loading" and nothing lifts, so the
          opening replay never counts into a total that hasn't landed yet. A 20s fallback shows
-         whatever is available rather than waiting forever on a failed scan. */
+         whatever is available rather than waiting forever on a failed scan.
+         For UFO, "arrived" also means every price a pod needs is in (wg.missing empty): the
+         per-bucket delivery can be complete while the PTGC price is still on its way, and the
+         Burn PTGC pod would then start its replay from a confident $0. */
       const[ready,setReady]=useState(false);
       const readyRef=useRef(false);readyRef.current=ready;
+      const missingKeys=(windows&&windows[win]&&windows[win].missing)||[];
+      const missingSet=useMemo(()=>new Set(missingKeys),[missingKeys.join('|')]);
       useEffect(()=>{
         if(!open){setReady(false);return;}
         const wg=windows&&windows[win];
-        const ok=!!wg&&(token!=='UFO'||!!wg.byKey);
+        const ok=!!wg&&(token!=='UFO'||(!!wg.byKey&&!(wg.missing&&wg.missing.length)));
         if(ok){setReady(true);return;}
         const id=setTimeout(()=>setReady(true),20000);
         return()=>clearTimeout(id);
@@ -3580,7 +3585,7 @@
               <div className="relative flex items-center gap-3 px-4 py-2.5 text-[12px] uppercase tracking-[0.2em] text-white/75" style={{borderBottom:`1px solid ${deckHexA(ac,0.18)}`}}>
                 <span className="inline-flex items-center gap-2 text-[#7CFC00]"><i className="w-[7px] h-[7px] rounded-full bg-[#7CFC00] animate-pulse" style={{boxShadow:'0 0 10px #7CFC00'}}></i>Signal lock · {token}</span>
                 <span className="ml-auto flex gap-4 sm:gap-6 text-white/35 normal-case tracking-[0.08em] font-mono text-[11px] sm:text-[12px]">
-                  <span>Generated {windowLabel} <b className="font-normal" style={{color:hi}}>{ready?fmtUSD(gen24):'…'}</b></span>
+                  <span>Generated {windowLabel} <b className="font-normal" style={{color:hi}}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</b></span>
                   <span className="hidden sm:inline">Contacts 24h <b className="font-normal" style={{color:hi}}>{contacts.toLocaleString()}</b></span>
                   <span>Fee <b className="font-normal" style={{color:hi}}>{(cfg.taxRate*100).toFixed(2)}%</b></span>
                   <span className="hidden md:inline">{status==='live'&&scan.block>0?`block ${scan.block.toLocaleString('en-US')} · next scan ${Math.max(0,Math.ceil((DECK_POLL_MS-(tickNow-(lastScan?lastScan.at:tickNow)))/1000))}s`:statusText}</span>
@@ -3594,9 +3599,9 @@
                 {pods.map((p,i)=>(
                   <div key={p.key} ref={el=>{podRefs.current[p.key]=el;}} className="deck-pod text-center" style={{left:pos[i][0]+'%',top:pos[i][1]+'px'}}>
                     <div className="deck-n font-orbitron text-[10px] tracking-[0.18em] uppercase whitespace-nowrap" style={{color:ac}}>{p.name}</div>
-                    {ready
+                    {ready&&!missingSet.has(p.key)
                       ?<div className="deck-tot font-orbitron font-bold text-[18px] mt-2 tabular-nums" style={{color:hi}}>{fmtUSD(disp[p.key]!=null?disp[p.key]:(totals[p.key]||0))}</div>
-                      :<div className="deck-tot deck-loading font-mono text-[11px] tracking-[0.18em] uppercase mt-2 text-white/40">loading</div>}
+                      :<div className="deck-tot deck-loading font-mono text-[11px] tracking-[0.18em] uppercase mt-2 text-white/40" title={ready?'waiting for the '+String(p.unit||'').replace('UFO+','')+' price':''}>loading</div>}
                   </div>
                 ))}
                 </div>
@@ -5209,6 +5214,31 @@
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[showBeam,setShowBeam]=useState(()=>{try{if(sessionStorage.getItem('grays_deck_reopen')==='1'){sessionStorage.removeItem('grays_deck_reopen');return true;}}catch(e){}return false;}); // LIVE FEED: the Abduction Deck overlay, opened from the nav (or re-opened after its own token toggle)
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
+      /* LIVE FEED: one figure per window for the Abduction Deck's pods, from the same sources as
+         the Value Generated panel. Memoized — it used to be rebuilt as a fresh object on every
+         render, which re-ran the deck's reseed effect each time.
+         `missing` lists the pod keys whose USD figure can't be trusted yet because the price it
+         needs (PTGC for Burn PTGC; PLS/PLSX/WETH for the LP halves) hasn't arrived. A bucket
+         that needs a price it doesn't have would otherwise read as a confident $0 — that is the
+         Burn PTGC pod bug. The deck waits for `missing` to empty before it goes ready, and
+         labels those pods "loading" if it has to go ready without them (20s fallback). */
+      const deckWindows=useMemo(()=>{
+        const prices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
+        const missing=token==='UFO'
+          ?(cfg.taxBreakdown||[]).filter(b=>(b.pct||0)>0&&!((prices[b.priceKey||'UFO']||0)>0)).map(b=>b.key||b.name)
+          :[];
+        const out={};
+        ['7d','30d','90d'].forEach(w=>{
+          if(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod&&realizedFees.byPeriod[w]){
+            const b=computeValueGenBuckets(w,delivered,realizedFees,prices);
+            if(b&&b.total>0){out[w]={label:w,total:b.total,byKey:b.byKey,missing};return;}
+            const px=data?.price||0,t=realizedFees.byPeriod[w].totalTokens||0;if(px>0&&t>0){out[w]={label:w,total:t*px,byKey:null,missing:[]};return;}
+          }
+          const v=volumeByPeriod&&volumeByPeriod['vol'+w];
+          if(v>0)out[w]={label:w,total:v*cfg.taxRate,byKey:null,missing:[]};
+        });
+        return out;
+      },[token,data,ptgcPrice,pls,plsxPrice,wethPrice,realizedFees,delivered,volumeByPeriod,feeVersion]);
       // MIGRATION: a brand-new token has no 7d/30d/90d history. Don't strand the user on
       // an empty panel — drop to the longest window that actually has data.
       useEffect(()=>{
@@ -5751,7 +5781,19 @@
         setLiquidityChange24h(null);
         setTxnChange24h(null);
         
+        let loadCancelled=false;
         const load=async()=>{
+          /* LIVE FEED FIX: the UFO deck's Burn PTGC pod (and the Value Generated panel's PTGC
+             bucket) is delivered pTGC × PTGC/USD. That price used to arrive only from DexScreener,
+             queued behind a dozen other DexScreener calls, so the pod read $0 for ~10s after the
+             chain scan was already done. Seed it from the chain first: one reserves read on
+             PTGC's main WPLS pair × the on-chain PLS/USD — sub-second, no DexScreener. The
+             DexScreener figure still replaces it when it lands (see usdOf below). */
+          if(token==='UFO'){
+            priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address)
+              .then(v=>{if(!loadCancelled&&v>0)setPtgcPrice(prev=>prev>0?prev:v);})
+              .catch(()=>{});
+          }
           /* The GitHub JSON caches and the first on-chain reads don't depend on each other.
              Kick both off at once (instead of awaiting the caches first) so first paint waits
              only on the on-chain reads — roughly max(cache,onchain) instead of their sum.
@@ -5908,6 +5950,7 @@
               }catch{return 0;}
             };
             // A failed/empty lookup returns 0; don't let it overwrite a good PTGC price.
+            // A good one replaces the on-chain seed fired at the top of load().
             usdOf(TOKENS.PTGC.address).then(p=>{if(p>0)setPtgcPrice(p);}).catch(()=>{});
             usdOf(PLSX_ADDRESS).then(setPlsxPrice).catch(()=>{});
             usdOf(UFO_WETH).then(setWethPrice).catch(()=>{});
@@ -6003,6 +6046,7 @@
           }
         };
         load();
+        return()=>{loadCancelled=true;};   // a token switch mid-flight must not seed the other dashboard's PTGC price
       },[token]);
 
       /* ===== AUTO-REFRESH (quick path) =====
@@ -7492,21 +7536,7 @@
             cfg={cfg}
             data={data}
             onSwitch={onSwitch}
-            windows={(()=>{
-              /* one figure per window, from the same sources as the Value Generated panel */
-              const prices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
-              const out={};
-              ['7d','30d','90d'].forEach(w=>{
-                if(token==='UFO'&&realizedFees&&realizedFees.ok&&realizedFees.byPeriod&&realizedFees.byPeriod[w]){
-                  const b=computeValueGenBuckets(w,delivered,realizedFees,prices);
-                  if(b&&b.total>0){out[w]={label:w,total:b.total,byKey:b.byKey};return;}
-                  const px=data?.price||0,t=realizedFees.byPeriod[w].totalTokens||0;if(px>0&&t>0){out[w]={label:w,total:t*px,byKey:null};return;}
-                }
-                const v=volumeByPeriod&&volumeByPeriod['vol'+w];
-                if(v>0)out[w]={label:w,total:v*cfg.taxRate,byKey:null};
-              });
-              return out;
-            })()}
+            windows={deckWindows}
           />
 
           {/* Holder Analytics Modal */}
