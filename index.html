@@ -4858,27 +4858,55 @@
       );
     };
     
+    // Supply-basis toggle shared by the Leagues views.
+    // mode: 'start' = starting supply (default) | 'circ' = circulating supply (starting − burned)
+    const SupplyBasisToggle=({mode,setMode,color='#D4AF37',color2,size='md'})=>{
+      const opts=[{k:'start',label:'Starting Supply'},{k:'circ',label:'Circulating Supply'}];
+      const idx=mode==='circ'?1:0;
+      const pad=size==='lg'?'px-5 py-2 text-sm':'px-3.5 py-1.5 text-[11px] sm:text-xs';
+      return(
+        <div role="tablist" aria-label="Supply basis" className="relative inline-grid grid-cols-2 rounded-full p-1 select-none" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 18px rgba(0,0,0,0.35)'}}>
+          {/* sliding pill */}
+          <div className="absolute top-1 bottom-1 rounded-full transition-transform duration-300 ease-out" style={{left:'4px',width:'calc(50% - 4px)',transform:`translateX(${idx*100}%)`,background:`linear-gradient(180deg, ${color} 0%, ${color2||(color+'cc')} 100%)`,boxShadow:`0 0 14px ${color}66, 0 1px 0 rgba(255,255,255,0.35) inset`}}></div>
+          {opts.map(o=>{
+            const active=(mode==='circ'?'circ':'start')===o.k;
+            return(
+              <button key={o.k} role="tab" aria-selected={active} onClick={()=>setMode(o.k)}
+                className={`relative z-10 rounded-full font-semibold tracking-wider uppercase whitespace-nowrap transition-colors duration-200 ${pad} ${active?'text-black':'text-white/55 hover:text-white'}`}>
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    };
+
     // Combined PTGC & UFO Leagues Modal - Fetches prices directly from DexScreener
     const CombinedLeaguesModal=({open,close})=>{
       const[prices,setPrices]=useState({ptgc:0,ufo:0});
+      const[burns,setBurns]=useState({ptgc:0,ufo:0});
+      const[supplyMode,setSupplyMode]=useState('start'); // 'start' (default) | 'circ'
       const[loading,setLoading]=useState(true);
-      // Tall card - portrait-preferred. Scale to fit portrait orientation perfectly.
-      const sc=Math.min(1,(Math.min(window.innerWidth,window.innerHeight)-32)/800,(Math.max(window.innerWidth,window.innerHeight)-100)/1000);
-      
+      // Tall card - portrait-preferred. Scale to fit portrait orientation perfectly (leave room for the toggle row above the card).
+      const sc=Math.min(1,(Math.min(window.innerWidth,window.innerHeight)-32)/800,(Math.max(window.innerWidth,window.innerHeight)-150)/1000);
+
       useEffect(()=>{
         if(!open)return;
         setLoading(true);
         const fetchPrices=async()=>{
           try{
-            const[ptgcData,ufoData]=await Promise.all([
+            const[ptgcData,ufoData,ptgcBurn,ufoBurn]=await Promise.all([
               dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.PTGC.mainPair),
-              dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.UFO.mainPair) /* MIGRATION: resolved at boot */
+              dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS.UFO.mainPair), /* MIGRATION: resolved at boot */
+              fetchBurn(TOKENS.PTGC.address,TOKENS.PTGC.decimals),
+              fetchBurn(TOKENS.UFO.address,TOKENS.UFO.decimals)
             ]);
             let pP=parseFloat(dsOnePair(ptgcData)?.priceUsd)||0;
             let uP=parseFloat(dsOnePair(ufoData)?.priceUsd)||0;
             if(!pP)pP=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
             if(!uP)uP=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);   // chain = fallback only
             setPrices({ptgc:pP,ufo:uP});
+            setBurns({ptgc:ptgcBurn?.total||0,ufo:ufoBurn?.total||0});
           }catch(e){
             console.error('Error fetching prices:',e);
           }
@@ -4886,6 +4914,11 @@
         };
         fetchPrices();
       },[open]);
+
+      // Supply basis for the tier math: starting supply, or starting − burned when in circulating mode
+      const circ=supplyMode==='circ';
+      const ptgcBase=circ?Math.max(0,TOKENS.PTGC.totalSupply-burns.ptgc):TOKENS.PTGC.totalSupply;
+      const ufoBase=circ?Math.max(0,TOKENS.UFO.totalSupply-burns.ufo):TOKENS.UFO.totalSupply;
       
       if(!open)return null;
       
@@ -4928,9 +4961,12 @@
       return(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={close}>
           <div className="relative flex flex-col items-center" onClick={e=>e.stopPropagation()}>
-            {/* X button moved way out of screenshot area */}
-            <button onClick={close} style={{position:'absolute',top:`${-40*sc}px`,right:0,width:'40px',height:'40px',borderRadius:'50%',background:'rgba(31,41,55,0.9)',color:'white',fontSize:'18px',fontWeight:'bold',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #4b5563',cursor:'pointer',zIndex:60}}>✕</button>
-            
+            {/* Top bar: supply-basis toggle (kept outside the screenshot border) + close button */}
+            <div className="relative w-full flex items-center justify-center mb-3" style={{minHeight:'44px',paddingRight:'48px',paddingLeft:'48px'}}>
+              <SupplyBasisToggle mode={supplyMode} setMode={setSupplyMode} color="#f5f5f5" color2="#9a9a9a"/>
+              <button onClick={close} aria-label="Close" style={{position:'absolute',top:'2px',right:0,width:'40px',height:'40px',borderRadius:'50%',background:'rgba(31,41,55,0.9)',color:'white',fontSize:'18px',fontWeight:'bold',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #4b5563',cursor:'pointer',zIndex:60}}>✕</button>
+            </div>
+
             {/* Vertical container 800x1000 */}
             <div style={{width:`${800*sc}px`,height:`${1000*sc}px`}}>
               <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${800}px`,height:`${1000}px`}}>
@@ -4940,6 +4976,7 @@
                 <div className="text-center mb-4">
                   <h1 className="font-orbitron text-5xl font-bold mb-2 text-white">THE GRAYS LEAGUES</h1>
                   <p className="text-white/60 text-2xl">Sea Creature Current Pricing</p>
+                  <p className="text-xl font-semibold tracking-wide mt-1 text-white/80">{circ?'Based on Circulating Supply':'Based on Starting Supply'}</p>
                 </div>
                 
                 {/* Token Logos with Prices - Centered over columns */}
@@ -4978,8 +5015,8 @@
                 {/* Main Data Grid - Compact rows */}
                 <div className="flex-1 flex flex-col justify-between">
                   {tiers.map((tier,i)=>{
-                    const ptgcTokens=TOKENS.PTGC.totalSupply*tier.pct;
-                    const ufoTokens=TOKENS.UFO.totalSupply*tier.pct;
+                    const ptgcTokens=ptgcBase*tier.pct;
+                    const ufoTokens=ufoBase*tier.pct;
                     const ptgcUsd=ptgcTokens*prices.ptgc;
                     const ufoUsd=ufoTokens*prices.ufo;
                     return(
@@ -5006,7 +5043,7 @@
                 <div className="flex justify-between items-center pt-3 border-t border-white/20 mt-2">
                   <div className="text-white/40 text-lg">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
                   <div className="text-white/40 text-lg font-medium font-orbitron">ptgc-ufo.com</div>
-                  <div className="text-white/40 text-lg">Based on starting supply</div>
+                  <div className="text-white/40 text-lg">{circ?'Based on circulating supply':'Based on starting supply'}</div>
                 </div>
               </div>
             </div>
@@ -5023,24 +5060,29 @@
     
     // Tier Info Modal - Shows token supply and holder tier thresholds
     const TierInfoModal=({open,close,token,cfg,price,holders,burn,holderTiers,theme})=>{
+      // 'start' = starting supply (default) | 'circ' = circulating supply (starting − burned)
+      const[supplyMode,setSupplyMode]=useState('start');
+      useEffect(()=>{if(open)setSupplyMode('start')},[open]); // always reopen on the default basis
       if(!open)return null;
-      
+
       const now=new Date();
       const date=`${now.getMonth()+1}-${now.getDate()}-${String(now.getFullYear()).slice(-2)}`;
       const startingSupply=cfg.totalSupply;
       const burnedQty=burn?.total||0;
-      const currentSupply=startingSupply-burnedQty;
-      
-      // Calculate tier thresholds based on starting supply
+      const currentSupply=Math.max(0,startingSupply-burnedQty);
+      const circ=supplyMode==='circ';
+      const basis=circ?currentSupply:startingSupply;
+
+      // Calculate tier thresholds on the selected supply basis
       const tiers=[
-        {name:'Poseidon',emoji:'🔱',threshold:startingSupply*0.10},
-        {name:'Whale',emoji:'🐋',threshold:startingSupply*0.01},
-        {name:'Shark',emoji:'🦈',threshold:startingSupply*0.001},
-        {name:'Dolphin',emoji:'🐬',threshold:startingSupply*0.0001},
-        {name:'Squid',emoji:'🦑',threshold:startingSupply*0.00001},
-        {name:'Turtle',emoji:'🐢',threshold:startingSupply*0.000001},
-        {name:'Shrimp',emoji:'🦐',threshold:startingSupply*0.0000001},
-        {name:'Shell',emoji:'🐚',threshold:startingSupply*0.00000001},
+        {name:'Poseidon',emoji:'🔱',threshold:basis*0.10},
+        {name:'Whale',emoji:'🐋',threshold:basis*0.01},
+        {name:'Shark',emoji:'🦈',threshold:basis*0.001},
+        {name:'Dolphin',emoji:'🐬',threshold:basis*0.0001},
+        {name:'Squid',emoji:'🦑',threshold:basis*0.00001},
+        {name:'Turtle',emoji:'🐢',threshold:basis*0.000001},
+        {name:'Shrimp',emoji:'🦐',threshold:basis*0.0000001},
+        {name:'Shell',emoji:'🐚',threshold:basis*0.00000001},
       ];
       
       const isPTGC=token==='PTGC';
@@ -5083,6 +5125,10 @@
           <div className="bg-[#0a0a0a] border-2 rounded-2xl max-w-lg w-full overflow-hidden max-h-[90vh] overflow-y-auto" style={{borderColor:pc}} onClick={e=>e.stopPropagation()}>
             {/* Header with logo */}
             <div className="p-4 sm:p-6 text-center" style={{background:`linear-gradient(180deg, ${pc}20 0%, transparent 100%)`}}>
+              {/* Supply-basis toggle */}
+              <div className="flex justify-center mb-4">
+                <SupplyBasisToggle mode={supplyMode} setMode={setSupplyMode} color={pc}/>
+              </div>
               <div className="flex justify-center mb-3 sm:mb-4">
                 <div className="w-20 h-20 sm:w-32 sm:h-32 rounded-full flex items-center justify-center" style={{background:`${pc}20`,border:`4px solid ${pc}`}}>
                   <img src={cfg.logo} alt={token} className="w-16 h-16 sm:w-28 sm:h-28 object-contain"/>
@@ -5097,17 +5143,18 @@
             {/* Supply Info */}
             <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-b" style={{borderColor:`${pc}30`}}>
               <div className="grid grid-cols-2 gap-2 sm:gap-3 text-sm sm:text-lg">
-                <div className="truncate" style={{color:pc}}>Starting Supply</div>
-                <div className="text-right font-bold text-white truncate">{fmt(startingSupply)}</div>
-                <div className="text-orange-400 flex items-center gap-1 truncate">🔥 Burned</div>
+                <div className={`flex items-center gap-2 min-w-0 transition-opacity ${circ?'opacity-50':''}`} style={{color:pc}}><span className="shrink-0 w-2 h-2 rounded-full transition-all" style={circ?{background:'transparent',boxShadow:'none'}:{background:pc,boxShadow:`0 0 8px ${pc}`}}></span><span className="truncate">Starting Supply</span></div>
+                <div className={`text-right font-bold text-white truncate transition-opacity ${circ?'opacity-50':''}`}>{fmt(startingSupply)}</div>
+                <div className="text-orange-400 flex items-center gap-2 min-w-0"><span className="shrink-0 w-2 h-2"></span><span className="truncate">🔥 Burned</span></div>
                 <div className="text-right font-bold text-orange-400 truncate">{fmt(burnedQty)}</div>
-                <div className="truncate" style={{color:pc}}>Current Supply</div>
-                <div className="text-right font-bold text-white truncate">{fmt(currentSupply)}</div>
+                <div className={`flex items-center gap-2 min-w-0 transition-opacity ${circ?'':'opacity-50'}`} style={{color:pc}}><span className="shrink-0 w-2 h-2 rounded-full transition-all" style={circ?{background:pc,boxShadow:`0 0 8px ${pc}`}:{background:'transparent',boxShadow:'none'}}></span><span className="truncate">Circulating Supply</span></div>
+                <div className={`text-right font-bold text-white truncate transition-opacity ${circ?'':'opacity-50'}`}>{fmt(currentSupply)}</div>
               </div>
             </div>
             
             {/* Tier Table */}
             <div className="p-4 sm:p-6">
+              <div className="text-center text-[11px] sm:text-xs uppercase tracking-wider text-white/40 mb-2">Tiers based on {circ?'circulating supply':'starting supply'}</div>
               <table className="w-full">
                 <thead>
                   <tr className="text-xs sm:text-sm uppercase">
