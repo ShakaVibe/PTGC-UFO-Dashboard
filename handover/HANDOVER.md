@@ -23,7 +23,8 @@ Update it at the end of every session.
 | Phase 2 — burn-summary staleness label (d4, browser half) | **Done, deployed** |
 | Phase 2 — `ufo-ptgc-burns` generator repoint (d4, pipeline half) | **Done in repo, awaiting push + first Action run** |
 | Phase 2 — precompute UFO scans (d1) | **Done in repo, awaiting push + first Action run.** `build-value-generated.mjs` now also writes `burnPeriods.UFO` and `delivered.ptgcBurnedAll` (+ a `ptgcPreWindow` checkpoint). With a fresh file a UFO visit makes ~30 RPC calls and 0 `eth_getLogs` (was ~150/63 fresh, ~1,100/1,010 stale). |
-| Phase 3 — decompose + polish | Not started |
+| Phase 3 — share cards (u2) | **Done in repo, awaiting push.** One `ShareCardModal` shell; 13 cards on it; real PNG download (2×) + Web Share; portrait-phone fit; Escape/focus/scroll-lock. |
+| Phase 3 — rest (Modal wrapper u1, jargon u7, mobile u8, a11y u9, …) | Not started |
 
 ## Sources of truth for numbers
 
@@ -57,14 +58,20 @@ Update it at the end of every session.
    `exactTo=true`, or the last chunk is sent as `toBlock:'latest'` and silently extends to the
    present (found 2026-09-08 in the pre-window scan; would have double-counted after Oct 6).
    Same helper exists in both `index.html` and `build-value-generated.mjs` — keep them in sync.
-5. **`ufo-ptgc-burns.json` schema 2**: `PTGCbyUFO` is now the COMBINED total across both UFO
+5. **Share cards** all render through `ShareCardModal` (search for it). Card content is the
+   child at its natural W×H; anything that must NOT be in the image goes in `controls`. The PNG
+   is html2canvas (loaded on first click, SRI-pinned) rendering a clone with the scale transform
+   removed — `data-share-wrap` is what the export looks for. Cross-origin logos (DexScreener CDN)
+   can taint the canvas; the shell then shows a "take a screenshot" message instead of failing
+   silently. The overlay is portalled to `<body>` so it can open from inside the KPI modal.
+6. **`ufo-ptgc-burns.json` schema 2**: `PTGCbyUFO` is now the COMBINED total across both UFO
    contracts; `byContract.v1` / `byContract.v2` split it. The deployed `index.html` reads
    `byContract.v1` as the historical base. Do not deploy the new generator with an older
    `index.html`, or the headline double-counts v2.
-6. **`Dashboard` is not keyed by token on purpose.** The Socials tab switches token and then
+7. **`Dashboard` is not keyed by token on purpose.** The Socials tab switches token and then
    opens a share modal on the same instance; a remount would drop the modal. The token-switch
    race is handled inside `load()` with `loadCancelled` guards instead.
-7. **Testing.** There is no test suite in the repo yet (roadmap b8). The working method so far:
+8. **Testing.** There is no test suite in the repo yet (roadmap b8). The working method so far:
    compile the `text/babel` block with the exact `@babel/standalone@7.26.4` in Node, then mount
    the page in headless Chromium with the CDN scripts served from the pinned npm packages and
    the data APIs stubbed (RPC, DexScreener, PulseScan; real `data/*.json`). Walk Home → PTGC →
@@ -83,7 +90,8 @@ Update it at the end of every session.
    d10 (UFO ATH is the old contract's), d11 (holder-tier scan cancellation), d12 (affiliates coverFee).
 4. Phase 1 build step (b1/b2) when ready — biggest payoff on the list; decide hosting first
    (currently GitHub Pages, so `vite build` → `dist/` → Pages from `dist` or from a `gh-pages` branch).
-5. Phase 3 polish (Modal wrapper, ShareCard shell, jargon explainers, a11y).
+5. Phase 3 polish: first-timer clarity (u7 tier labels + ⓘ explainers; u8 mobile nav overflow,
+   tap targets), then the general Modal wrapper (u1) for the non-share modals, then a11y (u9).
 
 ## Session log
 

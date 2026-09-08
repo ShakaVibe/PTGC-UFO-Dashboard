@@ -4431,6 +4431,130 @@
     };
     
     // KPI Content component with dual token support
+    /* ===================== SHARE CARD SHELL =====================
+     * One overlay for every share card. Fixes, in one place, what each of the ~12 inline
+     * modals used to reimplement slightly differently:
+     *   - SCALE: width-first. The old formula used max(innerWidth, innerHeight) as the width
+     *     budget, so on a portrait phone a 600px card rendered at ~550px and its left edge
+     *     was clipped off-screen. Now: min(1, (vw-24)/W, (vh-toolbar-hint)/H), re-computed on
+     *     resize/rotation.
+     *   - DOWNLOAD: a real PNG via html2canvas, loaded lazily on the first click (200 KB that
+     *     no longer ships on every page load), rendered from the UNSCALED card at 2x. Web Share
+     *     on phones that support sharing files. Falls back to the screenshot hint if a
+     *     cross-origin logo taints the canvas.
+     *   - DIALOG: role="dialog", Escape closes, focus moves in and is restored on close, the
+     *     page behind stops scrolling.
+     * `children` is the card at its natural W×H; `controls` renders above the card (period
+     * pills, month pickers) and is never part of the image. */
+    const HTML2CANVAS_SRC='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    const HTML2CANVAS_SRI='sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H';
+    let _h2cP=null;
+    const loadHtml2Canvas=()=>{
+      if(window.html2canvas)return Promise.resolve(window.html2canvas);
+      if(_h2cP)return _h2cP;
+      _h2cP=new Promise((res,rej)=>{
+        const el=document.createElement('script');
+        el.src=HTML2CANVAS_SRC;el.integrity=HTML2CANVAS_SRI;el.crossOrigin='anonymous';el.async=true;
+        el.onload=()=>window.html2canvas?res(window.html2canvas):rej(new Error('html2canvas did not initialise'));
+        el.onerror=()=>{_h2cP=null;rej(new Error('could not load html2canvas'));};
+        document.head.appendChild(el);
+      });
+      return _h2cP;
+    };
+    const shareCardPng=async(cardEl,width,height)=>{
+      const h2c=await loadHtml2Canvas();
+      const canvas=await h2c(cardEl,{
+        backgroundColor:'#0a0a0a',scale:2,useCORS:true,allowTaint:false,logging:false,
+        width,height,scrollX:0,scrollY:0,
+        /* The on-screen card sits inside a scaled wrapper. html2canvas renders a CLONE of the
+           document, so drop the transform there: the clone lays out at the true W×H and the
+           visible page never flickers. */
+        onclone:(doc)=>{doc.querySelectorAll('[data-share-wrap]').forEach(w=>{w.style.transform='none';});}
+      });
+      return new Promise((res,rej)=>{try{canvas.toBlob(b=>b?res(b):rej(new Error('empty image')),'image/png');}catch(e){rej(e);}});
+    };
+    const ShareCardModal=({onClose,width,height,filename='grays-share-card.png',label='Share card',controls=null,footer=null,zIndex=50,children})=>{
+      const[sc,setSc]=useState(()=>Math.min(1,(window.innerWidth-32)/width,(window.innerHeight-150)/height));
+      const[busy,setBusy]=useState(false);
+      const[msg,setMsg]=useState(null);   // {kind:'ok'|'err', text}
+      const cardRef=useRef(null),dlgRef=useRef(null),prevFocus=useRef(null);
+      const canShareFiles=(()=>{try{return !!(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File([''],'x.png',{type:'image/png'})]}));}catch(e){return false;}})();
+      useEffect(()=>{
+        const on=()=>setSc(Math.min(1,(window.innerWidth-32)/width,(window.innerHeight-150)/height));
+        on();window.addEventListener('resize',on);
+        return()=>window.removeEventListener('resize',on);
+      },[width,height]);
+      useEffect(()=>{
+        prevFocus.current=document.activeElement;
+        const key=e=>{if(e.key==='Escape'){e.stopPropagation();onClose&&onClose();}};
+        document.addEventListener('keydown',key);
+        const prevOverflow=document.body.style.overflow;document.body.style.overflow='hidden';
+        if(dlgRef.current)try{dlgRef.current.focus({preventScroll:true});}catch(e){}
+        return()=>{
+          document.removeEventListener('keydown',key);
+          document.body.style.overflow=prevOverflow;
+          const pf=prevFocus.current;if(pf&&pf.focus)try{pf.focus({preventScroll:true});}catch(e){}
+        };
+      },[]);
+      const save=async(share)=>{
+        if(busy||!cardRef.current)return;
+        setBusy(true);setMsg(null);
+        try{
+          const blob=await shareCardPng(cardRef.current,width,height);
+          if(share&&canShareFiles){
+            const file=new File([blob],filename,{type:'image/png'});
+            await navigator.share({files:[file],title:label});
+            setMsg({kind:'ok',text:'Shared'});
+          }else{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+            setTimeout(()=>URL.revokeObjectURL(url),4000);
+            setMsg({kind:'ok',text:'Saved '+filename});
+          }
+        }catch(e){
+          const aborted=e&&(e.name==='AbortError');
+          if(!aborted){
+            console.warn('share card export failed:',e);
+            const tainted=/taint|SecurityError|insecure/i.test(String(e&&(e.message||e.name)));
+            setMsg({kind:'err',text:tainted?'A logo host blocked the export — take a screenshot of the card instead.':'Could not build the image — take a screenshot of the card instead.'});
+          }
+        }finally{setBusy(false);}
+      };
+      const W=width*sc,H=height*sc;
+      /* Portalled to <body>: a share card can be opened from inside another modal (the KPI
+         report), whose own stacking context would otherwise keep this overlay underneath that
+         modal's fixed close button no matter what z-index it carries. */
+      return ReactDOM.createPortal(
+        <div className="fixed inset-0 flex items-center justify-center p-3 modal-overlay bg-black/90 overflow-y-auto" style={{zIndex}} onClick={onClose}>
+          <div ref={dlgRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className="relative outline-none" style={{width:`${W}px`,maxWidth:'100%'}} onClick={e=>e.stopPropagation()}>
+            {/* toolbar: card-specific controls on the left, export + close on the right */}
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">{controls}</div>
+              <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                <button onClick={()=>save(false)} disabled={busy} aria-label="Download PNG" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">
+                  <svg className={`w-3.5 h-3.5 ${busy?'animate-spin':''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>{busy?<path strokeLinecap="round" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0119 7.5M18.5 15A7.5 7.5 0 015 16.5"/>:<path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/>}</svg>
+                  {busy?'Rendering…':'Download PNG'}
+                </button>
+                {canShareFiles&&<button onClick={()=>save(true)} disabled={busy} aria-label="Share image" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">Share</button>}
+                <button onClick={onClose} aria-label="Close" className="px-2.5 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/[0.08] text-sm transition-colors">✕</button>
+              </div>
+            </div>
+            {/* the card, scaled to fit; the wrapper's transform is what the PNG export removes */}
+            <div style={{width:`${W}px`,height:`${H}px`,overflow:'hidden'}}>
+              <div data-share-wrap="1" style={{transform:`scale(${sc})`,transformOrigin:'top left',width:`${width}px`,height:`${height}px`}}>
+                <div ref={cardRef} style={{width:`${width}px`,height:`${height}px`}}>{children}</div>
+              </div>
+            </div>
+            <div className="text-center mt-3 text-xs min-h-[1.25rem]" aria-live="polite">
+              {msg?<span className={msg.kind==='err'?'text-amber-300/90':'text-emerald-300/90'}>{msg.text}</span>
+                  :footer||<span className="text-white/40">{width}×{height} · Download PNG saves the card at 2× for sharing</span>}
+            </div>
+          </div>
+        </div>,
+        document.body
+      );
+    };
+
     const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7dUsd})=>{
       const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
@@ -4749,34 +4873,23 @@
       
       // Twitter mode view
       if(twitterMode){
-        // Calculate scale based on viewport
-        const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-        const vh = typeof window !== 'undefined' ? window.innerHeight : 675;
-        const scaleX = vw / 1250;
-        const scaleY = vh / 720;
-        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
-        
         return(
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black overflow-hidden" onClick={()=>setTwitterMode(false)}>
-            <div className="text-white text-sm absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 px-4 py-2 rounded-lg z-10 whitespace-nowrap">Click anywhere to close • Screenshot to save</div>
+          <ShareCardModal onClose={()=>setTwitterMode(false)} width={1200} height={675} zIndex={90} label="PTGC + UFO KPI share card" filename={`ptgc-ufo-kpi-${new Date().toISOString().slice(0,10)}.png`}>
             <div 
               id="twitter-capture"
               className="relative flex-shrink-0" 
               style={{
                 width:'1200px',
                 height:'675px',
-                transform: scale < 1 ? `scale(${scale})` : 'none',
-                transformOrigin: 'center center',
                 background:'radial-gradient(ellipse at 25% 0%, rgba(212,175,55,0.3) 0%, transparent 40%), radial-gradient(ellipse at 75% 0%, rgba(124,252,0,0.3) 0%, transparent 40%), radial-gradient(ellipse at 50% 100%, rgba(180,80,20,0.25) 0%, transparent 50%), linear-gradient(180deg, #0d0d0d 0%, #080808 50%, #0a0805 100%)'
               }}
-              onClick={e=>e.stopPropagation()}
             >
               <div className="w-full h-full p-5 grid grid-cols-2 gap-5">
                 <TwitterCard t={token} c={cfg} d={data} b={burn} bp={burnPeriods} h={holders}/>
                 <TwitterCard t={otherToken} c={otherCfg} d={otherData} b={otherBurn} bp={otherBurnPeriods} h={otherHolders}/>
               </div>
             </div>
-          </div>
+          </ShareCardModal>
         );
       }
       
@@ -4852,8 +4965,6 @@
       const[burns,setBurns]=useState({ptgc:0,ufo:0});
       const[supplyMode,setSupplyMode]=useState('start'); // 'start' (default) | 'circ'
       const[loading,setLoading]=useState(true);
-      // Tall card - portrait-preferred. Scale to fit portrait orientation perfectly (leave room for the toggle row above the card).
-      const sc=Math.min(1,(Math.min(window.innerWidth,window.innerHeight)-32)/800,(Math.max(window.innerWidth,window.innerHeight)-150)/1000);
 
       useEffect(()=>{
         if(!open)return;
@@ -4924,18 +5035,9 @@
       ];
       
       return(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={close}>
-          <div className="relative flex flex-col items-center" onClick={e=>e.stopPropagation()}>
-            {/* Top bar: supply-basis toggle (kept outside the screenshot border) + close button */}
-            <div className="relative w-full flex items-center justify-center mb-3" style={{minHeight:'44px',paddingRight:'48px',paddingLeft:'48px'}}>
-              <SupplyBasisToggle mode={supplyMode} setMode={setSupplyMode} color="#f5f5f5" color2="#9a9a9a"/>
-              <button onClick={close} aria-label="Close" style={{position:'absolute',top:'2px',right:0,width:'40px',height:'40px',borderRadius:'50%',background:'rgba(31,41,55,0.9)',color:'white',fontSize:'18px',fontWeight:'bold',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #4b5563',cursor:'pointer',zIndex:60}}>✕</button>
-            </div>
-
+        <ShareCardModal onClose={close} width={800} height={1000} label="Combined Grays Leagues share card" filename={`grays-leagues-${supplyMode==='circ'?'circulating':'starting'}-supply-${new Date().toISOString().slice(0,10)}.png`}
+          controls={/* supply-basis toggle — toolbar, outside the image */<SupplyBasisToggle mode={supplyMode} setMode={setSupplyMode} color="#f5f5f5" color2="#9a9a9a"/>}>
             {/* Vertical container 800x1000 */}
-            <div style={{width:`${800*sc}px`,height:`${1000*sc}px`}}>
-              <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${800}px`,height:`${1000}px`}}>
-            <div className="border-2 border-dashed border-white/30 rounded-lg overflow-hidden">
               <div className="w-[800px] h-[1000px] bg-[#0a0a0a] p-6 flex flex-col" style={{background:'linear-gradient(180deg, #0a0a0a 0%, #151515 50%, #0a0a0a 100%)'}}>
                 {/* Header - Title Only */}
                 <div className="text-center mb-4">
@@ -5011,15 +5113,7 @@
                   <div className="text-white/40 text-lg">{circ?'Based on circulating supply':'Based on starting supply'}</div>
                 </div>
               </div>
-            </div>
-            </div>
-              </div>
-            
-            <div className="text-center mt-4 text-white/50 text-sm">
-              Screenshot inside the border (800×1000)
-            </div>
-          </div>
-        </div>
+        </ShareCardModal>
       );
     };
     
@@ -7723,15 +7817,9 @@
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
           {showBurnShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/314);
             return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowBurnShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowBurnShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-                
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowBurnShareModal)} width={600} height={314} label={`${token} burn stats share card`} filename={`${token.toLowerCase()}-burned-${new Date().toISOString().slice(0,10)}.png`}>
                 {/* Twitter Card - 600x314 (1.91:1 ratio, scales to 1200x628) */}
-                <div style={{width:`${600*sc}px`,height:`${314*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${600}px`,height:`${314}px`}}>
                 <div id="burn-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#2a2000':'#0a2000'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 ${theme.border} rounded-xl p-5 flex flex-col`}>
                     
@@ -7802,20 +7890,12 @@
                     </div>
                   </div>
                 </div>
-                </div>
-                  </div>
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Right-click the image and "Save Image As" or take a screenshot
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
           );
           })()}
           
           {/* Combined Burn Stats Modal */}
           {showCombinedBurnModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/540);
             const isPTGCActive=token==='PTGC';
             const ptgcBurn=isPTGCActive?burn:combinedBurnOtherData?.burn||{total:0,pct:0,supply:0};
             /* burnPeriods can be undefined (scan running) or null (scan failed); the card shows "—" for those windows */
@@ -7896,12 +7976,7 @@
             };
 
             return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)}>
-                <div className="relative" onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>closeModalAndReturn(setShowCombinedBurnModal)} style={{position:'absolute',top:`${-30*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer',padding:'4px 0'}}>{'\u2715'} Close</button>
-
-                  <div style={{width:`${600*sc}px`,height:`${540*sc}px`}}>
-                    <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${600}px`,height:`${540}px`}}>
+              <ShareCardModal onClose={()=>closeModalAndReturn(setShowCombinedBurnModal)} width={600} height={540} label="Combined burn stats share card" filename={`combined-burn-${new Date().toISOString().slice(0,10)}.png`}>
                   <div id="combined-burn-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
@@ -7944,19 +8019,13 @@
                       </div>
                     )}
                   </div>
-                  </div>
-                    </div>
-
-                  <div className="text-center mt-4 text-white/50 text-sm">Right-click the image and "Save Image As" or take a screenshot</div>
-                </div>
-              </div>
+              </ShareCardModal>
             );
           })()}
 
 
           {/* Combined Value Generated Modal */}
           {showCombinedValueGenModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/540);
             const isPTGCActive=token==='PTGC';
             const OB="'Orbitron',monospace";
             const RJ="'Rajdhani',sans-serif";
@@ -8041,13 +8110,9 @@
 
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
 
-            return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)}>
-                <div className="relative" onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>closeModalAndReturn(setShowCombinedValueGenModal)} style={{position:'absolute',top:`${-30*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer',padding:'4px 0'}}>{'\u2715'} Close</button>
-
-                  {/* Period pill selector — above card, outside screenshot */}
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',marginBottom:'22px'}}>
+            /* Period pill selector — toolbar, outside the image */
+            const periodControls=(
+                  <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
                     <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',color:'rgba(255,255,255,0.4)',fontWeight:600,marginRight:'4px'}}>Period:</span>
                     <div style={{display:'flex',gap:'4px',background:'rgba(0,0,0,0.5)',borderRadius:'20px',padding:'3px',border:'1px solid rgba(255,255,255,0.1)'}}>
                       {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([val,label])=>(
@@ -8057,9 +8122,9 @@
                       ))}
                     </div>
                   </div>
-
-                  <div style={{width:`${600*sc}px`,height:`${540*sc}px`}}>
-                    <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${600}px`,height:`${540}px`}}>
+            );
+            return(
+              <ShareCardModal onClose={()=>closeModalAndReturn(setShowCombinedValueGenModal)} width={600} height={540} label="Combined value generated share card" filename={`combined-value-generated-${combinedValueGenPeriod}-${new Date().toISOString().slice(0,10)}.png`} controls={periodControls}>
                   <div id="combined-valuegen-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
@@ -8104,29 +8169,16 @@
                       </div>
                     )}
                   </div>
-                  </div>
-                    </div>
-
-                  {/* Footer */}
-                  <div className="mt-4">
-                    <div className="text-white/40 text-sm">Right-click → "Save Image As" or take a screenshot</div>
-                  </div>
-                </div>
-              </div>
+              </ShareCardModal>
             );
           })()}
 
 
           {/* Value Generated Share Modal - Twitter optimized */}
           {showValueGenShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/314);
-            return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowValueGenShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowValueGenShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-
-                {/* Period selector — above card, outside the screenshot (mirrors the combined card) */}
-                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',marginBottom:'16px'}}>
+            /* Period selector — toolbar, outside the image (mirrors the combined card) */
+            const periodControls=(
+                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
                   <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',color:'rgba(255,255,255,0.4)',fontWeight:600,marginRight:'4px'}}>Period:</span>
                   <div style={{display:'flex',gap:'4px',background:'rgba(0,0,0,0.5)',borderRadius:'20px',padding:'3px',border:'1px solid rgba(255,255,255,0.1)'}}>
                     {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([pv,pl])=>(
@@ -8136,10 +8188,10 @@
                     ))}
                   </div>
                 </div>
-                
+            );
+            return(
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowValueGenShareModal)} width={600} height={314} label={`${token} value generated share card`} filename={`${token.toLowerCase()}-value-generated-${valueGenPeriod}-${new Date().toISOString().slice(0,10)}.png`} controls={periodControls}>
                 {/* Twitter Card - 600x314 */}
-                <div style={{width:`${600*sc}px`,height:`${314*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${600}px`,height:`${314}px`}}>
                 <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-emerald-500/50 rounded-xl p-5 flex flex-col`}>
                     
@@ -8212,28 +8264,15 @@
                     </div>
                   </div>
                 </div>
-                </div>
-                  </div>
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Right-click the image and "Save Image As" or take a screenshot
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
           );
           })()}
           
           {/* Token Allocation Share Modal - Twitter optimized */}
           {showAllocationShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/314);
             return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowAllocationShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowAllocationShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-                
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowAllocationShareModal)} width={600} height={314} label={`${token} token allocation share card`} filename={`${token.toLowerCase()}-allocation-${new Date().toISOString().slice(0,10)}.png`}>
                 {/* Twitter Card - 600x314 */}
-                <div style={{width:`${600*sc}px`,height:`${314*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${600}px`,height:`${314}px`}}>
                 <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-2 border-purple-500/50 rounded-xl p-4 flex flex-col`}>
                     
@@ -8287,28 +8326,15 @@
                     </div>
                   </div>
                 </div>
-                </div>
-                  </div>
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Right-click the image and "Save Image As" or take a screenshot
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
           );
           })()}
           
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
           {showDAOShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/340);
             return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowDAOShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowDAOShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-                
-                {/* Twitter Card - 600x314 */}
-                <div style={{width:`${600*sc}px`,height:`${340*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${600}px`,height:`${340}px`}}>
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowDAOShareModal)} width={600} height={340} label={token==='PTGC'?'PTGC DAO share card':'PTGC burned by UFO share card'} filename={`${token==='PTGC'?'ptgc-dao':'ptgc-burned-by-ufo'}-${new Date().toISOString().slice(0,10)}.png`}>
+                {/* Twitter Card - 600x340 */}
                 <div id="dao-share-card" className="w-[600px] h-[340px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
                   <div className={`h-full border-4 border-blue-500/80 rounded-xl pt-5 px-5 pb-9 flex flex-col relative`} style={{boxShadow:"0 0 30px rgba(59,130,246,0.3),inset 0 0 30px rgba(0,0,0,0.5)"}}>
                     
@@ -8424,36 +8450,24 @@
                     </div>
                   </div>
                 </div>
-                </div>
-                  </div>
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Right-click the image and "Save Image As" or take a screenshot
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
           );
           })()}
           
           {/* Affiliate Program Share Modal - Twitter optimized */}
           {showAffiliateShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/900,(Math.min(window.innerWidth,window.innerHeight)-100)/471);
+            /* shared shell props: the loading placeholder and the real card render into the same shell */
+            const shellProps={onClose:()=>closeModalAndReturn(setShowAffiliateShareModal),width:900,height:471,zIndex:80,label:'PTGC affiliate program share card',filename:`ptgc-affiliate-${affiliateShareMonth||new Date().toISOString().slice(0,7)}.png`};
             return(
-            <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] bg-black overflow-y-auto" onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowAffiliateShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-                
-                {affiliateShareLoading||!affiliateShareData?(
-                  <div style={{width:`${900*sc}px`,height:`${471*sc}px`}}>
-                    <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${900}px`,height:`${471}px`}}>
+                affiliateShareLoading||!affiliateShareData?(
+                <ShareCardModal {...shellProps}>
                   <div className="w-[900px] h-[471px] rounded-xl bg-[#111] border-2 border-[#D4AF37]/30 flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-14 h-14 border-4 border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin mx-auto mb-3"></div>
                       <p className="text-[#D4AF37] font-orbitron text-base">Loading Affiliate Data...</p>
                     </div>
                   </div>
-                  </div>
-                    </div>
+                </ShareCardModal>
                 ):(()=>{
                   const ad=affiliateShareData;
                   const cm=new Date().toISOString().slice(0,7);
@@ -8482,10 +8496,9 @@
                   const moReferrers=selectedEntries.length;
                   const moLabel=new Date(selectedShareMonth+'-01T12:00:00').toLocaleDateString('en-US',{month:'short'})+" '"+selectedShareMonth.slice(2,4);
                   
-                  return(
-                    <React.Fragment>
-                    {/* Month Selector Dropdown */}
-                    <div className="flex items-center justify-center gap-3 mb-3">
+                  /* Month Selector Dropdown — toolbar, outside the image */
+                  const monthControls=(
+                    <div className="flex items-center gap-3">
                       <span className="text-white/60 text-sm font-medium">Month shown on card:</span>
                       <select value={selectedShareMonth} onChange={e=>setAffiliateShareMonth(e.target.value)} className="bg-gray-800 border border-purple-500/50 text-white rounded-lg px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-purple-400" style={{minWidth:'160px'}}>
                         {shareMonths.map(month=>(
@@ -8493,9 +8506,9 @@
                         ))}
                       </select>
                     </div>
-                    
-                    <div style={{width:`${900*sc}px`,height:`${471*sc}px`}}>
-                      <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${900}px`,height:`${471}px`}}>
+                  );
+                  return(
+                    <ShareCardModal {...shellProps} filename={`ptgc-affiliate-${selectedShareMonth}.png`} controls={monthControls}>
                 <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
                       {(()=>{
                         const PSUPPLY=333333333333;
@@ -8603,17 +8616,9 @@
                         );
                       })()}
                     </div>
-                </div>
-                      </div>
-                    </React.Fragment>
+                    </ShareCardModal>
                   );
-                })()}
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Right-click the image and "Save Image As" or take a screenshot
-                </div>
-              </div>
-            </div>
+                })()
           );
           })()}
           
@@ -8635,14 +8640,8 @@
           
           {/* RH Cores Liquidity Share Modal */}
           {showRHCoresShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/1200,(Math.min(window.innerWidth,window.innerHeight)-100)/675);
             return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowRHCoresShareModal)} style={{position:'absolute',top:`${-30*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer',padding:'4px 0'}}>✕ Close</button>
-                
-                <div style={{width:`${1200*sc}px`,height:`${675*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${1200}px`,height:`${675}px`}}>
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowRHCoresShareModal)} width={1200} height={675} label="RH Cores share card" filename={`rh-cores-${new Date().toISOString().slice(0,10)}.png`}>
                 <div 
                   id="rhcores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -8781,14 +8780,7 @@
                     </div>
                   </div>
                 </div>
-                </div>
-                  </div>
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
             );
           })()}
           
@@ -8961,13 +8953,9 @@
                 {icon:'🌍',label:'25 Thousand',x:calcHX(25000)},
               ]},
             ];
-            const sc=Math.min(1,(window.innerWidth-40)/1200,(window.innerHeight-120)/675);
             return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 modal-overlay" onClick={()=>closeModalAndReturn(setShowXsShareModal)}>
-                <div className="relative" onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>closeModalAndReturn(setShowXsShareModal)} style={{position:'absolute',top:`${-36*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer'}}>✕ Close</button>
-                  <div style={{width:`${1200*sc}px`,height:`${675*sc}px`}}>
-                    <div style={{transform:`scale(${sc})`,transformOrigin:'top left',width:'1200px',height:'675px',background:'#0a0a0a',overflow:'hidden',boxSizing:'border-box',padding:'24px'}}>
+              <ShareCardModal onClose={()=>closeModalAndReturn(setShowXsShareModal)} width={1200} height={675} label={`${token} Xs to milestones share card`} filename={`${token.toLowerCase()}-xs-${new Date().toISOString().slice(0,10)}.png`}>
+                    <div style={{width:'1200px',height:'675px',background:'#0a0a0a',overflow:'hidden',boxSizing:'border-box',padding:'24px'}}>
 
                       {/* OUTER CARD */}
                       <div style={{width:'100%',height:'627px',borderRadius:'14px',overflow:'hidden',border:`2px solid rgba(${rgb},0.5)`,display:'flex',flexDirection:'column',boxShadow:`0 0 40px rgba(${rgb},0.12)`}}>
@@ -9062,10 +9050,7 @@
 
                       </div>
                     </div>
-                  </div>
-                  <div style={{textAlign:'center',marginTop:'10px',color:'rgba(255,255,255,0.35)',fontSize:'13px'}}>Screenshot to save &amp; share</div>
-                </div>
-              </div>
+              </ShareCardModal>
             );
           })()}
 
@@ -9080,14 +9065,8 @@
           
           {/* Combined Holders Share Modal */}
           {showHoldersShareModal&&(()=>{
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/1200,(Math.min(window.innerWidth,window.innerHeight)-100)/675);
             return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowHoldersShareModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowHoldersShareModal)} className="absolute -top-10 right-0 text-white/60 hover:text-white text-xl">✕ Close</button>
-
-                <div style={{width:`${1200*sc}px`,height:`${675*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${1200}px`,height:`${675}px`}}>
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowHoldersShareModal)} width={1200} height={675} label={`${token} holders share card`} filename={`${token.toLowerCase()}-holders-${new Date().toISOString().slice(0,10)}.png`}>
                 <div
                   id="holders-share-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -9245,14 +9224,7 @@
 
                   </div>
                 </div>
-                </div>
-                  </div>
-
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  Screenshot inside the border (1200×675 = 16:9 Twitter optimized)
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
           );
           })()}
           
@@ -9260,11 +9232,9 @@
           {showPriceWithCoresModal&&(()=>{
             const cardW=priceModalMobileMode?640:960;
             const cardH=priceModalMobileMode?360:540;
-            const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/cardW,(Math.min(window.innerWidth,window.innerHeight)-100)/cardH);
-            return(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-auto" onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)}>
-              <div className="relative" onClick={e=>e.stopPropagation()}>
-                <div className="flex flex-col items-center gap-3 mb-3">
+            /* Desktop/Mobile toggle + period selector — toolbar, outside the image */
+            const priceControls=(
+                <div className="flex items-center gap-3 flex-wrap">
                   {/* Desktop/Mobile Toggle */}
                   <div className="flex gap-2">
                     <button 
@@ -9279,7 +9249,6 @@
                     >
                       Mobile
                     </button>
-                    <button onClick={()=>closeModalAndReturn(setShowPriceWithCoresModal)} className="text-white/60 hover:text-white text-xl ml-4">✕</button>
                   </div>
                   {/* Time Period Selector */}
                   <div className="flex gap-2">
@@ -9309,9 +9278,9 @@
                     </button>
                   </div>
                 </div>
-                
-                <div style={{width:`${cardW*sc}px`,height:`${cardH*sc}px`}}>
-                  <div style={{transform:`scale(${sc})`,transformOrigin:"top left",width:`${cardW}px`,height:`${cardH}px`}}>
+            );
+            return(
+            <ShareCardModal onClose={()=>closeModalAndReturn(setShowPriceWithCoresModal)} width={cardW} height={cardH} label="Grays & Cores price share card" filename={`grays-cores-price-${priceModalPeriod}-${priceModalMobileMode?'mobile':'desktop'}-${new Date().toISOString().slice(0,10)}.png`} controls={priceControls}>
                 <div 
                   id="price-cores-capture"
                   className="relative overflow-hidden border-2 border-white/30"
@@ -9454,16 +9423,7 @@
                     </div>
                   </div>
                 </div>
-                </div>
-                  </div>
-                
-                <div className="text-center mt-4 text-white/50 text-sm">
-                  {priceModalMobileMode 
-                    ? 'Screenshot inside the border (640×360 = 16:9 Mobile Landscape)' 
-                    : 'Screenshot inside the border (960×540 = 16:9 Twitter optimized)'}
-                </div>
-              </div>
-            </div>
+            </ShareCardModal>
             );
           })()}
           
