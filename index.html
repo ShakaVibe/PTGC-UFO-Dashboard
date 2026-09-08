@@ -98,7 +98,20 @@
     .buy-btn{position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease}
     .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
     .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
-  
+    /* u8: a thumb-sized hit area for the small icon controls (ⓘ, 📷, USD/TOK, sort, the RH
+       switch). The glyph stays the size it was; only the tappable box grows to 32px. */
+    .tap{min-width:32px;min-height:32px;display:inline-flex;align-items:center;justify-content:center}
+    .tap-h{min-height:32px;display:inline-flex;align-items:center}
+    /* u7: focus ring for the explainer buttons and popover (keyboard users), not on tap. */
+    .tap:focus-visible,.tap-h:focus-visible{outline:2px solid rgba(255,255,255,0.6);outline-offset:2px;border-radius:6px}
+    /* u8: fade + chevron at the edge of a scrollable strip, shown only while more is hidden. */
+    .scroll-cue{position:absolute;top:0;bottom:0;width:44px;pointer-events:none;display:flex;align-items:center;opacity:0;transition:opacity .2s}
+    .scroll-cue[data-on="1"]{opacity:1}
+    .scroll-cue-r{right:0;justify-content:flex-end;padding-right:6px;background:linear-gradient(to left,#0a0a0a 35%,rgba(10,10,10,0))}
+    .scroll-cue-l{left:0;justify-content:flex-start;padding-left:6px;background:linear-gradient(to right,#0a0a0a 35%,rgba(10,10,10,0))}
+    .scroll-cue span{color:rgba(255,255,255,0.55);font-size:18px;line-height:1}
+    @media(prefers-reduced-motion:reduce){.animate-fire,.animate-pulse-slow{animation:none}.scroll-cue{transition:none}}
+
   
     /* Affiliate stats rows: collapse the 8-col fixed layout to 2-col on mobile */
     @media (max-width:640px){.affiliate-stats-row{grid-template-columns:repeat(2,1fr)!important;gap:0.5rem 0.75rem!important}.affiliate-stats-row .stat-emoji{font-size:1.5rem!important}.affiliate-stats-row .stat-label{font-size:0.65rem!important}.affiliate-stats-row .stat-value{font-size:1rem!important}}
@@ -110,7 +123,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const {useState,useEffect,useMemo,useRef}=React;
+    const {useState,useEffect,useMemo,useRef,useLayoutEffect}=React;
     
     /* ===================== CANONICAL ADDRESSES =====================
      * Every chain address the app knows, once. The older named constants below
@@ -1843,8 +1856,8 @@
               resize changed the nav row's total width, which was flipping the
               header's h-scrollbar on and off and jolting the page vertically. */}
           <span className="tabular-nums whitespace-nowrap inline-block text-right" style={{minWidth:'6.75rem'}}>{error?'refresh failed':'Updated '+ageTxt}</span>
-          {onRefresh&&<button onClick={onRefresh} disabled={refreshing} aria-label="Refresh data now" className={`hover:text-white transition-colors disabled:opacity-50 ${refreshing?'animate-spin':''}`} style={{lineHeight:1}}>
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0119 7.5M18.5 15A7.5 7.5 0 015 16.5"/></svg>
+          {onRefresh&&<button onClick={onRefresh} disabled={refreshing} aria-label="Refresh data now" className="tap -my-2 -mx-2 hover:text-white transition-colors disabled:opacity-50" style={{lineHeight:1}}>
+            <svg className={`w-3 h-3 ${refreshing?'animate-spin':''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0119 7.5M18.5 15A7.5 7.5 0 015 16.5"/></svg>
           </button>}
         </div>
       );
@@ -4630,6 +4643,140 @@
       );
     };
 
+    /* ===== u7: InfoTip — a tappable ⓘ explainer =====
+       `title` tooltips only appear on hover, and hover does not exist on a phone, so the
+       jargon on the dashboard ("Value Generated", "RH Cores", "Day 1,062", "X's to ATH") had
+       no explanation most visitors could reach. InfoTip is a 32px button that opens a small
+       card on tap/click; Escape, an outside tap, or scrolling closes it.
+
+       The card is portalled to <body> and positioned `fixed` from the button's rect, because
+       every panel is `overflow-hidden` and the header carries a backdrop-filter — an
+       absolutely-positioned child would be clipped by the first and mis-positioned by the
+       second. Copy lives in EXPLAINERS below so wording can be edited in one place. */
+    const InfoTip=({label,children,className='',glyphClass='text-[11px]',tone='text-white/45 hover:text-white/85',trigger=null})=>{
+      const[open,setOpen]=useState(false);
+      const[pos,setPos]=useState(null);
+      const btnRef=useRef(null),cardRef=useRef(null);
+      const place=()=>{
+        const b=btnRef.current;if(!b)return;
+        const r=b.getBoundingClientRect();
+        const vw=window.innerWidth,vh=window.innerHeight;
+        const w=Math.min(300,vw-24);
+        const left=Math.max(12,Math.min(r.left+r.width/2-w/2,vw-12-w));
+        const below=r.bottom+8;
+        /* flip above the button when there is no room underneath (bottom-of-screen tiles) */
+        const ch=(cardRef.current&&cardRef.current.offsetHeight)||160;
+        const top=(below+ch>vh-8&&r.top-8-ch>8)?r.top-8-ch:below;
+        setPos({top,left,width:w,arrowX:Math.max(14,Math.min(w-14,r.left+r.width/2-left))});
+      };
+      useLayoutEffect(()=>{if(open)place();},[open]);
+      useEffect(()=>{
+        if(!open)return;
+        const close=()=>setOpen(false);
+        const onDoc=e=>{const c=cardRef.current,b=btnRef.current;if((c&&c.contains(e.target))||(b&&b.contains(e.target)))return;close();};
+        const onKey=e=>{if(e.key==='Escape'){e.stopPropagation();close();if(btnRef.current)try{btnRef.current.focus({preventScroll:true});}catch(err){}}};
+        document.addEventListener('pointerdown',onDoc,true);
+        document.addEventListener('keydown',onKey);
+        window.addEventListener('scroll',close,{passive:true,capture:true});
+        window.addEventListener('resize',close);
+        return()=>{
+          document.removeEventListener('pointerdown',onDoc,true);
+          document.removeEventListener('keydown',onKey);
+          window.removeEventListener('scroll',close,{capture:true});
+          window.removeEventListener('resize',close);
+        };
+      },[open]);
+      const id=useRef('tip-'+Math.random().toString(36).slice(2,8)).current;
+      return(
+        <>
+          <button ref={btnRef} type="button" onClick={e=>{e.stopPropagation();setOpen(o=>!o);}}
+                  aria-label={`What is ${label}?`} aria-expanded={open} aria-controls={open?id:undefined}
+                  className={trigger?`tap-h rounded-full ${className}`:`tap -my-2 -mx-1 rounded-md transition-colors ${tone} ${className}`}>
+            {trigger||<span className={`${glyphClass} leading-none`} aria-hidden="true">{'ⓘ'}</span>}
+          </button>
+          {open&&pos&&ReactDOM.createPortal(
+            <div ref={cardRef} id={id} role="dialog" aria-label={label}
+                 className="fixed z-[70] bg-[#0d0d0d] border border-white/15 rounded-xl p-3.5 shadow-2xl text-left"
+                 style={{top:pos.top,left:pos.left,width:pos.width}}
+                 onClick={e=>e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3 mb-1.5">
+                <div className="text-white/85 text-[11px] font-semibold uppercase tracking-[0.15em] font-orbitron">{label}</div>
+                <button type="button" onClick={()=>setOpen(false)} aria-label="Close" className="tap -my-2 -mr-2 text-white/45 hover:text-white text-sm leading-none">{'✕'}</button>
+              </div>
+              <div className="text-white/70 text-[13px] leading-snug normal-case tracking-normal font-normal space-y-1.5">{children}</div>
+            </div>,
+            document.body
+          )}
+        </>
+      );
+    };
+
+    /* Explainer copy, in one place. Each is a function of the token so the wording can name
+       it and quote live figures (tax rate, ATH). Keep these to two or three sentences. */
+    const EXPLAINERS={
+      valueGenerated:(token,cfg)=>{
+        const rate=cfg&&cfg.taxRate>0?(cfg.taxRate*100).toFixed(cfg.taxRate*100%1?1:0):null;
+        return(
+          <>
+            <p>Every {token} trade pays a {rate?`${rate}% `:''}tax. This panel shows what that tax produced in the selected window, split by where it went — each tile is one destination.</p>
+            {token==='UFO'
+              ?<p>Figures are measured from the fee transfers on chain, not estimated from volume.</p>
+              :<p>Figures are estimated as trading volume × the tax rate for the window.</p>}
+          </>
+        );
+      },
+      rhCores:(token)=>(
+        <>
+          <p>The RH Cores are the PulseChain core coins: WPLS, PLSX, INC, HEX, eHEX and PRVX.</p>
+          <p>Switch it on to show only the {token} pools paired with one of them.</p>
+        </>
+      ),
+      day:(token)=>(
+        <p>How many days since {token}'s first liquidity pool went live on PulseChain — the token's age.</p>
+      ),
+      xToATH:(token,athPrice)=>(
+        <>
+          <p>How many times the current price would have to multiply to get back to its all-time high{athPrice>0?<> of <Price p={athPrice}/></>:null}.</p>
+          {token==='UFO'&&<p>UFO's ATH is the original contract's — the migration kept the same token, so it still counts.</p>}
+        </>
+      ),
+      xToPenny:()=>(
+        <p>How many times the current price would have to multiply to reach one cent ($0.01).</p>
+      ),
+      plsRatio:(token)=>(
+        <p>The {token} price expressed in PLS: how many PLS one {token} is worth right now.</p>
+      )
+    };
+
+    /* u8: is there more of a horizontally-scrolling strip hidden off either edge? The nav rows
+       hide their scrollbar (on purpose — see .no-scrollbar), which also hid the fact that
+       "Charts" and everything after it existed on a 375px phone. Returns {l,r}; the caller
+       renders a fade + chevron on whichever side has more. Re-run when `deps` change because
+       the strip is not in the DOM until the dashboard has loaded. */
+    const useScrollCue=(ref,deps)=>{
+      const[cue,setCue]=useState({l:false,r:false});
+      useEffect(()=>{
+        const el=ref.current;if(!el)return;
+        const upd=()=>{
+          const l=el.scrollLeft>2,r=el.scrollLeft+el.clientWidth<el.scrollWidth-2;
+          setCue(c=>(c.l===l&&c.r===r)?c:{l,r});
+        };
+        upd();
+        el.addEventListener('scroll',upd,{passive:true});
+        window.addEventListener('resize',upd);
+        let ro=null;if(window.ResizeObserver){ro=new ResizeObserver(upd);ro.observe(el);}
+        const t=setTimeout(upd,300); // fonts landing can change the strip's width
+        return()=>{el.removeEventListener('scroll',upd);window.removeEventListener('resize',upd);if(ro)ro.disconnect();clearTimeout(t);};
+      },deps);
+      return cue;
+    };
+    const ScrollCues=({cue})=>(
+      <>
+        <div className="scroll-cue scroll-cue-l" data-on={cue.l?'1':'0'} aria-hidden="true"><span>{'\u2039'}</span></div>
+        <div className="scroll-cue scroll-cue-r" data-on={cue.r?'1':'0'} aria-hidden="true"><span>{'\u203A'}</span></div>
+      </>
+    );
+
     const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7dUsd})=>{
       const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
@@ -5398,7 +5545,9 @@
         on();window.addEventListener('scroll',on,{passive:true});
         return()=>window.removeEventListener('scroll',on);
       },[]);
-      const mobNavRef=useRef(null);
+      const mobNavRef=useRef(null),deskNavRef=useRef(null);
+      const mobNavCue=useScrollCue(mobNavRef,[loading,loadError]);
+      const deskNavCue=useScrollCue(deskNavRef,[loading,loadError]);
       useEffect(()=>{ // keep the active tab visible in the swipeable row
         const el=mobNavRef.current&&mobNavRef.current.querySelector('[data-active="1"]');
         if(el&&el.scrollIntoView)try{el.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}
@@ -6529,7 +6678,7 @@
               <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 flex-wrap">
 
                 {/* Back arrow — minimal, no pill */}
-                <button onClick={onBack} className="group flex items-center text-white/40 hover:text-white transition-colors p-1 -ml-1 shrink-0">
+                <button onClick={onBack} aria-label="Back to Home" className="group tap text-white/40 hover:text-white transition-colors -ml-1.5 shrink-0">
                   <span className="text-xl group-hover:-translate-x-0.5 transition-transform">{'\u2190'}</span>
                 </button>
 
@@ -6544,9 +6693,11 @@
                   <div className={`font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold leading-none tracking-wide ${isGold?'metallic-gold':theme.text}`}>{token}</div>
                   <div className="flex items-center gap-1.5 mt-2">
                     <span className="text-white/40 text-xs font-mono tabular-nums">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span>
-                    <button onClick={copyAddress} className="text-white/40 hover:text-white/80 transition-colors text-xs">{copied?'\u2713':'\u{1F4CB}'}</button>
+                    <button onClick={copyAddress} aria-label={copied?'Copied':'Copy contract address'} className="tap -my-2 -mx-2 text-white/40 hover:text-white/80 transition-colors text-xs">{copied?'\u2713':'\u{1F4CB}'}</button>
                   </div>
-                  {hdrDaysOld!=null&&(<div className="mt-1.5"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{hdrDaysOld.toLocaleString()}</span></div></div>)}
+                  {/* u7: the whole Day pill is the tap target for its explainer — a separate ⓘ
+                      widened this block enough to push the price onto its own line at 375px. */}
+                  {hdrDaysOld!=null&&(<div className="mt-1.5 -mb-1"><InfoTip label={`Day ${hdrDaysOld.toLocaleString()}`} className="-my-1" trigger={<span className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{hdrDaysOld.toLocaleString()}</span><span className="text-white/35 text-[10px] leading-none ml-0.5" aria-hidden="true">{'ⓘ'}</span></span>}>{EXPLAINERS.day(token)}</InfoTip></div>)}
                 </div>
 
                 {/* hairline divider */}
@@ -6569,15 +6720,15 @@
                     wrap row underneath carries them. */}
                 <div className="hidden xl:flex items-center flex-1 min-w-0 justify-around gap-4">
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
+                    <span className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio<InfoTip label="PLS Ratio">{EXPLAINERS.plsRatio(token)}</InfoTip></span>
                     <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{plsRatio}</span>
                   </div>
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH</span>
+                    <span className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH<InfoTip label="X's to ATH">{EXPLAINERS.xToATH(token,athPrice)}</InfoTip></span>
                     <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{fmtX(xToATH)}</span>
                   </div>
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny</span>
+                    <span className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny<InfoTip label="X's to a Penny">{EXPLAINERS.xToPenny()}</InfoTip></span>
                     <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{fmtX(xToPenny)}</span>
                   </div>
                 </div>
@@ -6601,26 +6752,30 @@
               </div>
 
               {/* Stats fallback below xl (they're hidden in row 1 until then) */}
-              <div className="xl:hidden flex items-center gap-x-5 gap-y-2 mt-3 flex-wrap">
-                <div className="flex items-baseline gap-2">
+              <div className="xl:hidden flex items-center gap-x-4 sm:gap-x-5 gap-y-1.5 mt-3 flex-wrap">
+                <div className="flex items-center gap-2">
                   <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
                   <span className={`text-base font-bold tabular-nums ${theme.text}`}>{plsRatio}</span>
+                  <InfoTip label="PLS Ratio" className="-ml-1.5 -mr-2">{EXPLAINERS.plsRatio(token)}</InfoTip>
                 </div>
-                <div className="w-px h-4 bg-white/15"></div>
-                <div className="flex items-baseline gap-2">
+                <div className="hidden sm:block w-px h-4 bg-white/15"></div>
+                <div className="flex items-center gap-2">
                   <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH</span>
                   <span className={`text-base font-bold tabular-nums ${theme.text}`}>{fmtX(xToATH)}</span>
+                  <InfoTip label="X's to ATH" className="-ml-1.5 -mr-2">{EXPLAINERS.xToATH(token,athPrice)}</InfoTip>
                 </div>
-                <div className="w-px h-4 bg-white/15"></div>
-                <div className="flex items-baseline gap-2">
+                <div className="hidden sm:block w-px h-4 bg-white/15"></div>
+                <div className="flex items-center gap-2">
                   <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny</span>
                   <span className={`text-base font-bold tabular-nums ${theme.text}`}>{fmtX(xToPenny)}</span>
+                  <InfoTip label="X's to a Penny" className="-ml-1.5 -mr-2">{EXPLAINERS.xToPenny()}</InfoTip>
                 </div>
               </div>
 
               {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator.
                   Hidden on phones — the mobile slim bar below renders the same tabs as a single swipeable row. */}
-              <div className="hidden sm:flex items-center gap-1 mt-4 border-t border-white/[0.08] flex-nowrap overflow-x-auto overflow-y-hidden no-scrollbar">
+              <div className="hidden sm:block relative mt-4 border-t border-white/[0.08]">
+              <div ref={deskNavRef} className="flex items-center gap-1 flex-nowrap overflow-x-auto overflow-y-hidden no-scrollbar">
                 <button onClick={()=>gotoTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
                   Dashboard
                   {activeTab==='dashboard' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
@@ -6646,6 +6801,8 @@
                 <button onClick={onAffiliates} className="px-3.5 py-3 text-sm font-semibold text-purple-300 hover:text-purple-200 transition-colors shrink-0">Affiliates</button>
                 <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()} className="ml-auto shrink-0 pl-2"/>
               </div>
+              <ScrollCues cue={deskNavCue}/>
+              </div>
 
             </div>
           </header>
@@ -6666,6 +6823,7 @@
                 </div>
               </div>
             )}
+            <div className="relative">
             <div ref={mobNavRef} className="flex items-center gap-0.5 px-2 overflow-x-auto overflow-y-hidden no-scrollbar" style={{scrollbarWidth:'none',WebkitOverflowScrolling:'touch'}}>
               {/* Same destinations as the desktop Row 2 nav above — keep the two lists in sync. */}
               <button data-active={activeTab==='dashboard'?'1':'0'} onClick={()=>gotoTab('dashboard')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55'}`}>Dashboard{activeTab==='dashboard'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
@@ -6677,6 +6835,8 @@
               <a href={`portfolio.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0"><span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
               <button onClick={onAffiliates} className="px-3 py-2.5 text-[13px] font-semibold text-purple-300 whitespace-nowrap shrink-0">Affiliates</button>
               <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()} className="shrink-0 pl-2 pr-2"/>
+            </div>
+            <ScrollCues cue={mobNavCue}/>
             </div>
           </div>
           
@@ -6694,14 +6854,14 @@
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
-                  <button onClick={()=>setShowVolumeModal(true)} className={`absolute top-2 right-2 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
+                  <button onClick={()=>setShowVolumeModal(true)} aria-label="Volume by period" className={`tap absolute top-0 right-0 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Volume 24H</div>
                   <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.vol)}</div>
                   {(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-xs sm:text-sm font-medium mt-2 ${change>=0?'text-emerald-400':'text-rose-400'} truncate`}>{change>=0?'\u2191':'\u2193'} {Math.abs(change).toFixed(1)}% <span className="text-white/40">vs 7d avg</span></div>}return<div className="h-4 mt-2"></div>})()}
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
-                  <button onClick={()=>setShowRHModal(true)} className={`absolute top-2 right-2 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button>
+                  <button onClick={()=>setShowRHModal(true)} aria-label="Liquidity with RH Core coins" className={`tap absolute top-0 right-0 px-1.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Liquidity</div>
                   <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.liq)}</div>
                   <div className="h-4 mt-2"></div>
@@ -6714,7 +6874,7 @@
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
-                  <button onClick={()=>setShowHolderModal(true)} className={`absolute top-2 right-2 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
+                  <button onClick={()=>setShowHolderModal(true)} aria-label="Holders by period" className={`tap absolute top-0 right-0 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Holders</div>
                   <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holdersByPeriod?.current??holders)/* MIGRATION: file-first. holdersByPeriod.current is the holder-history snapshot (our reliable file); the live PulseScan count is only used if the file has no snapshot for this token. Count moves ~1-2/day so a slightly-stale file value is fine, and it never dashes. */}</div>
                   {holderChange!==null?(holderChange===0?<div className="text-xs sm:text-sm font-medium mt-2 text-white/40">{'\u2014'} 0</div>:<div className={`text-xs sm:text-sm font-medium mt-2 ${holderChange>=0?'text-emerald-400':'text-rose-400'} truncate`}>{holderChange>=0?'\u2191':'\u2193'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>):<div className="h-4 mt-2"></div>}
@@ -6727,13 +6887,16 @@
                   <div className="h-4 mt-2"></div>
                 </div>
 
-                <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors min-w-0">
-                  <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Txns 24H</div>
+                {/* u8: seven tiles in a 2-col (phone) / 3-col (tablet) grid leave this one alone
+                    in its row. Below lg it spans the full row and lays its content out
+                    side-by-side so it reads as a strip rather than an oversized tile. */}
+                <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors min-w-0 col-span-2 sm:col-span-3 lg:col-span-1 flex items-center justify-between gap-3 flex-wrap lg:block">
+                  <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white font-medium lg:mb-2">Txns 24H</div>
                   <div className="flex items-baseline gap-2 leading-none flex-wrap">
                     <span className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums`}>{(data?.buys||0)+(data?.sells||0)}</span>
                     <span className="text-xs sm:text-sm tabular-nums"><span className="text-emerald-400">{data?.buys||0}</span><span className="text-white/30 mx-0.5">/</span><span className="text-rose-400">{data?.sells||0}</span></span>
                   </div>
-                  {txnChange24h!==null?<div className={`text-xs sm:text-sm font-medium mt-2 ${txnChange24h>=0?'text-emerald-400':'text-rose-400'} truncate`}>{txnChange24h>=0?'\u2191':'\u2193'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-xs sm:text-sm font-medium mt-2 ${tc>=0?'text-emerald-400':'text-rose-400'} truncate`}>{tc>=0?'\u2191':'\u2193'} {Math.abs(tc).toFixed(1)}%</div>:<div className="h-4 mt-2"></div>})()}
+                  {txnChange24h!==null?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${txnChange24h>=0?'text-emerald-400':'text-rose-400'} truncate`}>{txnChange24h>=0?'\u2191':'\u2193'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${tc>=0?'text-emerald-400':'text-rose-400'} truncate`}>{tc>=0?'\u2191':'\u2193'} {Math.abs(tc).toFixed(1)}%</div>:<div className="hidden lg:block h-4 mt-2"></div>})()}
                 </div>
 
               </div>
@@ -6747,16 +6910,18 @@
               <section className="relative bg-[#050505] border border-orange-500/45 rounded-2xl overflow-hidden flex flex-col">
                 <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-orange-500/90 to-transparent"></div>
                 <div className="p-5 sm:p-6 flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-4 gap-3">
-                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.7)]"></span>
-                      Total Supply Burned
-                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
-                      <button onClick={()=>setShowBurnShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
+                  {/* u8: `flex-wrap` + `ml-auto` let the USD/TOK toggle drop under the title on a
+                      375px phone instead of squeezing "Total Supply Burned" onto three lines. */}
+                  <div className="flex flex-wrap justify-between items-center mb-4 gap-x-3 gap-y-2">
+                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.7)] shrink-0"></span>
+                      <span className="whitespace-nowrap">Total Supply Burned</span>
+                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5 whitespace-nowrap">/ {token}</span>
+                      <button onClick={()=>setShowBurnShareModal(true)} aria-label="Share the burn panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
                     </h3>
-                    <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 shrink-0">
-                      <button onClick={()=>setBurnShowTokens(false)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${!burnShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>USD</button>
-                      <button onClick={()=>setBurnShowTokens(true)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${burnShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>TOK</button>
+                    <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 shrink-0 ml-auto" role="group" aria-label="Show burn values in">
+                      <button onClick={()=>setBurnShowTokens(false)} aria-pressed={!burnShowTokens} className={`tap-h px-2.5 rounded text-[10px] font-medium tracking-wider transition ${!burnShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>USD</button>
+                      <button onClick={()=>setBurnShowTokens(true)} aria-pressed={burnShowTokens} className={`tap-h px-2.5 rounded text-[10px] font-medium tracking-wider transition ${burnShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>TOK</button>
                     </div>
                   </div>
 
@@ -6843,24 +7008,33 @@
               <section className="relative bg-[#050505] border border-emerald-400/45 rounded-2xl overflow-hidden flex flex-col">
                 <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-emerald-400/90 to-transparent"></div>
                 <div className="p-5 sm:p-6 flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-4 gap-3 flex-wrap">
-                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]"></span>
-                      Value Generated
-                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
-                      <button onClick={()=>setShowValueGenShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
+                  {/* u8: on phones the two control groups take their own full-width row under the
+                      title (w-full sm:w-auto) — the header used to wrap to three ragged lines at
+                      320–375px. u7: ⓘ explains the term; the note line says where the tax goes. */}
+                  <div className="flex justify-between items-center mb-1.5 gap-x-3 gap-y-2 flex-wrap">
+                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)] shrink-0"></span>
+                      <span className="whitespace-nowrap">Value Generated</span>
+                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5 whitespace-nowrap">/ {token}</span>
+                      <InfoTip label="Value Generated" glyphClass="text-xs">{EXPLAINERS.valueGenerated(token,cfg)}</InfoTip>
+                      <button onClick={()=>setShowValueGenShareModal(true)} aria-label="Share the Value Generated panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
                     </h3>
-                    <div className="flex gap-1.5 items-center">
-                      <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5">
-                        <button onClick={()=>setValueGenShowTokens(false)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${!valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>USD</button>
-                        <button onClick={()=>setValueGenShowTokens(true)} className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>TOK</button>
+                    <div className="flex gap-1.5 items-center w-full sm:w-auto sm:ml-auto">
+                      <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5" role="group" aria-label="Show values in">
+                        <button onClick={()=>setValueGenShowTokens(false)} aria-pressed={!valueGenShowTokens} className={`tap-h px-2.5 rounded text-[10px] font-medium tracking-wider transition ${!valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>USD</button>
+                        <button onClick={()=>setValueGenShowTokens(true)} aria-pressed={valueGenShowTokens} className={`tap-h px-2.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenShowTokens?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>TOK</button>
                       </div>
-                      <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5">
+                      <div className="flex bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 ml-auto sm:ml-0" role="group" aria-label="Window">
                         {['24h','7d','30d','90d'].map(p=>(
-                          <button key={p} onClick={()=>setValueGenPeriod(p)} className={`px-1.5 py-0.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenPeriod===p?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>{p.toUpperCase()}</button>
+                          <button key={p} onClick={()=>setValueGenPeriod(p)} aria-pressed={valueGenPeriod===p} className={`tap-h px-2 sm:px-2.5 rounded text-[10px] font-medium tracking-wider transition ${valueGenPeriod===p?`${theme.bg} text-black`:'text-white/50 hover:text-white'}`}>{p.toUpperCase()}</button>
                         ))}
                       </div>
                     </div>
+                  </div>
+                  {/* u7: the one-line "tax → buckets" note. Reads the live rate for UFO (cfg.taxRate is
+                      overwritten from chain at boot) and the fixed 5% for PTGC. */}
+                  <div className="text-[11px] text-white/40 mb-3 leading-snug">
+                    {cfg.taxRate>0?`${(cfg.taxRate*100).toFixed(cfg.taxRate*100%1?1:0)}% tax on every trade`:'The tax on every trade'}, split across the tiles below{token==='UFO'?' — measured on chain':' — estimated from volume'}.
                   </div>
 
                   <div className="flex-1 flex flex-col">
@@ -7120,14 +7294,14 @@
               <section className="relative bg-[#050505] border border-purple-400/45 rounded-2xl overflow-hidden">
                 <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-purple-400/90 to-transparent"></div>
                 <div className="p-5 sm:p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.7)]"></span>
-                      Token Allocation
-                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
-                      <button onClick={()=>setShowAllocationShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
+                  <div className="flex flex-wrap justify-between items-center mb-4 gap-x-3 gap-y-2">
+                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.7)] shrink-0"></span>
+                      <span className="whitespace-nowrap">Token Allocation</span>
+                      <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5 whitespace-nowrap">/ {token}</span>
+                      <button onClick={()=>setShowAllocationShareModal(true)} aria-label="Share the allocation panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
                     </h3>
-                    <button onClick={()=>setShowTierInfo(true)} className="px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wider uppercase text-purple-300 border border-purple-400/30 bg-purple-500/10 hover:bg-purple-500/20 hover:border-purple-400/60 transition-colors">Leagues</button>
+                    <button onClick={()=>setShowTierInfo(true)} className="tap-h ml-auto px-2.5 rounded-md text-[11px] font-semibold tracking-wider uppercase text-purple-300 border border-purple-400/30 bg-purple-500/10 hover:bg-purple-500/20 hover:border-purple-400/60 transition-colors">Leagues</button>
                   </div>
 
                   <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
@@ -7203,14 +7377,14 @@
                 <section className="relative bg-[#050505] border border-sky-400/45 rounded-2xl">
                   <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-sky-400/90 to-transparent"></div>
                   <div className="p-5 sm:p-6">
-                    <div className="flex justify-between items-start mb-5">
+                    <div className="flex justify-between items-center mb-5 gap-3">
                       <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>
                         DAO Treasury
-                        <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5">/ {token}</span>
-                        <button onClick={()=>setShowDAOShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
+                        <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5 whitespace-nowrap">/ {token}</span>
+                        <button onClick={()=>setShowDAOShareModal(true)} aria-label="Share the DAO Treasury panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
                       </h3>
-                      <a href="ledger.html" className="px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wider uppercase text-sky-300 border border-sky-400/30 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/60 transition-all">Ledger</a>
+                      <a href="ledger.html" className="tap-h px-2.5 rounded-md text-[11px] font-semibold tracking-wider uppercase text-sky-300 border border-sky-400/30 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/60 transition-all">Ledger</a>
                     </div>
                     {daoLoading?(
                       <div className="flex items-center justify-center py-6">
@@ -7236,13 +7410,13 @@
                             <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{1F3E6}'} Ready to Deploy</div>
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(daoData?.managementValue||0)}</span>
-                              <button onClick={()=>setShowMgmtTokens(!showMgmtTokens)} className="text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
+                              <button onClick={()=>setShowMgmtTokens(!showMgmtTokens)} aria-label="Token breakdown" aria-expanded={showMgmtTokens} className="tap -my-2 text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
                             </div>
                             {showMgmtTokens&&daoData?.managementTokens&&(
                               <div className="absolute top-full left-0 right-0 sm:right-auto mt-2 z-50 bg-[#0a0a0a] border border-white/15 rounded-lg p-3 shadow-2xl sm:min-w-[280px] max-w-[calc(100vw-2rem)]">
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="text-white/65 text-[10px] font-semibold uppercase tracking-[0.15em]">Token Breakdown</span>
-                                  <button onClick={()=>setShowMgmtTokens(false)} className="text-white/40 hover:text-white text-sm">{'\u2715'}</button>
+                                  <button onClick={()=>setShowMgmtTokens(false)} aria-label="Close" className="tap -my-2 -mr-2 text-white/40 hover:text-white text-sm">{'\u2715'}</button>
                                 </div>
                                 <div className="space-y-1.5 text-sm">
                                   {daoData.managementTokens.filter(t=>t.usdValue>=5).map((t,i)=>(
@@ -7264,13 +7438,13 @@
                             <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{1F4CA}'} Total DAO Value</div>
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(daoData?.totalValue||0)}</span>
-                              <button onClick={()=>setShowTotalBreakdown(!showTotalBreakdown)} className="text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
+                              <button onClick={()=>setShowTotalBreakdown(!showTotalBreakdown)} aria-label="Total value breakdown" aria-expanded={showTotalBreakdown} className="tap -my-2 text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
                             </div>
                             {showTotalBreakdown&&daoData&&(
                               <div className="absolute top-full left-0 right-0 sm:left-auto sm:right-0 mt-2 z-50 bg-[#0a0a0a] border border-white/15 rounded-lg p-3 shadow-2xl sm:min-w-[280px] max-w-[calc(100vw-2rem)]">
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="text-white/65 text-[10px] font-semibold uppercase tracking-[0.15em]">Total Value Breakdown</span>
-                                  <button onClick={()=>setShowTotalBreakdown(false)} className="text-white/40 hover:text-white text-sm">{'\u2715'}</button>
+                                  <button onClick={()=>setShowTotalBreakdown(false)} aria-label="Close" className="tap -my-2 -mr-2 text-white/40 hover:text-white text-sm">{'\u2715'}</button>
                                 </div>
                                 <div className="space-y-1.5 text-sm">
                                   <div className="flex justify-between gap-3 text-white/55">
@@ -7316,7 +7490,7 @@
                       <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>
                         PTGC Burned by UFO
-                        <button onClick={()=>setShowDAOShareModal(true)} className="text-xs opacity-40 hover:opacity-100 transition-opacity ml-1">{'\u{1F4F7}'}</button>
+                        <button onClick={()=>setShowDAOShareModal(true)} aria-label="Share this panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
                       </h3>
                       <span className="text-sky-400/50 text-[10px] uppercase tracking-[0.18em] text-right">
                         Lifetime
@@ -7414,16 +7588,20 @@
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2.5 py-1 flex items-center gap-2">
+                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2.5 flex items-center gap-2">
                   <span className={`text-[11px] font-medium tracking-wider uppercase ${!showRHCores?theme.text:'text-white/35'}`}>All</span>
-                  <button onClick={()=>setShowRHCores(!showRHCores)} className="relative w-9 h-4 rounded-full transition-colors bg-white/10">
-                    <div className={`absolute top-0.5 w-3 h-3 rounded-full shadow transition-transform ${showRHCores?'translate-x-5':'translate-x-0.5'}`} style={{background:token==='PTGC'?'#D4AF37':'#7CFC00'}}/>
+                  {/* u8: the 36×16 track sits inside a 32px-tall button so it can actually be tapped. */}
+                  <button onClick={()=>setShowRHCores(!showRHCores)} role="switch" aria-checked={showRHCores} aria-label="Show only RH Core pairs" className="tap -mx-1">
+                    <span className="relative block w-9 h-4 rounded-full transition-colors bg-white/10">
+                      <span className={`absolute top-0.5 w-3 h-3 rounded-full shadow transition-transform ${showRHCores?'translate-x-5':'translate-x-0.5'}`} style={{background:token==='PTGC'?'#D4AF37':'#7CFC00'}}/>
+                    </span>
                   </button>
                   <span className={`text-[11px] font-medium tracking-wider uppercase ${showRHCores?theme.text:'text-white/35'}`}>RH Cores</span>
+                  <InfoTip label="RH Cores" className="-ml-1">{EXPLAINERS.rhCores(token)}</InfoTip>
                 </div>
-                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 py-1 flex items-center gap-1">
+                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 flex items-center gap-1" role="group" aria-label="Sort pairs by">
                   <span className="text-white/35 text-[10px] uppercase tracking-[0.18em] mr-1">Sort</span>
-                  {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition ${sortBy===c?`${theme.text} bg-white/[0.06]`:'text-white/40 hover:text-white/70'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
+                  {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} aria-pressed={sortBy===c} className={`tap-h px-2 rounded text-[11px] font-medium whitespace-nowrap transition ${sortBy===c?`${theme.text} bg-white/[0.06]`:'text-white/40 hover:text-white/70'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
                 </div>
               </div>
             </div>
@@ -7436,16 +7614,19 @@
                 </div>
               </div>
               <div className="flex gap-2 items-center">
-                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 py-1 flex items-center gap-1.5">
+                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 flex items-center gap-1.5">
                   <span className={`text-[10px] font-medium tracking-wider uppercase ${!showRHCores?theme.text:'text-white/35'}`}>All</span>
-                  <button onClick={()=>setShowRHCores(!showRHCores)} className="relative w-9 h-4 rounded-full transition-colors bg-white/10">
-                    <div className={`absolute top-0.5 w-3 h-3 rounded-full shadow transition-transform ${showRHCores?'translate-x-5':'translate-x-0.5'}`} style={{background:token==='PTGC'?'#D4AF37':'#7CFC00'}}/>
+                  <button onClick={()=>setShowRHCores(!showRHCores)} role="switch" aria-checked={showRHCores} aria-label="Show only RH Core pairs" className="tap -mx-1">
+                    <span className="relative block w-9 h-4 rounded-full transition-colors bg-white/10">
+                      <span className={`absolute top-0.5 w-3 h-3 rounded-full shadow transition-transform ${showRHCores?'translate-x-5':'translate-x-0.5'}`} style={{background:token==='PTGC'?'#D4AF37':'#7CFC00'}}/>
+                    </span>
                   </button>
                   <span className={`text-[10px] font-medium tracking-wider uppercase ${showRHCores?theme.text:'text-white/35'}`}>RH</span>
+                  <InfoTip label="RH Cores" className="-ml-2 -mr-2">{EXPLAINERS.rhCores(token)}</InfoTip>
                 </div>
-                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-2 py-1 flex items-center gap-1">
+                <div className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-1.5 flex items-center gap-0.5" role="group" aria-label="Sort pairs by">
                   <span className="text-white/35 text-[10px] uppercase tracking-wider mr-0.5">Sort</span>
-                  {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} className={`px-1 py-0.5 rounded text-[10px] font-medium transition ${sortBy===c?`${theme.text} bg-white/[0.06]`:'text-white/40 hover:text-white/70'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
+                  {['Ratio','Volume','Liquidity','24h %'].map((l,i)=>{const c=['ratio','volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} aria-pressed={sortBy===c} className={`tap-h px-1 rounded text-[10px] font-medium whitespace-nowrap transition ${sortBy===c?`${theme.text} bg-white/[0.06]`:'text-white/40 hover:text-white/70'}`}>{l}{sortBy===c&&(sortDir==='desc'?'\u2193':'\u2191')}</button>})}
                 </div>
               </div>
             </div>
