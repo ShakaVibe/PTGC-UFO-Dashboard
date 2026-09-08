@@ -38,14 +38,32 @@
        restore full logging. console.warn and console.error always stay on. */
     (function(){try{if(!/[?&]debug=1\b/.test(location.search)){var n=function(){};console.log=n;console.info=n;console.debug=n;}}catch(e){}})();
   </script>
+  <!-- Open the connections for every third-party origin early; the scripts below are
+       render-blocking and each one used to pay its own DNS + TLS handshake in series. -->
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Versions pinned exactly: a floating tag (react@18, babel@7) means an upstream
-       release can change the code this site runs without any deploy on our side. -->
+       release can change the code this site runs without any deploy on our side.
+       SUBRESOURCE INTEGRITY: each hash is the SHA-384 of the exact bytes the CDN served on
+       2026-09-08 (cross-checked against the npm tarballs). If a CDN ever serves different
+       bytes for the same pinned URL the browser refuses to run them — a blank page is the
+       correct outcome for a compromised or corrupted script, but it also means: change a
+       version here and you MUST regenerate its hash (openssl dgst -sha384 -binary f | openssl base64 -A).
+       Tailwind's play CDN generates its script and does not allow cross-origin reads, so it
+       cannot carry a hash; it is scheduled to be replaced by a build step. -->
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
+  <!-- chart.umd.js is the file that actually ships in the chart.js package (already minified).
+       chart.umd.min.js did not exist there; jsDelivr was minifying it on the fly, which is not
+       a stable artifact to pin a hash against. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
+  <!-- html2canvas (200 KB) was loaded on every visit but never called anywhere on the page;
+       removed. Re-add it (lazily, inside the share-card handler) when the PNG download ships. -->
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
@@ -434,7 +452,8 @@
         return r.result;
       }
       const msg=(r&&r.error&&r.error.message)||'no result field';
-      if(depth<6&&(b-a)>250){
+      /* depth<6 only reached ~1,500 blocks from a 100k chunk; the span check is the real floor. */
+      if(depth<10&&(b-a)>250){
         const mid=Math.floor((a+b)/2);
         const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
         if(left===null)return null;
@@ -459,20 +478,20 @@
        Failures are never cached: a null must stay retryable, and caching it would
        turn one transient RPC hiccup into five minutes of "chain read failed". */
     const logsInflight={};
-    const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+    const getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK)=>{
       if(toBlock<fromBlock)return[];
-      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${cacheBucket()}`;
+      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${chunk}|${cacheBucket()}`;
       if(logsInflight[key])return logsInflight[key];
-      const p=_getLogsChunked(address,topics,fromBlock,toBlock);
+      const p=_getLogsChunked(address,topics,fromBlock,toBlock,chunk);
       logsInflight[key]=p;
       p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
       return p;
     };
 
-    const _getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+    const _getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK)=>{
       if(toBlock<fromBlock)return[];
       const ranges=[];
-      for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
+      for(let s=fromBlock;s<=toBlock;s+=chunk)ranges.push([s,Math.min(s+chunk-1,toBlock)]);
       if(ranges.length>MAX_LOG_RANGES){
         lastLogError=`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`;
         console.warn(lastLogError);
@@ -515,12 +534,22 @@
        would be wrong forever, with ok:true. See handoff section 8.4.
        The 0x0->latest fast path is also the query most likely to be silently
        capped, so its result is truncation-checked like any other. */
-    const fetchFeeTimeline=async(tokenAddress,fromBlock,toBlock)=>{
+    /* The fallback scan must start at the LAUNCH block, not at the 90-day boundary the
+       caller happens to be scanning. A FeesUpdated event older than the window is exactly
+       the one that sets the rates for every transfer inside it; scanning only the window
+       dropped it once the token passed 90 days and silently reverted every bucket to
+       DEFAULT_FEE_RATES with ok:true. FeesUpdated is rare, so the launch→head scan can
+       use big chunks (getLogsRange still halves them if an endpoint's span cap objects). */
+    const FEE_TIMELINE_CHUNK=100000;
+    const fetchFeeTimeline=async(tokenAddress,fromBlock,toBlock,launchBlock)=>{
       let arr=null;
       const full=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
         params:[{address:tokenAddress,fromBlock:'0x0',toBlock:'latest',topics:[FEES_UPDATED_TOPIC]}],id:1},20000);
       if(full&&Array.isArray(full.result)&&!looksTruncated(full.result.length))arr=full.result;
-      else arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],fromBlock,toBlock);
+      else{
+        const from=(launchBlock>0&&launchBlock<fromBlock)?launchBlock:fromBlock;
+        arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],from,toBlock,FEE_TIMELINE_CHUNK);
+      }
       if(arr===null)return null;
       return arr.map(l=>({block:parseInt(l.blockNumber,16),rates:decodeFeesUpdated(l.data)}))
                 .sort((a,b)=>a.block-b.block);
@@ -724,7 +753,7 @@
         const contractTopic='0x'+encodeAddress(tokenAddress);
         const[transferLogs,feeEvents]=await Promise.all([
           getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],scanFrom,cur),
-          fetchFeeTimeline(tokenAddress,scanFrom,cur)
+          fetchFeeTimeline(tokenAddress,scanFrom,cur,launch)
         ]);
         if(!transferLogs)return{ok:false,error:lastLogError||'chain read failed'};
         if(!feeEvents)return{ok:false,error:lastLogError||'could not read fee-change history'};
@@ -1131,6 +1160,82 @@
       }catch(e){console.error('fetchDeliveredValue error:',e);return{ok:false,error:e.message||'unexpected error'};}
     };
 
+    /* ===== LIFETIME "pTGC burned by UFO" ==========================================
+       fetchDeliveredValue (and the hourly snapshot built from the same code) scans from
+       max(90-day boundary, launch). While UFO is younger than 90 days its "90d" bucket IS
+       the lifetime figure — and the headline total was reading exactly that. From day 90
+       on, the window slides and the "lifetime" number would stop growing, then shrink.
+
+       This adds the slice the window no longer reaches: [launch, scanFrom). It is
+       historical and immutable, so it is checkpointed in localStorage and only the
+       blocks since the last checkpoint are scanned on later visits — one day's worth of
+       logs, not the whole history. Same two log streams and the same 0.5%-fee-leg
+       discrimination as the main scan. Returns {ok, amount}; ok:false means "unknown",
+       and the panel then labels the headline as a 90-day figure instead of lifetime. */
+    const PTGC_PRE_WINDOW_CHUNK=200000;
+    const PTGC_PRE_STORE='grays_ptgc_by_ufo_pre_v1';
+    const sumPtgcBurnedInSwapbacks=(ptgcBurns,swapbackTxs)=>{
+      const PTGC_FEE_RATIO=0.005/0.95;
+      const byTx={};
+      for(const l of ptgcBurns){
+        if(!swapbackTxs[l.transactionHash])continue;
+        (byTx[l.transactionHash]=byTx[l.transactionHash]||[]).push(l);
+      }
+      let sum=0;
+      for(const tx of Object.keys(byTx)){
+        const legs=byTx[tx].map(l=>({amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
+        const drop={};
+        for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
+          if(i===j||drop[i])continue;
+          const r=legs[i].amt/legs[j].amt;
+          if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01)drop[i]=true;
+        }
+        legs.forEach((lg,i)=>{if(!drop[i])sum+=lg.amt;});
+      }
+      return sum;
+    };
+    const ptgcPreWindowInflight={};
+    const fetchPtgcBurnedBeforeWindow=async(ufoAddress,ptgcAddress,launch,scanFrom)=>{
+      if(!(launch>0)||!(scanFrom>0))return{ok:false,amount:0};
+      if(scanFrom<=launch)return{ok:true,amount:0,exact:true};   // window already reaches launch
+      const k=`${ufoAddress.toLowerCase()}|${launch}|${scanFrom}`;
+      if(ptgcPreWindowInflight[k])return ptgcPreWindowInflight[k];
+      const p=(async()=>{
+        const storeKey=PTGC_PRE_STORE+':'+ufoAddress.toLowerCase();
+        /* `launch` is an ESTIMATE (estimateLaunchBlock pads earlier by 15% + 5000 blocks, so it
+           drifts on every visit and differs from the snapshot generator's value). Every estimate
+           is at or before the true launch, and nothing UFO-related exists before the true
+           launch, so a checkpoint's amount is valid whatever launch value it was built with.
+           Only its toBlock matters. */
+        let cp=null;
+        try{const j=JSON.parse(localStorage.getItem(storeKey)||'null');if(j&&typeof j.toBlock==='number'&&typeof j.amount==='number'&&j.toBlock>0)cp=j;}catch(e){}
+        let from=launch,base=0;
+        if(cp){ if(cp.toBlock>=scanFrom-1)return{ok:true,amount:cp.amount}; from=cp.toBlock+1;base=cp.amount; }
+        const to=scanFrom-1;
+        const ufoTopic='0x'+encodeAddress(ufoAddress);
+        const[ufoOut,ptgcBurns]=await Promise.all([
+          getLogsChunked(ufoAddress,[TRANSFER_TOPIC,ufoTopic,null],from,to,PTGC_PRE_WINDOW_CHUNK),
+          getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],from,to,PTGC_PRE_WINDOW_CHUNK)
+        ]);
+        if(!ufoOut||!ptgcBurns)return{ok:false,amount:0};
+        const swapbackTxs={};for(const l of ufoOut)swapbackTxs[l.transactionHash]=true;
+        const amount=base+sumPtgcBurnedInSwapbacks(ptgcBurns,swapbackTxs);
+        try{localStorage.setItem(storeKey,JSON.stringify({launch:Math.min(launch,cp?cp.launch||launch:launch),toBlock:to,amount}));}catch(e){}
+        console.log(`pTGC burned by UFO before the 90d window (blocks ${launch}-${to}): ${Math.round(amount).toLocaleString()} pTGC`);
+        return{ok:true,amount};
+      })();
+      ptgcPreWindowInflight[k]=p;
+      p.then(r=>{if(!r||!r.ok)delete ptgcPreWindowInflight[k];},()=>{delete ptgcPreWindowInflight[k];});
+      return p;
+    };
+    /* Attach ptgcBurnedAll / ptgcBurnedAllOk to a delivered result (live or snapshot). */
+    const withLifetimePtgcBurn=async(delivered,ufoAddress,ptgcAddress)=>{
+      if(!delivered||!delivered.ok||!delivered.byPeriod||!delivered.byPeriod['90d'])return delivered;
+      const pre=await fetchPtgcBurnedBeforeWindow(ufoAddress,ptgcAddress,delivered.launch||0,delivered.scanFrom||0);
+      const win=delivered.byPeriod['90d'].ptgcBurned||0;
+      return{...delivered,ptgcBurnedAll:pre.ok?win+pre.amount:win,ptgcBurnedAllOk:!!pre.ok};
+    };
+
     /* MIGRATION: Total Supply Burned periods, straight from the chain.
        The headline is balanceOf(0x369) — literally whatever sits in the burn address.
        These period boxes sum Transfer(->0x369) logs inside each window. Note this
@@ -1138,7 +1243,19 @@
        burned supply regardless of who burned it. It is NOT "burned by fees". */
     const BURN_TOPIC_PADDED='0x0000000000000000000000000000000000000000000000000000000000000369';
     const burnPeriodsCache={};
-    const fetchBurnPeriodsOnChain=async(tokenAddress,decimals,firstPoolMs)=>{
+    /* In-flight dedupe: the result cache below is only checked AFTER eth_blockNumber and the
+       boundary search, so two callers in the same tick both missed it and both ran the full
+       90-day log scan. Share the promise instead (per token, per 5-min bucket). */
+    const burnPeriodsInflight={};
+    const fetchBurnPeriodsOnChain=(tokenAddress,decimals,firstPoolMs)=>{
+      const ik=`${tokenAddress}|${firstPoolMs||0}|${cacheBucket()}`;
+      if(burnPeriodsInflight[ik])return burnPeriodsInflight[ik];
+      const p=_fetchBurnPeriodsOnChain(tokenAddress,decimals,firstPoolMs);
+      burnPeriodsInflight[ik]=p;
+      p.then(r=>{if(r==null)delete burnPeriodsInflight[ik];},()=>{delete burnPeriodsInflight[ik];});
+      return p;
+    };
+    const _fetchBurnPeriodsOnChain=async(tokenAddress,decimals,firstPoolMs)=>{
       try{
         const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         if(!blk.result)return null;
@@ -1210,7 +1327,7 @@
           if(b>=B['30d'])acc.d30+=amt;
           acc.d90+=amt;
         }
-        const out={...acc,txs};
+        const out={...acc,txs,windowReachesLaunch:launch>0&&fromBlock<=launch};
         ptgcByUfoCache[key]=out;
         console.log(`PTGC burned by NEW UFO: ${acc.total.toLocaleString()} PTGC across ${txs} swapback tx(s)`);
         return out;
@@ -2125,7 +2242,10 @@
         return parseInt(data.token_holders_count)||0;
       }catch{return 0}
     };
-    const fetchBurn=async(addr,dec)=>{try{const[bRes,sRes]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})]);const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
+    /* Returns null (not zeros) when the RPC pool fails: rpcFetch resolves {result:null} after
+       all endpoints time out, and a zero here used to paint "0 burned / 0.00%" on the page.
+       Every caller guards on null and keeps its previous value. */
+    const fetchBurn=async(addr,dec)=>{try{const[bRes,sRes]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})]);if(!bRes||!sRes||bRes.result==null||sRes.result==null){console.warn('fetchBurn: RPC returned no result');return null;}const burned=Number(BigInt(bRes.result))/Math.pow(10,dec);const supply=Number(BigInt(sRes.result))/Math.pow(10,dec);if(!(supply>0))return null;return{total:burned,pct:(burned/supply)*100,supply}}catch(e){console.error('fetchBurn error:',e);return null}};
 
     /* (removed) fetchLive24hBurn — the old block-counted 24h burn (currentBlock-8640 @10s/block)
        drifted past launch on fast blocks and swept in the ~93B launch burn. It was replaced by
@@ -2306,10 +2426,18 @@
       const ptgcTotalSupply=TOKENS.PTGC.totalSupply;
       const oldBurned=ptgcByUFO?.totalBurned||0;
       const dvP=(delivered&&delivered.ok)?delivered.byPeriod:null;
+      /* LIFETIME vs WINDOW. The scan window is max(90d, launch). Until UFO is 90 days old
+         the 90d bucket is the lifetime figure; after that only ptgcBurnedAll (the window
+         plus the checkpointed pre-window slice, see withLifetimePtgcBurn) is. If that slice
+         could not be read, the headline falls back to the 90-day figure and
+         `lifetimeIsWindow` tells the panel to label it honestly instead of as "since launch". */
+      const windowReachesLaunch=!!(delivered&&delivered.ok&&delivered.launch>0&&delivered.scanFrom<=delivered.launch);
+      const lifetimeOk=!!(delivered&&delivered.ok&&(delivered.ptgcBurnedAllOk||windowReachesLaunch))||(!dvP&&!!(ptgcByUfoLive&&ptgcByUfoLive.windowReachesLaunch));
       const ptgcSrc=dvP?{
-        total:dvP['90d'].ptgcBurned,h24:dvP['24h'].ptgcBurned,
+        total:(delivered.ptgcBurnedAllOk?delivered.ptgcBurnedAll:dvP['90d'].ptgcBurned),h24:dvP['24h'].ptgcBurned,
         d7:dvP['7d'].ptgcBurned,d30:dvP['30d'].ptgcBurned,d90:dvP['90d'].ptgcBurned
       }:(ptgcByUfoLive||null);
+      const lifetimeIsWindow=!!ptgcSrc&&!lifetimeOk;
       const newBurned=ptgcSrc?ptgcSrc.total:0;
       const totalBurned=oldBurned+newBurned;
       const burnPct=ptgcTotalSupply>0?(totalBurned/ptgcTotalSupply)*100:0;
@@ -2330,7 +2458,7 @@
         ?{h24:{amount:combine(ptgcSrc.h24,24)},d7:{amount:combine(ptgcSrc.d7,24*7)},d30:{amount:combine(ptgcSrc.d30,24*30)},d90:{amount:combine(ptgcSrc.d90,24*90)}}
         :null;
       const periodsHaveOld=Array.isArray(oldRows);
-      return{ptgcSrc,oldBurned,newBurned,totalBurned,burnPct,periods,periodsHaveOld};
+      return{ptgcSrc,oldBurned,newBurned,totalBurned,burnPct,periods,periodsHaveOld,lifetimeIsWindow};
     };
 
     /* Measured Value Generated per bucket for a period — the same delivered on-chain basis as
@@ -3352,6 +3480,10 @@
       /* ---------- chain feed ---------- */
       useEffect(()=>{
         if(!open)return;
+        /* A re-run (data.pairs changed on a refresh) reseeds the tape and queues a NEW replay.
+           The previous replay's timers lived on in replayTimersRef, so its rows kept landing on
+           top of the fresh seed — duplicate row ids and pod totals counted twice. Cancel them. */
+        replayTimersRef.current.forEach(clearTimeout);replayTimersRef.current=[];setReplayQueue(null);
         const st=stateRef.current;st.seen=new Set();st.last=0;
         if(poolLiveRef.current.token!==token){            // a token switch starts the ranking over; a refresh keeps it
           poolBaseRef.current=null;poolLiveRef.current={token,rows:[],ids:new Set(),failed:false};
@@ -3516,12 +3648,21 @@
             setRows(seeded.slice(replay.length,DECK_MAX_ROWS));
             setReplayQueue(replay);
             st.last=head;setStatus(logs?'live':'partial');setScan({block:head,n:1});
+            let misses=0;   // consecutive failed ticks; drives the backoff below
             const tick=async()=>{
               if(stop)return;
               try{
                 const hr=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-                const cur=parseInt(hr.result,16);
-                if(cur>0)setScan(sc=>({block:cur,n:sc.n+1}));
+                const cur=parseInt(hr&&hr.result,16);
+                /* rpcFetch resolves {result:null} when every endpoint fails, so `cur` was NaN:
+                   neither branch below ran, status stayed "live", and the countdown sat at 0 s
+                   forever. Say "retrying" and back off instead of hammering a dead pool. */
+                if(!(cur>0)){
+                  misses++;setStatus('retrying');setLastScan({block:st.last,found:0,at:Date.now(),same:true,failed:true});
+                  timer=setTimeout(tick,Math.min(DECK_POLL_MS*Math.pow(2,misses),60000));return;
+                }
+                misses=0;
+                setScan(sc=>({block:cur,n:sc.n+1}));
                 if(cur>st.last){
                   const nl=await fetchBoth(st.last+1,cur,cur);
                   if(stop)return;
@@ -3536,9 +3677,10 @@
                     }
                     st.last=cur;setStatus('live');
                   }else setStatus('retrying');
-                }else if(cur>0)setLastScan({block:cur,found:0,at:Date.now(),same:true});
-              }catch(e){setStatus('retrying');}
-              timer=setTimeout(tick,DECK_POLL_MS);
+                }else setLastScan({block:cur,found:0,at:Date.now(),same:true});
+              }catch(e){misses++;setStatus('retrying');}
+              if(stop)return;
+              timer=setTimeout(tick,misses?Math.min(DECK_POLL_MS*Math.pow(2,misses),60000):DECK_POLL_MS);
             };
             timer=setTimeout(tick,DECK_POLL_MS);
           }catch(e){console.warn('deck feed:',e);setStatus('chain read failed');}
@@ -3881,7 +4023,7 @@
                     {lastScan
                       ?(lastScan.found>0
                         ?<span><b className="font-normal" style={{color:'#7CFC00'}}>{lastScan.found} new contact{lastScan.found===1?'':'s'}</b> · block {lastScan.block.toLocaleString('en-US')}</span>
-                        :<span>{lastScan.same?'no new block yet':'block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'}</span>)
+                        :<span>{lastScan.failed?'chain read failed — retrying':lastScan.same?'no new block yet':'block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'}</span>)
                       :<span>{status==='connecting'?'reading the chain…':'scanning for contacts…'}</span>}
                     {status==='live'&&lastScan
                       ?<span className="text-white/30">· next scan {Math.max(0,Math.ceil((DECK_POLL_MS-(tickNow-lastScan.at))/1000))}s</span>
@@ -4323,14 +4465,24 @@
            stayed on skeletons until the SLOWEST of nine requests finished. Fire the
            preloads without awaiting — they warm the Dashboard exactly as before, but
            the cards paint as soon as their own data lands. */
-        fetchBurnHistory();fetchCoingeckoData();fetchLiquidityHistory();
-        fetchTransactionHistory();fetchHolderHistoryNew();fetchTokensInLPHistory();
-        const[p,u,plsPrice]=await Promise.all([
-          fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair),
-          UFO_MAINTENANCE?Promise.resolve(null):fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair),
-          fetchPLS()
-        ]);
-        setData({PTGC:p,UFO:u});setPls(plsPrice);setLastUpdate(new Date());setLoading(false)};load()},[]);
+        const swallow=pr=>{try{pr&&pr.catch&&pr.catch(()=>{});}catch(e){}};   // preloads are best-effort; never an unhandled rejection
+        swallow(fetchBurnHistory());swallow(fetchCoingeckoData());swallow(fetchLiquidityHistory());
+        swallow(fetchTransactionHistory());swallow(fetchHolderHistoryNew());swallow(fetchTokensInLPHistory());
+        try{
+          await bootReady;   // UFO's pair/fee config is confirmed on-chain first (≤5 s); the skeletons are already on screen
+          const[p,u,plsPrice]=await Promise.all([
+            fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair).catch(()=>null),
+            UFO_MAINTENANCE?Promise.resolve(null):fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair).catch(()=>null),
+            fetchPLS().catch(()=>0)
+          ]);
+          setData({PTGC:p,UFO:u});setPls(plsPrice);
+          /* Only stamp "Updated just now" when something actually arrived. A failed boot used
+             to show a green "just now" badge beside cards reading $0.00 / —. The retry ladder
+             below now shows as "refresh failed" in the badge instead of a console.warn. */
+          if(p||u){setLastUpdate(new Date());setRefreshError(false);}else setRefreshError(true);
+        }catch(e){console.error('Home load failed:',e);setRefreshError(true);}
+        finally{setLoading(false);}
+      };load()},[]);
       /* AUTO-REFRESH: same quick-path pattern as the Dashboard — cheap live fetches every
          5 minutes + on tab re-focus; a failed refresh keeps the last good numbers on screen. */
       const refreshBusyRef=useRef(false);
@@ -4526,7 +4678,7 @@
           
           // Fetch burn data
           const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals);
-          setOtherBurn(burnData);
+          if(burnData)setOtherBurn(burnData);
           
           // If startInTwitterMode, switch to twitter mode after data loads
           if(startInTwitterMode){
@@ -4559,7 +4711,7 @@
           ?(()=>{const v24=d?.vol||0;const v7=volumeByPeriod?.vol7d||0;const avg=v7/7;return(v24>0&&avg>0)?((v24-avg)/avg)*100:null;})()
           :(burnHistoryCache?.[t]?.changes?.volume24h??null);
         const mcapChange=priceChange;
-        const burn7dAmt=bp.d7||0;
+        const burn7dAmt=bp?.d7||0;
         const burn7dUSD=burn7dAmt*(d?.price||0);
         const burnPctNum=b.pct||0;
         const burnUSD=b.total*(d?.price||0);
@@ -4572,7 +4724,7 @@
            means we're not on the measured path (compare card / modal) — keep the estimate. */
         const valueGenMeasured=(t===token&&typeof valueGen7dUsd==='number');
         const valueGenPending=(t===token&&valueGen7dUsd===null);
-        const valueGen7d=valueGenMeasured?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
+        const valueGen7d=valueGenMeasured?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp?.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
         const creaturesRaw=getBurnC(burnPctNum,'Squid');
         const creatures=creaturesRaw.filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
         const burn7dPct=b.supply>0?(burn7dAmt/b.supply)*100:0;
@@ -4684,7 +4836,7 @@
         const plsRatio=pls>0?(price/pls).toFixed(2):'—';
         const priceFormatted=formatPriceTwitter(price);
         const creatures=getBurnCreaturesTwitter(b.total||0,t);
-        const burn7d=bp.d7||0;
+        const burn7d=bp?.d7||0;
         const burn7dCreature=get24hBurnCreature(burn7d,t);
         const date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         const liqMcapPct=d?.mcap>0?((d?.liq||0)/d.mcap*100).toFixed(1)+'%':'—';
@@ -5407,10 +5559,13 @@
       const[holders,setHolders]=useState(null);
       const[pls,setPls]=useState(0); // 0 = unknown; UI shows '—' until the real price arrives
       const[loading,setLoading]=useState(true);
+      const[loadError,setLoadError]=useState(null);   // string when the first load failed outright; drives the Retry screen
+      const loadErrorRef=useRef(null);loadErrorRef.current=loadError;
+      const[loadAttempt,setLoadAttempt]=useState(0);  // bump to re-run load() for the same token
       const[sortBy,setSortBy]=useState('volume');
       const[sortDir,setSortDir]=useState('desc');
       const[lastUpdate,setLastUpdate]=useState(new Date());
-      const[burnPeriods,setBurnPeriods]=useState({h12:0,h24:0,d7:0,d30:0,d90:0});
+      const[burnPeriods,setBurnPeriods]=useState(undefined); // undefined = loading, null = failed, object = data (never zeros: "$0" is a claim)
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
       // MIGRATION: UFO's Value Generated is always measured on-chain (see fetchRealizedFees).
@@ -5570,6 +5725,17 @@
            interim numbers" instead of replacing them with an error/blank state. */
         let seededInterim=false;
         setRealizedLoading(true);
+        /* Every delivered result — live or snapshot — goes through here so the lifetime
+           pTGC-burned figure gets attached (see withLifetimePtgcBurn). The window result is
+           shown immediately; the lifetime number lands a moment later. */
+        const applyDelivered=(d)=>{
+          setDelivered(d);
+          if(d&&d.ok&&d.ptgcBurnedAllOk===undefined){
+            withLifetimePtgcBurn(d,TOKENS.UFO.address,TOKENS.PTGC.address)
+              .then(x=>{if(!cancelled&&x!==d)setDelivered(prev=>prev===d?x:prev);})
+              .catch(()=>{});
+          }
+        };
         const runLiveScan=()=>{
         if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;}
         /* Transient RPC failures should never reach the user as a button. Try up to three
@@ -5626,7 +5792,7 @@
             catch(e){ d={ok:false,error:e.message||'error'}; }
             if(cancelled)return;
             if(d&&d.ok){
-              setDelivered(d);
+              applyDelivered(d);
               setSnapshotInfo(null);   // live data on screen; retire any "as of" label
               return;
             }
@@ -5655,6 +5821,8 @@
            and PTGC-burned-by-UFO boxes load instantly. On an explicit RETRY, or a missing / stale /
            foreign-contract file, fall through to the live scan (identical to before). */
         (async()=>{
+          await bootReady;   // HARDCODED_UFO_PAIRS / fee config may still be settling right after mount
+          if(cancelled)return;
           if(feeRetry===0){
             try{
               const res=await fetch(VALUE_GEN_URL+'?t='+cacheBucket());
@@ -5666,7 +5834,7 @@
                 const ageMs=validFile?(Date.now()-Date.parse(j.meta.generatedAt)):Infinity;
                 if(validFile&&ageMs<VALUE_GEN_STALE_MS&&!cancelled){
                   setRealizedFees(j.realizedFees);
-                  setDelivered(j.delivered);
+                  applyDelivered(j.delivered);
                   setSnapshotInfo({ageMs,interim:false});
                   setRealizedLoading(false);
                   fetchContractHealth(TOKENS.UFO.address).then(h=>{if(!cancelled)setHealth(h&&h.ok?h:null);}).catch(()=>{});
@@ -5680,7 +5848,7 @@
                   console.warn(`value-generated snapshot is ${(ageMs/3600000).toFixed(1)}h old; showing as interim while the live scan refreshes`);
                   seededInterim=true;
                   setRealizedFees(j.realizedFees);
-                  setDelivered(j.delivered);
+                  applyDelivered(j.delivered);
                   setSnapshotInfo({ageMs,interim:true});
                   setRealizedLoading(false);
                 }
@@ -6069,7 +6237,7 @@
         setHolderTiers({Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0});
         setPtgcPrice(0);
         setHolderChange(null);
-        setBurnPeriods({h12:0,h24:0,d7:0,d30:0,d90:0});
+        setBurnPeriods(undefined);
         setLive24hBurn(null);
         setValueGenPeriod('7d');
         setValueGenShowTokens(false);
@@ -6079,9 +6247,19 @@
         setHoldersByPeriod({current:null,d1Ago:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
         setLiquidityChange24h(null);
         setTxnChange24h(null);
-        
+        /* Other-token caches used by the Combined share cards. They were never reset on a
+           token switch, so after PTGC → UFO the "other" slot still held UFO's numbers and the
+           Combined Burn / Value Gen / X's cards painted UFO figures into the PTGC column. */
+        setOtherTokenPairs([]);
+        setCombinedBurnOtherData(null);
+        setCombinedValueGenOtherData(null);
+        setXsShareOtherData(null);
+        setLoadError(null);
+
         let loadCancelled=false;
-        const load=async()=>{
+        const load=async()=>{try{
+          await bootReady;   // seeded UFO config may be replaced by the chain's answer; wait for it (≤5 s) before the first fetch
+          if(loadCancelled)return;
           /* LIVE FEED FIX: the UFO deck's Burn PTGC pod (and the Value Generated panel's PTGC
              bucket) is delivered pTGC × PTGC/USD. That price used to arrive only from DexScreener,
              queued behind a dozen other DexScreener calls, so the pod read $0 for ~10s after the
@@ -6110,14 +6288,24 @@
              entirely and read the burn address from chain instead. PTGC still uses the cache,
              so only PTGC needs the caches before it can seed its periods. */
           if(token==='UFO'){
-            setBurnPeriods({h12:0,h24:0,d7:0,d30:0,d90:0});   // seed; the on-chain scan below fills it
+            setBurnPeriods(undefined);   // undefined = still loading (the on-chain scan below fills it); null = failed
           }else{
             await cachesP;
+            if(loadCancelled)return;
             setBurnPeriods(getBurnPeriods(token));
           }
 
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);
-          setData(d);setHolders(prev=>h!=null?h:prev);setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          if(loadCancelled)return;   // token switched mid-flight: every setter below would paint the OLD token's data into the new dashboard
+          if(!d){
+            /* Nothing to show: DexScreener and the on-chain price fallback both failed.
+               Surface it instead of sitting on the spinner forever (the boot retry ladder
+               only runs once loading is false). */
+            setLoadError('Could not reach DexScreener or the PulseChain RPC endpoints.');
+            setLoading(false);
+            return;
+          }
+          setData(d);setHolders(prev=>h!=null?h:prev);if(b)setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
           
           /* firstPoolMs is read again OUTSIDE this if-block (the live24hBurn fetch below),
              so it must live in load()'s scope. @babel/standalone renames a block-scoped
@@ -6130,9 +6318,12 @@
           if(token==='UFO'){
             /* `if(bp)` silently kept the zeroed initial state when the chain read failed,
                so 7D/30D/90D rendered "$0" — a claim, not an absence. null means unknown. */
-            fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS).then(bp=>{
+            const bpP=fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS);
+            bpP.then(bp=>{
+              if(loadCancelled)return;
               setBurnPeriods(bp||null);
-            }).catch(()=>setBurnPeriods(null));
+              setLive24hBurn(bp?bp.h24:null);   // same scan — it used to be launched a second time just for this number
+            }).catch(()=>{if(!loadCancelled){setBurnPeriods(null);setLive24hBurn(null);}});
             /* fetchPtgcBurnedByUfo issued three log scans that fetchDeliveredValue already
                performs, and the PTGC panel now prefers the delivered figures anyway (they
                discriminate out pTGC's own 0.5% burn fee). It is kept only as a FALLBACK and
@@ -6150,16 +6341,15 @@
              so scanning ~90 days of PTGC logs here just to get one number is slow enough to
              leave the box stuck on "Loading". Skip it for PTGC; the 24H box uses burnPeriods.h24
              (the same cache source as its 7D/30D/90D). */
-          if(token==='UFO'){
-            fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS)
-              .then(bp=>{setLive24hBurn(bp?bp.h24:null);})
-              .catch(()=>setLive24hBurn(null));
-          }
-          
+          /* (The second, identical fetchBurnPeriodsOnChain call that used to live here — just to
+             read .h24 — is gone. Both calls fired in the same tick, before the cache was
+             populated, so UFO scanned ~90 days of burn logs twice on every load.) */
+
           /* First paint already happened. The readouts below compare against the history
              caches, so make sure they've landed (for UFO this is the first time we wait). */
           await cachesP;
-          
+          if(loadCancelled)return;
+
           // Update holder change with current holder count
           const hc=getHolderChange(token,h);
           if(hc!==null)setHolderChange(hc);
@@ -6176,7 +6366,7 @@
           
           // Start these in parallel after initial load
           if(cfg.stakingContract){
-            fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>setStakingData(staking));
+            fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(staking=>{if(!loadCancelled&&staking)setStakingData(staking);}).catch(()=>{});
           }
           
           // Holder tiers — three-tier sourcing, fastest-and-freshest first:
@@ -6189,6 +6379,7 @@
           const tierCacheKey='grays_tiers_'+cfg.address.toLowerCase();
           const ALLOC_FILE='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/token-allocation.json';
           const applyTiers=(tierObj,cache)=>{
+            if(loadCancelled)return;
             setHolderTiers(tierObj);
             if(cache){try{localStorage.setItem(tierCacheKey,JSON.stringify({ts:Date.now(),tiers:tierObj}));}catch(e){}}
           };
@@ -6206,9 +6397,11 @@
               }
             }catch(e){}
             // 2) localStorage cache from a prior live scan
-            try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers){setHolderTiers(o.tiers);return;}}}catch(e){}
+            try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers){if(!loadCancelled)setHolderTiers(o.tiers);return;}}}catch(e){}
             // 3) Live scan (slow; caches a complete result for next time)
             fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
+              if(loadCancelled)return;
+              if(!result||!result.counts){applyTiers({Poseidon:null,Whale:null,Shark:null,Dolphin:null,SquidAndBelow:null,ok:false,partial:false,error:'no result'},false);return;}
               /* Exact -> the number. Partial -> a lower bound, still worth showing.
                  Nothing at all -> null, and the tiles print "—". Zero whales is a claim,
                  and a failed query is no basis for it. */
@@ -6221,14 +6414,23 @@
                 SquidAndBelow:result.ok?(result.squidAndBelow||0):null,  // needs a complete count
                 ok:result.ok,partial:!!result.partial,error:result.error
               },result.ok);
+            }).catch(e=>{
+              // A rejected scan used to leave the tiles at the zeroed initial state = "0 whales".
+              console.warn('holder tier scan failed:',e);
+              applyTiers({Poseidon:null,Whale:null,Shark:null,Dolphin:null,SquidAndBelow:null,ok:false,partial:false,error:String(e&&e.message||e)},false);
             });
           })();
-          
+
           if(cfg.hasDAO&&cfg.daoContract){
             setDaoLoading(true);
             fetchDAOData(cfg.daoContract,cfg.daoTreasury,p).then(dao=>{
+              if(loadCancelled)return;
               setDaoData(dao);
               setDaoLoading(false);
+            }).catch(e=>{
+              // A rejection used to leave daoLoading=true forever (spinner with no way out).
+              console.warn('DAO data failed:',e);
+              if(!loadCancelled){setDaoData(null);setDaoLoading(false);}
             });
           }
           
@@ -6250,12 +6452,12 @@
             };
             // A failed/empty lookup returns 0; don't let it overwrite a good PTGC price.
             // A good one replaces the on-chain seed fired at the top of load().
-            usdOf(TOKENS.PTGC.address).then(p=>{if(p>0)setPtgcPrice(p);}).catch(()=>{});
-            usdOf(PLSX_ADDRESS).then(setPlsxPrice).catch(()=>{});
-            usdOf(UFO_WETH).then(setWethPrice).catch(()=>{});
+            usdOf(TOKENS.PTGC.address).then(p=>{if(!loadCancelled&&p>0)setPtgcPrice(p);}).catch(()=>{});
+            usdOf(PLSX_ADDRESS).then(p=>{if(!loadCancelled)setPlsxPrice(p);}).catch(()=>{});
+            usdOf(UFO_WETH).then(p=>{if(!loadCancelled)setWethPrice(p);}).catch(()=>{});
             // Re-read live fees each refresh so founder changes appear without a redeploy.
             fetchUfoFees(cfg.address).then(f=>{
-              if(f){cfg.taxRate=f.taxRate;cfg.taxBreakdown=f.breakdown;setFeeVersion(v=>v+1);}
+              if(f){cfg.taxRate=f.taxRate;cfg.taxBreakdown=f.breakdown;if(!loadCancelled)setFeeVersion(v=>v+1);}
             }).catch(()=>{});
           }
           
@@ -6343,10 +6545,15 @@
           } else {
             setHoldersByPeriod({ current: h, d1Ago: null, d7Ago: null, d30Ago: null, d90Ago: null, avg7d: null, avg30d: null, avg90d: null });
           }
-        };
+        }catch(e){
+          /* Any throw in here used to orphan every setter after it AND leave loading=true
+             forever — a spinner with no header, no back button and no retry. */
+          console.error('Dashboard load failed:',e);
+          if(!loadCancelled){setLoadError(String(e&&e.message||e));setLoading(false);}
+        }};
         load();
-        return()=>{loadCancelled=true;};   // a token switch mid-flight must not seed the other dashboard's PTGC price
-      },[token]);
+        return()=>{loadCancelled=true;};   // a token switch mid-flight must not paint the other dashboard's data
+      },[token,loadAttempt]);
 
       /* ===== AUTO-REFRESH (quick path) =====
        * The full load() above runs log scans and cache comparisons — far too heavy to
@@ -6369,11 +6576,20 @@
             fetchBurn(cfg.address,cfg.decimals).catch(()=>null),
             fetchPLS().catch(()=>0)
           ]);
+          if(d&&loadErrorRef.current){
+            /* The first load failed outright and the retry ladder has now reached the data
+               sources: re-run the FULL load (burn periods, tiers, DAO, volume windows…) rather
+               than just clearing the error, which would show a dashboard with half its
+               panels stuck on their initial state. */
+            setLoadError(null);setLoading(true);setLoadAttempt(a=>a+1);return;
+          }
           if(d){setData(prev=>mergeDex(prev,d));setLastUpdate(new Date());setRefreshError(false);}
           else setRefreshError(true);
           // No-op guards: identical values return the previous reference → no re-render.
           if(h!=null)setHolders(prev=>h===prev?prev:h);
-          if(b&&b.supply>0)setBurn(prev=>(prev&&prev.burned===b.burned&&prev.supply===b.supply)?prev:b);
+          // (was prev.burned — a field fetchBurn never returns, so the guard always short-circuited
+          //  and the burn box/creatures/donut froze at boot values until a full reload)
+          if(b&&b.supply>0)setBurn(prev=>(prev&&prev.total===b.total&&prev.supply===b.supply)?prev:b);
           if(p>0)setPls(prev=>p===prev?prev:p);
         }finally{refreshBusyRef.current=false;setRefreshing(false);}
       };
@@ -6504,7 +6720,23 @@
       ];
       
       if(loading)return<div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className={`w-16 h-16 mx-auto mb-4 rounded-full border-4 ${theme.border} border-t-transparent animate-spin`}></div><div className={`font-orbitron text-lg ${theme.text}`}>Loading {token}...</div></div></div>;
-      
+      /* First load failed outright and nothing is on screen: say so, and give the visitor a
+         way out. Previously this state was an infinite spinner with no header or back button. */
+      if(loadError&&!data)return(
+        <div className="min-h-screen flex items-center justify-center p-6">
+          <div role="alert" className="max-w-md w-full text-center bg-[#111]/80 border border-white/10 rounded-2xl p-8">
+            <img src={cfg.logo} alt="" className="w-16 h-16 mx-auto mb-4 opacity-80"/>
+            <div className={`font-orbitron text-lg ${theme.text} mb-2`}>Couldn't load {token}</div>
+            <p className="text-white/60 text-sm mb-1">{loadError}</p>
+            <p className="text-white/40 text-xs mb-6">Public data sources sometimes throttle bursts of requests. Retrying usually works.</p>
+            <div className="flex justify-center gap-3">
+              <button onClick={()=>{setLoadError(null);setLoading(true);setLoadAttempt(a=>a+1);}} className={`px-5 py-2 rounded-xl border ${theme.border} ${theme.text} font-semibold hover:bg-white/5`}>Retry</button>
+              <button onClick={onBack} className="px-5 py-2 rounded-xl border border-white/15 text-white/70 hover:bg-white/5">Back to Home</button>
+            </div>
+          </div>
+        </div>
+      );
+
       return(
         <div className="min-h-screen">
           
@@ -6552,10 +6784,13 @@
                 </div>
 
                 {/* hairline divider */}
-                <div className="hidden lg:block w-px self-stretch bg-white/10 mx-1"></div>
+                <div className="hidden xl:block w-px self-stretch bg-white/10 mx-1"></div>
 
-                {/* Stats — flex-1 absorbs slack into spacing instead of leaving a void */}
-                <div className="hidden lg:flex items-center flex-1 min-w-0 justify-around gap-4">
+                {/* Stats — flex-1 absorbs slack into spacing instead of leaving a void.
+                    Inline only from xl (1280px): between lg and xl the row is ~250px short and
+                    "X's to a Penny" / the values were being clipped mid-number. Below xl the
+                    wrap row underneath carries them. */}
+                <div className="hidden xl:flex items-center flex-1 min-w-0 justify-around gap-4">
                   <div className="flex flex-col items-start gap-0.5">
                     <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
                     <span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{plsRatio}</span>
@@ -6571,10 +6806,10 @@
                 </div>
 
                 {/* hairline divider */}
-                <div className="hidden lg:block w-px self-stretch bg-white/10 mx-1"></div>
+                <div className="hidden xl:block w-px self-stretch bg-white/10 mx-1"></div>
 
                 {/* Actions — packed right next to stats, no gap created by justify-between */}
-                <div className="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
+                <div className="flex items-center gap-2 shrink-0 ml-auto xl:ml-0">
                   {/* BUY hidden on UFO for now — its onboarding page still uses the old token.
                       Re-show by removing the token!=='UFO' guard once that page is migrated. */}
                   {token!=='UFO'&&(<a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
@@ -6588,8 +6823,8 @@
                 </div>
               </div>
 
-              {/* Stats fallback for small screens (since they're hidden in row 1 below lg) */}
-              <div className="lg:hidden flex items-center gap-x-5 gap-y-2 mt-3 flex-wrap">
+              {/* Stats fallback below xl (they're hidden in row 1 until then) */}
+              <div className="xl:hidden flex items-center gap-x-5 gap-y-2 mt-3 flex-wrap">
                 <div className="flex items-baseline gap-2">
                   <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
                   <span className={`text-base font-bold tabular-nums ${theme.text}`}>{plsRatio}</span>
@@ -6677,48 +6912,48 @@
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors min-w-0">
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Market Cap</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.mcap)}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.mcap)}</div>
                   <div className={`text-xs sm:text-sm font-medium mt-2 ${priceUp?'text-emerald-400':'text-rose-400'}`}>{priceUp?'\u2191':'\u2193'} {Math.abs(data?.change||0).toFixed(2)}%</div>
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
                   <button onClick={()=>setShowVolumeModal(true)} className={`absolute top-2 right-2 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Volume 24H</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.vol)}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.vol)}</div>
                   {(()=>{const vol24h=data?.vol||0;const vol7d=volumeByPeriod.vol7d||0;if(vol24h>0&&vol7d>0){const vol7dAvg=vol7d/7;const change=vol7dAvg>0?((vol24h-vol7dAvg)/vol7dAvg)*100:0;return<div className={`text-xs sm:text-sm font-medium mt-2 ${change>=0?'text-emerald-400':'text-rose-400'} truncate`}>{change>=0?'\u2191':'\u2193'} {Math.abs(change).toFixed(1)}% <span className="text-white/40">vs 7d avg</span></div>}return<div className="h-4 mt-2"></div>})()}
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
                   <button onClick={()=>setShowRHModal(true)} className={`absolute top-2 right-2 px-1.5 py-0.5 text-[10px] font-bold ${theme.text} hover:opacity-70 transition-opacity`}>RH</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Liquidity</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.liq)}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtUSD(data?.liq)}</div>
                   <div className="h-4 mt-2"></div>
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors min-w-0">
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">LIQ / MCAP</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium tabular-nums leading-none ${theme.text} truncate`}>{liqMcapRatio}%</div>
+                  <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium tabular-nums leading-none ${theme.text} truncate`}>{liqMcapRatio}%</div>
                   <div className="h-4 mt-2"></div>
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
                   <button onClick={()=>setShowHolderModal(true)} className={`absolute top-2 right-2 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Holders</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holdersByPeriod?.current??holders)/* MIGRATION: file-first. holdersByPeriod.current is the holder-history snapshot (our reliable file); the live PulseScan count is only used if the file has no snapshot for this token. Count moves ~1-2/day so a slightly-stale file value is fine, and it never dashes. */}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holdersByPeriod?.current??holders)/* MIGRATION: file-first. holdersByPeriod.current is the holder-history snapshot (our reliable file); the live PulseScan count is only used if the file has no snapshot for this token. Count moves ~1-2/day so a slightly-stale file value is fine, and it never dashes. */}</div>
                   {holderChange!==null?(holderChange===0?<div className="text-xs sm:text-sm font-medium mt-2 text-white/40">{'\u2014'} 0</div>:<div className={`text-xs sm:text-sm font-medium mt-2 ${holderChange>=0?'text-emerald-400':'text-rose-400'} truncate`}>{holderChange>=0?'\u2191':'\u2193'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>):<div className="h-4 mt-2"></div>}
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
                   <span className={`absolute top-2 right-2 text-[10px] font-bold ${theme.text}`}>{tokensInLPPct}%</span>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Tokens in LP</div>
-                  <div className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtAbbr(tokensInLP)}</div>
+                  <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmtAbbr(tokensInLP)}</div>
                   <div className="h-4 mt-2"></div>
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors min-w-0">
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Txns 24H</div>
                   <div className="flex items-baseline gap-2 leading-none flex-wrap">
-                    <span className={`text-xl sm:text-2xl lg:text-[26px] font-medium ${theme.text} tabular-nums`}>{(data?.buys||0)+(data?.sells||0)}</span>
+                    <span className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums`}>{(data?.buys||0)+(data?.sells||0)}</span>
                     <span className="text-xs sm:text-sm tabular-nums"><span className="text-emerald-400">{data?.buys||0}</span><span className="text-white/30 mx-0.5">/</span><span className="text-rose-400">{data?.sells||0}</span></span>
                   </div>
                   {txnChange24h!==null?<div className={`text-xs sm:text-sm font-medium mt-2 ${txnChange24h>=0?'text-emerald-400':'text-rose-400'} truncate`}>{txnChange24h>=0?'\u2191':'\u2193'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-xs sm:text-sm font-medium mt-2 ${tc>=0?'text-emerald-400':'text-rose-400'} truncate`}>{tc>=0?'\u2191':'\u2193'} {Math.abs(tc).toFixed(1)}%</div>:<div className="h-4 mt-2"></div>})()}
@@ -6749,9 +6984,9 @@
                   </div>
 
                   <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-1">
-                    <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmt(burn?.total)}</span>
+                    <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`} title={burn?.supply>0?undefined:'Burn balance not read yet (or the RPC read failed). This is unknown, not zero.'}>{burn?.supply>0?fmt(burn.total):'\u2014'}</span>
                     <span className="text-sm sm:text-base font-semibold text-white tabular-nums">{fmtUSD((burn?.total||0)*(data?.price||0))}</span>
-                    <span className="text-xs sm:text-sm text-white/45 tabular-nums">{(burn?.pct||0).toFixed(2)}%</span>
+                    <span className="text-xs sm:text-sm text-white/45 tabular-nums">{burn?.supply>0?burn.pct.toFixed(2)+'%':'\u2014'}</span>
                   </div>
                   {/* whale-progress row follows */}
 
@@ -6770,7 +7005,10 @@
 
                   <div className="flex-1"></div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[{l:'24H',k:'24h',v:token==='UFO'?live24hBurn:burnPeriods?.h24,loading:token==='UFO'&&live24hBurn===null},{l:'7D',k:'7d',v:burnPeriods?.d7},{l:'30D',k:'30d',v:burnPeriods?.d30},{l:'90D',k:'90d',v:burnPeriods?.d90}].map(({l,k,v,loading})=>{
+                    {/* burnPeriods: undefined = chain scan still running (show "Loading"), null = scan failed
+                        (show "—"), object = real numbers. It used to initialise to zeros, so UFO's 7D/30D/90D
+                        tiles read "$0" for the ~20 s the scan takes — a claim, not an absence. */}
+                    {[{l:'24H',k:'24h',v:token==='UFO'?live24hBurn:burnPeriods?.h24,loading:burnPeriods===undefined||(token==='UFO'&&live24hBurn===null&&burnPeriods!==null)},{l:'7D',k:'7d',v:burnPeriods?.d7,loading:burnPeriods===undefined},{l:'30D',k:'30d',v:burnPeriods?.d30,loading:burnPeriods===undefined},{l:'90D',k:'90d',v:burnPeriods?.d90,loading:burnPeriods===undefined}].map(({l,k,v,loading})=>{
                       const unknown=(v==null);
                       const pct=cfg.totalSupply>0&&v>0?(v/cfg.totalSupply)*100:0;
                       const c=(!loading&&v>0)?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
@@ -7303,15 +7541,16 @@
                       /* PTGC-burned figures now come from the shared computePtgcBurnedByUfo,
                          so this panel and its share card render from one source and can't
                          diverge again (see the helper's note near UFO_LAUNCH_FALLBACK_MS). */
-                      const {totalBurned,burnPct,periods,periodsHaveOld}=computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data);
+                      const {totalBurned,burnPct,periods,periodsHaveOld,lifetimeIsWindow}=computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data);
                       const whaleProgress=getWhaleProgress(burnPct);
                       const creatures=getBurnC(burnPct,'Squid');
 
                       return(
                         <div className="space-y-3">
                           <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5">
-                            <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 sm:px-3 py-2.5 min-w-0">
-                              <div className="text-white/55 text-[10px] sm:text-sm uppercase tracking-[0.12em] sm:tracking-[0.18em] font-semibold mb-1">Burned</div>
+                            <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 sm:px-3 py-2.5 min-w-0"
+                                 title={lifetimeIsWindow?'The scan that feeds this number covers the last 90 days only; burns older than that could not be read yet.':'All pTGC burned by UFO since launch (old contract + new contract).'}>
+                              <div className="text-white/55 text-[10px] sm:text-sm uppercase tracking-[0.12em] sm:tracking-[0.18em] font-semibold mb-1">{lifetimeIsWindow?'Burned (90d)':'Burned'}</div>
                               <div className="text-lg sm:text-2xl font-semibold tabular-nums text-sky-300 leading-none truncate">{fmtAbbr(totalBurned)}</div>
                             </div>
                             <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 sm:px-3 py-2.5 min-w-0">
@@ -7879,10 +8118,10 @@
                       {/* Left column - stats */}
                       <div className="flex-1">
                         <div className="flex items-baseline gap-2 mb-1">
-                          <span className={`text-3xl font-bold ${theme.text}`}>{fmt(burn?.total)}</span>
+                          <span className={`text-3xl font-bold ${theme.text}`}>{burn?.supply>0?fmt(burn.total):'\u2014'}</span>
                           <span className="text-xl font-bold text-green-400">{fmtUSD((burn?.total||0)*(data?.price||0))}</span>
                         </div>
-                        <div className="text-white/50 text-sm mb-2">({(burn?.pct||0).toFixed(2)}% of supply)</div>
+                        <div className="text-white/50 text-sm mb-2">({burn?.supply>0?burn.pct.toFixed(2)+'%':'\u2014'} of supply)</div>
                         
                         {/* Whale progress bar */}
                         <div className="flex items-center gap-2 mb-2">
@@ -7902,14 +8141,19 @@
                       
                       {/* Right column - period boxes */}
                       <div className="grid grid-cols-2 gap-2 w-[220px]">
-                        {[{l:'24H',v:live24hBurn!==null?live24hBurn:burnPeriods.h24},{l:'7D',v:burnPeriods.d7},{l:'30D',v:burnPeriods.d30},{l:'90D',v:burnPeriods.d90}].map(({l,v})=>{
-                          const pct=cfg.totalSupply>0?(v/cfg.totalSupply)*100:0;
+                        {/* Same semantics as the panel: a window that is unknown (scan failed / still
+                            running) prints "—", not "$0". burnPeriods may be undefined or null. */}
+                        {[{l:'24H',v:live24hBurn!==null?live24hBurn:burnPeriods?.h24},{l:'7D',v:burnPeriods?.d7},{l:'30D',v:burnPeriods?.d30},{l:'90D',v:burnPeriods?.d90}].map(({l,v})=>{
+                          const unknown=(v==null);
+                          const pct=cfg.totalSupply>0&&v>0?(v/cfg.totalSupply)*100:0;
                           const c=v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
                           return(
                             <div key={l} className="bg-black/50 border border-orange-500/30 rounded-lg p-2 relative h-[85px]">
                               <div className="text-white font-bold text-sm absolute top-1 left-2">{l}</div>
                               <div className="text-2xl text-center mt-4">{c.e}{c.cnt>0&&<span className="text-white/70 text-sm ml-1">x{c.cnt}</span>}</div>
-                              {burnShowTokens?(
+                              {unknown?(
+                                <div className="text-white/40 font-bold text-lg text-center">{'—'}</div>
+                              ):burnShowTokens?(
                                 <div className="text-orange-400 font-bold text-lg text-center">{fmtAbbr(v)} <span className="text-white/50 text-sm">{token}</span></div>
                               ):(
                                 <div className="text-green-400 font-bold text-lg text-center">{fmtUSD(v*(data?.price||0))}</div>
@@ -7942,10 +8186,11 @@
             const sc=Math.min(1,(Math.max(window.innerWidth,window.innerHeight)-32)/600,(Math.min(window.innerWidth,window.innerHeight)-100)/540);
             const isPTGCActive=token==='PTGC';
             const ptgcBurn=isPTGCActive?burn:combinedBurnOtherData?.burn||{total:0,pct:0,supply:0};
-            const ptgcPeriods=isPTGCActive?burnPeriods:combinedBurnOtherData?.burnPeriods||{h24:0,d7:0,d30:0,d90:0};
+            /* burnPeriods can be undefined (scan running) or null (scan failed); the card shows "—" for those windows */
+            const ptgcPeriods=(isPTGCActive?burnPeriods:combinedBurnOtherData?.burnPeriods)||{h24:null,d7:null,d30:null,d90:null};
             const ptgcPriceV=isPTGCActive?(data?.price||0):(combinedBurnOtherData?.price||0);
             const ufoBurn=isPTGCActive?combinedBurnOtherData?.burn||{total:0,pct:0,supply:0}:burn;
-            const ufoPeriods=isPTGCActive?combinedBurnOtherData?.burnPeriods||{h24:0,d7:0,d30:0,d90:0}:burnPeriods;
+            const ufoPeriods=(isPTGCActive?combinedBurnOtherData?.burnPeriods:burnPeriods)||{h24:null,d7:null,d30:null,d90:null};
             const ufoPriceV=isPTGCActive?(combinedBurnOtherData?.price||0):(data?.price||0);
             const ptgcUSD=(ptgcBurn.total||0)*ptgcPriceV;
             const ufoUSD=(ufoBurn.total||0)*ufoPriceV;
@@ -7957,7 +8202,7 @@
             const RJ="'Rajdhani',sans-serif";
 
             const TokenBlock=({logo,name,totalAmt,usdVal,supplyPct,periods,supply,price,accent,rgb})=>{
-              const rows=[{label:'24H',val:periods.h24||0},{label:'7D',val:periods.d7||0},{label:'30D',val:periods.d30||0},{label:'90D',val:periods.d90||0}];
+              const rows=[{label:'24H',val:periods?.h24},{label:'7D',val:periods?.d7},{label:'30D',val:periods?.d30},{label:'90D',val:periods?.d90}];
               return(
                 <div style={{borderRadius:'12px',padding:'16px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`,position:'relative'}}>
 
@@ -7991,8 +8236,9 @@
                   {/* Period rows — Orbitron labels, Rajdhani numbers */}
                   <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                     {rows.map(({label,val})=>{
-                      const c=getC(val,supply);
-                      const usdAmt=val*price;
+                      const unknown=(val==null);
+                      const c=getC(val||0,supply);
+                      const usdAmt=(val||0)*price;
                       return(
                         <div key={label} style={{display:'flex',alignItems:'center',padding:'7px 12px',borderRadius:'8px',background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.15)`,gap:'10px'}}>
                           {/* Period label — Orbitron, title treatment */}
@@ -8006,9 +8252,9 @@
                           {/* Dotted fill */}
                           <div style={{flex:1,borderBottom:`1px dashed rgba(${rgb},0.2)`,alignSelf:'center'}}/>
                           {/* USD — Rajdhani bold like Leagues */}
-                          <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:700,color:'#4ade80',flexShrink:0,marginRight:'16px'}}>{fmtUSD(usdAmt)}</span>
+                          <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:700,color:unknown?'rgba(255,255,255,0.35)':'#4ade80',flexShrink:0,marginRight:'16px'}}>{unknown?'\u2014':fmtUSD(usdAmt)}</span>
                           {/* Token count — Rajdhani semibold like Leagues token column */}
-                          <span style={{width:'105px',textAlign:'right',fontFamily:RJ,fontSize:'16px',fontWeight:600,color:`rgba(${rgb},0.6)`,flexShrink:0}}>{fmtAbbr(val)} {name}</span>
+                          <span style={{width:'105px',textAlign:'right',fontFamily:RJ,fontSize:'16px',fontWeight:600,color:`rgba(${rgb},0.6)`,flexShrink:0}}>{unknown?'\u2014':fmtAbbr(val)} {name}</span>
                         </div>
                       );
                     })}
@@ -8491,7 +8737,7 @@
                             <div className="flex-1">
                               <div className="grid grid-cols-3 gap-2 mb-2">
                                 <div className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 text-center" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
-                                  <div className="text-blue-300 text-xs font-bold uppercase tracking-wide">Burned</div>
+                                  <div className="text-blue-300 text-xs font-bold uppercase tracking-wide">{_ptgc.lifetimeIsWindow?'Burned (90d)':'Burned'}</div>
                                   <div className="text-xl font-bold text-[#D4AF37]">{fmtAbbr(totalBurned)}</div>
                                 </div>
                                 <div className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 text-center" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
@@ -9775,6 +10021,7 @@
       const[fetchProgress,setFetchProgress]=useState(0);
       const[fetchTotal,setFetchTotal]=useState(0);
       const[fetchDone,setFetchDone]=useState(false);
+      const[lookupFailed,setLookupFailed]=useState(0);   // hashes whose RPC lookup returned nothing
       const chartRef=useRef(null);
       const chartInstanceRef=useRef(null);
 
@@ -9785,12 +10032,14 @@
         const txsWithHash=allTx.filter(tx=>tx.txHash);
         if(!txsWithHash.length){setFetchDone(true);return;}
         setFetchTotal(txsWithHash.length);
-        let done=0;
+        let done=0,failed=0;
+        let alive=true;   // closing the modal used to leave the remaining lookups running (and setState-ing) to the end
         const map={};
         // Process in batches of 5 to avoid flooding RPC
         const BATCH=5;
         const processBatch=async(batch)=>{
           await Promise.all(batch.map(async tx=>{
+            if(!alive)return;
             try{
               const res=await rpcFetch({jsonrpc:'2.0',method:'eth_getTransactionByHash',params:[tx.txHash],id:1},8000);
               const fromAddr=res?.result?.from;
@@ -9800,28 +10049,32 @@
                 map[addr].ptgc+=(tx.ptgcAmount||0);
                 map[addr].usd+=(tx.usdAmount||0);
                 map[addr].buys+=1;
-              }
-            }catch(e){/* skip failed lookups */}
+              }else failed++;
+            }catch(e){failed++;}
             done++;
-            setFetchProgress(done);
+            if(alive)setFetchProgress(done);
           }));
         };
         (async()=>{
-          for(let i=0;i<txsWithHash.length;i+=BATCH){
+          for(let i=0;i<txsWithHash.length&&alive;i+=BATCH){
             await processBatch(txsWithHash.slice(i,i+BATCH));
-            setWalletMap({...map});
+            if(alive)setWalletMap({...map});
           }
-          setFetchDone(true);
+          if(alive){setLookupFailed(failed);setFetchDone(true);}
         })();
+        return()=>{alive=false;};
       },[]);
 
-      const walletData=Object.values(walletMap);
+      /* Derived from walletMap (state), so it only changes when a batch lands. `Object.values`
+         inline produced a new array every render, which defeated the memo below and rebuilt
+         the pie chart on every progress tick and every copy click. */
+      const walletData=useMemo(()=>Object.values(walletMap),[walletMap]);
 
-      const totals={
+      const totals=useMemo(()=>({
         ptgc:walletData.reduce((s,w)=>s+w.ptgc,0),
         usd:walletData.reduce((s,w)=>s+w.usd,0),
         buys:walletData.reduce((s,w)=>s+w.buys,0),
-      };
+      }),[walletData]);
 
       const sortedWallets=useMemo(()=>{
         const getV=(w)=>metric==='ptgc'?w.ptgc:metric==='usd'?w.usd:w.buys;
@@ -9991,7 +10244,7 @@
                 </div>
               </div>
             ):(
-              fetchDone&&<div className="p-8 text-center text-white/40">No transaction hashes found to look up buyer wallets.</div>
+              fetchDone&&<div className="p-8 text-center text-white/40">{lookupFailed>0?`Couldn't read ${lookupFailed} of ${fetchTotal} transactions from the PulseChain RPC endpoints. Close and reopen to try again.`:'No transaction hashes found to look up buyer wallets.'}</div>
             )}
 
             <div className="px-4 pb-4 pt-1">
@@ -10842,7 +11095,9 @@
                   <div className="p-3 space-y-2">
                     {entries.length>0?entries.map((entry,i)=>{
                       const name=entry.name||entry.username;
-                      const rawValue=entry[valueKey]||entry.buysCount||entry.ptgcAmount||0;
+                      /* Was `entry[valueKey]||entry.buysCount||entry.ptgcAmount||0`: a "Most Referrals" row
+                         with 0 buys fell through to its PTGC amount and displayed volume as a count. */
+                      const rawValue=Number(entry[valueKey])||0;
                       const value=valueFormatter(rawValue);
                       const creature=showCreatures?getCreatureForPtgc(rawValue):null;
                       return(
@@ -11460,7 +11715,38 @@
       return'#/';
     };
 
+    /* One render error anywhere (a null dereference in a modal, a bad number in a share card)
+       used to unmount the entire React tree — a black page with no way back. The boundary
+       keeps the failure to the view that threw and offers reload / home. Keyed by route in
+       App so navigating away always gives a clean subtree. */
+    class ErrorBoundary extends React.Component{
+      constructor(p){super(p);this.state={error:null};}
+      static getDerivedStateFromError(error){return{error};}
+      componentDidCatch(error,info){console.error('Render error:',error,info&&info.componentStack);}
+      render(){
+        if(!this.state.error)return this.props.children;
+        const msg=String(this.state.error&&this.state.error.message||this.state.error);
+        return(
+          <div className="min-h-screen flex items-center justify-center p-6">
+            <div role="alert" className="max-w-md w-full text-center bg-[#111]/80 border border-white/10 rounded-2xl p-8">
+              <div className="font-orbitron text-lg text-[#F0DC78] mb-2">Something went wrong</div>
+              <p className="text-white/60 text-sm mb-1">This part of the dashboard hit an error while drawing.</p>
+              <p className="text-white/35 text-xs font-mono break-all mb-6">{msg}</p>
+              <div className="flex justify-center gap-3">
+                <button onClick={()=>window.location.reload()} className="px-5 py-2 rounded-xl border border-[#D4AF37]/40 text-[#F0DC78] font-semibold hover:bg-white/5">Reload</button>
+                <button onClick={()=>{window.location.hash='#/';this.setState({error:null});}} className="px-5 py-2 rounded-xl border border-white/15 text-white/70 hover:bg-white/5">Home</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+    }
+
+    /* Subscribers re-render when bootstrapUFO lands after mount (see bootReady at the bottom). */
+    const configListeners=new Set();
     const App=()=>{
+      const[,setConfigVersion]=useState(0);
+      useEffect(()=>{configListeners.add(setConfigVersion);return()=>{configListeners.delete(setConfigVersion);};},[]);
       const[route,setRoute]=useState(()=>{
         /* Legacy handoff: calculators.html / portfolio.html send the user back with
            ?token=X (+ optional localStorage view flag). Convert it to a hash once,
@@ -11502,18 +11788,21 @@
          for crawlers. */
       const overlay=!disclaimerAccepted?<DisclaimerModal onAccept={handleAcceptDisclaimer}/>:null;
       if(view==='affiliates')return(<>
-        <AffiliatesPage onBack={()=>{const t=lastToken;if(t){try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}else{navigate('home')}}}/>
+        <ErrorBoundary key="affiliates"><AffiliatesPage onBack={()=>{const t=lastToken;if(t){try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}else{navigate('home')}}}/></ErrorBoundary>
       {overlay}</>);
-      
+
+      /* NOTE: Dashboard is deliberately NOT keyed by token. The Socials tab switches token and
+         then opens a share modal on the SAME instance (onSwitch + setTimeout), so a remount
+         would drop that modal. The token-switch race is handled inside load() instead. */
       if(view==='dashboard'&&token)return(<>
-          <Dashboard token={token} routeTab={tab}
+          <ErrorBoundary key="dashboard"><Dashboard token={token} routeTab={tab}
             onTabRoute={(t)=>navigate('dashboard',token,t)}
             onBack={()=>{try{localStorage.removeItem('ptgc_last_token')}catch(e){}navigate('home')}}
             onSwitch={(t)=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,tab)}}
-            onAffiliates={()=>{setLastToken(token);navigate('affiliates')}}/>
+            onAffiliates={()=>{setLastToken(token);navigate('affiliates')}}/></ErrorBoundary>
       {overlay}</>);
       return(<>
-          <Home onSelect={t=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}}/>
+          <ErrorBoundary key="home"><Home onSelect={t=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}}/></ErrorBoundary>
       {overlay}</>);
     };
     
@@ -11558,9 +11847,14 @@
     };
 
     const mountApp=(()=>{let done=false;return()=>{if(done)return;done=true;ReactDOM.createRoot(document.getElementById('root')).render(<App/>);};})();
-    // Never let a slow RPC block first paint. Whichever finishes first wins; the app
-    // renders once and only once. Late-arriving fee data still lands via Dashboard's refresh.
-    Promise.race([bootstrapUFO(),new Promise(r=>setTimeout(r,5000))]).then(mountApp,mountApp);
+    /* FIRST PAINT: the app used to wait for bootstrapUFO (or a 5 s timeout) before React
+       mounted at all, so a slow RPC meant up to five seconds of black page. Now React mounts
+       immediately (header, logos and skeletons paint at once) and the DATA fetches in Home
+       and Dashboard await `bootReady` instead — the same ordering guarantee as before, just
+       without blocking the UI. bootReady never rejects and never takes longer than 5 s. */
+    const bootReady=Promise.race([bootstrapUFO().catch(e=>{console.warn('bootstrapUFO failed:',e);}),new Promise(r=>setTimeout(r,5000))]);
+    bootReady.then(()=>{configListeners.forEach(f=>{try{f(v=>v+1);}catch(e){}});});   // re-render anything showing seeded UFO config
+    mountApp();
   </script>
 </body>
 </html>
