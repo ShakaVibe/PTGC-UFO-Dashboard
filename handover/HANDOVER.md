@@ -12,9 +12,9 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-08)
+## Current state (end of 2026-09-08, pass 7)
 
-Roadmap: 32 of 58 items closed. Everything below marked "in repo" is committed to the local
+Roadmap: 34 of 58 items closed. Everything below marked "in repo" is committed to the local
 clone on Shaka's Mac; check `git status` there and push if anything is still pending.
 
 | Area | Status |
@@ -22,9 +22,10 @@ clone on Shaka's Mac; check `git status` there and push if anything is still pen
 | Phase 0 — wrong numbers / crashes (17 items) | **Done, live** |
 | Phase 1 — dead code (b3), html2canvas removal (b4) | **Done, live** |
 | Phase 1 — Vite build (b1, b2), icons/manifest (b5), fonts (b6), CI/CSP (b7), tests (b8), operator script (b9) | Not started — build deliberately parked by Shaka |
-| Phase 2 — all data items (d1–d12) | **Done** (d10 and d12 closed as won't-do, see gotchas). d1/d4 are live; d5/d7/d8/d9/d11 are in the repo awaiting the next push |
+| Phase 2 — all data items (d1–d12) | **Done, live** (d10 and d12 closed as won't-do, see gotchas) |
 | Phase 3 — share cards (u2) | **Done, live** |
-| Phase 3 — everything else (u1, u3–u14) | Not started. Suggested order: u7+u8 (clarity + mobile), u12 (keep shell while loading), u10 (rename Socials Hub), u1 (Modal wrapper), u9 (a11y), u4/u5/u6, u3 (decomposition — better after the build) |
+| Phase 3 — clarity + mobile (u7, u8) | **Done, in repo awaiting push.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
+| Phase 3 — everything else (u1, u3–u6, u9–u14) | Not started. Suggested order: u12 (keep shell while loading), u10 (rename Socials Hub), u1 (Modal wrapper), u9 (a11y — the u7/u8 pass already added aria-labels/pressed/switch on the controls it touched), u4/u5/u6, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 
 ### How a session goes
@@ -88,31 +89,38 @@ clone on Shaka's Mac; check `git status` there and push if anything is still pen
 7. **`Dashboard` is not keyed by token on purpose.** The Socials tab switches token and then
    opens a share modal on the same instance; a remount would drop the modal. The token-switch
    race is handled inside `load()` with `loadCancelled` guards instead.
-8. **Testing.** There is no test suite in the repo yet (roadmap b8). The working method so far:
-   compile the `text/babel` block with the exact `@babel/standalone@7.26.4` in Node, then mount
-   the page in headless Chromium with the CDN scripts served from the pinned npm packages and
-   the data APIs stubbed (RPC, DexScreener, PulseScan; real `data/*.json`). Walk Home → PTGC →
-   UFO → Live Feed → KPI, plus RPC-down and DexScreener-down runs. That harness lives in the
-   Claude session, not the repo — porting it into `tools/` is on the list.
+8. **Testing.** There is no test suite yet (roadmap b8), but the harness is now in the repo:
+   `tools/harness/` (README there). `npm run compile` compiles the `text/babel` block with the
+   exact `@babel/standalone@7.26.4`; `node run.js <route> <w> <h> <out> [actions]` mounts the page
+   in headless Chromium with the CDN scripts served from the pinned npm packages, Tailwind from a
+   CLI build, and the data APIs stubbed (RPC, DexScreener, PulseScan; real `data/*.json`).
+   Walk Home → PTGC → UFO → Live Feed → KPI, plus `RPC_DOWN=1` and `DS_DOWN=1` runs. Rebuild
+   `tw.out.css` (`npm run css`) after editing `index.html` or new Tailwind classes won't exist.
+9. **Emojis are off limits.** The creature emojis (🔱🐋🦈🐬🦑🐚) and their layout are Shaka's; do not
+   add text labels under them or restyle them (decided 2026-09-08 when scoping u7).
+10. **Explainer copy lives in `EXPLAINERS`** (right after the `InfoTip` component). Add a new ⓘ by
+   writing the copy there and dropping `<InfoTip label="…">{EXPLAINERS.x(token)}</InfoTip>` next to
+   the term. `title=` tooltips are hover-only — don't add new ones for anything a phone user needs.
 
 ## Next up (in order)
 
-1. **Push the pending commit** (Phase 2 leftovers d5/d7/d8/d9/d11 + handover). No Action run needed.
-2. **First-timer clarity (u7 + u8)** — ~half a day: tier labels under the creature emojis, tappable
-   ⓘ explainers for "Value Generated" / "RH Cores" / "Day N" / "X's to ATH" (title tooltips don't
-   exist on touch), mobile nav overflow cue, orphan 7th KPI tile, tap targets ≥32 px.
-3. **Keep the shell visible while loading (u12)** — replace the full-page spinner with header +
+1. **Push the pending commit** (u7/u8 clarity + mobile pass, `tools/harness/`, handover). No Action
+   run needed. Then open ptgc-ufo.com on a phone: tap the ⓘ next to "X's to ATH", the Day pill, and
+   the one on the Value Generated title — each should open a small card; swipe the tab strip and
+   check the › cue disappears at the end.
+2. **Keep the shell visible while loading (u12)** — replace the full-page spinner with header +
    nav + per-panel skeletons; fix Home's 128 px skeletons (shorter than the real cards).
-4. **Modal wrapper (u1) + a11y pass (u9)** — give the non-share modals what `ShareCardModal`
+3. **Modal wrapper (u1) + a11y pass (u9)** — give the non-share modals what `ShareCardModal`
    already has (Escape, focus, scroll lock, role=dialog); aria-labels on icon buttons; focus
    rings; reduced-motion.
-5. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
+4. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
    decision is Pages-from-`dist` vs a `gh-pages` branch. Do b3-style cleanup first; everything
    in Phase 3 gets easier after it.
-6. **October 6, 2026** — UFO day 90. Check the UFO dashboard and the "PTGC Burned by UFO" panel
+5. **October 6, 2026** — UFO day 90. Check the UFO dashboard and the "PTGC Burned by UFO" panel
    that day (both of the fixed 90-day bugs get their first real test; the `exactTo` bug found
    in dry-run would have shown up here too).
 
 ## Session log
 
-- `sessions/2026-09-08.md` — review, roadmap, Phase 0, dead code, data quick wins, generator repoint.
+- `sessions/2026-09-08.md` — review, roadmap, Phase 0, dead code, data quick wins, generator repoint,
+  share cards, Phase 2 leftovers, u7/u8 clarity + mobile pass, harness ported to `tools/`.
