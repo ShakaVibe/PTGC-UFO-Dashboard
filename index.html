@@ -411,6 +411,28 @@
 
     // ~5 minute cache bucket, wall-clock (independent of block time)
     const cacheBucket=()=>Math.floor(Date.now()/(5*60*1000));
+    /* ONE head block per moment. Every scanner used to call eth_blockNumber itself; when a
+       block landed between two calls their `toBlock` differed, the shared log-scan cache key
+       differed, and the "shared" scan ran twice. Concurrent callers now get the same promise
+       (fresh for HEAD_SHARE_MS), and a caller can pass the head it already holds. */
+    const HEAD_SHARE_MS=4000;
+    let _headP=null,_headAt=0;
+    const getHeadBlock=()=>{
+      if(_headP&&Date.now()-_headAt<HEAD_SHARE_MS)return _headP;
+      _headAt=Date.now();
+      const p=rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1})
+        .then(r=>{const n=parseInt(r&&r.result,16);return n>0?n:null;},()=>null);
+      _headP=p;
+      p.then(n=>{if(n==null&&_headP===p)_headP=null;});   // never cache a failure; never clobber a newer promise
+      return p;
+    };
+    /* Bucketed caches (key ends in the 5-minute bucket): evict every other bucket on insert so
+       a tab that lives all afternoon does not keep every scan result it ever produced. */
+    const putBucketed=(cache,key,val)=>{
+      const b='-'+cacheBucket();
+      for(const k of Object.keys(cache))if(!k.endsWith(b)&&!k.endsWith('|'+cacheBucket()))delete cache[k];
+      cache[key]=val;
+    };
     const LOG_CHUNK=10000;
     const MAX_LOG_RANGES=100;
     /* RPC log caps are almost always round numbers. A result of EXACTLY one of these,
@@ -483,7 +505,7 @@
       const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${chunk}|${cacheBucket()}`;
       if(logsInflight[key])return logsInflight[key];
       const p=_getLogsChunked(address,topics,fromBlock,toBlock,chunk);
-      logsInflight[key]=p;
+      putBucketed(logsInflight,key,p);
       p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
       return p;
     };
@@ -573,16 +595,27 @@
        timestamps" and a RETRY button. Retrying is the machine's job. Three attempts with
        backoff; only then do we admit defeat, and we say which block failed. */
     const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-    const getBlockTs=async(b)=>{
-      if(blockTsCache[b]!=null)return blockTsCache[b];
-      for(let attempt=0;attempt<3;attempt++){
-        if(attempt)await sleep(200*attempt);
-        const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+b.toString(16),false],id:1});
-        const t=parseInt((r&&r.result&&r.result.timestamp)||'0x0',16);
-        if(t){blockTsCache[b]=t;return t;}
-      }
-      console.warn(`eth_getBlockByNumber failed 3x for block ${b}`);
-      return 0;
+    const blockTsInflight={};
+    const BLOCK_TS_CACHE_MAX=3000;   // timestamps are immutable, but a long-lived tab should not hoard them
+    const getBlockTs=(b)=>{
+      if(blockTsCache[b]!=null)return Promise.resolve(blockTsCache[b]);
+      if(blockTsInflight[b])return blockTsInflight[b];   // concurrent binary searches ask for the same blocks
+      const p=(async()=>{
+        for(let attempt=0;attempt<3;attempt++){
+          if(attempt)await sleep(200*attempt);
+          const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+b.toString(16),false],id:1});
+          const t=parseInt((r&&r.result&&r.result.timestamp)||'0x0',16);
+          if(t){
+            if(Object.keys(blockTsCache).length>BLOCK_TS_CACHE_MAX)for(const k of Object.keys(blockTsCache).slice(0,BLOCK_TS_CACHE_MAX/2))delete blockTsCache[k];
+            blockTsCache[b]=t;return t;
+          }
+        }
+        console.warn(`eth_getBlockByNumber failed 3x for block ${b}`);
+        return 0;
+      })();
+      blockTsInflight[b]=p;
+      p.then(()=>{delete blockTsInflight[b];},()=>{delete blockTsInflight[b];});
+      return p;
     };
 
     // smallest block whose timestamp >= targetSec. Returns null if the chain
@@ -615,9 +648,19 @@
        resolve the launch block first, answer those three for free, and run only
        the searches that can actually land inside the token's life — in parallel.
        On a 2-day-old token this is one search instead of four. */
-    const getPeriodBoundaries=async(headBlock,firstPoolMs)=>{
+    let boundariesInflight=null;   // {key, p}
+    const getPeriodBoundaries=(headBlock,firstPoolMs)=>{
       const key=`${cacheBucket()}-${firstPoolMs||0}`;
-      if(boundariesCache&&boundariesCache.key===key)return boundariesCache.v;
+      if(boundariesCache&&boundariesCache.key===key)return Promise.resolve(boundariesCache.v);
+      /* Several scanners start in the same tick and all missed the result cache, so each ran
+         the same binary searches. Share the in-flight promise. */
+      if(boundariesInflight&&boundariesInflight.key===key)return boundariesInflight.p;
+      const p=_getPeriodBoundaries(headBlock,firstPoolMs,key);
+      boundariesInflight={key,p};
+      p.then(v=>{if(v==null&&boundariesInflight&&boundariesInflight.p===p)boundariesInflight=null;},()=>{boundariesInflight=null;});
+      return p;
+    };
+    const _getPeriodBoundaries=async(headBlock,firstPoolMs,key)=>{
       const headTs=await getBlockTs(headBlock);
       if(!headTs)return null;
       const{secPerBlock}=await getChainTiming(headBlock);
@@ -694,7 +737,7 @@
           swapThresholdUFO: stRaw?weiToTokens(BigInt(stRaw)):null,
           contractUfoBalance: balRaw?weiToTokens(BigInt(balRaw)):null,
           contractPlsBalance: (plsRaw&&plsRaw.result)?weiToTokens(BigInt(plsRaw.result)):null};
-        healthCache[key]=out;
+        putBucketed(healthCache,key,out);
         console.log('contract health:',out);
         return out;
       }catch(e){console.error('fetchContractHealth error:',e);return{ok:false,error:e.message};}
@@ -739,9 +782,8 @@
     const fetchRealizedFees=async(tokenAddress,firstPoolMs)=>{
       lastLogError=null;
       try{
-        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return{ok:false,error:'could not read current block'};
-        const cur=parseInt(blk.result,16);
+        const cur=await getHeadBlock();
+        if(!cur)return{ok:false,error:'could not read current block'};
         const key=`${tokenAddress}-fees-${cacheBucket()}`;
         if(realizedFeeCache[key])return realizedFeeCache[key];
 
@@ -895,7 +937,7 @@
           };
         }
         const out={ok:true,byPeriod:byPeriod,excluded:excluded,feeChanges:feeEvents.length,scanFrom:scanFrom,headBlock:cur};
-        realizedFeeCache[key]=out;
+        putBucketed(realizedFeeCache,key,out);
         console.log(`Realized UFO fees | blocks ${scanFrom}-${cur} | ${transferLogs.length} inbound legs, ${rows.filter(r=>r.drop).length} excluded, ${feeEvents.length} fee change(s)`);
         if(excluded.any){
           console.warn(`  excluded: ${directSendCount} direct send(s) = ${Math.round(directSendTokens).toLocaleString()} UFO | `+
@@ -958,9 +1000,8 @@
     const fetchDeliveredValue=async(ufoAddress,ptgcAddress,firstPoolMs,pairs)=>{
       lastLogError=null;
       try{
-        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return{ok:false,error:'could not read current block'};
-        const cur=parseInt(blk.result,16);
+        const cur=await getHeadBlock();
+        if(!cur)return{ok:false,error:'could not read current block'};
         const key=`${ufoAddress}-delivered-${cacheBucket()}`;
         if(deliveredCache[key])return deliveredCache[key];
 
@@ -1143,7 +1184,7 @@
                       burn total would silently double. */
                    swapbackTxs:Object.keys(swapbackTxs),
                    pairs:pairs.map(p=>({symbol:p.quoteSymbol,address:p.address}))};
-        deliveredCache[key]=out;
+        putBucketed(deliveredCache,key,out);
         console.log(`Delivered value | blocks ${scanFrom}-${cur} | ${Object.keys(swapbackTxs).length} swapback tx(s)`);
         PERIOD_KEYS.forEach(k=>{
           const a=accs[k];
@@ -1251,15 +1292,14 @@
       const ik=`${tokenAddress}|${firstPoolMs||0}|${cacheBucket()}`;
       if(burnPeriodsInflight[ik])return burnPeriodsInflight[ik];
       const p=_fetchBurnPeriodsOnChain(tokenAddress,decimals,firstPoolMs);
-      burnPeriodsInflight[ik]=p;
+      putBucketed(burnPeriodsInflight,ik,p);
       p.then(r=>{if(r==null)delete burnPeriodsInflight[ik];},()=>{delete burnPeriodsInflight[ik];});
       return p;
     };
     const _fetchBurnPeriodsOnChain=async(tokenAddress,decimals,firstPoolMs)=>{
       try{
-        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return null;
-        const cur=parseInt(blk.result,16);
+        const cur=await getHeadBlock();
+        if(!cur)return null;
         const B=await getPeriodBoundaries(cur,firstPoolMs);
         if(!B)return null;
         const launch=B.launch;
@@ -1282,7 +1322,7 @@
         }
         // sinceLaunch = the 90d window reaches back past the token's birth, so d90 is lifetime
         const out={...acc,sinceLaunch:fromBlock<=launch+1,burnTxs:logs.length};
-        burnPeriodsCache[key]=out;
+        putBucketed(burnPeriodsCache,key,out);
         console.log(`On-chain burn periods (${tokenAddress.slice(0,8)}...): 24h=${acc.h24.toLocaleString()} 7d=${acc.d7.toLocaleString()} from ${logs.length} burn txs`);
         return out;
       }catch(e){console.error('fetchBurnPeriodsOnChain error:',e);return null;}
@@ -1297,9 +1337,8 @@
     const ptgcByUfoCache={};
     const fetchPtgcBurnedByUfo=async(ufoAddress,ptgcAddress,firstPoolMs)=>{
       try{
-        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return null;
-        const cur=parseInt(blk.result,16);
+        const cur=await getHeadBlock();
+        if(!cur)return null;
         const B=await getPeriodBoundaries(cur,firstPoolMs);
         if(!B)return null;
         const launch=B.launch;
@@ -1328,7 +1367,7 @@
           acc.d90+=amt;
         }
         const out={...acc,txs,windowReachesLaunch:launch>0&&fromBlock<=launch};
-        ptgcByUfoCache[key]=out;
+        putBucketed(ptgcByUfoCache,key,out);
         console.log(`PTGC burned by NEW UFO: ${acc.total.toLocaleString()} PTGC across ${txs} swapback tx(s)`);
         return out;
       }catch(e){console.error('fetchPtgcBurnedByUfo error:',e);return null;}
@@ -1395,9 +1434,8 @@
 
     const fetchFeeExemptionAudit=async(tokenAddress,firstPoolMs)=>{
       try{
-        const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
-        if(!blk.result)return null;
-        const cur=parseInt(blk.result,16);
+        const cur=await getHeadBlock();
+        if(!cur)return null;
         const key=`${tokenAddress}-audit-${cacheBucket()}`;
         if(feeAuditCache[key])return feeAuditCache[key];
 
@@ -1600,7 +1638,7 @@
            gross them up by the tax rate to compare like-for-like with DEX volume. */
         const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
         const out={ok:true,liqDetectionOk,liqDiag,totalPairSwapUfo,totalPairSwapCount,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,lastFailBlock,lastFailHoursAgo,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
-        feeAuditCache[key]=out;
+        putBucketed(feeAuditCache,key,out);
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
         console.log(`swap legs: ${swapLegs} | taxed: ${taxedLegs} | untaxed: ${untaxedLegs}`);
@@ -1704,7 +1742,7 @@
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     /* RESILIENCE: human age for the "as of" freshness label ("14m ago", "5.5h ago"). */
-    const fmtSnapshotAge=ms=>{if(ms==null||!isFinite(ms))return'';const m=ms/60000;if(m<90)return Math.max(1,Math.round(m))+'m ago';return(m/60).toFixed(1).replace(/\.0$/,'')+'h ago';};
+    const fmtSnapshotAge=ms=>{if(ms==null||!isFinite(ms))return'';const m=ms/60000;if(m<90)return Math.max(1,Math.round(m))+'m ago';if(m>=2880)return(m/1440).toFixed(1).replace(/\.0$/,'')+'d ago';return(m/60).toFixed(1).replace(/\.0$/,'')+'h ago';};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
@@ -1923,23 +1961,30 @@
       return null;
     };
     // Every pair for a token, newest documented endpoint first, legacy last.
+    const DS_HEDGE_MS=2500;
     const dsPairsFor=async addr=>{
-      /* All three in PARALLEL with a short leash. During the Aug-2026 outage these hung
-         for 15s+ apiece on a cache miss; sequential fallbacks stacked to 45s of dead air
-         and the tiles stayed empty the whole time. Whichever generation answers, we take.
-         Cache hits come back in single-digit ms, so 6s is generous. */
-      const [v1,tp,legacy]=await Promise.all([
-        dsGet(`https://api.dexscreener.com/tokens/v1/pulsechain/${addr}`,6000),
-        dsGet(`https://api.dexscreener.com/token-pairs/v1/pulsechain/${addr}`,6000),
-        dsGet(`https://api.dexscreener.com/latest/dex/tokens/${addr}`,6000)
-      ]);
+      /* HEDGED, not parallel. This used to fire all three endpoint generations every time —
+         3x the request volume for one answer, which is what kept tripping DexScreener's
+         rate limit. Now the documented endpoint (token-pairs/v1) goes first; the two older
+         generations are fired only if it is empty, errors, or has not answered within
+         DS_HEDGE_MS. That keeps the outage behaviour the parallel version was built for
+         (Aug-2026: 15 s hangs per endpoint) without paying for it on every healthy call. */
+      const tpUrl=`https://api.dexscreener.com/token-pairs/v1/pulsechain/${addr}`;
       const out=[],seen=new Set();
       const add=arr=>{(arr||[]).forEach(p=>{
         const k=p&&p.pairAddress&&p.pairAddress.toLowerCase();
         if(k&&!seen.has(k)){seen.add(k);out.push(p);}
       });};
-      if(Array.isArray(v1))add(v1);
+      const primary=dsGet(tpUrl,6000);
+      const first=await Promise.race([primary,_sleep(DS_HEDGE_MS).then(()=>undefined)]);
+      if(Array.isArray(first)&&first.length){add(first);return out;}
+      const [tp,v1,legacy]=await Promise.all([
+        primary,
+        dsGet(`https://api.dexscreener.com/tokens/v1/pulsechain/${addr}`,6000),
+        dsGet(`https://api.dexscreener.com/latest/dex/tokens/${addr}`,6000)
+      ]);
       if(Array.isArray(tp))add(tp);
+      if(Array.isArray(v1))add(v1);
       if(legacy&&Array.isArray(legacy.pairs))add(legacy.pairs);
       return out;
     };
@@ -2315,6 +2360,13 @@
     
     const UFO_PTGC_BURNS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/ufo-ptgc-burns.json';
 
+    /* STALENESS. value-generated.json has always had freshness tiers; this file had none, so a
+       stalled Action froze PTGC's 24H/7D/30D/90D burn boxes at the last run's values with no
+       label — indefinitely. Now: older than BURN_HISTORY_STALE_MS shows an amber "as of" label
+       on the boxes; older than BURN_HISTORY_MAX_AGE_MS is treated as unknown ("—"). */
+    const BURN_HISTORY_STALE_MS=6*60*60*1000;     // the Action normally runs several times a day
+    const BURN_HISTORY_MAX_AGE_MS=7*24*60*60*1000; // a week-old window is not "the last 24 hours"
+    const burnHistoryAgeMs=()=>{const t=burnHistoryCache&&burnHistoryCache.lastUpdated?Date.parse(burnHistoryCache.lastUpdated):NaN;return isFinite(t)?Math.max(0,Date.now()-t):null;};
     const fetchBurnHistory=async()=>{
       if(burnHistoryCache&&(Date.now()-burnHistoryCacheTime)<BURN_CACHE_TTL)return burnHistoryCache;
       try{
@@ -2349,8 +2401,13 @@
     
     // Get burn periods from cache for a token
     const getBurnPeriods=(token)=>{
-      if(!burnHistoryCache||!burnHistoryCache[token])return{h12:0,h24:0,d7:0,d30:0,d90:0};
-      const p=burnHistoryCache[token].periods;
+      if(!burnHistoryCache||!burnHistoryCache[token])return null;   // unknown, not zero (the tiles print "—")
+      const age=burnHistoryAgeMs();
+      if(age!=null&&age>BURN_HISTORY_MAX_AGE_MS){
+        if(!getBurnPeriods._warned){getBurnPeriods._warned=true;console.warn(`burn-summary.json is ${(age/86400000).toFixed(1)} days old; treating its period windows as unknown`);}
+        return null;
+      }
+      const p=burnHistoryCache[token].periods||{};
       return{
         h12:p.h12?.amount||0,
         h24:p.h24?.amount||0,
@@ -2580,23 +2637,6 @@
       return closestDiff < 2 * 60 * 60 * 1000 ? closest : null;
     };
 
-    const getLiquidityChange = (token, hoursAgo = 24) => {
-      if (!liquidityHistoryCache?.snapshots || liquidityHistoryCache.snapshots.length < 2) return null;
-      const snapshots = liquidityHistoryCache.snapshots;
-      const current = snapshots[snapshots.length - 1];
-      const past = findSnapshotAt(snapshots, hoursAgo);
-      if (!current || !past) return null;
-      const currentVal = current[token] || 0;
-      const pastVal = past[token] || 0;
-      if (pastVal === 0) return null;
-      return {
-        change: currentVal - pastVal,
-        changePercent: ((currentVal - pastVal) / pastVal) * 100,
-        current: currentVal,
-        past: pastVal
-      };
-    };
-
     const getTransactionChange = (token, hoursAgo = 24) => {
       if (!transactionHistoryCache?.snapshots || transactionHistoryCache.snapshots.length < 2) return null;
       const snapshots = transactionHistoryCache.snapshots;
@@ -2611,23 +2651,6 @@
         changePercent: ((currentTxns - pastTxns) / pastTxns) * 100,
         current: current[token],
         past: past[token]
-      };
-    };
-
-    const getTokensInLPChange = (token, hoursAgo = 24) => {
-      if (!tokensInLPHistoryCache?.snapshots || tokensInLPHistoryCache.snapshots.length < 2) return null;
-      const snapshots = tokensInLPHistoryCache.snapshots;
-      const current = snapshots[snapshots.length - 1];
-      const past = findSnapshotAt(snapshots, hoursAgo);
-      if (!current || !past) return null;
-      const currentVal = current[token] || 0;
-      const pastVal = past[token] || 0;
-      if (pastVal === 0) return null;
-      return {
-        change: currentVal - pastVal,
-        changePercent: ((currentVal - pastVal) / pastVal) * 100,
-        current: currentVal,
-        past: pastVal
       };
     };
 
@@ -2660,18 +2683,6 @@
       return result;
     };
 
-    const fetchPLSBalance=async(addr)=>{try{const r=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[addr,'latest'],id:1});return Number(BigInt(r.result||'0x0'))/1e18}catch{return 0}};
-    
-    const fetchTokenBalance=async(tokenAddr,walletAddr,decimals)=>{
-      try{
-        const data='0x70a08231000000000000000000000000'+walletAddr.slice(2).toLowerCase();
-        const r=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:tokenAddr,data},'latest'],id:1});
-        return Number(BigInt(r.result||'0x0'))/Math.pow(10,decimals);
-      }catch{return 0}
-    };
-    
-    // Fetch staking data - totalStaked() and totalLocked() from contract
-    // Note: totalLocked is a SUBSET of totalStaked, not separate
     const fetchStakingData=async(stakingContract,tokenAddr,decimals,maxSupply)=>{
       try{
         let totalStakedTokens=0;
@@ -2749,7 +2760,6 @@
     };
     
     // Cache for token prices (refreshed each time fetchDAOData runs)
-    let tokenPriceCache = {};
     
     // Fetch DAO data - matching ProWeb exactly
     const fetchDAOData=async(daoContract,managementWallet,plsPrice)=>{
@@ -3051,184 +3061,6 @@
           })}
           <circle cx={r} cy={r} r={radius-strokeWidth/2} fill="#0a0a0a"/>
         </svg>
-      );
-    };
-    
-    const AllocationModal=({open,close,token,cfg,theme,burn,tokensInLP,totalSupply,stakingData,totalHolderCount})=>{
-      const[tierCounts,setTierCounts]=useState({Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0});
-      const[turtleAndBelow,setTurtleAndBelow]=useState(0);
-      const[loading,setLoading]=useState(true);
-      const[progress,setProgress]=useState(0);
-      
-      useEffect(()=>{
-        if(!open)return;
-        setLoading(true);
-        setProgress(0);
-        setTierCounts({Poseidon:0,Whale:0,Shark:0,Dolphin:0,Squid:0});
-        setTurtleAndBelow(0);
-        
-        fetchHolderTiers(cfg.address,cfg,totalHolderCount,(fetched,counts,counted)=>{
-          setProgress(fetched);
-          setTierCounts({...counts});
-        }).then(({counts,turtleAndBelow})=>{
-          setTierCounts(counts);
-          setTurtleAndBelow(turtleAndBelow);
-          setLoading(false);
-        });
-      },[open,cfg,totalHolderCount]);
-      
-      if(!open)return null;
-      
-      // Use cfg.totalSupply (hardcoded max supply: 333,333,333,333 for PTGC)
-      const maxSupply=cfg.totalSupply;
-      const burnedTokens=burn?.total||0;
-      const burnedPct=maxSupply>0?burnedTokens/maxSupply*100:0;
-      const lpPct=maxSupply>0?(tokensInLP/maxSupply)*100:0;
-      const stakedTokens=stakingData?.staked||0;
-      const lockedTokens=stakingData?.locked||0;
-      const stakedPct=stakingData?.stakedPct||0;
-      const lockedPct=stakingData?.lockedPct||0;
-      // Held = Total Supply - Burned - In LP - Staked - Locked
-      const heldTokens=Math.max(0,maxSupply-burnedTokens-tokensInLP-stakedTokens-lockedTokens);
-      const heldPct=maxSupply>0?(heldTokens/maxSupply)*100:0;
-      
-      const isPTGC=token==='PTGC';
-      const chartData=isPTGC?[
-        {label:'Burned',value:burnedPct},
-        {label:'In LP',value:lpPct},
-        {label:'Staked',value:stakedPct},
-        {label:'Staked/Locked',value:lockedPct},
-        {label:'Held',value:heldPct}
-      ]:[
-        {label:'Burned',value:burnedPct},
-        {label:'In LP',value:lpPct},
-        {label:'Held',value:100-burnedPct-lpPct}
-      ];
-      
-      const chartColors=isPTGC?['#f97316','#3b82f6','#a855f7','#ec4899',cfg.colorHex]:['#f97316','#3b82f6',cfg.colorHex];
-      
-      const displayCounts={
-        Poseidon:tierCounts.Poseidon,
-        Whale:tierCounts.Whale,
-        Shark:tierCounts.Shark,
-        Dolphin:tierCounts.Dolphin,
-        Squid:tierCounts.Squid,
-        'Turtle & Below':turtleAndBelow
-      };
-      const totalCountedHolders=Object.values(tierCounts).reduce((s,c)=>s+c,0)+turtleAndBelow;
-      
-      return(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/70" onClick={close}>
-          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto`} onClick={e=>e.stopPropagation()}>
-            <div className="p-4 sm:p-5">
-              <div className="flex justify-between items-center mb-4 gap-2">
-                <h2 className={`text-base sm:text-xl font-bold ${theme.text}`}>{'\u{1F4CA}'} {token} Token Allocation</h2>
-                <button onClick={close} className="text-white/60 hover:text-white text-2xl shrink-0">{'\u00D7'}</button>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-4">
-                <DonutChart data={chartData} colors={chartColors} size={140}/>
-                <div className="space-y-1">
-                  {chartData.map((d,i)=>(
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <div className="w-3 h-3 rounded-full shrink-0" style={{background:chartColors[i]}}></div>
-                      <span className="text-white/70">{d.label}:</span>
-                      <span className={`font-bold ${theme.text}`}>{d.value.toFixed(2)}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-3 sm:p-4`}>
-                <div className="flex justify-between items-center mb-3 gap-2">
-                  <div className="text-white/60 text-xs uppercase">Holder Distribution by % of Supply</div>
-                  {loading&&<div className="text-white/40 text-xs shrink-0">Scanning...</div>}
-                </div>
-                
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  {HOLDER_TIERS_DISPLAY.map(tier=>(
-                    <div key={tier.n} className="text-center min-w-0">
-                      <div className="text-xl sm:text-2xl mb-1">{tier.e}</div>
-                      {loading?(
-                        <div className="text-base sm:text-lg font-bold text-white/30">⏳</div>
-                      ):(
-                        <div className={`text-base sm:text-lg font-bold ${theme.text} truncate`}>{displayCounts[tier.n]||0}</div>
-                      )}
-                      <div className="text-white/50 text-xs truncate">{tier.n}</div>
-                    </div>
-                  ))}
-                </div>
-                
-                {loading?(
-                  <div className="flex items-center justify-center gap-2 mt-3">
-                    <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{borderColor:`${cfg.colorHex} transparent transparent transparent`}}></div>
-                    <span className="text-white/50 text-sm">Loading holders...</span>
-                  </div>
-                ):(
-                  <div className="text-center text-white/40 text-xs mt-3">Total: {fmt(totalCountedHolders)} holders (excludes LPs & staking)</div>
-                )}
-                
-                <div className="text-white/40 text-xs mt-3 pt-3 border-t border-white/10">
-                  {'\u{1F531}'} 10%+ {'\u2022'} {'\u{1F40B}'} 1%+ {'\u2022'} {'\u{1F988}'} 0.1%+ {'\u2022'} {'\u{1F42C}'} 0.01%+ {'\u2022'} {'\u{1F991}'} 0.001%+ {'\u2022'} {'\u{1F422}'} Below
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-    
-    const ValueGenModal=({open,close,token,vol,cfg,theme})=>{
-      const[period,setPeriod]=useState('24h');
-      if(!open)return null;
-      
-      // 24h volume is always actual from DexScreener
-      // 7d, 30d, 90d are estimates based on 24h
-      const vol24h=vol;
-      const vol7d=vol*7;
-      const vol30d=vol*30;
-      const vol90d=vol*90;
-      
-      const periodVols={'24h':vol24h,'7d':vol7d,'30d':vol30d,'90d':vol90d};
-      const periodVol=periodVols[period];
-      const total=periodVol*cfg.taxRate;
-      const isEstimate=period!=='24h';
-      
-      return(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/70" onClick={close}>
-          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-md w-full`} onClick={e=>e.stopPropagation()}>
-            <div className="p-4">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className={`text-lg font-bold ${theme.text}`}>{'\u{1F4B0}'} {token} Value Generation</h2>
-                <button onClick={close} className="text-white/60 hover:text-white text-xl">{'\u00D7'}</button>
-              </div>
-              
-              <div className="flex gap-1 mb-4 bg-black/30 rounded-lg p-1">
-                {['24h','7d','30d','90d'].map(p=>(
-                  <button key={p} onClick={()=>setPeriod(p)} className={`flex-1 py-2 rounded-md text-sm font-medium transition ${period===p?`${theme.bg} text-black`:'text-white/60 hover:text-white'}`}>{p.toUpperCase()}{p!=='24h'&&<span className="text-xs opacity-60">*</span>}</button>
-                ))}
-              </div>
-              
-              <div className="text-center mb-4">
-                <div className="text-white/50 text-xs sm:text-sm flex items-center justify-center gap-2 flex-wrap">
-                  Volume ({period.toUpperCase()}): {fmtUSD(periodVol)}
-                </div>
-                <div className="text-3xl sm:text-4xl font-bold text-green-400 my-2 truncate">{fmtUSD(total)}</div>
-                <div className="text-white/50 text-xs sm:text-sm">{(cfg.taxRate*100)}% Tax Generated {isEstimate?'(est)':''}</div>
-                {isEstimate&&<div className="text-white/40 text-xs mt-1">* Projected based on 24H actual volume</div>}
-              </div>
-              
-              <div className="space-y-2">
-                {cfg.taxBreakdown.map((item,i)=>(
-                  <div key={i} className={`${theme.card} border ${theme.border} rounded-lg px-3 py-2 flex justify-between items-center gap-2 min-w-0`}>
-                    <span className="text-white/70 text-xs sm:text-sm truncate"><span className="mr-2">{item.emoji}</span>{item.name}</span>
-                    <span className={`font-bold ${theme.text} text-sm sm:text-base shrink-0`}>{fmtUSD(periodVol*(item.pct/100))}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
       );
     };
     
@@ -4320,66 +4152,6 @@
       );
     };
 
-    const BurnModal=({open,close,token,burn,price,cfg,live24hBurn})=>{
-      const[hist,setHist]=useState({h12:null,h24:null,d7:null,d30:null});
-      useEffect(()=>{
-        if(!open)return;
-        // Load from cache immediately
-        const periods=getBurnPeriods(token);
-        setHist({h12:periods.h12,h24:periods.h24,d7:periods.d7,d30:periods.d30});
-      },[open,token]);
-      if(!open)return null;
-      const theme={text:cfg.color==='gold'?'text-[#F0DC78]':'text-[#7CFC00]'};
-      const creatures=getBurnC(burn?.pct||0,'Squid');
-      const maxSupply=cfg.totalSupply;
-      const getPct=a=>maxSupply>0?(a/maxSupply)*100:0;
-      const whaleProgress=getWhaleProgress(burn?.pct||0);
-      const boxes=[{l:'12H',v:hist.h12},{l:'24H',v:live24hBurn!==null?live24hBurn:hist.h24,live:live24hBurn!==null},{l:'7D',v:hist.d7},{l:'30D',v:hist.d30}];
-      return(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/70" onClick={close}>
-          <div className="bg-[#111] border border-orange-500/30 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-            <div className="p-4 sm:p-5">
-              <div className="flex justify-between mb-4 gap-2">
-                <div className="flex items-center gap-3 sm:gap-4 min-w-0"><img src={cfg.logo} alt={token} className="w-12 h-12 sm:w-20 sm:h-20 shrink-0"/><div className="min-w-0"><h2 className="text-base sm:text-2xl font-bold text-orange-400 font-orbitron truncate">{token} Burn Stats</h2><div className="text-white/40 text-xs sm:text-sm truncate">{'\u{1F525}'} Total Supply Burned</div></div></div>
-                <button onClick={close} className="text-white/60 hover:text-white text-2xl shrink-0">{'\u00D7'}</button>
-              </div>
-              <div className="bg-gradient-to-r from-orange-500/15 to-orange-600/10 border border-orange-500/30 rounded-xl p-3 sm:p-4 mb-4">
-                <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center mb-3">
-                  <div className="min-w-0"><div className="text-orange-400/70 text-[10px] sm:text-xs uppercase">Burned</div><div className={`text-base sm:text-2xl font-bold ${theme.text} truncate`}>{fmt(burn?.total)}</div></div>
-                  <div className="min-w-0"><div className="text-orange-400/70 text-[10px] sm:text-xs uppercase">USD Value</div><div className="text-base sm:text-2xl font-bold text-green-400 truncate">{fmtUSD((burn?.total||0)*price)}</div></div>
-                  <div className="min-w-0"><div className="text-orange-400/70 text-[10px] sm:text-xs uppercase">% Supply</div><div className="text-base sm:text-2xl font-bold text-white truncate">{(burn?.pct||0).toFixed(2)}%</div></div>
-                </div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex-1 h-3 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleProgress.progress}%`}}></div></div>
-                  <span className="text-xl">{'\u{1F40B}'}</span>
-                  <span className="text-orange-400/70 text-sm">{whaleProgress.progress.toFixed(1)}%</span>
-                </div>
-                <div className="flex items-center justify-center gap-2 flex-wrap"><span className="text-2xl sm:text-3xl animate-fire">{'\u{1F525}'}</span>{creatures.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl sm:text-3xl">{c.e}</span><span className="text-white/80 text-base sm:text-lg font-bold">x{c.cnt}</span></span>)}</div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-                {boxes.map(({l,v,live})=>{
-                  const isLoading=v===null;
-                  const pct=!isLoading?getPct(v):0;
-                  const c=!isLoading&&v>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};
-                  return(
-                  <div key={l} className="bg-[#1a1a1a] border border-orange-500/20 rounded-xl p-3 sm:p-4 min-w-0">
-                    <div className="flex justify-between mb-2 gap-1">
-                      <span className="text-white/60 text-sm sm:text-base font-medium">{l}</span>
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="text-2xl sm:text-3xl">{isLoading?'\u{23F3}':c.e}</span>
-                        {!isLoading&&c.cnt>0&&<span className="text-white/70 text-sm sm:text-base font-bold">x{c.cnt}</span>}
-                      </div>
-                    </div>
-                    {isLoading?<div className="animate-pulse-slow text-orange-400/50 text-base sm:text-lg">Loading...</div>:<><div className="text-base sm:text-2xl font-bold text-orange-400 truncate">{fmt(v)}</div><div className="text-sm sm:text-base text-green-400 truncate">{fmtUSD(v*price)}</div></>}
-                  </div>
-                )})}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-    
     const LPRow=({pair,theme,mainAddr})=>{
       const[logoErr,setLogoErr]=useState(false);
       const[det,setDet]=useState(false);
@@ -4437,16 +4209,6 @@
         </div>
       );
     };
-    const MaintenanceScreen=({label})=>(
-      <div className="max-w-2xl mx-auto px-4 py-16 sm:py-24 text-center">
-        <div className="rounded-2xl border border-yellow-400/30 bg-[#141414] p-8 sm:p-12" style={{boxShadow:'0 0 40px rgba(234,179,8,0.1)'}}>
-          <div className="text-5xl sm:text-6xl mb-4">🛠️</div>
-          <h2 className="font-orbitron text-2xl sm:text-3xl font-bold text-yellow-300 mb-2">{label} — Under Maintenance</h2>
-          <p className="text-white/60 text-xs uppercase tracking-[0.2em] mb-5">Migration in Progress</p>
-          <p className="text-white/75 text-sm sm:text-base leading-relaxed">{MAINT_MSG}</p>
-        </div>
-      </div>
-    );
     // ===== END MAINT-MIGRATION components =====
 
     const Home=({onSelect})=>{
@@ -4639,21 +4401,24 @@
       const otherCfg=TOKENS[otherToken];
       
       // Get burn periods from the already-loaded burnHistoryCache
+      /* The "other" token's period windows. PTGC's come from burn-summary.json. UFO's must NOT:
+         that file still describes the OLD UFO contract, so the compare card was quoting the
+         retired token's 7D burn as the new one's. UFO's are read from chain in loadOtherToken
+         and land in otherBurnPeriodsChain; until then they are unknown (rendered as 0 in the
+         card's ratio math but never presented as a lifetime figure). */
+      const[otherBurnPeriodsChain,setOtherBurnPeriodsChain]=useState(null);
       const getOtherBurnPeriods=()=>{
-        if(!burnHistoryCache||!burnHistoryCache[otherToken])return{h24:0,d7:0,d30:0,d90:0};
-        const p=burnHistoryCache[otherToken].periods;
-        return{
-          h24:p.h24?.amount||0,
-          d7:p.d7?.amount||0,
-          d30:p.d30?.amount||0,
-          d90:p.d90?.amount||0
-        };
+        if(otherToken==='UFO')return otherBurnPeriodsChain;
+        return getBurnPeriods(otherToken);
       };
       
       const loadOtherToken=async()=>{
         if(otherData&&otherBurn.total>0){
           // Already loaded, just switch to twitter mode if requested
           if(startInTwitterMode)setTwitterMode(true);
+          if(otherToken==='UFO'&&!otherBurnPeriodsChain){   // a failed chain read gets another go (deduped by the fetcher's caches)
+            fetchBurnPeriodsOnChain(otherCfg.address,otherCfg.decimals,UFO_LAUNCH_FALLBACK_MS).then(bp=>{if(bp)setOtherBurnPeriodsChain(bp);}).catch(()=>{});
+          }
           return;
         }
         setOtherLoading(true);
@@ -4679,7 +4444,12 @@
           // Fetch burn data
           const burnData=await fetchBurn(otherCfg.address,otherCfg.decimals);
           if(burnData)setOtherBurn(burnData);
-          
+          if(otherToken==='UFO'){
+            const _fp=dexData?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+            fetchBurnPeriodsOnChain(otherCfg.address,otherCfg.decimals,(_fp&&isFinite(_fp))?_fp:UFO_LAUNCH_FALLBACK_MS)
+              .then(bp=>setOtherBurnPeriodsChain(bp||null)).catch(()=>{});
+          }
+
           // If startInTwitterMode, switch to twitter mode after data loads
           if(startInTwitterMode){
             setTimeout(()=>setTwitterMode(true),100);
@@ -5341,215 +5111,6 @@
     };
     
 
-    // Liquidity History Modal
-    const LiquidityModal = ({ open, close, token, currentLiquidity, theme, cfg }) => {
-      const [changes, setChanges] = useState({});
-      const [chartData, setChartData] = useState([]);
-      const chartRef = React.useRef(null);
-      const chartInstance = React.useRef(null);
-      
-      useEffect(() => {
-        if (!open) return;
-        const multiChanges = getMultiPeriodChanges(liquidityHistoryCache, token, (snap, t) => snap[t] || 0);
-        setChanges(multiChanges);
-        if (liquidityHistoryCache?.snapshots) {
-          const data = liquidityHistoryCache.snapshots
-            .slice(-168)
-            .filter((_, i) => i % 4 === 0)
-            .map(s => ({
-              time: new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
-              value: s[token] || 0
-            }));
-          setChartData(data);
-        }
-      }, [open, token]);
-      
-      useEffect(() => {
-        if (!open || !chartRef.current || chartData.length === 0 || !window.Chart) return;
-        if (chartInstance.current) chartInstance.current.destroy();
-        const ctx = chartRef.current.getContext('2d');
-        const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-        gradient.addColorStop(0, cfg.colorHex + '66');
-        gradient.addColorStop(1, cfg.colorHex + '00');
-        chartInstance.current = new window.Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: chartData.map(d => d.time),
-            datasets: [{
-              label: 'Liquidity',
-              data: chartData.map(d => d.value),
-              borderColor: cfg.colorHex,
-              backgroundColor: gradient,
-              borderWidth: 2,
-              fill: true,
-              tension: 0.4,
-              pointRadius: 0
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1a', borderColor: cfg.colorHex, borderWidth: 1, callbacks: { label: (ctx) => '$' + ctx.parsed.y.toLocaleString() } } },
-            scales: { x: { display: false }, y: { grid: { color: '#333' }, ticks: { color: '#999', callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v) } } }
-          }
-        });
-        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-      }, [open, chartData, cfg.colorHex]);
-      
-      if (!open) return null;
-      const Badge = ({ value }) => {
-        if (value === undefined || value === null) return <span className="text-white/40">{'\u2014'}</span>;
-        const isUp = value >= 0;
-        return <span className={`font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '\u25B2' : '\u25BC'} {Math.abs(value).toFixed(2)}%</span>;
-      };
-      
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClick={close}>
-          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4 gap-2">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <span className="text-2xl sm:text-3xl shrink-0">{'\u{1F4A7}'}</span>
-                  <div className="min-w-0">
-                    <span className={`font-orbitron text-lg sm:text-2xl font-bold ${theme.text} block truncate`}>{token}</span>
-                    <div className="text-white/50 text-xs sm:text-base truncate">Liquidity History</div>
-                  </div>
-                </div>
-                <button onClick={close} className="text-white/60 hover:text-white text-2xl shrink-0">{'\u00D7'}</button>
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 mb-4`}>
-                <div className="text-white/50 text-xs sm:text-sm uppercase">Current Liquidity</div>
-                <div className={`text-2xl sm:text-3xl font-bold ${theme.text} truncate`}>{fmtUSD(currentLiquidity)}</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4">
-                {['24H', '7D', '30D', '90D'].map(period => (
-                  <div key={period} className={`${theme.card} border ${theme.border} rounded-lg p-2 sm:p-3 min-w-0`}>
-                    <div className="text-white/50 text-xs sm:text-sm uppercase">{period} Change</div>
-                    <div className="text-base sm:text-xl truncate"><Badge value={changes[period]?.changePercent} /></div>
-                    {changes[period] && <div className="text-white/40 text-xs mt-1 truncate">{changes[period].change >= 0 ? '+' : ''}{fmtUSD(changes[period].change)}</div>}
-                  </div>
-                ))}
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4`}>
-                <div className="text-white/50 text-xs sm:text-sm uppercase mb-2">7 Day Trend</div>
-                <div style={{ height: '150px' }}>
-                  <canvas ref={chartRef}></canvas>
-                  {chartData.length === 0 && <div className="flex items-center justify-center h-full text-white/40">Loading chart data...</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    // Transaction History Modal
-    const TransactionModal = ({ open, close, token, currentTxns, currentBuys, currentSells, theme, cfg }) => {
-      const [changes, setChanges] = useState({});
-      const [chartData, setChartData] = useState([]);
-      const chartRef = React.useRef(null);
-      const chartInstance = React.useRef(null);
-      
-      useEffect(() => {
-        if (!open) return;
-        const multiChanges = getMultiPeriodChanges(transactionHistoryCache, token, (snap, t) => snap[t]?.total || 0);
-        setChanges(multiChanges);
-        if (transactionHistoryCache?.snapshots) {
-          const data = transactionHistoryCache.snapshots
-            .slice(-168)
-            .filter((_, i) => i % 4 === 0)
-            .map(s => ({
-              time: new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
-              buys: s[token]?.buys || 0,
-              sells: s[token]?.sells || 0,
-              total: s[token]?.total || 0
-            }));
-          setChartData(data);
-        }
-      }, [open, token]);
-      
-      useEffect(() => {
-        if (!open || !chartRef.current || chartData.length === 0 || !window.Chart) return;
-        if (chartInstance.current) chartInstance.current.destroy();
-        const ctx = chartRef.current.getContext('2d');
-        chartInstance.current = new window.Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: chartData.map(d => d.time),
-            datasets: [
-              { label: 'Buys', data: chartData.map(d => d.buys), backgroundColor: '#22c55e88', borderColor: '#22c55e', borderWidth: 1 },
-              { label: 'Sells', data: chartData.map(d => d.sells), backgroundColor: '#ef444488', borderColor: '#ef4444', borderWidth: 1 }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: true, labels: { color: '#999' } } },
-            scales: { x: { display: false, stacked: true }, y: { stacked: true, grid: { color: '#333' }, ticks: { color: '#999' } } }
-          }
-        });
-        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-      }, [open, chartData]);
-      
-      if (!open) return null;
-      const Badge = ({ value }) => {
-        if (value === undefined || value === null) return <span className="text-white/40">{'\u2014'}</span>;
-        const isUp = value >= 0;
-        return <span className={`font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>{isUp ? '\u25B2' : '\u25BC'} {Math.abs(value).toFixed(1)}%</span>;
-      };
-      const buyRatio = currentTxns > 0 ? (currentBuys / currentTxns * 100).toFixed(0) : 50;
-      
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClick={close}>
-          <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4 gap-2">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <span className="text-2xl sm:text-3xl shrink-0">{'\u26A1'}</span>
-                  <div className="min-w-0">
-                    <span className={`font-orbitron text-lg sm:text-2xl font-bold ${theme.text} block truncate`}>{token}</span>
-                    <div className="text-white/50 text-xs sm:text-base truncate">Transaction History</div>
-                  </div>
-                </div>
-                <button onClick={close} className="text-white/60 hover:text-white text-2xl shrink-0">{'\u00D7'}</button>
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 mb-4`}>
-                <div className="flex items-center justify-between mb-2 gap-2">
-                  <div className="min-w-0">
-                    <div className="text-white/50 text-xs sm:text-sm uppercase">24H Transactions</div>
-                    <div className={`text-2xl sm:text-3xl font-bold ${theme.text} truncate`}>{currentTxns}</div>
-                  </div>
-                  <div className="text-right min-w-0">
-                    <div className="text-xs sm:text-sm"><span className="text-green-400 font-bold">{currentBuys}</span><span className="text-white/30 mx-1">/</span><span className="text-red-400 font-bold">{currentSells}</span></div>
-                    <div className="text-white/40 text-[10px] sm:text-xs">buys / sells</div>
-                  </div>
-                </div>
-                <div className="h-2 bg-red-500/30 rounded-full overflow-hidden"><div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${buyRatio}%` }} /></div>
-                <div className="text-center text-white/50 text-xs mt-1">{buyRatio}% buys</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4">
-                {['24H', '7D', '30D', '90D'].map(period => (
-                  <div key={period} className={`${theme.card} border ${theme.border} rounded-lg p-2 sm:p-3 min-w-0`}>
-                    <div className="text-white/50 text-xs sm:text-sm uppercase">{period} Change</div>
-                    <div className="text-base sm:text-xl truncate"><Badge value={changes[period]?.changePercent} /></div>
-                    {changes[period] && <div className="text-white/40 text-xs mt-1 truncate">{changes[period].change >= 0 ? '+' : ''}{changes[period].change} txns</div>}
-                  </div>
-                ))}
-              </div>
-              <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4`}>
-                <div className="text-white/50 text-xs sm:text-sm uppercase mb-2">7 Day Activity</div>
-                <div style={{ height: '150px' }}>
-                  <canvas ref={chartRef}></canvas>
-                  {chartData.length === 0 && <div className="flex items-center justify-center h-full text-white/40">Loading chart data...</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-
     const Dashboard=({token,onBack,onSwitch,onAffiliates,routeTab='dashboard',onTabRoute})=>{
       const[showMaintNotice,setShowMaintNotice]=useState(false); // MAINT-MIGRATION
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
@@ -5737,7 +5298,7 @@
           }
         };
         const runLiveScan=()=>{
-        if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;}
+        if(feeRetry>0){Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);boundariesCache=null;boundariesInflight=null;}
         /* Transient RPC failures should never reach the user as a button. Try up to three
            times, backing off, keeping the loading state up. Only a persistent failure gets
            surfaced — and then RETRY is a real choice, not a chore. */
@@ -5746,7 +5307,7 @@
             if(attempt){
               await new Promise(r=>setTimeout(r,600*attempt));
               Object.keys(realizedFeeCache).forEach(k=>delete realizedFeeCache[k]);
-              boundariesCache=null;
+              boundariesCache=null;boundariesInflight=null;
             }
             if(cancelled)return;
             let r;
@@ -5784,7 +5345,7 @@
             if(attempt){
               await new Promise(r=>setTimeout(r,600*attempt));
               Object.keys(deliveredCache).forEach(k=>delete deliveredCache[k]);
-              boundariesCache=null;
+              boundariesCache=null;boundariesInflight=null;
             }
             if(cancelled)return;
             let d;
@@ -5873,9 +5434,6 @@
       const[showHolderModal,setShowHolderModal]=useState(false);
       const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
       const[showXsShareModal,setShowXsShareModal]=useState(false);
-      const[showCombinedXsShareModal,setShowCombinedXsShareModal]=useState(false);
-      const[xsShareOtherData,setXsShareOtherData]=useState(null);
-      const[xsShareOtherLoading,setXsShareOtherLoading]=useState(false);
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
       const[showValueGenShareModal,setShowValueGenShareModal]=useState(false);
       const[showAllocationShareModal,setShowAllocationShareModal]=useState(false);
@@ -5884,11 +5442,7 @@
       const[affiliateShareMonth,setAffiliateShareMonth]=useState(null);
       const[affiliateShareData,setAffiliateShareData]=useState(null);
       const[affiliateShareLoading,setAffiliateShareLoading]=useState(false);
-      const[showLiquidityModal,setShowLiquidityModal]=useState(false);
-      const[showTransactionModal,setShowTransactionModal]=useState(false);
-      const[liquidityChange24h,setLiquidityChange24h]=useState(null);
       const[txnChange24h,setTxnChange24h]=useState(null);
-      const[tokensInLPChange24h,setTokensInLPChange24h]=useState(null);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
       const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
       
@@ -6245,7 +5799,6 @@
         setShowRHCores(false);
         setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
         setHoldersByPeriod({current:null,d1Ago:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
-        setLiquidityChange24h(null);
         setTxnChange24h(null);
         /* Other-token caches used by the Combined share cards. They were never reset on a
            token switch, so after PTGC → UFO the "other" slot still held UFO's numbers and the
@@ -6253,7 +5806,6 @@
         setOtherTokenPairs([]);
         setCombinedBurnOtherData(null);
         setCombinedValueGenOtherData(null);
-        setXsShareOtherData(null);
         setLoadError(null);
 
         let loadCancelled=false;
@@ -6355,14 +5907,10 @@
           if(hc!==null)setHolderChange(hc);
           
           // Calculate liquidity and transaction changes from history
-          const liqChange = getLiquidityChange(token, 24);
-          if (liqChange) setLiquidityChange24h(liqChange.changePercent);
           
           const txnChange = getTransactionChange(token, 24);
           if (txnChange) setTxnChange24h(txnChange.changePercent);
           
-          const tilpChange = getTokensInLPChange(token, 24);
-          if (tilpChange) setTokensInLPChange24h(tilpChange.changePercent);
           
           // Start these in parallel after initial load
           if(cfg.stakingContract){
@@ -7004,6 +6552,15 @@
                   </div>
 
                   <div className="flex-1"></div>
+                  {(()=>{
+                    /* PTGC's windows come from burn-summary.json (UFO's are read live). Say when
+                       that file is old instead of presenting stale windows as current. */
+                    if(token!=='PTGC'||burnPeriods===undefined)return null;
+                    const age=burnHistoryAgeMs();
+                    if(age==null||age<BURN_HISTORY_STALE_MS)return null;
+                    const tooOld=age>BURN_HISTORY_MAX_AGE_MS;
+                    return <div className="text-[10px] uppercase tracking-[0.14em] text-amber-300/70 text-right mb-1" title={tooOld?'The burn snapshot is more than a week old, so these windows are shown as unknown rather than as stale numbers.':'These windows come from the hourly burn snapshot, which has not been refreshed recently.'}>{tooOld?'snapshot '+fmtSnapshotAge(age).replace(' ago','')+' old':'as of '+fmtSnapshotAge(age)}</div>;
+                  })()}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {/* burnPeriods: undefined = chain scan still running (show "Loading"), null = scan failed
                         (show "—"), object = real numbers. It used to initialise to zeros, so UFO's 7D/30D/90D
@@ -7805,9 +7362,20 @@
                         fetchBurn(otherCfg.address,otherCfg.decimals),
                         dsPairsFor(otherCfg.address).then(ps0=>({pairs:ps0})).then(d=>{const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));return ps.length?parseFloat(ps[0].priceUsd)||0:0}).catch(()=>0)/* MIGRATION: was fragile /pairs/{mainPair} .pair?.priceUsd — hardened to robust /tokens/ best-pair (matches usdOf) */
                       ]).then(([burnData,price])=>{
-                        const bp=getBurnPeriods(otherToken);
-                        setCombinedBurnOtherData({burn:burnData,burnPeriods:bp,price});
-                        setCombinedBurnLoading(false);
+                        /* UFO's windows come from chain (burn-summary.json describes the OLD UFO
+                           contract); PTGC's from the file. Show the card at once with the windows
+                           marked "loading" (undefined) and let the chain scan fill them in. */
+                        if(otherToken==='UFO'){
+                          setCombinedBurnOtherData({burn:burnData,burnPeriods:undefined,price});
+                          setCombinedBurnLoading(false);
+                          const _fp=(otherTokenPairs||[]).reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+                          fetchBurnPeriodsOnChain(otherCfg.address,otherCfg.decimals,(_fp&&isFinite(_fp))?_fp:UFO_LAUNCH_FALLBACK_MS)
+                            .then(bp=>setCombinedBurnOtherData(d=>d?{...d,burnPeriods:bp||null}:d))
+                            .catch(()=>setCombinedBurnOtherData(d=>d?{...d,burnPeriods:null}:d));
+                        }else{
+                          setCombinedBurnOtherData({burn:burnData,burnPeriods:getBurnPeriods(otherToken),price});
+                          setCombinedBurnLoading(false);
+                        }
                       }).catch(()=>setCombinedBurnLoading(false));
                     }
                   }} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500/20 to-orange-600/20 border border-orange-400/30 text-orange-300 hover:from-orange-500/30 hover:to-orange-600/30 transition-all text-left">
@@ -9437,138 +9005,6 @@
             );
           })()}
 
-          {/* ===== COMBINED X's SHARE MODAL ===== */}
-          {showCombinedXsShareModal&&(()=>{
-            const OB="'Orbitron',monospace";
-            const RJ="'Rajdhani',sans-serif";
-            const isPTGC=token==='PTGC';
-            const ptgcPrice=isPTGC?(data?.price||0):(xsShareOtherData?.price||0);
-            const ufoPrice=isPTGC?(xsShareOtherData?.price||0):(data?.price||0);
-            const ptgcChange=isPTGC?(data?.change||0):(xsShareOtherData?.change||0);
-            const ufoChange=isPTGC?(xsShareOtherData?.change||0):(data?.change||0);
-            const ptgcMcap=isPTGC?(data?.mcap||0):(xsShareOtherData?.mcap||0);
-            const ufoMcap=isPTGC?(xsShareOtherData?.mcap||0):(data?.mcap||0);
-            const ptgcLiq=isPTGC?(data?.liq||0):(xsShareOtherData?.liq||0);
-            const ufoLiq=isPTGC?(xsShareOtherData?.liq||0):(data?.liq||0);
-            const ptgcHolders=isPTGC?holders:null;
-            const ufoHolders=!isPTGC?holders:null;
-            const fmtP=(p)=>{if(!p||isNaN(p)||p===0)return'—';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);return'$'+p.toExponential(4);};
-            const fmtMC=(v)=>{if(!v)return'—';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';return'$'+(v/1e3).toFixed(0)+'K';};
-            const calcPX=(t,p)=>{if(!p||p<=0||t<=p)return null;return t/p;};
-            const calcMCX=(mc,s,p)=>{if(!s||!p||p<=0)return null;const tp=mc/s;return tp<=p?null:tp/p;};
-            const calcLX=(tl,cl)=>{if(!cl||cl<=0||tl<=cl)return null;return tl/cl;};
-            const fmtX=(x)=>{if(!x)return null;if(x>=1e5)return Math.round(x/1000)+'K';if(x>=1e3)return(x/1e3).toFixed(1)+'K';if(x>=100)return Math.round(x)+'x';if(x>=10)return x.toFixed(1)+'x';return x.toFixed(2)+'x';};
-            const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-            const mkCats=(p,s,liq)=>[
-              {label:'PRICE',catCol:'#FFD700',tiles:[
-                {icon:'🪙',label:'To a Penny',sub:'$0.01',x:calcPX(0.01,p)},
-                {icon:'💲',label:'To a Dime',sub:'$0.10',x:calcPX(0.10,p)},
-                {icon:'💰',label:'To a Quarter',sub:'$0.25',x:calcPX(0.25,p)},
-              ]},
-              {label:'MARKET CAP',catCol:'#60A5FA',tiles:[
-                {icon:'📊',label:'$25M Cap',sub:'Market Cap',x:calcMCX(25e6,s,p)},
-                {icon:'🚀',label:'$100M Cap',sub:'Market Cap',x:calcMCX(100e6,s,p)},
-                {icon:'🌕',label:'$1B Cap',sub:'Market Cap',x:calcMCX(1e9,s,p)},
-              ]},
-              {label:'LIQUIDITY',catCol:'#34D399',tiles:[
-                {icon:'💧',label:'$10M Liq',sub:'Liquidity',x:calcLX(10e6,liq)},
-                {icon:'🌊',label:'$25M Liq',sub:'Liquidity',x:calcLX(25e6,liq)},
-                {icon:'🏦',label:'$100M Liq',sub:'Liquidity',x:calcLX(100e6,liq)},
-              ]},
-            ];
-            const ptgcCats=mkCats(ptgcPrice,TOKENS.PTGC.totalSupply,ptgcLiq);
-            const ufoCats=mkCats(ufoPrice,TOKENS.UFO.totalSupply,ufoLiq);
-            const sc=Math.min(1,(window.innerWidth-40)/1200,(window.innerHeight-120)/675);
-            const XCard=({tName,tLogo,tCol,tRgb,tAddr,tPrice,tChange,tMcap,tHolders,cats,tPlsRatio})=>{
-              const up=tChange>=0;
-              return(
-                <div style={{flex:1,borderRadius:'12px',overflow:'hidden',border:`2px solid rgba(${tRgb},0.5)`,display:'flex',flexDirection:'column',boxShadow:`0 0 24px rgba(${tRgb},0.1)`}}>
-                  {/* Header */}
-                  <div style={{background:`linear-gradient(135deg,rgba(${tRgb},0.14) 0%,rgba(0,0,0,0.7) 100%)`,borderBottom:`1px solid rgba(${tRgb},0.22)`,padding:'0 16px',height:'60px',display:'flex',alignItems:'center',gap:'0',flexShrink:0}}>
-                    <div style={{width:'44px',height:'44px',borderRadius:'50%',border:`2px solid rgba(${tRgb},0.75)`,boxShadow:`0 0 12px rgba(${tRgb},0.5)`,overflow:'hidden',flexShrink:0,background:'#0d0d0d',display:'flex',alignItems:'center',justifyContent:'center',marginRight:'10px'}}>
-                      <img src={tLogo} alt={tName} style={{width:'40px',height:'40px'}}/>
-                    </div>
-                    <div style={{flexShrink:0,marginRight:'16px'}}>
-                      <div style={{fontFamily:OB,fontSize:'24px',fontWeight:900,color:tCol,lineHeight:1,textShadow:`0 0 14px rgba(${tRgb},0.6)`}}>{tName}</div>
-                      <div style={{fontFamily:'monospace',fontSize:'10px',color:'rgba(255,255,255,0.25)',marginTop:'2px'}}>{tAddr.slice(0,8)}...{tAddr.slice(-4)}</div>
-                    </div>
-                    <div style={{width:'1px',height:'32px',background:'rgba(255,255,255,0.1)',marginRight:'16px',flexShrink:0}}/>
-                    <div style={{flexShrink:0,marginRight:'16px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                        <span style={{fontFamily:OB,fontSize:'17px',fontWeight:700,color:tCol}}>{fmtP(tPrice)}</span>
-                        <span style={{fontFamily:RJ,fontSize:'14px',fontWeight:700,color:up?'#4ade80':'#f87171'}}>{up?'▲':'▼'}{Math.abs(tChange).toFixed(2)}%</span>
-                      </div>
-                      <div style={{fontFamily:RJ,fontSize:'11px',color:'rgba(255,255,255,0.35)',marginTop:'1px'}}>Price (24H)</div>
-                    </div>
-                    <div style={{flexShrink:0,marginRight:'16px'}}>
-                      <div style={{fontFamily:OB,fontSize:'15px',fontWeight:700,color:'rgba(255,255,255,0.8)'}}>{fmtMC(tMcap)}</div>
-                      <div style={{fontFamily:RJ,fontSize:'11px',color:'rgba(255,255,255,0.35)',marginTop:'1px'}}>Market Cap</div>
-                    </div>
-                    <div style={{width:'1px',height:'32px',background:'rgba(255,255,255,0.1)',marginRight:'16px',flexShrink:0}}/>
-                    <div style={{flexShrink:0,marginRight:'16px'}}>
-                      <div style={{fontFamily:OB,fontSize:'15px',fontWeight:700,color:'rgba(255,255,255,0.8)'}}>{tPlsRatio}</div>
-                      <div style={{fontFamily:RJ,fontSize:'11px',color:'rgba(255,255,255,0.35)',marginTop:'1px'}}>PLS Ratio</div>
-                    </div>
-                    {tHolders!=null&&<div style={{flexShrink:0}}>
-                      <div style={{fontFamily:OB,fontSize:'15px',fontWeight:700,color:'rgba(255,255,255,0.8)'}}>{fmt(tHolders)||'—'}</div>
-                      <div style={{fontFamily:RJ,fontSize:'11px',color:'rgba(255,255,255,0.35)',marginTop:'1px'}}>Holders</div>
-                    </div>}
-                    <div style={{flex:1}}/>
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontFamily:OB,fontSize:'10px',color:tCol,letterSpacing:'2.5px'}}>THE X'S REPORT</div>
-                      <div style={{fontFamily:RJ,fontSize:'11px',color:'rgba(255,255,255,0.25)',marginTop:'2px'}}>{today} · ptgc-ufo.com</div>
-                    </div>
-                  </div>
-                  {/* Body: 3 category columns × 3 tiles */}
-                  <div style={{flex:1,padding:'10px 14px',background:'rgba(0,0,0,0.5)',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
-                    {cats.map(({label,catCol,tiles},ci)=>(
-                      <div key={ci} style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                        <div style={{fontFamily:OB,fontSize:'9px',fontWeight:700,color:catCol,textTransform:'uppercase',letterSpacing:'2px',textAlign:'center',paddingBottom:'2px',borderBottom:'1px solid rgba(255,255,255,0.07)'}}>{label}</div>
-                        {tiles.map(({icon,label:tl,sub,x},ti)=>{
-                          const done=!x;
-                          const xStr=done?null:fmtX(x);
-                          const vfs=xStr?xStr.length>=6?'18px':xStr.length>=4?'22px':'28px':'16px';
-                          return(
-                            <div key={ti} style={{flex:1,position:'relative',background:'rgba(0,0,0,0.4)',border:done?'2px solid rgba(255,255,255,0.15)':'2px solid rgba(255,255,255,0.68)',borderRadius:'8px',display:'flex',alignItems:'center',gap:'8px',padding:'6px 10px 12px 10px',overflow:'hidden'}}>
-                              <div style={{fontSize:'22px',lineHeight:1,flexShrink:0,filter:done?'grayscale(1) opacity(0.3)':'none'}}>{icon}</div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontFamily:OB,fontSize:'8px',fontWeight:700,color:done?'rgba(255,255,255,0.2)':catCol,textTransform:'uppercase',letterSpacing:'0.8px',lineHeight:1.2}}>{tl}</div>
-                                <div style={{fontFamily:OB,fontSize:done?'14px':vfs,fontWeight:900,color:done?'rgba(255,255,255,0.18)':'#ffffff',lineHeight:1.1,marginTop:'2px'}}>{done?'✓ Done':xStr}</div>
-                                <div style={{fontFamily:RJ,fontSize:'10px',color:done?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.4)',marginTop:'2px'}}>{done?'Achieved':sub}</div>
-                              </div>
-                              {/* Thermometer bar — log scale, maxX=1000 */}
-                              {(()=>{const maxX=1000;const fillPct=done?1.0:x>=maxX?0.01:Math.max(0.01,Math.min(1,Math.log(maxX/x)/Math.log(maxX)));return(<div style={{position:'absolute',bottom:0,left:0,right:0,height:'5px',background:'rgba(0,0,0,0.6)'}}><div style={{height:'100%',width:`${fillPct*100}%`,background:catCol,boxShadow:`0 0 5px ${catCol},0 0 10px ${catCol}`,borderRadius:'0 3px 0 0'}}/></div>);})()}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            };
-            return(
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 modal-overlay" onClick={()=>closeModalAndReturn(setShowCombinedXsShareModal)}>
-                <div className="relative" onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>closeModalAndReturn(setShowCombinedXsShareModal)} style={{position:'absolute',top:`${-36*sc}px`,right:0,color:'rgba(255,255,255,0.6)',fontSize:'18px',background:'none',border:'none',cursor:'pointer'}}>✕ Close</button>
-                  <div style={{width:`${1200*sc}px`,height:`${675*sc}px`}}>
-                    <div style={{transform:`scale(${sc})`,transformOrigin:'top left',width:'1200px',height:'675px',background:'#0a0a0a',overflow:'hidden',boxSizing:'border-box',padding:'20px 22px',display:'flex',flexDirection:'column',gap:'10px'}}>
-                      {/* Title bar */}
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',height:'22px',flexShrink:0}}>
-                        <div style={{fontFamily:OB,fontSize:'14px',fontWeight:900,letterSpacing:'3px',background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>🚀 THE X'S REPORT — PRICE MILESTONE MULTIPLIERS</div>
-                        {xsShareOtherLoading&&<div style={{fontFamily:RJ,fontSize:'12px',color:'rgba(255,255,255,0.35)'}}>Fetching live data…</div>}
-                      </div>
-                      {/* PTGC card */}
-                      <XCard tName="PTGC" tLogo={TOKENS.PTGC.logo} tCol="#D4AF37" tRgb="212,175,55" tAddr={TOKENS.PTGC.address} tPrice={ptgcPrice} tChange={ptgcChange} tMcap={ptgcMcap} tHolders={ptgcHolders} cats={ptgcCats} tPlsRatio={isPTGC?plsRatio:'—'}/>
-                      {/* UFO card */}
-                      <XCard tName="UFO" tLogo={TOKENS.UFO.logo} tCol="#7CFC00" tRgb="124,252,0" tAddr={TOKENS.UFO.address} tPrice={ufoPrice} tChange={ufoChange} tMcap={ufoMcap} tHolders={ufoHolders} cats={ufoCats} tPlsRatio={!isPTGC?plsRatio:'—'}/>
-                    </div>
-                  </div>
-                  <div style={{textAlign:'center',marginTop:'10px',color:'rgba(255,255,255,0.35)',fontSize:'13px'}}>Screenshot to save &amp; share</div>
-                </div>
-              </div>
-            );
-          })()}
 
                     {/* Combined PTGC & UFO Leagues Modal */}
           {showCombinedLeaguesModal&&(
@@ -9967,30 +9403,6 @@
             );
           })()}
           
-          {showLiquidityModal && (
-            <LiquidityModal
-              open={showLiquidityModal}
-              close={() => setShowLiquidityModal(false)}
-              token={token}
-              currentLiquidity={data?.liq || 0}
-              theme={theme}
-              cfg={cfg}
-            />
-          )}
-          
-          {showTransactionModal && (
-            <TransactionModal
-              open={showTransactionModal}
-              close={() => setShowTransactionModal(false)}
-              token={token}
-              currentTxns={(data?.buys || 0) + (data?.sells || 0)}
-              currentBuys={data?.buys || 0}
-              currentSells={data?.sells || 0}
-              theme={theme}
-              cfg={cfg}
-            />
-          )}
-          
           <MaintenanceNotice open={showMaintNotice} onClose={()=>setShowMaintNotice(false)}/>{/* MAINT-MIGRATION */}
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
           
@@ -10259,12 +9671,10 @@
       const[data,setData]=useState(null);
       const[loading,setLoading]=useState(true);
       const[error,setError]=useState(null);
-      const[searchTerm,setSearchTerm]=useState('');
       const[selectedReferrer,setSelectedReferrer]=useState(null);
       const[activeTab,setActiveTab]=useState('payments');
       const[viewingMonth,setViewingMonth]=useState(null);
       const[expandedReceipts,setExpandedReceipts]=useState(new Set());
-      const[expandedMonthTx,setExpandedMonthTx]=useState(null);
       const[sortCol,setSortCol]=useState('ptgc');
       const[sortDir,setSortDir]=useState('desc');
       const[showRegistry,setShowRegistry]=useState(false);
@@ -10438,13 +9848,6 @@
       const formatMonthYear=(m)=>m?new Date(m+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
       
       // Filter leaderboard by search
-      const filteredLeaderboard=useMemo(()=>{
-        if(!stats?.leaderboard)return[];
-        if(!searchTerm)return stats.leaderboard;
-        const term=searchTerm.toLowerCase();
-        return stats.leaderboard.filter(r=>r.username.toLowerCase().includes(term)||r.wallet?.toLowerCase().includes(term));
-      },[stats?.leaderboard,searchTerm]);
-      
       // Get referrer details with their monthly breakdown and transaction details
       const getReferrerDetails=(username)=>{
         if(!data)return null;
