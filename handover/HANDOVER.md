@@ -22,7 +22,7 @@ Update it at the end of every session.
 | Phase 2 — data quick wins (d2, d3, d6) | **Done, deployed** |
 | Phase 2 — burn-summary staleness label (d4, browser half) | **Done, deployed** |
 | Phase 2 — `ufo-ptgc-burns` generator repoint (d4, pipeline half) | **Done in repo, awaiting push + first Action run** |
-| Phase 2 — precompute UFO scans (d1) | Partly covered by the generator change (lifetime pTGC-burned now comes from the file); the fee/burn-period scans are still browser-side |
+| Phase 2 — precompute UFO scans (d1) | **Done in repo, awaiting push + first Action run.** `build-value-generated.mjs` now also writes `burnPeriods.UFO` and `delivered.ptgcBurnedAll` (+ a `ptgcPreWindow` checkpoint). With a fresh file a UFO visit makes ~30 RPC calls and 0 `eth_getLogs` (was ~150/63 fresh, ~1,100/1,010 stale). |
 | Phase 3 — decompose + polish | Not started |
 
 ## Sources of truth for numbers
@@ -31,8 +31,9 @@ Update it at the end of every session.
 - **Burn totals**: `balanceOf(0x369)` on chain.
 - **PTGC burn windows (24H/7D/30D/90D)**: `data/burn-summary.json` (hourly, `update-burn-history.yml`).
   Shown with an amber "as of" label after 6 h, as "—" after 7 days.
-- **UFO burn windows**: read live from chain — `burn-summary.json`'s UFO section still describes the
-  OLD contract (`fetch-burn-history.js` line 31). Don't use it for UFO.
+- **UFO burn windows**: `data/value-generated.json` → `burnPeriods.UFO` when <3 h old, otherwise a
+  live chain scan. `burn-summary.json`'s UFO section still describes the OLD contract
+  (`fetch-burn-history.js` line 31) — never use it for UFO.
 - **UFO Value Generated**: `data/value-generated.json` (hourly, `build-value-generated.yml`); the
   browser falls back to a live scan when the file is >3 h old.
 - **PTGC burned by UFO** — always OLD + NEW contract, headline and period boxes alike (Shaka's
@@ -52,14 +53,18 @@ Update it at the end of every session.
    real test of the fixes — check the UFO dashboard and the "PTGC Burned by UFO" panel that day.
 3. **`burnPeriods` state semantics**: `undefined` = loading, `null` = failed, object = data.
    Never seed it with zeros; "$0" is a claim.
-4. **`ufo-ptgc-burns.json` schema 2**: `PTGCbyUFO` is now the COMBINED total across both UFO
+4. **`getLogsChunked(..., exactTo)`** — a scan whose end block is NOT the chain head must pass
+   `exactTo=true`, or the last chunk is sent as `toBlock:'latest'` and silently extends to the
+   present (found 2026-09-08 in the pre-window scan; would have double-counted after Oct 6).
+   Same helper exists in both `index.html` and `build-value-generated.mjs` — keep them in sync.
+5. **`ufo-ptgc-burns.json` schema 2**: `PTGCbyUFO` is now the COMBINED total across both UFO
    contracts; `byContract.v1` / `byContract.v2` split it. The deployed `index.html` reads
    `byContract.v1` as the historical base. Do not deploy the new generator with an older
    `index.html`, or the headline double-counts v2.
-5. **`Dashboard` is not keyed by token on purpose.** The Socials tab switches token and then
+6. **`Dashboard` is not keyed by token on purpose.** The Socials tab switches token and then
    opens a share modal on the same instance; a remount would drop the modal. The token-switch
    race is handled inside `load()` with `loadCancelled` guards instead.
-6. **Testing.** There is no test suite in the repo yet (roadmap b8). The working method so far:
+7. **Testing.** There is no test suite in the repo yet (roadmap b8). The working method so far:
    compile the `text/babel` block with the exact `@babel/standalone@7.26.4` in Node, then mount
    the page in headless Chromium with the CDN scripts served from the pinned npm packages and
    the data APIs stubbed (RPC, DexScreener, PulseScan; real `data/*.json`). Walk Home → PTGC →
@@ -68,13 +73,14 @@ Update it at the end of every session.
 
 ## Next up (in order)
 
-1. Push this session's changes and run the "Fetch UFO PTGC Burns" workflow manually
-   (Actions → workflow_dispatch). First run scans the v2 contract from 2026-07-08 (~270 log
-   chunks + ~150 receipts). Check the summary in the job log: v1 lifetime should match today's
-   4.59B; v2 lifetime should be in the low hundreds of millions.
-2. Verify on the live site that "PTGC Burned by UFO" still reads ≈ v1 + v2 (≈ 4.73B on Sep 8).
-3. Phase 2 remainder: move UFO's fee scan and burn-period scan into `build-value-generated.mjs`
-   (d1) — that's what removes the ~1,000 `eth_getLogs` a cold UFO visit still makes.
+1. Push and run "Build Value Generated" manually once (Actions → workflow_dispatch). The log's
+   last line should say `lifetime pTGC by UFO v2: … (exact) | UFO burn periods: fresh`.
+   Then the live UFO dashboard's burn tiles should appear instantly (no "Loading") with a small
+   "as of Xm ago" label once the file is >1 h old.
+2. (Done 2026-09-08) "Fetch UFO PTGC Burns" ran: v1 4.59B, v2 148.9M, combined 4.73B ✓.
+3. Phase 2 leftovers, all small: d5 (return scan errors instead of `lastLogError` global),
+   d7 (one constants block), d8 (dead mcap rescale), d9 (vol windows nulled on spikes),
+   d10 (UFO ATH is the old contract's), d11 (holder-tier scan cancellation), d12 (affiliates coverFee).
 4. Phase 1 build step (b1/b2) when ready — biggest payoff on the list; decide hosting first
    (currently GitHub Pages, so `vite build` → `dist/` → Pages from `dist` or from a `gh-pages` branch).
 5. Phase 3 polish (Modal wrapper, ShareCard shell, jargon explainers, a11y).

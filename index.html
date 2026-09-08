@@ -500,17 +500,22 @@
        Failures are never cached: a null must stay retryable, and caching it would
        turn one transient RPC hiccup into five minutes of "chain read failed". */
     const logsInflight={};
-    const getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK)=>{
+    /* exactTo: getLogsRange sends the final slice as toBlock:'latest' when it reaches the
+       scan's end block, which is right when that end IS the chain head (a just-mined block can
+       404 by number) and WRONG for a historical slice — 'latest' then silently extends the last
+       chunk to the present and double-counts everything after it. Callers scanning a range that
+       ends before the head pass exactTo=true. */
+    const getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK,exactTo=false)=>{
       if(toBlock<fromBlock)return[];
-      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${chunk}|${cacheBucket()}`;
+      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${chunk}|${exactTo?1:0}|${cacheBucket()}`;
       if(logsInflight[key])return logsInflight[key];
-      const p=_getLogsChunked(address,topics,fromBlock,toBlock,chunk);
+      const p=_getLogsChunked(address,topics,fromBlock,toBlock,chunk,exactTo);
       putBucketed(logsInflight,key,p);
       p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
       return p;
     };
 
-    const _getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK)=>{
+    const _getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK,exactTo=false)=>{
       if(toBlock<fromBlock)return[];
       const ranges=[];
       for(let s=fromBlock;s<=toBlock;s+=chunk)ranges.push([s,Math.min(s+chunk-1,toBlock)]);
@@ -521,7 +526,7 @@
       }
       const out=[];const CONC=3;
       for(let i=0;i<ranges.length;i+=CONC){
-        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,toBlock)));
+        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,exactTo?Infinity:toBlock)));
         for(const r of res){ if(r===null)return null; out.push(...r); }
       }
       return out;
@@ -1255,8 +1260,8 @@
         const to=scanFrom-1;
         const ufoTopic='0x'+encodeAddress(ufoAddress);
         const[ufoOut,ptgcBurns]=await Promise.all([
-          getLogsChunked(ufoAddress,[TRANSFER_TOPIC,ufoTopic,null],from,to,PTGC_PRE_WINDOW_CHUNK),
-          getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],from,to,PTGC_PRE_WINDOW_CHUNK)
+          getLogsChunked(ufoAddress,[TRANSFER_TOPIC,ufoTopic,null],from,to,PTGC_PRE_WINDOW_CHUNK,true),
+          getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],from,to,PTGC_PRE_WINDOW_CHUNK,true)
         ]);
         if(!ufoOut||!ptgcBurns)return{ok:false,amount:0};
         const swapbackTxs={};for(const l of ufoOut)swapbackTxs[l.transactionHash]=true;
@@ -2312,6 +2317,29 @@
        while the live scan refreshes it in the background. Hour-old numbers beat dashes.
        Beyond this age the file is too old to responsibly display even as interim. */
     const VALUE_GEN_INTERIM_MS=48*60*60*1000;
+    /* One download of the snapshot per 5-minute bucket, shared by the Dashboard's load()
+       (UFO burn periods) and the fee effect (Value Generated / delivered). Resolves
+       {json, ageMs, valid} — never rejects. `valid` = built for THIS UFO contract with both
+       scans ok. */
+    let _vgSnap=null;
+    const fetchValueGenSnapshot=()=>{
+      const bucket=cacheBucket();
+      if(_vgSnap&&_vgSnap.bucket===bucket)return _vgSnap.p;
+      const p=(async()=>{
+        try{
+          const res=await fetch(VALUE_GEN_URL+'?t='+bucket);
+          if(!res.ok)return{json:null,ageMs:Infinity,valid:false};
+          const j=await res.json();
+          const valid=!!(j&&j.meta&&j.delivered&&j.delivered.ok&&j.realizedFees&&j.realizedFees.ok
+            &&(j.meta.ufoAddress||'').toLowerCase()===TOKENS.UFO.address.toLowerCase()&&j.meta.generatedAt);
+          const ageMs=valid?(Date.now()-Date.parse(j.meta.generatedAt)):Infinity;
+          return{json:j,ageMs,valid};
+        }catch(e){return{json:null,ageMs:Infinity,valid:false};}
+      })();
+      _vgSnap={bucket,p};
+      p.then(r=>{if(!r.valid&&_vgSnap&&_vgSnap.p===p)_vgSnap=null;});   // don't pin a failed download for 5 min
+      return p;
+    };
     // (removed) HOLDER_HISTORY_URL / fetchHolderHistory — the old root holder-history.json
     // and its reader were only used by the now-deleted HolderChartModal. The live holder
     // chart reads data/holder-history.json via fetchHolderHistoryNew() / snapshotsFor().
@@ -5142,6 +5170,7 @@
       const[sortDir,setSortDir]=useState('desc');
       const[lastUpdate,setLastUpdate]=useState(new Date());
       const[burnPeriods,setBurnPeriods]=useState(undefined); // undefined = loading, null = failed, object = data (never zeros: "$0" is a claim)
+      const[burnPeriodsSource,setBurnPeriodsSource]=useState(null); // {ageMs} when UFO's windows came from the hourly snapshot
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
       // MIGRATION: UFO's Value Generated is always measured on-chain (see fetchRealizedFees).
@@ -5401,13 +5430,11 @@
           if(cancelled)return;
           if(feeRetry===0){
             try{
-              const res=await fetch(VALUE_GEN_URL+'?t='+cacheBucket());
-              if(res.ok){
-                const j=await res.json();
-                const validFile=j&&j.meta&&j.delivered&&j.delivered.ok&&j.realizedFees&&j.realizedFees.ok
-                  &&(j.meta.ufoAddress||'').toLowerCase()===TOKENS.UFO.address.toLowerCase()
-                  &&j.meta.generatedAt;
-                const ageMs=validFile?(Date.now()-Date.parse(j.meta.generatedAt)):Infinity;
+              const snap=await fetchValueGenSnapshot();
+              if(snap.json){
+                const j=snap.json;
+                const validFile=snap.valid;
+                const ageMs=snap.ageMs;
                 if(validFile&&ageMs<VALUE_GEN_STALE_MS&&!cancelled){
                   setRealizedFees(j.realizedFees);
                   applyDelivered(j.delivered);
@@ -5807,6 +5834,7 @@
         setPtgcPrice(0);
         setHolderChange(null);
         setBurnPeriods(undefined);
+        setBurnPeriodsSource(null);
         setLive24hBurn(null);
         setValueGenPeriod('7d');
         setValueGenShowTokens(false);
@@ -5883,14 +5911,29 @@
           const _fp=d?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
           const firstPoolMs=(_fp&&isFinite(_fp))?_fp:null;
           if(token==='UFO'){
-            /* `if(bp)` silently kept the zeroed initial state when the chain read failed,
-               so 7D/30D/90D rendered "$0" — a claim, not an absence. null means unknown. */
-            const bpP=fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS);
-            bpP.then(bp=>{
+            /* UFO burn windows: the hourly snapshot carries them (schema 2, roadmap d1) so a
+               visitor no longer pays ~55 eth_getLogs for four numbers. Use it when it is fresh
+               and was scanned this run (not carried forward from a failed run); otherwise read
+               the chain as before. null means unknown — never zeros. */
+            (async()=>{
+              try{
+                const snap=await fetchValueGenSnapshot();
+                if(loadCancelled)return;
+                const bp=snap.valid&&snap.ageMs<VALUE_GEN_STALE_MS&&snap.json.burnPeriods&&snap.json.burnPeriods.UFO;
+                if(bp&&!bp.carriedForward&&typeof bp.h24==='number'&&typeof bp.d90==='number'){
+                  setBurnPeriods({h12:bp.h12||0,h24:bp.h24,d7:bp.d7,d30:bp.d30,d90:bp.d90,sinceLaunch:!!bp.sinceLaunch,burnTxs:bp.burnTxs});
+                  setLive24hBurn(bp.h24);
+                  setBurnPeriodsSource({ageMs:snap.ageMs});
+                  return;
+                }
+              }catch(e){}
+              if(loadCancelled)return;
+              setBurnPeriodsSource(null);
+              const bp=await fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS).catch(()=>null);
               if(loadCancelled)return;
               setBurnPeriods(bp||null);
               setLive24hBurn(bp?bp.h24:null);   // same scan — it used to be launched a second time just for this number
-            }).catch(()=>{if(!loadCancelled){setBurnPeriods(null);setLive24hBurn(null);}});
+            })();
             /* fetchPtgcBurnedByUfo issued three log scans that fetchDeliveredValue already
                performs, and the PTGC panel now prefers the delivered figures anyway (they
                discriminate out pTGC's own 0.5% burn fee). It is kept only as a FALLBACK and
@@ -6570,7 +6613,13 @@
                   {(()=>{
                     /* PTGC's windows come from burn-summary.json (UFO's are read live). Say when
                        that file is old instead of presenting stale windows as current. */
-                    if(token!=='PTGC'||burnPeriods===undefined)return null;
+                    if(burnPeriods===undefined)return null;
+                    if(token==='UFO'){
+                      /* windows from the hourly snapshot: label them once they are more than an hour old */
+                      const a=burnPeriodsSource&&burnPeriodsSource.ageMs;
+                      if(a==null||a<60*60*1000)return null;
+                      return <div className="text-[10px] uppercase tracking-[0.14em] text-white/35 text-right mb-1" title="These windows come from the hourly on-chain snapshot.">as of {fmtSnapshotAge(a)}</div>;
+                    }
                     const age=burnHistoryAgeMs();
                     if(age==null||age<BURN_HISTORY_STALE_MS)return null;
                     const tooOld=age>BURN_HISTORY_MAX_AGE_MS;

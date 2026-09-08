@@ -116,7 +116,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
         return r.result;
       }
       const msg=(r&&r.error&&r.error.message)||'no result field';
-      if(depth<6&&(b-a)>250){
+      if(depth<10&&(b-a)>250){
         const mid=Math.floor((a+b)/2);
         const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
         if(left===null)return null;
@@ -141,20 +141,25 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
        Failures are never cached: a null must stay retryable, and caching it would
        turn one transient RPC hiccup into five minutes of "chain read failed". */
     const logsInflight={};
-    const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+    /* exactTo: getLogsRange sends the final slice as toBlock:'latest' when it reaches the
+       scan's end block, which is right when that end IS the chain head (a just-mined block can
+       404 by number) and WRONG for a historical slice — 'latest' then silently extends the last
+       chunk to the present and double-counts everything after it. Callers scanning a range that
+       ends before the head pass exactTo=true. */
+    const getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK,exactTo=false)=>{
       if(toBlock<fromBlock)return[];
-      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${cacheBucket()}`;
+      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${chunk}|${exactTo?1:0}|${cacheBucket()}`;
       if(logsInflight[key])return logsInflight[key];
-      const p=_getLogsChunked(address,topics,fromBlock,toBlock);
+      const p=_getLogsChunked(address,topics,fromBlock,toBlock,chunk,exactTo);
       logsInflight[key]=p;
       p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
       return p;
     };
 
-    const _getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+    const _getLogsChunked=async(address,topics,fromBlock,toBlock,chunk=LOG_CHUNK,exactTo=false)=>{
       if(toBlock<fromBlock)return[];
       const ranges=[];
-      for(let s=fromBlock;s<=toBlock;s+=LOG_CHUNK)ranges.push([s,Math.min(s+LOG_CHUNK-1,toBlock)]);
+      for(let s=fromBlock;s<=toBlock;s+=chunk)ranges.push([s,Math.min(s+chunk-1,toBlock)]);
       if(ranges.length>MAX_LOG_RANGES){
         lastLogError=`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`;
         console.warn(lastLogError);
@@ -162,7 +167,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
       }
       const out=[];const CONC=3;
       for(let i=0;i<ranges.length;i+=CONC){
-        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,toBlock)));
+        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,exactTo?Infinity:toBlock)));
         for(const r of res){ if(r===null)return null; out.push(...r); }
       }
       return out;
@@ -197,12 +202,20 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
        would be wrong forever, with ok:true. See handoff section 8.4.
        The 0x0->latest fast path is also the query most likely to be silently
        capped, so its result is truncation-checked like any other. */
-    const fetchFeeTimeline=async(tokenAddress,fromBlock,toBlock)=>{
+    /* The fallback scan must start at the LAUNCH block, not at the 90-day boundary: a
+       FeesUpdated event older than the window sets the rates for every transfer inside it.
+       Scanning only the window dropped it once the token passed 90 days and reverted every
+       bucket to DEFAULT_FEE_RATES with ok:true. (Same fix as index.html, 2026-09-08.) */
+    const FEE_TIMELINE_CHUNK=100000;
+    const fetchFeeTimeline=async(tokenAddress,fromBlock,toBlock,launchBlock)=>{
       let arr=null;
       const full=await rpcFetch({jsonrpc:'2.0',method:'eth_getLogs',
         params:[{address:tokenAddress,fromBlock:'0x0',toBlock:'latest',topics:[FEES_UPDATED_TOPIC]}],id:1},20000);
       if(full&&Array.isArray(full.result)&&!looksTruncated(full.result.length))arr=full.result;
-      else arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],fromBlock,toBlock);
+      else{
+        const from=(launchBlock>0&&launchBlock<fromBlock)?launchBlock:fromBlock;
+        arr=await getLogsChunked(tokenAddress,[FEES_UPDATED_TOPIC],from,toBlock,FEE_TIMELINE_CHUNK);
+      }
       if(arr===null)return null;
       return arr.map(l=>({block:parseInt(l.blockNumber,16),rates:decodeFeesUpdated(l.data)}))
                 .sort((a,b)=>a.block-b.block);
@@ -367,7 +380,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
         const contractTopic='0x'+encodeAddress(tokenAddress);
         const[transferLogs,feeEvents]=await Promise.all([
           getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],scanFrom,cur),
-          fetchFeeTimeline(tokenAddress,scanFrom,cur)
+          fetchFeeTimeline(tokenAddress,scanFrom,cur,launch)
         ]);
         if(!transferLogs)return{ok:false,error:lastLogError||'chain read failed'};
         if(!feeEvents)return{ok:false,error:lastLogError||'could not read fee-change history'};
@@ -736,6 +749,87 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
       }catch(e){console.error('fetchDeliveredValue error:',e);return{ok:false,error:e.message||'unexpected error'};}
     };
 
+// ===== NEW (2026-09-08, roadmap d1): burn periods + lifetime pTGC, precomputed here so the
+// browser stops scanning them on every UFO visit =====
+
+    /* Total Supply Burned windows for UFO: sum of Transfer(->0x369) inside each timestamp
+       window. Includes launch/manual burns (correct: burned supply is burned supply). Ported
+       from index.html fetchBurnPeriodsOnChain. */
+    const fetchBurnPeriodsOnChain=async(tokenAddress,decimals,firstPoolMs)=>{
+      const blk=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
+      if(!blk.result)return null;
+      const cur=parseInt(blk.result,16);
+      const B=await getPeriodBoundaries(cur,firstPoolMs);
+      if(!B)return null;
+      const launch=B.launch;
+      const fromBlock=Math.max(0,B['90d'],launch);
+      const logs=await getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],fromBlock,cur);
+      if(!logs)return null;
+      const acc={h12:0,h24:0,d7:0,d30:0,d90:0};
+      for(const l of logs){
+        const b=parseInt(l.blockNumber,16);
+        const raw=BigInt(l.data&&l.data!=='0x'?l.data:'0x0');
+        const amt=decimals===18?weiToTokens(raw):Number(raw)/Math.pow(10,decimals);
+        if(b>=B['24h'])acc.h12+=amt;
+        if(b>=B['24h'])acc.h24+=amt;
+        if(b>=B['7d'])acc.d7+=amt;
+        if(b>=B['30d'])acc.d30+=amt;
+        acc.d90+=amt;
+      }
+      const out={...acc,sinceLaunch:fromBlock<=launch+1,burnTxs:logs.length,headBlock:cur,scanFrom:fromBlock};
+      console.log(`Burn periods (${tokenAddress.slice(0,8)}…): 24h=${Math.round(acc.h24).toLocaleString()} 7d=${Math.round(acc.d7).toLocaleString()} 30d=${Math.round(acc.d30).toLocaleString()} 90d=${Math.round(acc.d90).toLocaleString()} from ${logs.length} burn txs`);
+      return out;
+    };
+
+    /* LIFETIME pTGC burned by UFO. The delivered scan is clamped to max(90d, launch); once the
+       token is older than 90 days its "90d" bucket is no longer the lifetime figure. This adds
+       the slice the window no longer reaches, [launch, scanFrom), using the same two log
+       streams and the same 0.5%-fee-leg discrimination. The slice is immutable history, so
+       it is checkpointed in the output file (`delivered.ptgcPreWindow`) and later runs scan
+       only the blocks since the checkpoint. Ported from index.html fetchPtgcBurnedBeforeWindow. */
+    const PTGC_PRE_WINDOW_CHUNK=200000;
+    const sumPtgcBurnedInSwapbacks=(ptgcBurns,swapbackTxs)=>{
+      const PTGC_FEE_RATIO=0.005/0.95;
+      const byTx={};
+      for(const l of ptgcBurns){
+        if(!swapbackTxs[l.transactionHash])continue;
+        (byTx[l.transactionHash]=byTx[l.transactionHash]||[]).push(l);
+      }
+      let sum=0;
+      for(const tx of Object.keys(byTx)){
+        const legs=byTx[tx].map(l=>({amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
+        const drop={};
+        for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
+          if(i===j||drop[i])continue;
+          const r=legs[i].amt/legs[j].amt;
+          if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01)drop[i]=true;
+        }
+        legs.forEach((lg,i)=>{if(!drop[i])sum+=lg.amt;});
+      }
+      return sum;
+    };
+    const fetchPtgcBurnedBeforeWindow=async(ufoAddress,ptgcAddress,launch,scanFrom,checkpoint)=>{
+      if(!(launch>0)||!(scanFrom>0))return{ok:false,amount:0,toBlock:null};
+      if(scanFrom<=launch)return{ok:true,amount:0,toBlock:scanFrom-1,exact:true};
+      /* `launch` is an estimate that pads earlier on every run; every estimate is at or before
+         the true launch and nothing UFO-related exists before it, so a checkpoint's amount is
+         valid whatever launch value it was built with — only its toBlock matters. */
+      let from=launch,base=0;
+      const cp=(checkpoint&&typeof checkpoint.toBlock==='number'&&typeof checkpoint.amount==='number'&&checkpoint.toBlock>0)?checkpoint:null;
+      if(cp){ if(cp.toBlock>=scanFrom-1)return{ok:true,amount:cp.amount,toBlock:cp.toBlock}; from=cp.toBlock+1;base=cp.amount; }
+      const to=scanFrom-1;
+      const ufoTopic='0x'+encodeAddress(ufoAddress);
+      const[ufoOut,ptgcBurns]=await Promise.all([
+        getLogsChunked(ufoAddress,[TRANSFER_TOPIC,ufoTopic,null],from,to,PTGC_PRE_WINDOW_CHUNK,true),
+        getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],from,to,PTGC_PRE_WINDOW_CHUNK,true)
+      ]);
+      if(!ufoOut||!ptgcBurns)return{ok:false,amount:0,toBlock:null};
+      const swapbackTxs={};for(const l of ufoOut)swapbackTxs[l.transactionHash]=true;
+      const amount=base+sumPtgcBurnedInSwapbacks(ptgcBurns,swapbackTxs);
+      console.log(`pTGC burned by UFO before the 90d window (blocks ${from}-${to}${cp?', on top of checkpoint':''}): ${Math.round(amount).toLocaleString()} pTGC`);
+      return{ok:true,amount,toBlock:to};
+    };
+
 // ===== builder inputs (new migrated UFO) =====
 const UFO_ADDRESS  = '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6';
 const PTGC_ADDRESS = '0x94534EeEe131840b1c0F61847c572228bdfDDE93';
@@ -749,28 +843,51 @@ const HARDCODED_UFO_PAIRS = [
 
 async function main(){
   const firstPoolMs = UFO_LAUNCH_FALLBACK_MS; // safe early floor; costs one extra query at most
-  const [realizedFees, delivered] = await Promise.all([
+
+  // Previous file: carries the pre-window checkpoint forward (and is the carry-forward on failure).
+  let prev=null;
+  try{ if(fs.existsSync(OUT_PATH)) prev=JSON.parse(fs.readFileSync(OUT_PATH,'utf8')); }catch(e){ console.warn('could not read previous file:',e.message); }
+  const prevCheckpoint=prev&&prev.delivered&&prev.delivered.ptgcPreWindow||null;
+
+  const [realizedFees, delivered, burnPeriods] = await Promise.all([
     fetchRealizedFees(UFO_ADDRESS, firstPoolMs),
-    fetchDeliveredValue(UFO_ADDRESS, PTGC_ADDRESS, firstPoolMs, HARDCODED_UFO_PAIRS)
+    fetchDeliveredValue(UFO_ADDRESS, PTGC_ADDRESS, firstPoolMs, HARDCODED_UFO_PAIRS),
+    fetchBurnPeriodsOnChain(UFO_ADDRESS, 18, firstPoolMs).catch(e=>{console.warn('burn periods failed:',e.message);return null;})
   ]);
   if(!realizedFees || !realizedFees.ok || !delivered || !delivered.ok){
     console.error('scan failed — NOT writing (carrying forward last good file).',
       { realizedFees: realizedFees && realizedFees.error, delivered: delivered && delivered.error });
     process.exit(1);
   }
+
+  /* Lifetime pTGC burned by the live contract = the 90d window + everything before it.
+     A failed pre-window read is not fatal: the browser then labels the headline "(90d)". */
+  const pre = await fetchPtgcBurnedBeforeWindow(UFO_ADDRESS, PTGC_ADDRESS, delivered.launch||0, delivered.scanFrom||0, prevCheckpoint)
+    .catch(e=>{console.warn('pre-window scan failed:',e.message);return{ok:false,amount:0,toBlock:null};});
+  const win = delivered.byPeriod && delivered.byPeriod['90d'] ? (delivered.byPeriod['90d'].ptgcBurned||0) : 0;
+  delivered.ptgcBurnedAll   = pre.ok ? win + pre.amount : win;
+  delivered.ptgcBurnedAllOk = !!pre.ok;
+  if(pre.ok && pre.toBlock!=null) delivered.ptgcPreWindow = { toBlock: pre.toBlock, amount: pre.amount, launch: delivered.launch||0 };
+  else if(prevCheckpoint) delivered.ptgcPreWindow = prevCheckpoint;   // keep the last good checkpoint
+
+  /* Burn periods are optional: a failed scan keeps the previous run's numbers (marked stale by
+     their own headBlock) rather than dropping the field, so the browser can decide. */
+  const burnPeriodsOut = burnPeriods || (prev && prev.burnPeriods && prev.burnPeriods.UFO ? { ...prev.burnPeriods.UFO, carriedForward: true } : null);
+
   const out = {
     meta: {
       generatedAt: new Date().toISOString(),
       headBlock: delivered.headBlock || realizedFees.headBlock || null,
       ufoAddress: UFO_ADDRESS,
       ptgcAddress: PTGC_ADDRESS,
-      schema: 1
+      schema: 2
     },
     delivered,
-    realizedFees
+    realizedFees,
+    burnPeriods: burnPeriodsOut ? { UFO: burnPeriodsOut } : undefined
   };
   fs.writeFileSync(OUT_PATH, JSON.stringify(out, null, 2));
   const d24 = delivered.byPeriod && delivered.byPeriod['24h'];
-  console.log(`wrote ${OUT_PATH} | headBlock ${out.meta.headBlock} | 24h: ${d24?Math.round(d24.ufoBurned):'?'} UFO burned, ${d24?Math.round(d24.ptgcBurned):'?'} PTGC burned`);
+  console.log(`wrote ${OUT_PATH} | headBlock ${out.meta.headBlock} | 24h: ${d24?Math.round(d24.ufoBurned):'?'} UFO burned, ${d24?Math.round(d24.ptgcBurned):'?'} PTGC burned | lifetime pTGC by UFO v2: ${Math.round(delivered.ptgcBurnedAll).toLocaleString()} (${delivered.ptgcBurnedAllOk?'exact':'90d only'}) | UFO burn periods: ${burnPeriodsOut?(burnPeriodsOut.carriedForward?'carried forward':'fresh'):'none'}`);
 }
 main().catch(e => { console.error('builder crashed:', e); process.exit(1); });
