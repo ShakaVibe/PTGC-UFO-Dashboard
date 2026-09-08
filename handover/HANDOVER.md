@@ -14,8 +14,8 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-08, pass 8)
 
-Roadmap: 35 of 58 items closed. Everything below marked "in repo" is committed to the local
-clone on Shaka's Mac; check `git status` there and push if anything is still pending.
+Roadmap: 35 of 58 items closed. Working tree was clean and level with `origin/main` at the end of the day
+(`3025fc3`). Check `git --no-optional-locks status` there before starting.
 
 | Area | Status |
 |---|---|
@@ -25,7 +25,7 @@ clone on Shaka's Mac; check `git status` there and push if anything is still pen
 | Phase 2 — all data items (d1–d12) | **Done, live** (d10 and d12 closed as won't-do, see gotchas) |
 | Phase 3 — share cards (u2) | **Done, live** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
-| Phase 3 — loading shell (u12) | **Done, in repo awaiting push** |
+| Phase 3 — loading shell (u12) | **Done, live** |
 | Phase 3 — everything else (u1, u3–u6, u9–u11, u13, u14) | Not started. Suggested order: u10 (rename Socials Hub), u1 (Modal wrapper), u9 (a11y — the u7/u8 pass already added aria-labels/pressed/switch on the controls it touched), u4/u5/u6, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 
@@ -115,10 +115,9 @@ clone on Shaka's Mac; check `git status` there and push if anything is still pen
 
 ## Next up (in order)
 
-1. **Push the pending commit** (u12 loading shell + Home skeletons + handover). No Action run
-   needed. Then load ptgc-ufo.com/#/ptgc on a phone with a slow connection (or throttle in
-   DevTools): the header, tabs and grey placeholder tiles should appear first and the numbers fill
-   in without anything moving; Home's two cards should not jump when their data lands.
+1. **Nothing pending.** Everything through u12 is pushed and live (commit `3025fc3`). Optional
+   check: load ptgc-ufo.com/#/ptgc on a phone with a throttled connection — header, tabs and grey
+   placeholder tiles first, numbers fill in without anything moving.
 2. **Modal wrapper (u1) + a11y pass (u9)** — give the non-share modals what `ShareCardModal`
    already has (Escape, focus, scroll lock, role=dialog); aria-labels on icon buttons; focus
    rings; reduced-motion.
