@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -83,8 +83,10 @@ const dsAnswer=(url)=>{
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text().slice(0,300));});
   page.on('pageerror',e=>errors.push('PAGEERROR '+String(e).slice(0,300)));
   const rpcCount={n:0};
+  const slow=+process.env.SLOW||0;const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   await page.route('**/*',async r=>{
     const u=r.request().url();
+    if(slow&&/rpc\.pulsechain|g4mm4|publicnode|api\.dexscreener\.com|api\.scan\.pulsechain/.test(u))await sleep(slow);
     if(u.startsWith(`http://localhost:${port}`)||u.startsWith(`http://127.0.0.1:${port}`))return r.continue();
     if(/rpc\.pulsechain|g4mm4|publicnode/.test(u)){rpcCount.n++;if(process.env.RPC_DOWN)return r.fulfill({status:503,body:'down'});let body={};try{body=JSON.parse(r.request().postData()||'{}');}catch(e){}return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(rpcAnswer(body))});}
     if(/api\.dexscreener\.com/.test(u)&&process.env.DS_DOWN)return r.fulfill({status:503,body:'down'});

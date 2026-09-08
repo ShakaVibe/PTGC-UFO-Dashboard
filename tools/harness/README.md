@@ -18,6 +18,7 @@ node run.js "#/ptgc" 375 812 out/ptgc-m "shot=top;scroll=520;shot=panels"
 node run.js "#/ufo"  1440 900 out/ufo-d
 RPC_DOWN=1 node run.js "#/ptgc" 375 812 out/rpcdown      # every RPC returns 503
 DS_DOWN=1  node run.js "#/ufo"  375 812 out/dsdown       # DexScreener returns 503
+SLOW=9000  node run.js "#/ptgc" 375 812 out/loading      # every data reply waits 9 s → screenshot the loading shell
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
 ```
 
