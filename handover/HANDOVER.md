@@ -12,19 +12,28 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (2026-09-08)
+## Current state (end of 2026-09-08)
+
+Roadmap: 32 of 58 items closed. Everything below marked "in repo" is committed to the local
+clone on Shaka's Mac; check `git status` there and push if anything is still pending.
 
 | Area | Status |
 |---|---|
-| Phase 0 — wrong numbers / crashes | **Done, deployed** (17 items) |
-| Phase 1 — build step (Vite) | Not started (deliberately deferred) |
-| Phase 1 — dead code (b3) | **Done, deployed** (641 lines) |
-| Phase 2 — data quick wins (d2, d3, d6) | **Done, deployed** |
-| Phase 2 — burn-summary staleness label (d4, browser half) | **Done, deployed** |
-| Phase 2 — `ufo-ptgc-burns` generator repoint (d4, pipeline half) | **Done in repo, awaiting push + first Action run** |
-| Phase 2 — precompute UFO scans (d1) | **Done in repo, awaiting push + first Action run.** `build-value-generated.mjs` now also writes `burnPeriods.UFO` and `delivered.ptgcBurnedAll` (+ a `ptgcPreWindow` checkpoint). With a fresh file a UFO visit makes ~30 RPC calls and 0 `eth_getLogs` (was ~150/63 fresh, ~1,100/1,010 stale). |
-| Phase 3 — share cards (u2) | **Done in repo, awaiting push.** One `ShareCardModal` shell; 13 cards on it; real PNG download (2×) + Web Share; portrait-phone fit; Escape/focus/scroll-lock. |
-| Phase 3 — rest (Modal wrapper u1, jargon u7, mobile u8, a11y u9, …) | Not started |
+| Phase 0 — wrong numbers / crashes (17 items) | **Done, live** |
+| Phase 1 — dead code (b3), html2canvas removal (b4) | **Done, live** |
+| Phase 1 — Vite build (b1, b2), icons/manifest (b5), fonts (b6), CI/CSP (b7), tests (b8), operator script (b9) | Not started — build deliberately parked by Shaka |
+| Phase 2 — all data items (d1–d12) | **Done** (d10 and d12 closed as won't-do, see gotchas). d1/d4 are live; d5/d7/d8/d9/d11 are in the repo awaiting the next push |
+| Phase 3 — share cards (u2) | **Done, live** |
+| Phase 3 — everything else (u1, u3–u14) | Not started. Suggested order: u7+u8 (clarity + mobile), u12 (keep shell while loading), u10 (rename Socials Hub), u1 (Modal wrapper), u9 (a11y), u4/u5/u6, u3 (decomposition — better after the build) |
+| Phase 4 — product ideas (g1–g6) | Not started |
+
+### How a session goes
+1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
+2. Claude edits in place (or writes via the device bridge), verifies with the headless harness
+   described under Testing, and updates `handover/` + the roadmap ticks.
+3. Shaka pushes: `git add -A && git commit -m "…" && git pull --rebase && git push`. The
+   `pull --rebase` is needed because the Actions bots commit `data/*.json` every few minutes.
+4. If a pipeline script changed, run its workflow once by hand (Actions → Run workflow).
 
 ## Sources of truth for numbers
 
@@ -88,17 +97,21 @@ Update it at the end of every session.
 
 ## Next up (in order)
 
-1. Push and run "Build Value Generated" manually once (Actions → workflow_dispatch). The log's
-   last line should say `lifetime pTGC by UFO v2: … (exact) | UFO burn periods: fresh`.
-   Then the live UFO dashboard's burn tiles should appear instantly (no "Loading") with a small
-   "as of Xm ago" label once the file is >1 h old.
-2. (Done 2026-09-08) "Fetch UFO PTGC Burns" ran: v1 4.59B, v2 148.9M, combined 4.73B ✓.
-3. (Done 2026-09-08) Phase 2 leftovers d5, d7, d8, d9, d11. Still open: d12 (affiliates
-   `coverFee` — needs Shaka's ruling on what the commission rule IS before code changes).
-4. Phase 1 build step (b1/b2) when ready — biggest payoff on the list; decide hosting first
-   (currently GitHub Pages, so `vite build` → `dist/` → Pages from `dist` or from a `gh-pages` branch).
-5. Phase 3 polish: first-timer clarity (u7 tier labels + ⓘ explainers; u8 mobile nav overflow,
-   tap targets), then the general Modal wrapper (u1) for the non-share modals, then a11y (u9).
+1. **Push the pending commit** (Phase 2 leftovers d5/d7/d8/d9/d11 + handover). No Action run needed.
+2. **First-timer clarity (u7 + u8)** — ~half a day: tier labels under the creature emojis, tappable
+   ⓘ explainers for "Value Generated" / "RH Cores" / "Day N" / "X's to ATH" (title tooltips don't
+   exist on touch), mobile nav overflow cue, orphan 7th KPI tile, tap targets ≥32 px.
+3. **Keep the shell visible while loading (u12)** — replace the full-page spinner with header +
+   nav + per-panel skeletons; fix Home's 128 px skeletons (shorter than the real cards).
+4. **Modal wrapper (u1) + a11y pass (u9)** — give the non-share modals what `ShareCardModal`
+   already has (Escape, focus, scroll lock, role=dialog); aria-labels on icon buttons; focus
+   rings; reduced-motion.
+5. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
+   decision is Pages-from-`dist` vs a `gh-pages` branch. Do b3-style cleanup first; everything
+   in Phase 3 gets easier after it.
+6. **October 6, 2026** — UFO day 90. Check the UFO dashboard and the "PTGC Burned by UFO" panel
+   that day (both of the fixed 90-day bugs get their first real test; the `exactTo` bug found
+   in dry-run would have shown up here too).
 
 ## Session log
 
