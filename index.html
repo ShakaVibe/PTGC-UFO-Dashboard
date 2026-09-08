@@ -2378,7 +2378,14 @@
         try{
           const ufoPtgcData=await r2.json();
           if(ufoPtgcData?.PTGCbyUFO){
-            burnHistoryCache.PTGCbyUFO=ufoPtgcData.PTGCbyUFO;
+            /* schema 2 (multi-contract generator): PTGCbyUFO is the COMBINED total across every
+               UFO contract and byContract splits it. The dashboard's "old base" must be the
+               retired v1 contract only — the live contract is measured on chain — so read
+               byContract.v1 when present. schema 1 files are v1-only and keep working as-is. */
+            const v1=ufoPtgcData.byContract&&ufoPtgcData.byContract.v1&&ufoPtgcData.byContract.v1.PTGCbyUFO;
+            burnHistoryCache.PTGCbyUFO=v1||ufoPtgcData.PTGCbyUFO;
+            const live=ufoPtgcData.byContract&&ufoPtgcData.liveContract&&ufoPtgcData.byContract[ufoPtgcData.liveContract];
+            burnHistoryCache.PTGCbyUFOLive=(live&&live.PTGCbyUFO&&(live.address||'').toLowerCase()===TOKENS.UFO.address.toLowerCase())?{...live.PTGCbyUFO,lastUpdated:ufoPtgcData.lastUpdated}:null;
             /* The file is NOT the frozen historical base the handoff describes. It carries
                8,500+ DATED rows and is still being regenerated against the OLD UFO contract,
                which is still burning pTGC (8.4M in the last 24h). Keep the rows: they are the
@@ -2489,11 +2496,16 @@
          could not be read, the headline falls back to the 90-day figure and
          `lifetimeIsWindow` tells the panel to label it honestly instead of as "since launch". */
       const windowReachesLaunch=!!(delivered&&delivered.ok&&delivered.launch>0&&delivered.scanFrom<=delivered.launch);
-      const lifetimeOk=!!(delivered&&delivered.ok&&(delivered.ptgcBurnedAllOk||windowReachesLaunch))||(!dvP&&!!(ptgcByUfoLive&&ptgcByUfoLive.windowReachesLaunch));
+      /* Third source for the live contract's lifetime: the generator's byContract[live] total
+         (schema 2, <24h old). Less precise than the chain scan (it cannot separate pTGC's own
+         0.5% fee leg), so it is the fallback when the pre-window read failed, not the primary. */
+      const fileLive=burnHistoryCache?.PTGCbyUFOLive;
+      const fileLiveFresh=!!(fileLive&&fileLive.lastUpdated&&(Date.now()-Date.parse(fileLive.lastUpdated))<24*3600*1000&&typeof fileLive.totalBurned==='number');
+      const lifetimeOk=!!(delivered&&delivered.ok&&(delivered.ptgcBurnedAllOk||windowReachesLaunch))||(!dvP&&!!(ptgcByUfoLive&&ptgcByUfoLive.windowReachesLaunch))||fileLiveFresh;
       const ptgcSrc=dvP?{
-        total:(delivered.ptgcBurnedAllOk?delivered.ptgcBurnedAll:dvP['90d'].ptgcBurned),h24:dvP['24h'].ptgcBurned,
+        total:(delivered.ptgcBurnedAllOk?delivered.ptgcBurnedAll:(windowReachesLaunch?dvP['90d'].ptgcBurned:(fileLiveFresh?fileLive.totalBurned:dvP['90d'].ptgcBurned))),h24:dvP['24h'].ptgcBurned,
         d7:dvP['7d'].ptgcBurned,d30:dvP['30d'].ptgcBurned,d90:dvP['90d'].ptgcBurned
-      }:(ptgcByUfoLive||null);
+      }:(ptgcByUfoLive?{...ptgcByUfoLive,total:(ptgcByUfoLive.windowReachesLaunch||!fileLiveFresh)?ptgcByUfoLive.total:fileLive.totalBurned}:null);
       const lifetimeIsWindow=!!ptgcSrc&&!lifetimeOk;
       const newBurned=ptgcSrc?ptgcSrc.total:0;
       const totalBurned=oldBurned+newBurned;
@@ -2501,13 +2513,16 @@
       const oldRows=burnHistoryCache?.PTGCbyUFORows;
       const mine={};
       if(delivered&&delivered.ok&&delivered.swapbackTxs)delivered.swapbackTxs.forEach(t=>{mine[t]=true;});
-      const launchMs=(()=>{const fp=data?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);return (fp&&isFinite(fp))?fp:UFO_LAUNCH_FALLBACK_MS;})();
+      /* The retired v1 contract still burns pTGC on residual trades, and the panel is "PTGC
+         burned by UFO" — old AND new — so the period windows add v1's rows for the whole
+         window, not only up to the v2 launch (an earlier version cut them off there on the
+         assumption v1 had stopped). Only v1 rows count here (v2 is measured on chain), and a
+         row that names one of v2's own swapback txs is skipped as a double-count guard. */
       const oldFor=hrs=>{
         if(!Array.isArray(oldRows))return null;
         const cut=Date.now()-hrs*3600*1000;
-        if(launchMs<=cut)return 0;
         let sum=0;
-        for(let i=0;i<oldRows.length;i++){const r=oldRows[i];if(!r||r.t<cut)continue;if(r.t>=launchMs)continue;if(r.tx&&mine[r.tx])continue;sum+=r.a||0;}
+        for(let i=0;i<oldRows.length;i++){const r=oldRows[i];if(!r||r.t<cut)continue;if(r.c&&r.c!=='v1')continue;if(r.tx&&mine[r.tx])continue;sum+=r.a||0;}
         return sum;
       };
       const combine=(neu,hrs)=>{if(neu==null)return null;const old=oldFor(hrs);return old==null?neu:neu+old;};
