@@ -112,19 +112,51 @@
   <script type="text/babel">
     const {useState,useEffect,useMemo,useRef}=React;
     
+    /* ===================== CANONICAL ADDRESSES =====================
+     * Every chain address the app knows, once. The older named constants below
+     * (WPLS_ADDRESS, UFO_WETH, WETH_ADDRESS, WPLS_ADDR, DAI_WPLS_PAIR …) now alias these; they
+     * used to be separate literals in three casings scattered over the file, which is exactly
+     * how a copy-paste typo turns into a wrong number. Add new addresses HERE. */
+    const ADDR={
+      PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',
+      UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',
+      UFO_V1:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',   // retired contract; reference only — its burns arrive via ufo-ptgc-burns.json (byContract.v1)
+      WPLS:'0xA1077a294dDE1B09bB078844df40758a5D0f9a27',
+      PLSX:'0x95B303987A60C71504D99Aa1b13B4DA07b0790ab',
+      WETH:'0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C',
+      EHEX:'0x57fdE0a71132198BBeC939B98976993d8D89D225',
+      PRVX:'0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11',
+      HEX:'0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
+      INC:'0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d',
+      WBTC:'0xb17D901469B9208B17d916112988A3FeD19b5cA1',
+      USDC:'0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
+      USDT:'0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f',
+      DAI:'0xefD766cCb38EaF1dfd701853BFCe31359239F305',
+      PULSEX_ROUTER:'0x165C3410fC91EF562C50559f7d2289fEbed552d9',
+      BURN:'0x0000000000000000000000000000000000000369',
+      PAIR_PTGC_WPLS:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',
+      PAIR_PTGC_PRVX:'0x975c7aB1daE5c97327ef7019587DffC66096F5d8',
+      PAIR_UFO_WPLS:'0xE221e6fC30e5787F0d551f980B4da1055D832A03',
+      PAIR_UFO_PLSX:'0x145BC3a8a5EC0C84061511a5DB6023360caDF654',
+      PAIR_UFO_WETH:'0xc4434600F1f263Ee38c38dfe32c8DEf8c0047C0b',
+      PAIR_UFO_EHEX:'0xe61aA9a9b7a13ceedEAa8D26bfF5222003a40634',
+      PAIR_WPLS_DAI:'0xe56043671df55de5cdf8459710433c10324de0ae',   // V1, used to price PLS in USD
+      PAIR_WPLS_USDC:'0x6753560538eca67617a9ce605178f788be7e524e'   // V1, second PLS/USD source
+    };
+    const SUPPLY={PTGC:333333333333,UFO:999999999051};   // starting supplies; UFO confirmed against contract _tTotal
     const TOKENS={
-      PTGC:{name:'PTGC',address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D4AF37',decimals:18,mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',pulseScanUrl:'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93',totalSupply:333333333333,taxRate:0.05,hasDAO:true,
+      PTGC:{name:'PTGC',address:ADDR.PTGC,logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D4AF37',decimals:18,mainPair:ADDR.PAIR_PTGC_WPLS,pulseScanUrl:'https://scan.pulsechain.com/token/'+ADDR.PTGC,totalSupply:SUPPLY.PTGC,taxRate:0.05,hasDAO:true,
         daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
         daoTreasury:'0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',
         stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
         taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
-      UFO:{name:'UFO',address:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,
+      UFO:{name:'UFO',address:ADDR.UFO,logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,
         /* MIGRATION: seeded with the known UFO/WPLS pair; re-confirmed on-chain at boot
            via the PulseX factory (chain value wins if they ever disagree). */
-        mainPair:'0xE221e6fC30e5787F0d551f980B4da1055D832A03',
-        pulseScanUrl:'https://scan.pulsechain.com/token/0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',
-        totalSupply:999999999051, /* confirmed: matches contract _tTotal */
+        mainPair:ADDR.PAIR_UFO_WPLS,
+        pulseScanUrl:'https://scan.pulsechain.com/token/'+ADDR.UFO,
+        totalSupply:SUPPLY.UFO,
         /* MIGRATION: taxRate + taxBreakdown below are FALLBACKS ONLY (contract defaults, 1% each).
            At boot they are overwritten by the live on-chain fee values. The founder can change
            these at any time via updateFees(); the site reads whatever the contract currently says. */
@@ -150,16 +182,13 @@
     
     // MIGRATION: only PTGC pools remain static. UFO's new pools are appended at boot.
     const LP_ADDRESSES=[
-      '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', // PTGC/WPLS main pair
-      '0x975c7ab1dae5c97327ef7019587dffc66096f5d8', // PTGC/PRVX
-      '0xe221e6fc30e5787f0d551f980b4da1055d832a03', // UFO/WPLS  (new)
-      '0x145bc3a8a5ec0c84061511a5db6023360cadf654', // UFO/PLSX  (new)
-      '0xc4434600f1f263ee38c38dfe32c8def8c0047c0b'  // UFO/WETH  (new)
-    ];
+      ADDR.PAIR_PTGC_WPLS, ADDR.PAIR_PTGC_PRVX,
+      ADDR.PAIR_UFO_WPLS, ADDR.PAIR_UFO_PLSX, ADDR.PAIR_UFO_WETH   // UFO's are re-confirmed on chain at boot
+    ].map(a=>a.toLowerCase());
     
     // Hardcoded PTGC pairs that should always show (even if DexScreener doesn't return them)
     const HARDCODED_PTGC_PAIRS = [
-      { address: '0x975c7aB1daE5c97327ef7019587DffC66096F5d8', quoteSymbol: 'PRVX', quoteName: 'ProveX', quoteAddress: '0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11', isRHCore: true, version: 'v2' }
+      { address: ADDR.PAIR_PTGC_PRVX, quoteSymbol: 'PRVX', quoteName: 'ProveX', quoteAddress: ADDR.PRVX, isRHCore: true, version: 'v2' }
     ];
 
     // Hardcoded UFO pairs that should always show (even if DexScreener doesn't return them)
@@ -168,10 +197,10 @@
     // created by the contract constructor. Re-confirmed on-chain at boot by resolveUfoPairs();
     // if the factory ever disagrees, the chain value wins.
     const HARDCODED_UFO_PAIRS = [
-      { address: '0xE221e6fC30e5787F0d551f980B4da1055D832A03', quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS',   quoteAddress: '0xA1077a294dDE1B09bB078844df40758a5D0f9a27', isRHCore: true, version: 'v2' },
-      { address: '0x145BC3a8a5EC0C84061511a5DB6023360caDF654', quoteSymbol: 'PLSX', quoteName: 'PulseX',         quoteAddress: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', isRHCore: true, version: 'v2' },
-      { address: '0xc4434600F1f263Ee38c38dfe32c8DEf8c0047C0b', quoteSymbol: 'WETH', quoteName: 'Wrapped Ether',  quoteAddress: '0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C', isRHCore: true, version: 'v2' },
-      { address: '0xe61aA9a9b7a13ceedEAa8D26bfF5222003a40634', quoteSymbol: 'EHEX', quoteName: 'eHEX',          quoteAddress: '0x57fdE0a71132198BBeC939B98976993d8D89D225', isRHCore: true, version: 'v2' }/* MIGRATION: DexScreener doesn't index this PulseX-V2 UFO/EHEX pool; resolved + verified on-chain (token0=UFO, token1=EHEX, ~4.7B UFO / 44.5M EHEX). Read on-chain via fetchLPFromChain like the other hardcoded pools. */
+      { address: ADDR.PAIR_UFO_WPLS, quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS',   quoteAddress: ADDR.WPLS, isRHCore: true, version: 'v2' },
+      { address: ADDR.PAIR_UFO_PLSX, quoteSymbol: 'PLSX', quoteName: 'PulseX',         quoteAddress: ADDR.PLSX, isRHCore: true, version: 'v2' },
+      { address: ADDR.PAIR_UFO_WETH, quoteSymbol: 'WETH', quoteName: 'Wrapped Ether',  quoteAddress: ADDR.WETH, isRHCore: true, version: 'v2' },
+      { address: ADDR.PAIR_UFO_EHEX, quoteSymbol: 'EHEX', quoteName: 'eHEX',          quoteAddress: ADDR.EHEX, isRHCore: true, version: 'v2' }/* MIGRATION: DexScreener doesn't index this PulseX-V2 UFO/EHEX pool; resolved + verified on-chain (token0=UFO, token1=EHEX, ~4.7B UFO / 44.5M EHEX). Read on-chain via fetchLPFromChain like the other hardcoded pools. */
     ];
     
     // Fetch LP data directly from blockchain (for pairs DexScreener doesn't track)
@@ -217,7 +246,7 @@
         return null;
       }
     };
-    const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
+    const BURN_ADDRESS=ADDR.BURN;
     /* ===== MAINT-MIGRATION MASTER SWITCH =====
      * true  = UFO is hidden from the public: card is masked (no price/mcap/vol/ratio/
      *         change/day-count/contract address), card click shows the maintenance
@@ -296,10 +325,10 @@
      * The founder can change these at any time via updateFees(); we therefore never
      * hardcode them — we read them live from the contract on every load.
      * ============================================================================= */
-    const PULSEX_ROUTER='0x165C3410fC91EF562C50559f7d2289fEbed552d9';
-    const WPLS_ADDRESS='0xA1077a294dDE1B09bB078844df40758a5D0f9a27';
-    const PLSX_ADDRESS='0x95B303987A60C71504D99Aa1b13B4DA07b0790ab';
-    const UFO_WETH='0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C';
+    const PULSEX_ROUTER=ADDR.PULSEX_ROUTER;
+    const WPLS_ADDRESS=ADDR.WPLS;
+    const PLSX_ADDRESS=ADDR.PLSX;
+    const UFO_WETH=ADDR.WETH;
     const SEL_FACTORY='0xc45a0155';   // factory()
     const SEL_GETPAIR='0xe6a43905';   // getPair(address,address)
 
@@ -343,11 +372,9 @@
       try{
         const factory=wordToAddress(await ethCallRead(PULSEX_ROUTER,SEL_FACTORY));
         if(isZeroAddress(factory))return null;
-        const partners=[
-          {quoteSymbol:'WPLS',quoteName:'Wrapped PLS',quoteAddress:WPLS_ADDRESS},
-          {quoteSymbol:'PLSX',quoteName:'PulseX',quoteAddress:PLSX_ADDRESS},
-          {quoteSymbol:'WETH',quoteName:'Wrapped Ether',quoteAddress:UFO_WETH}
-        ];
+        /* The three constructor-created pools, from the same list the rest of the app uses. */
+        const partners=HARDCODED_UFO_PAIRS.filter(p=>['WPLS','PLSX','WETH'].includes(p.quoteSymbol))
+          .map(p=>({quoteSymbol:p.quoteSymbol,quoteName:p.quoteName,quoteAddress:p.quoteAddress}));
         const found=await Promise.all(partners.map(async p=>{
           const data=SEL_GETPAIR+encodeAddress(tokenAddress)+encodeAddress(p.quoteAddress);
           const addr=wordToAddress(await ethCallRead(factory,data));
@@ -439,7 +466,12 @@
        or any very full batch, may have been silently truncated. Split and refetch. */
     const LOG_CAP_SUSPECTS=[100,128,200,250,256,500,512,1000,1024,2000,2048,4096,5000,10000];
     const looksTruncated=(n)=>n>=900||LOG_CAP_SUSPECTS.indexOf(n)>=0;
-    let lastLogError=null;
+    /* Why a log scan failed, PER ADDRESS. This used to be one shared global: with several
+       scanners running at once, one could report the other's message (or null it out). */
+    const logErrorByAddr={};
+    const noteLogError=(address,msg)=>{logErrorByAddr[String(address).toLowerCase()]=msg;console.warn(msg);};
+    const logErrorFor=(address)=>logErrorByAddr[String(address).toLowerCase()]||null;
+    const clearLogError=(...addrs)=>{addrs.forEach(a=>{delete logErrorByAddr[String(a).toLowerCase()];});};
     // Constructor sets every fee to 100 bps. Rates before the first FeesUpdated event.
     const DEFAULT_FEE_RATES={reflection:100,ufoBurn:100,ptgcBurn:100,plsLP:100,plsxLP:100,wethLP:100};
 
@@ -483,8 +515,7 @@
         if(right===null)return null;
         return left.concat(right);
       }
-      lastLogError=`eth_getLogs failed (blocks ${a}-${b}): ${msg}`;
-      console.warn(lastLogError);
+      noteLogError(address,`eth_getLogs failed (blocks ${a}-${b}): ${msg}`);
       return null;
     };
 
@@ -520,8 +551,7 @@
       const ranges=[];
       for(let s=fromBlock;s<=toBlock;s+=chunk)ranges.push([s,Math.min(s+chunk-1,toBlock)]);
       if(ranges.length>MAX_LOG_RANGES){
-        lastLogError=`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`;
-        console.warn(lastLogError);
+        noteLogError(address,`window too large: ${ranges.length} ranges (max ${MAX_LOG_RANGES})`);
         return null;
       }
       const out=[];const CONC=3;
@@ -785,7 +815,7 @@
        eth_calls on the first load.
        --------------------------------------------------------------------------- */
     const fetchRealizedFees=async(tokenAddress,firstPoolMs)=>{
-      lastLogError=null;
+      clearLogError(tokenAddress);
       try{
         const cur=await getHeadBlock();
         if(!cur)return{ok:false,error:'could not read current block'};
@@ -802,8 +832,8 @@
           getLogsChunked(tokenAddress,[TRANSFER_TOPIC,null,contractTopic],scanFrom,cur),
           fetchFeeTimeline(tokenAddress,scanFrom,cur,launch)
         ]);
-        if(!transferLogs)return{ok:false,error:lastLogError||'chain read failed'};
-        if(!feeEvents)return{ok:false,error:lastLogError||'could not read fee-change history'};
+        if(!transferLogs)return{ok:false,error:logErrorFor(tokenAddress)||'chain read failed'};
+        if(!feeEvents)return{ok:false,error:logErrorFor(tokenAddress)||'could not read fee-change history'};
 
         /* ---- parse every inbound leg ---- */
         const rows=[];
@@ -1003,7 +1033,7 @@
     });
 
     const fetchDeliveredValue=async(ufoAddress,ptgcAddress,firstPoolMs,pairs)=>{
-      lastLogError=null;
+      clearLogError(ufoAddress,ptgcAddress);
       try{
         const cur=await getHeadBlock();
         if(!cur)return{ok:false,error:'could not read current block'};
@@ -1029,9 +1059,9 @@
           getLogsChunked(ptgcAddress,[TRANSFER_TOPIC,null,BURN_TOPIC_PADDED],scanFrom,cur),
           getLogsChunked(ufoAddress,[TRANSFER_TOPIC,null,contractTopic],scanFrom,cur)
         ]);
-        if(!ufoOut)return{ok:false,error:lastLogError||'could not read contract transfers'};
-        if(!ufoBurns)return{ok:false,error:lastLogError||'could not read UFO burns'};
-        if(!ptgcBurns)return{ok:false,error:lastLogError||'could not read pTGC burns'};
+        if(!ufoOut)return{ok:false,error:logErrorFor(ufoAddress)||'could not read contract transfers'};
+        if(!ufoBurns)return{ok:false,error:logErrorFor(ufoAddress)||'could not read UFO burns'};
+        if(!ptgcBurns)return{ok:false,error:logErrorFor(ptgcAddress)||'could not read pTGC burns'};
 
         const swapbackTxs={};
         for(const l of ufoOut)swapbackTxs[l.transactionHash]=true;
@@ -1438,6 +1468,7 @@
     const feeAuditCache={};
 
     const fetchFeeExemptionAudit=async(tokenAddress,firstPoolMs)=>{
+      clearLogError(tokenAddress);
       try{
         const cur=await getHeadBlock();
         if(!cur)return null;
@@ -1451,7 +1482,7 @@
 
         // ALL transfers of UFO in the window, not just fee transfers
         const logs=await getLogsChunked(tokenAddress,[TRANSFER_TOPIC],fromBlock,cur);
-        if(!logs)return{ok:false,error:lastLogError||'chain read failed'};
+        if(!logs)return{ok:false,error:logErrorFor(tokenAddress)||'chain read failed'};
 
         const lc=a=>a.toLowerCase();
         const contract=lc(tokenAddress);
@@ -1751,7 +1782,8 @@
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
     const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
-    const WETH_ADDRESS='0x02dcdD04e3F455D838cd1249292C58f3B79e3C3C'.toLowerCase();
+    const CORE_LOGOS={WPLS:getLogo(ADDR.WPLS),PLSX:getLogo(ADDR.PLSX),INC:getLogo(ADDR.INC),HEX:getLogo(ADDR.HEX),EHEX:getLogo(ADDR.EHEX),PRVX:getLogo(ADDR.PRVX)};
+    const WETH_ADDRESS=ADDR.WETH.toLowerCase();
     const ETH_LOGO='data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI1MCIgZmlsbD0iIzYyN0VFQSIvPjxwb2x5Z29uIHBvaW50cz0iNTAsMTIgMjcsNTIgNTAsNDMiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMSkiLz48cG9seWdvbiBwb2ludHM9IjUwLDEyIDczLDUyIDUwLDQzIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjI3LDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuNikiLz48cG9seWdvbiBwb2ludHM9IjczLDUyIDUwLDQzIDUwLDYwIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMikiLz48cG9seWdvbiBwb2ludHM9IjUwLDYwIDI3LDU2IDUwLDg4IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDEpIi8+PHBvbHlnb24gcG9pbnRzPSI1MCw2MCA3Myw1NiA1MCw4OCIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjYpIi8+PC9zdmc+';
     /* Value Generated LP buckets show the partner token's logo. Same sources the LP Pairs
        rows use: DexScreener token images, except bridged WETH which uses the inline SVG. */
@@ -1844,7 +1876,7 @@
       return'$'+price.toFixed(8);
     };
     const getBurnCreaturesTwitter=(burnTotal,tokenName)=>{
-      const supply=tokenName==='PTGC'?333333333333:999999999051;
+      const supply=SUPPLY[tokenName]||SUPPLY.PTGC;
       const t={POSEIDON:supply*0.10,WHALE:supply*0.01,SHARK:supply*0.001,DOLPHIN:supply*0.0001,SQUID:supply*0.00001};
       let rem=burnTotal;
       const poseidons=Math.floor(rem/t.POSEIDON);rem=rem%t.POSEIDON;
@@ -1861,7 +1893,7 @@
       return creatures;
     };
     const get24hBurnCreature=(burn24h,tokenName)=>{
-      const supply=tokenName==='PTGC'?333333333333:999999999051;
+      const supply=SUPPLY[tokenName]||SUPPLY.PTGC;
       const t={WHALE:supply*0.01,SHARK:supply*0.001,DOLPHIN:supply*0.0001,SQUID:supply*0.00001,TURTLE:supply*0.000001,SHRIMP:supply*0.0000001,SHELL:supply*0.00000001};
       if(burn24h>=t.WHALE)return'🐋';if(burn24h>=t.SHARK)return'🦈';if(burn24h>=t.DOLPHIN)return'🐬';if(burn24h>=t.SQUID)return'🦑';if(burn24h>=t.TURTLE)return'🐢';if(burn24h>=t.SHRIMP)return'🦐';return'🐚';
     };
@@ -1995,8 +2027,8 @@
     };
     /* Reads a PulseX pair's reserves directly. No DexScreener involved. Returns USD price
        of `token` given the pair's other side is WPLS and we know PLS/USD. */
-    const WPLS_ADDR='0xa1077a294dde1b09bb078844df40758a5d0f9a27';
-    const DAI_WPLS_PAIR='0xe56043671df55de5cdf8459710433c10324de0ae';
+    const WPLS_ADDR=ADDR.WPLS.toLowerCase();
+    const DAI_WPLS_PAIR=ADDR.PAIR_WPLS_DAI;
     const readPair=async pair=>{
       const c=d=>rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:pair,data:d},'latest'],id:1});
       const[t0,rs]=await Promise.all([c('0x0dfe1681'),c('0x0902f1ac')]);
@@ -2012,8 +2044,8 @@
        ~$1M each) agree to within 0.01%, so if both read we average; if one fails we
        still have a price. Verified 2026-08-24: $0.0000143927 across 4 pools. */
     const PLS_STABLE_POOLS=[
-      {pair:'0xe56043671df55de5cdf8459710433c10324de0ae',dec:18}, // V1 WPLS/DAI
-      {pair:'0x6753560538eca67617a9ce605178f788be7e524e',dec:6}   // V1 WPLS/USDC
+      {pair:ADDR.PAIR_WPLS_DAI,dec:18}, // V1 WPLS/DAI
+      {pair:ADDR.PAIR_WPLS_USDC,dec:6}   // V1 WPLS/USDC
     ];
     let _plsCache={v:0,t:0};
     const plsUsdFromChain=async()=>{
@@ -2044,6 +2076,28 @@
       }catch(e){console.warn('on-chain price failed',e.message);return 0;}
     };
 
+    /* Circulating supply implied by DexScreener's own market cap (mcap / price), per token,
+       remembered from the last good DexScreener answer. When DexScreener is down and the price
+       comes from the chain, mcap = impliedSupply × price. Falls back to the configured max
+       supply (an overstatement by the burned share — better than a stale or zero figure). */
+    const IMPLIED_SUPPLY_STORE='grays_implied_supply_v1';
+    const impliedSupplyCache=(()=>{try{const j=JSON.parse(localStorage.getItem(IMPLIED_SUPPLY_STORE)||'{}');return (j&&typeof j==='object')?j:{};}catch(e){return{};}})();
+    const rememberImpliedSupply=(addr,supply)=>{
+      impliedSupplyCache[addr.toLowerCase()]=supply;
+      try{localStorage.setItem(IMPLIED_SUPPLY_STORE,JSON.stringify(impliedSupplyCache));}catch(e){}   // survives a reload during an outage
+    };
+    const mcapFromPrice=(addr,price,dsMcap)=>{
+      const k=addr.toLowerCase();
+      if(impliedSupplyCache[k]>0)return impliedSupplyCache[k]*price;
+      const cfg=Object.values(TOKENS).find(t=>t.address.toLowerCase()===k);
+      if(cfg&&cfg.totalSupply>0){
+        /* No remembered supply: starting supply minus the burn we know about (burn-summary.json),
+           so the cold-cache figure is circulating, not starting (a 16–25% overstatement otherwise). */
+        const burned=(burnHistoryCache&&burnHistoryCache[cfg.name]&&burnHistoryCache[cfg.name].totalBurned)||0;
+        return Math.max(0,cfg.totalSupply-burned)*price;
+      }
+      return dsMcap||0;
+    };
     const fetchDex=async(addr,mainPair)=>{
       try{
         let mp=null;
@@ -2211,16 +2265,21 @@
               console.warn(`${addr.slice(0,8)}: DexScreener had no price — fell back to on-chain $${_chain.toPrecision(6)}`);
             }
           }
+          const _m = pp.marketCap || pp.fdv || 0;
+          /* Remember the circulating supply DexScreener's market cap implies, so the on-chain
+             price fallback can produce a market cap that agrees with the price it shows. */
+          if(_m > 0 && _dsPrice > 0) rememberImpliedSupply(addr, _m/_dsPrice);
           return {
             price: _price,
             change: pp.priceChange?.h24 || 0,
             priceChange: pp.priceChange || null, // {m5,h1,h6,h24} — used for real home sparklines
             mcap: (()=>{
-              const m = pp.marketCap || pp.fdv || 0;
-              /* Only rescale in the fallback case, where the displayed price came from the
-                 chain and DexScreener's mcap would otherwise contradict it. */
-              if(m > 0 && _dsPrice > 0 && _price > 0 && _price !== _dsPrice) return m * (_price/_dsPrice);
-              return m;
+              /* Fallback case: the displayed price came from the chain. The old rescale
+                 (`m * price/dsPrice`) could never run here because dsPrice is 0 in exactly this
+                 case, so market cap stayed at DexScreener's stale value (or 0) while the price
+                 was live. Use the implied supply instead. */
+              if(_dsPrice <= 0 && _price > 0) return mcapFromPrice(addr, _price, _m);
+              return _m;
             })(),
             liq: pairs.reduce((s, p) => s + p.liq, 0),
             vol: pairs.reduce((s, p) => s + p.vol, 0),
@@ -2236,7 +2295,7 @@
           const cp = await priceFromChain(mainPair, addr);
           if(cp){
             console.warn(`DexScreener returned no pairs for ${addr.slice(0,8)} — on-chain price $${cp}`);
-            return {price:cp,change:0,priceChange:null,mcap:0,liq:0,vol:0,buys:0,sells:0,tokensInLP:0,pairs:[],_fromChain:true};
+            return {price:cp,change:0,priceChange:null,mcap:mcapFromPrice(addr,cp,0),liq:0,vol:0,buys:0,sells:0,tokensInLP:0,pairs:[],_fromChain:true};
           }
         }
         return null;
@@ -2771,15 +2830,15 @@
     
     // Management wallet tokens with hardcoded prices (same as ProWeb)
     const MANAGEMENT_TOKENS = [
-      { symbol: 'USDC', address: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07', decimals: 6, stablecoin: true },
-      { symbol: 'USDT', address: '0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f', decimals: 6, stablecoin: true },
-      { symbol: 'DAI', address: '0xefD766cCb38EaF1dfd701853BFCe31359239F305', decimals: 18, stablecoin: true },
-      { symbol: 'PLSX', address: '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab', decimals: 18 },
-      { symbol: 'HEX', address: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39', decimals: 8 },
-      { symbol: 'INC', address: '0x2fa878Ab3F87CC1C9737Fc071108F904c0B0C95d', decimals: 18 },
-      { symbol: 'WBTC', address: '0xb17D901469B9208B17d916112988A3FeD19b5cA1', decimals: 8 },
-      { symbol: 'WETH', address: '0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C', decimals: 18 },
-      { symbol: 'EHEX', address: '0x57fde0a71132198BBeC939B98976993d8D89D225', decimals: 8 },
+      { symbol: 'USDC', address: ADDR.USDC, decimals: 6, stablecoin: true },
+      { symbol: 'USDT', address: ADDR.USDT, decimals: 6, stablecoin: true },
+      { symbol: 'DAI', address: ADDR.DAI, decimals: 18, stablecoin: true },
+      { symbol: 'PLSX', address: ADDR.PLSX, decimals: 18 },
+      { symbol: 'HEX', address: ADDR.HEX, decimals: 8 },
+      { symbol: 'INC', address: ADDR.INC, decimals: 18 },
+      { symbol: 'WBTC', address: ADDR.WBTC, decimals: 8 },
+      { symbol: 'WETH', address: ADDR.WETH, decimals: 18 },
+      { symbol: 'EHEX', address: ADDR.EHEX, decimals: 8 },
     ];
     
     // Fetch token price from DexScreener
@@ -2949,17 +3008,21 @@
     };
     
     // Fetch holders - stop after Dolphin tier, calculate rest as Squid & Below
-    const fetchHolderTiers=async(addr,cfg,totalHolderCount,lpAddresses=[])=>{
+    /* `signal` (AbortSignal): the scan can run 20 pages × 6 tries × 12 s; without a signal it
+       kept hammering PulseScan long after the dashboard that asked for it was gone. */
+    const fetchHolderTiers=async(addr,cfg,totalHolderCount,lpAddresses=[],signal=null)=>{
       const counts={Poseidon:0,Whale:0,Shark:0,Dolphin:0};
-      let queryOk=true,lastErr=null,complete=false;
+      let queryOk=true,lastErr=null,complete=false,capped=false;
       let nextPageParams=null;
       let totalFetched=0;
       const maxPages=20;
       let page=0;
       let countedHolders=0;
       
-      // Combine static LP addresses with dynamic ones (exclude LP pools only)
-      const allLPAddresses=[...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase());
+      // Combine static LP addresses with dynamic ones (exclude LP pools only); de-duplicated,
+      // since the same pool used to be subtracted twice from "squid & below" when it appeared
+      // in both lists.
+      const allLPAddresses=[...new Set([...LP_ADDRESSES,...lpAddresses].map(a=>a.toLowerCase()))];
       
       /* PulseScan occasionally 500s or times out on a single page. That used to end the
          whole scan and render the tiers as a lower bound (the "≥" prefix), with squid unknown.
@@ -2973,17 +3036,23 @@
       const fetchPage=async(pageUrl)=>{
         for(let attempt=0;attempt<HOLDER_PAGE_TRIES;attempt++){
           const last=attempt>=HOLDER_PAGE_TRIES-1;
+          if(signal&&signal.aborted)return{err:'cancelled'};
           const controller=new AbortController();
           const timeoutId=setTimeout(()=>controller.abort(),12000);
+          const onAbort=()=>controller.abort();
+          if(signal)signal.addEventListener('abort',onAbort,{once:true});
           try{
             const r=await fetch(pageUrl,{signal:controller.signal});
+            if(!r.ok){clearTimeout(timeoutId);if(signal)signal.removeEventListener('abort',onAbort);if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}return{err:`holders API returned ${r.status}`};}
+            const j=await r.json();   // the body read stays under the same timeout + abort as the headers
             clearTimeout(timeoutId);
-            if(!r.ok){if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}return{err:`holders API returned ${r.status}`};}
-            const j=await r.json();
+            if(signal)signal.removeEventListener('abort',onAbort);
             if(!j||!Array.isArray(j.items)){if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}return{err:'holders API returned no items array'};}
             return{data:j};
           }catch(e){
             clearTimeout(timeoutId);
+            if(signal)signal.removeEventListener('abort',onAbort);
+            if(signal&&signal.aborted)return{err:'cancelled'};
             if(!last){await new Promise(s=>setTimeout(s,600*(attempt+1)));continue;}
             return{err:e.message||'holders fetch failed'};
           }
@@ -3061,10 +3130,14 @@
             }
             page++;
         }
+        /* Loop ended by the page cap with holders still above the Dolphin line: the counts are
+           a lower bound, not exact. This used to be reported as ok:true / partial:false. */
+        if(!complete&&queryOk&&page>=maxPages){capped=true;queryOk=false;lastErr=`page cap (${maxPages} pages / ${totalFetched} holders) reached before the Dolphin line`;}
       }catch(e){
         console.error('Error fetching holders:',e);
         queryOk=false;lastErr=e.message||'holders fetch failed';
       }
+      if(signal&&signal.aborted)return{counts,countedHolders,squidAndBelow:null,total:totalFetched,ok:false,partial:false,complete:false,capped:false,cancelled:true,error:'cancelled'};
       /* Three outcomes, not two:
            complete            -> the counts are exact
            partial (some pages)-> the counts are a LOWER BOUND. Throwing them away and
@@ -3074,14 +3147,16 @@
       else if(!queryOk&&countedHolders>0)console.warn(`holder tiers PARTIAL: ${lastErr} — counts are a lower bound over the top ${totalFetched} holders`);
       else if(!queryOk)console.warn(`holder tiers UNAVAILABLE: ${lastErr} — counts are NOT zero, they are unknown`);
       
-      // Squid & Below = total holders - counted tiers - LP addresses - staking contract
+      /* Squid & Below = total holders − counted tiers − LP/staking addresses (de-duplicated
+         above; a pool listed twice used to be subtracted twice). A pool that holds nothing is
+         still subtracted — PulseScan's count can't tell us, and the error is a handful at most. */
       const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
       const squidAndBelow=Math.max(0,totalHolderCount-countedHolders-excludedAddresses);
       
       return{counts,countedHolders,squidAndBelow,total:totalFetched,
              ok:(queryOk||complete),          // a failure after completion is not a failure
              partial:(!queryOk&&!complete&&countedHolders>0),
-             complete,error:lastErr};
+             complete,capped,cancelled:!!(signal&&signal.aborted),error:lastErr};
     };
     
     const DonutChart=({data,colors,size=120})=>{
@@ -4752,7 +4827,7 @@
               </div>
               <div className="px-4 py-3 flex items-center justify-center border-t" style={{borderColor:`${pc}15`}}>
                 <div className="flex items-center gap-2">
-                  <img src="https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xa1077a294dde1b09bb078844df40758a5d0f9a27.png" alt="PLS" className="w-5 h-5 rounded-full"/>
+                  <img src={CORE_LOGOS.WPLS} alt="PLS" className="w-5 h-5 rounded-full"/>
                   <span className="text-sm text-gray-300 font-semibold">PulseChain</span>
                 </div>
               </div>
@@ -5601,14 +5676,7 @@
       useEffect(()=>{
         if(showPriceWithCoresModal){
           // Contract addresses for DexScreener (current prices + 24h)
-          const coreAddresses={
-            WPLS:'0xa1077a294dde1b09bb078844df40758a5d0f9a27',
-            PLSX:'0x95b303987a60c71504d99aa1b13b4da07b0790ab',
-            INC:'0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
-            HEX:'0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
-            EHEX:'0x57fde0a71132198bbec939b98976993d8d89d225',
-            PRVX:'0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11'
-          };
+          const coreAddresses={WPLS:ADDR.WPLS,PLSX:ADDR.PLSX,INC:ADDR.INC,HEX:ADDR.HEX,EHEX:ADDR.EHEX,PRVX:ADDR.PRVX};
           
           // Fetch DexScreener data for current prices and 24h change
           // Then use cached coingeckoDataCache for 7d, 30d, 90d changes
@@ -5946,6 +6014,7 @@
         setLoadError(null);
 
         let loadCancelled=false;
+        const tierAbort=new AbortController();   // stops the PulseScan holder-tier scan on token switch / unmount
         const load=async()=>{try{
           await bootReady;   // seeded UFO config may be replaced by the chain's answer; wait for it (≤5 s) before the first fetch
           if(loadCancelled)return;
@@ -6099,8 +6168,8 @@
             // 2) localStorage cache from a prior live scan
             try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers){if(!loadCancelled)setHolderTiers(o.tiers);return;}}}catch(e){}
             // 3) Live scan (slow; caches a complete result for next time)
-            fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses).then(result=>{
-              if(loadCancelled)return;
+            fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses,tierAbort.signal).then(result=>{
+              if(loadCancelled||(result&&result.cancelled))return;
               if(!result||!result.counts){applyTiers({Poseidon:null,Whale:null,Shark:null,Dolphin:null,SquidAndBelow:null,ok:false,partial:false,error:'no result'},false);return;}
               /* Exact -> the number. Partial -> a lower bound, still worth showing.
                  Nothing at all -> null, and the tiles print "—". Zero whales is a claim,
@@ -6172,20 +6241,28 @@
           const v24 = d?.vol || 0;
           const _vFirstPool = d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m, Infinity);
           const _ageDays = (_vFirstPool && isFinite(_vFirstPool)) ? (Date.now()-_vFirstPool)/86400000 : null;
+          /* Coherence guards, revised (roadmap d9). The old check compared each cached window
+             with the LIVE 24h volume and nulled the window if it was smaller — so a genuine
+             volume spike (the day people most want the number) blanked the 7D/30D/90D panel.
+             The stale-series problem it was written for is caught without the live number:
+               (a) the window is not longer than the token's life,
+               (b) the series is monotonic (7d <= 30d <= 90d — a series built for another
+                   contract or a broken run fails this),
+               (c) the file itself is fresh (< 24h; it is rebuilt hourly). */
+          const cgAgeMs = coingeckoDataCache && coingeckoDataCache.lastUpdated ? (Date.now()-Date.parse(coingeckoDataCache.lastUpdated)) : Infinity;
+          const cgFresh = isFinite(cgAgeMs) && cgAgeMs < 24*3600*1000;
           const gateVol = (windowDays, val) => {
+            if (!cgFresh) return null;
             if (val == null || !isFinite(val) || val <= 0) return null;
             if (_ageDays == null || _ageDays < windowDays) return null;  // younger than the window
-            if (val < v24) return null;                                   // incoherent => stale series
             return val;
           };
           if (coingeckoDataCache && coingeckoDataCache[token]) {
             const cv = coingeckoDataCache[token].volume || {};
-            setVolumeByPeriod({
-              vol24h: v24,
-              vol7d:  gateVol(7,  cv.vol7d),
-              vol30d: gateVol(30, cv.vol30d),
-              vol90d: gateVol(90, cv.vol90d)
-            });
+            let v7 = gateVol(7, cv.vol7d), v30 = gateVol(30, cv.vol30d), v90 = gateVol(90, cv.vol90d);
+            const mono = (v7==null||v30==null||v7<=v30*1.001) && (v30==null||v90==null||v30<=v90*1.001) && (v7==null||v90==null||v7<=v90*1.001);
+            if (!mono) { console.warn(`${token}: cached volume windows are not monotonic (7d ${v7} / 30d ${v30} / 90d ${v90}); treating as unavailable`); v7=v30=v90=null; }
+            setVolumeByPeriod({ vol24h: v24, vol7d: v7, vol30d: v30, vol90d: v90 });
           } else {
             // Fallback - only show 24h
             setVolumeByPeriod({ vol24h: v24, vol7d: null, vol30d: null, vol90d: null });
@@ -6252,7 +6329,7 @@
           if(!loadCancelled){setLoadError(String(e&&e.message||e));setLoading(false);}
         }};
         load();
-        return()=>{loadCancelled=true;};   // a token switch mid-flight must not paint the other dashboard's data
+        return()=>{loadCancelled=true;tierAbort.abort();};   // a token switch mid-flight must not paint the other dashboard's data
       },[token,loadAttempt]);
 
       /* ===== AUTO-REFRESH (quick path) =====
@@ -8511,7 +8588,7 @@
                     <ShareCardModal {...shellProps} filename={`ptgc-affiliate-${selectedShareMonth}.png`} controls={monthControls}>
                 <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
                       {(()=>{
-                        const PSUPPLY=333333333333;
+                        const PSUPPLY=SUPPLY.PTGC;
                         const moPct=PSUPPLY>0?((moPtgc||0)/PSUPPLY)*100:0;
                         const moCreatures=getBurnC(moPct).slice(0,3);
                         const atPct=PSUPPLY>0?((allTimePtgc||0)/PSUPPLY)*100:0;
@@ -8696,14 +8773,7 @@
                       const ptgcPairs=token==='PTGC'?currentPairs:otherPairs;
                       const ufoPairs=token==='UFO'?currentPairs:otherPairs;
                       
-                      const coreLogos={
-                        WPLS:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xa1077a294dde1b09bb078844df40758a5d0f9a27.png',
-                        PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
-                        INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
-                        HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
-                        EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png',
-                        PRVX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11.png'
-                      };
+                      const coreLogos=CORE_LOGOS;
                       
                       const getPairData=(pairs,core)=>{
                         const pair=pairs.find(p=>{
@@ -9320,14 +9390,7 @@
                         <div className="text-white/60 text-xs font-medium mb-2 uppercase tracking-wider">RH Core Tokens</div>
                         <div className="flex-1 flex flex-col justify-between">
                           {(()=>{
-                            const coreLogos={
-                              WPLS:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xa1077a294dde1b09bb078844df40758a5d0f9a27.png',
-                              PLSX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x95b303987a60c71504d99aa1b13b4da07b0790ab.png',
-                              INC:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d.png',
-                              HEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39.png',
-                              EHEX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0x57fde0a71132198bbec939b98976993d8d89d225.png',
-                              PRVX:'https://dd.dexscreener.com/ds-data/tokens/pulsechain/0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11.png'
-                            };
+                            const coreLogos=CORE_LOGOS;
                             const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
                             const cores=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
                             return cores.map(core=>{
@@ -9436,7 +9499,7 @@
     
     // Affiliates Dashboard Page
     // Module-level helper (used by BuyerDistributionModal and AffiliatesPage)
-    const PTGC_SUPPLY_GLOBAL=333333333333;
+    const PTGC_SUPPLY_GLOBAL=SUPPLY.PTGC;
     const getCreatureForPtgc=(ptgcAmount)=>{
       if(!ptgcAmount||ptgcAmount<=0)return null;
       const pct=(ptgcAmount/PTGC_SUPPLY_GLOBAL)*100;

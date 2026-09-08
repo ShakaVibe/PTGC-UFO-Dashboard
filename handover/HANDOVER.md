@@ -45,6 +45,14 @@ Update it at the end of every session.
 
 ## Gotchas — read before editing
 
+00. **Addresses live in `ADDR`, supplies in `SUPPLY`** (top of the script, just before `TOKENS`).
+   The older names (`WPLS_ADDRESS`, `UFO_WETH`, `LP_ADDRESSES`, `HARDCODED_UFO_PAIRS`, …) are
+   aliases of it. Add new addresses there, not as literals.
+
+0. **UFO's ATH is the ORIGINAL contract's on purpose.** The migration is the same token, so
+   "X's to ATH" measures against `ATH_PRICES.UFO = 0.000113` (the pre-migration high) and the
+   CoinGecko file carries no UFO ATH to override it. Do not "fix" this (roadmap d10 is closed).
+
 1. **SRI hashes.** The `<script>` tags for React, ReactDOM, Babel and Chart.js carry
    `integrity` hashes. Change a version → regenerate the hash or the page goes blank:
    `openssl dgst -sha384 -binary file.js | openssl base64 -A`. Tailwind's play CDN cannot
@@ -85,9 +93,8 @@ Update it at the end of every session.
    Then the live UFO dashboard's burn tiles should appear instantly (no "Loading") with a small
    "as of Xm ago" label once the file is >1 h old.
 2. (Done 2026-09-08) "Fetch UFO PTGC Burns" ran: v1 4.59B, v2 148.9M, combined 4.73B ✓.
-3. Phase 2 leftovers, all small: d5 (return scan errors instead of `lastLogError` global),
-   d7 (one constants block), d8 (dead mcap rescale), d9 (vol windows nulled on spikes),
-   d10 (UFO ATH is the old contract's), d11 (holder-tier scan cancellation), d12 (affiliates coverFee).
+3. (Done 2026-09-08) Phase 2 leftovers d5, d7, d8, d9, d11. Still open: d12 (affiliates
+   `coverFee` — needs Shaka's ruling on what the commission rule IS before code changes).
 4. Phase 1 build step (b1/b2) when ready — biggest payoff on the list; decide hosting first
    (currently GitHub Pages, so `vite build` → `dist/` → Pages from `dist` or from a `gh-pages` branch).
 5. Phase 3 polish: first-timer clarity (u7 tier labels + ⓘ explainers; u8 mobile nav overflow,
