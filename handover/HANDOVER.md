@@ -14,8 +14,7 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-09)
 
-Roadmap: 37 of 57 items closed. Today's work (u1 + u9) is in `index.html` on Shaka's machine,
-**uncommitted** at the time of writing — Shaka pushes (step 3 below). Check
+Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09). Check
 `git --no-optional-locks status` there before starting.
 
 | Area | Status |
@@ -27,7 +26,7 @@ Roadmap: 37 of 57 items closed. Today's work (u1 + u9) is in `index.html` on Sha
 | Phase 3 — share cards (u2) | **Done, live** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
 | Phase 3 — loading shell (u12) | **Done, live** |
-| Phase 3 — Modal wrapper (u1), a11y (u9) | **Done** 2026-09-09, awaiting push |
+| Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`5c2d3cf93`, 2026-09-09) |
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — everything else (u3–u6, u11, u13, u14) | Not started. Suggested order: u4/u5/u6, u11/u13/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
@@ -40,7 +39,11 @@ Roadmap: 37 of 57 items closed. Today's work (u1 + u9) is in `index.html` on Sha
    The `pull --rebase` is needed because the Actions bots commit `data/*.json` every few minutes.
    (Claude-side notes: run git in the linked folder with `git --no-optional-locks …` — a plain
    `git status` from the bridge leaves a `.git/index.lock` it cannot delete, and the next commit
-   fails with "index.lock: File exists". When writing a file back a second time in one session,
+   fails with "index.lock: File exists". Never run `rebase --continue` or anything that writes
+   refs from the bridge either — it leaves `REBASE_HEAD.lock` / `packed-refs.lock` for Shaka to
+   `rm`. If `pull --rebase` aborts with "local changes would be overwritten" right after a
+   commit, it is the folder sync re-writing Claude's edits a beat late — wait a moment,
+   `git status`, then `git rebase --continue`. When writing a file back a second time in one session,
    stage it from a NEW path under outputs/ — re-using the first path re-sent the first snapshot.)
 4. If a pipeline script changed, run its workflow once by hand (Actions → Run workflow).
 
@@ -125,9 +128,9 @@ Roadmap: 37 of 57 items closed. Today's work (u1 + u9) is in `index.html` on Sha
 
 ## Next up (in order)
 
-1. **Push u1 + u9** (`index.html` only). After deploy, a 30-second check on the phone: open any
-   ⓘ modal, page behind must not scroll; on desktop, Tab through the header and Escape out of a
-   modal — focus should land back on the button that opened it.
+1. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
+   not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
+   back on the button that opened it.
 2. **Phase 3 leftovers** — u4/u5/u6 next (see roadmap), then u11/u13/u14. u3 (decomposition)
    waits for the build.
 3. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
