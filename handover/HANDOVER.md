@@ -6,16 +6,17 @@ Update it at the end of every session.
 
 - Live site: https://ptgc-ufo.com (GitHub Pages from `main`, `deploy.yml`)
 - Roadmap + tick-off backlog (Claude artifact, shared state): "Grays Dashboard Roadmap"
-  in Shaka's Claude artifact gallery — 58 items across five phases.
+  in Shaka's Claude artifact gallery — 57 items across five phases (u10 dropped 2026-09-09).
 - Repo layout: `index.html` is the whole app (React 18 + Babel-standalone + Tailwind play
   CDN, compiled in the browser). `scripts/` + `.github/workflows/` are the hourly data
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-08, pass 8)
+## Current state (end of 2026-09-09)
 
-Roadmap: 35 of 58 items closed. Working tree was clean and level with `origin/main` at the end of the day
-(`3025fc3`). Check `git --no-optional-locks status` there before starting.
+Roadmap: 37 of 57 items closed. Today's work (u1 + u9) is in `index.html` on Shaka's machine,
+**uncommitted** at the time of writing — Shaka pushes (step 3 below). Check
+`git --no-optional-locks status` there before starting.
 
 | Area | Status |
 |---|---|
@@ -26,7 +27,9 @@ Roadmap: 35 of 58 items closed. Working tree was clean and level with `origin/ma
 | Phase 3 — share cards (u2) | **Done, live** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
 | Phase 3 — loading shell (u12) | **Done, live** |
-| Phase 3 — everything else (u1, u3–u6, u9–u11, u13, u14) | Not started. Suggested order: u10 (rename Socials Hub), u1 (Modal wrapper), u9 (a11y — the u7/u8 pass already added aria-labels/pressed/switch on the controls it touched), u4/u5/u6, u3 (decomposition — better after the build) |
+| Phase 3 — Modal wrapper (u1), a11y (u9) | **Done** 2026-09-09, awaiting push |
+| Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
+| Phase 3 — everything else (u3–u6, u11, u13, u14) | Not started. Suggested order: u4/u5/u6, u11/u13/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 
 ### How a session goes
@@ -107,6 +110,13 @@ Roadmap: 35 of 58 items closed. Working tree was clean and level with `origin/ma
 10. **Explainer copy lives in `EXPLAINERS`** (right after the `InfoTip` component). Add a new ⓘ by
    writing the copy there and dropping `<InfoTip label="…">{EXPLAINERS.x(token)}</InfoTip>` next to
    the term. `title=` tooltips are hover-only — don't add new ones for anything a phone user needs.
+12. **Every overlay is a `<Modal>`** (MODAL SHELL block, just above the share-card shell). New
+   pop-up → `<Modal onClose={…} label="…" className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/80">`
+   with the panel as the child (panel keeps `onClick={e=>e.stopPropagation()}`). Escape, focus,
+   Tab-cycling, scroll lock, `role=dialog` and the body portal come with it — don't re-add them.
+   Escape only closes the TOP layer (`MODAL_STACK`); `InfoTip` is on that stack too. Omit
+   `onClose` for a modal the user must act on. `useDialog(ref,onClose)` is the hook if the
+   overlay needs its own markup (only `ShareCardModal` does).
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -115,12 +125,11 @@ Roadmap: 35 of 58 items closed. Working tree was clean and level with `origin/ma
 
 ## Next up (in order)
 
-1. **Nothing pending.** Everything through u12 is pushed and live (commit `3025fc3`). Optional
-   check: load ptgc-ufo.com/#/ptgc on a phone with a throttled connection — header, tabs and grey
-   placeholder tiles first, numbers fill in without anything moving.
-2. **Modal wrapper (u1) + a11y pass (u9)** — give the non-share modals what `ShareCardModal`
-   already has (Escape, focus, scroll lock, role=dialog); aria-labels on icon buttons; focus
-   rings; reduced-motion.
+1. **Push u1 + u9** (`index.html` only). After deploy, a 30-second check on the phone: open any
+   ⓘ modal, page behind must not scroll; on desktop, Tab through the header and Escape out of a
+   modal — focus should land back on the button that opened it.
+2. **Phase 3 leftovers** — u4/u5/u6 next (see roadmap), then u11/u13/u14. u3 (decomposition)
+   waits for the build.
 3. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
    decision is Pages-from-`dist` vs a `gh-pages` branch. Do b3-style cleanup first; everything
    in Phase 3 gets easier after it.
@@ -132,3 +141,5 @@ Roadmap: 35 of 58 items closed. Working tree was clean and level with `origin/ma
 
 - `sessions/2026-09-08.md` — review, roadmap, Phase 0, dead code, data quick wins, generator repoint,
   share cards, Phase 2 leftovers, u7/u8 clarity + mobile pass, harness ported to `tools/`.
+- `sessions/2026-09-09.md` — u1 Modal shell (16 overlays migrated, key stack shared with
+  ShareCardModal + InfoTip), u9 a11y (labels, nav landmarks, focus ring, reduced motion), u10 dropped.
