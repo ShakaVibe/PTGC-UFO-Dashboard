@@ -105,13 +105,25 @@
     .tap-h{min-height:32px;display:inline-flex;align-items:center}
     /* u7: focus ring for the explainer buttons and popover (keyboard users), not on tap. */
     .tap:focus-visible,.tap-h:focus-visible{outline:2px solid rgba(255,255,255,0.6);outline-offset:2px;border-radius:6px}
+    /* u9: the same ring on every control a keyboard can reach. :focus-visible only — a tap or
+       click never shows it. Dialog containers take programmatic focus and are excluded. */
+    button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
+    [tabindex]:not([role="dialog"]):focus-visible{outline:2px solid rgba(255,255,255,0.6);outline-offset:2px}
+    /* the tab strips clip vertically (overflow-y-hidden), so their ring sits inside the box */
+    nav button:focus-visible,nav a:focus-visible{outline-offset:-2px;border-radius:6px}
     /* u8: fade + chevron at the edge of a scrollable strip, shown only while more is hidden. */
     .scroll-cue{position:absolute;top:0;bottom:0;width:44px;pointer-events:none;display:flex;align-items:center;opacity:0;transition:opacity .2s}
     .scroll-cue[data-on="1"]{opacity:1}
     .scroll-cue-r{right:0;justify-content:flex-end;padding-right:6px;background:linear-gradient(to left,#0a0a0a 35%,rgba(10,10,10,0))}
     .scroll-cue-l{left:0;justify-content:flex-start;padding-left:6px;background:linear-gradient(to right,#0a0a0a 35%,rgba(10,10,10,0))}
     .scroll-cue span{color:rgba(255,255,255,0.55);font-size:18px;line-height:1}
-    @media(prefers-reduced-motion:reduce){.animate-fire,.animate-pulse-slow{animation:none}.scroll-cue{transition:none}}
+    /* u9: honour the OS "reduce motion" setting. Looping/decorative animation stops and hover
+       transforms go static; spinners (animate-spin) keep turning because they mean "working". */
+    @media(prefers-reduced-motion:reduce){
+      .animate-fire,.animate-pulse-slow,.animate-pulse,[class*="animate-[sweep"],[class*="animate-[shimmer"],.buy-btn::after{animation:none!important}
+      .scroll-cue,.token-card,.buy-btn,.clickable,.transition-all,.transition-colors,.transition-opacity,.transition-transform,.transition{transition:none!important}
+      .token-card:hover,.buy-btn:hover,.clickable:hover{transform:none}
+    }
 
   
     /* Affiliate stats rows: collapse the 8-col fixed layout to 2-col on mobile */
@@ -3816,7 +3828,7 @@
         'no pools':'no pools loaded','chain read failed':'chain read failed'}[status]||status;
       const cols=`64px 44px minmax(230px,1.4fr) 108px repeat(${pods.length},minmax(84px,1fr))`;
       return(
-        <div className="fixed inset-0 z-[60] bg-[#06070a] overflow-y-auto" onClick={close}>
+        <Modal className="z-[60] bg-[#06070a] overflow-y-auto" onClose={close} label={`${token} Live Feed`}>
           <style>{`
             .deck-pod{position:absolute;width:150px;transform:translateX(-50%);padding:11px 14px 10px;background:rgba(6,7,10,0.74);border:1px solid rgba(255,255,255,0.08);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);transition:box-shadow .3s,background .3s}
             .deck-pod:before,.deck-pod:after{content:'';position:absolute;width:14px;height:14px;border:1px solid ${ac};opacity:.9}
@@ -4026,7 +4038,7 @@
               Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus taxed wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
             </div>
           </div>
-        </div>
+        </Modal>
       );
     };
     const DeckPairLogo=({src,initial,title})=>{
@@ -4160,7 +4172,7 @@
       };
 
       return(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClick={close}>
+        <Modal className="z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClose={close} label="Holder analytics">
           <div className={`bg-[#111] border ${theme.border} rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={e=>e.stopPropagation()}>
             <div className="p-4 sm:p-5">
               {/* Header */}
@@ -4172,7 +4184,7 @@
                     <div className="text-white/50 text-xs sm:text-base mt-0.5 truncate">Holder Analytics</div>
                   </div>
                 </div>
-                <button onClick={close} className="text-white/50 hover:text-white text-2xl shrink-0">×</button>
+                <button aria-label="Close" onClick={close} className="text-white/50 hover:text-white text-2xl shrink-0">×</button>
               </div>
 
               {/* Current + 24H change hero */}
@@ -4280,7 +4292,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </Modal>
       );
     };
 
@@ -4305,7 +4317,7 @@
             <div className="col-span-1 text-center"><div className="text-white text-xs">24h</div><div className={up?'text-green-400':'text-red-400'}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
             <div className="col-span-1 text-center"><div className="text-white text-xs">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div>
             <div className="col-span-1 text-right"><div className="text-white text-xs">Vol/Liq</div><div className="text-white">{ratio}</div></div>
-            <div className="col-span-2 flex justify-end gap-2"><button onClick={()=>setDet(!det)} className="text-lg hover:scale-110">{'\u2139\uFE0F'}</button><a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DexScreener" className="text-lg hover:scale-110">{'\u{1F4C8}'}</a><a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DEXTools" className="text-lg hover:scale-110">{'\u{1F4CA}'}</a></div>
+            <div className="col-span-2 flex justify-end gap-2"><button onClick={()=>setDet(!det)} aria-label="Pool details" aria-expanded={det} className="text-lg hover:scale-110">{'\u2139\uFE0F'}</button><a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DexScreener" className="text-lg hover:scale-110">{'\u{1F4C8}'}</a><a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DEXTools" className="text-lg hover:scale-110">{'\u{1F4CA}'}</a></div>
           </div>
           <div className="sm:hidden">
             <div className="flex items-center gap-3 mb-2">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} className="w-8 h-8 rounded-full"/>:(!logoErr&&logo?<img src={logo} className="w-8 h-8 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>)}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up?'text-green-400':'text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
@@ -4330,7 +4342,7 @@
     const MaintenanceNotice=({open,onClose})=>{
       if(!open)return null;
       return(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)'}} onClick={onClose}>
+        <Modal className="z-[9999] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)'}} onClose={onClose} label="Under maintenance">
           <div onClick={e=>e.stopPropagation()} className="relative max-w-md w-full rounded-2xl border border-yellow-400/30 bg-[#141414] p-6 sm:p-8 text-center" style={{boxShadow:'0 0 40px rgba(234,179,8,0.15)'}}>
             <div className="text-4xl mb-3">🛠️</div>
             <h3 className="font-orbitron text-xl sm:text-2xl font-bold text-yellow-300 mb-2">Under Maintenance</h3>
@@ -4338,7 +4350,7 @@
             <p className="text-white/75 text-sm leading-relaxed mb-6">{MAINT_MSG}</p>
             <button onClick={onClose} className="px-6 py-2.5 rounded-xl bg-yellow-500/20 border border-yellow-400/40 text-yellow-200 font-semibold hover:bg-yellow-500/30 transition-all">Got it</button>
           </div>
-        </div>
+        </Modal>
       );
     };
     // ===== END MAINT-MIGRATION components =====
@@ -4435,7 +4447,7 @@
             {masked&&<div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/20 border border-yellow-400/40">{/* MAINT-MIGRATION badge */}<span className="text-yellow-300 text-xs">⚠</span><span className="text-yellow-200 text-[10px] font-bold uppercase tracking-wider">Under Maintenance</span></div>}
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
               <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
-              <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
+              <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button aria-label="Copy contract address" onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
               <div className="flex-1 text-center sm:text-right">{masked?(
                 <>
                   <div className="text-white/25 font-bold text-xl sm:text-2xl lg:text-3xl tracking-widest">———</div>
@@ -4520,6 +4532,75 @@
     };
     
     // KPI Content component with dual token support
+    /* ===================== MODAL SHELL =====================
+     * u1. One dialog behaviour for every overlay on the page. `Modal` renders the fixed
+     * backdrop (portalled to <body>, so it escapes any parent's stacking context) and gives
+     * it what ShareCardModal already had:
+     *   - role="dialog" + aria-modal, named by `label` (what a screen reader announces)
+     *   - Escape closes the TOPMOST open modal only (MODAL_STACK), so a share card opened
+     *     over the KPI report closes on its own first
+     *   - focus moves into the dialog on open, Tab / Shift+Tab cycle inside it, and focus
+     *     returns to the opener on close
+     *   - the page behind stops scrolling while any modal is open (one lock, ref-counted)
+     *   - a click on the backdrop calls onClose and does NOT bubble to an outer modal
+     * Usage:
+     *   <Modal onClose={close} label="Volume by period" className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/80">
+     *     <div className="panel…" onClick={e=>e.stopPropagation()}>…</div>
+     *   </Modal>
+     * `className` is everything the old overlay div carried except `fixed inset-0`. Omit
+     * `onClose` for a modal the user must act on (the disclaimer). `useDialog` is the hook
+     * underneath, for an overlay that needs its own markup (ShareCardModal). */
+    const MODAL_STACK=[];            // who owns Escape right now (modals AND the ⓘ popover); top = last
+    let _modalSeq=0,_lockCount=0,_bodyOverflow=null;
+    /* Put a layer on the key stack. Returns {isTop, release}. Modals do this inside useDialog;
+       InfoTip does it while its popover is open, so Escape closes the popover first and the
+       modal underneath it on the next press. */
+    const claimKeys=(getEl)=>{const e={id:++_modalSeq,getEl};MODAL_STACK.push(e);return{isTop:()=>MODAL_STACK[MODAL_STACK.length-1]===e,release:()=>{const i=MODAL_STACK.indexOf(e);if(i>=0)MODAL_STACK.splice(i,1);}};};
+    const topModalEl=()=>{for(let i=MODAL_STACK.length-1;i>=0;i--){const el=MODAL_STACK[i].getEl&&MODAL_STACK[i].getEl();if(el)return el;}return null;};
+    const FOCUSABLE='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const useDialog=(dlgRef,onClose)=>{
+      const closeRef=useRef(onClose);closeRef.current=onClose;
+      useEffect(()=>{
+        const prevFocus=document.activeElement;
+        if(_lockCount++===0){_bodyOverflow=document.body.style.overflow;document.body.style.overflow='hidden';}
+        const {isTop,release}=claimKeys(()=>dlgRef.current);
+        const key=e=>{
+          if(!isTop())return;
+          if(e.key==='Escape'){if(closeRef.current){e.preventDefault();closeRef.current();}return;}
+          if(e.key==='Tab'&&dlgRef.current){
+            const dlg=dlgRef.current;
+            const els=Array.from(dlg.querySelectorAll(FOCUSABLE)).filter(el=>el.getClientRects().length>0);
+            if(els.length===0){e.preventDefault();return;}
+            const first=els[0],last=els[els.length-1],act=document.activeElement,inside=dlg.contains(act)&&act!==dlg;
+            if(e.shiftKey&&(!inside||act===first)){e.preventDefault();last.focus();}
+            else if(!e.shiftKey&&(!inside||act===last)){e.preventDefault();first.focus();}
+          }
+        };
+        document.addEventListener('keydown',key);
+        if(dlgRef.current)try{dlgRef.current.focus({preventScroll:true});}catch(e){}
+        return()=>{
+          document.removeEventListener('keydown',key);
+          release();
+          if(--_lockCount===0){document.body.style.overflow=_bodyOverflow||'';_bodyOverflow=null;}
+          /* back to the opener; if it unmounted with us (a share button inside a re-rendered
+             report), land on the dialog underneath rather than <body>. */
+          const back=(prevFocus&&document.contains(prevFocus)&&prevFocus!==document.body)?prevFocus:topModalEl();
+          if(back&&back.focus)try{back.focus({preventScroll:true});}catch(e){}
+        };
+      },[]);
+    };
+    const Modal=({onClose,label,className='',style,children})=>{
+      const dlgRef=useRef(null);
+      useDialog(dlgRef,onClose);
+      return ReactDOM.createPortal(
+        <div ref={dlgRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className={`fixed inset-0 outline-none ${className}`} style={style}
+             onClick={e=>{e.stopPropagation();if(onClose)onClose();}}>
+          {children}
+        </div>,
+        document.body
+      );
+    };
+
     /* ===================== SHARE CARD SHELL =====================
      * One overlay for every share card. Fixes, in one place, what each of the ~12 inline
      * modals used to reimplement slightly differently:
@@ -4531,8 +4612,8 @@
      *     no longer ships on every page load), rendered from the UNSCALED card at 2x. Web Share
      *     on phones that support sharing files. Falls back to the screenshot hint if a
      *     cross-origin logo taints the canvas.
-     *   - DIALOG: role="dialog", Escape closes, focus moves in and is restored on close, the
-     *     page behind stops scrolling.
+     *   - DIALOG: via useDialog (see MODAL SHELL above) — same Escape / focus / scroll-lock
+     *     behaviour as every other modal; Escape closes only the topmost one.
      * `children` is the card at its natural W×H; `controls` renders above the card (period
      * pills, month pickers) and is never part of the image. */
     const HTML2CANVAS_SRC='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
@@ -4566,25 +4647,14 @@
       const[sc,setSc]=useState(()=>Math.min(1,(window.innerWidth-32)/width,(window.innerHeight-150)/height));
       const[busy,setBusy]=useState(false);
       const[msg,setMsg]=useState(null);   // {kind:'ok'|'err', text}
-      const cardRef=useRef(null),dlgRef=useRef(null),prevFocus=useRef(null);
+      const cardRef=useRef(null),dlgRef=useRef(null);
       const canShareFiles=(()=>{try{return !!(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File([''],'x.png',{type:'image/png'})]}));}catch(e){return false;}})();
       useEffect(()=>{
         const on=()=>setSc(Math.min(1,(window.innerWidth-32)/width,(window.innerHeight-150)/height));
         on();window.addEventListener('resize',on);
         return()=>window.removeEventListener('resize',on);
       },[width,height]);
-      useEffect(()=>{
-        prevFocus.current=document.activeElement;
-        const key=e=>{if(e.key==='Escape'){e.stopPropagation();onClose&&onClose();}};
-        document.addEventListener('keydown',key);
-        const prevOverflow=document.body.style.overflow;document.body.style.overflow='hidden';
-        if(dlgRef.current)try{dlgRef.current.focus({preventScroll:true});}catch(e){}
-        return()=>{
-          document.removeEventListener('keydown',key);
-          document.body.style.overflow=prevOverflow;
-          const pf=prevFocus.current;if(pf&&pf.focus)try{pf.focus({preventScroll:true});}catch(e){}
-        };
-      },[]);
+      useDialog(dlgRef,onClose);   // Escape / focus / scroll lock — shared with Modal (u1)
       const save=async(share)=>{
         if(busy||!cardRef.current)return;
         setBusy(true);setMsg(null);
@@ -4614,7 +4684,7 @@
          report), whose own stacking context would otherwise keep this overlay underneath that
          modal's fixed close button no matter what z-index it carries. */
       return ReactDOM.createPortal(
-        <div className="fixed inset-0 flex items-center justify-center p-3 modal-overlay bg-black/90 overflow-y-auto" style={{zIndex}} onClick={onClose}>
+        <div className="fixed inset-0 flex items-center justify-center p-3 modal-overlay bg-black/90 overflow-y-auto" style={{zIndex}} onClick={e=>{e.stopPropagation();onClose&&onClose();}}>
           <div ref={dlgRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className="relative outline-none" style={{width:`${W}px`,maxWidth:'100%'}} onClick={e=>e.stopPropagation()}>
             {/* toolbar: card-specific controls on the left, export + close on the right */}
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -4675,12 +4745,14 @@
         if(!open)return;
         const close=()=>setOpen(false);
         const onDoc=e=>{const c=cardRef.current,b=btnRef.current;if((c&&c.contains(e.target))||(b&&b.contains(e.target)))return;close();};
-        const onKey=e=>{if(e.key==='Escape'){e.stopPropagation();close();if(btnRef.current)try{btnRef.current.focus({preventScroll:true});}catch(err){}}};
+        const keys=claimKeys();   // Escape closes the popover, not the modal it may sit in (u1)
+        const onKey=e=>{if(e.key==='Escape'&&keys.isTop()){e.stopPropagation();close();if(btnRef.current)try{btnRef.current.focus({preventScroll:true});}catch(err){}}};
         document.addEventListener('pointerdown',onDoc,true);
         document.addEventListener('keydown',onKey);
         window.addEventListener('scroll',close,{passive:true,capture:true});
         window.addEventListener('resize',close);
         return()=>{
+          keys.release();
           document.removeEventListener('pointerdown',onDoc,true);
           document.removeEventListener('keydown',onKey);
           window.removeEventListener('scroll',close,{capture:true});
@@ -5185,7 +5257,7 @@
         <>
           {/* Twitter Screenshot Button - show when in dual view */}
           {showBoth&&(
-            <button 
+            <button aria-label="Share the KPI report as an image" 
               onClick={()=>setTwitterMode(true)} 
               disabled={!bothLoaded}
               className={`mb-3 px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-opacity ${bothLoaded?'bg-[#1DA1F2] hover:opacity-80':'bg-gray-600 cursor-not-allowed'} text-white`}
@@ -5468,7 +5540,7 @@
       };
       
       return(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClick={close}>
+        <Modal className="z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClose={close} label="Holder tiers">
           <div className="bg-[#0a0a0a] border-2 rounded-2xl max-w-lg w-full overflow-hidden max-h-[90vh] overflow-y-auto" style={{borderColor:pc}} onClick={e=>e.stopPropagation()}>
             {/* Header with logo */}
             <div className="p-4 sm:p-6 text-center" style={{background:`linear-gradient(180deg, ${pc}20 0%, transparent 100%)`}}>
@@ -5531,7 +5603,7 @@
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       );
     };
     
@@ -6843,17 +6915,17 @@
 
               {/* Row 2: ONE continuous nav strip, no groupings, no justify-between. Color = the only differentiator.
                   Hidden on phones — the mobile slim bar below renders the same tabs as a single swipeable row. */}
-              <div className="hidden sm:block relative mt-4 border-t border-white/[0.08]">
+              <nav aria-label="Dashboard sections" className="hidden sm:block relative mt-4 border-t border-white/[0.08]">
               <div ref={deskNavRef} className="flex items-center gap-1 flex-nowrap overflow-x-auto overflow-y-hidden no-scrollbar">
-                <button onClick={()=>gotoTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
+                <button aria-current={activeTab==='dashboard'?'page':undefined} onClick={()=>gotoTab('dashboard')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55 hover:text-white'}`}>
                   Dashboard
                   {activeTab==='dashboard' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
-                <button onClick={()=>gotoTab('kpi')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55 hover:text-white'}`}>
+                <button aria-current={activeTab==='kpi'?'page':undefined} onClick={()=>gotoTab('kpi')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55 hover:text-white'}`}>
                   KPI Report
                   {activeTab==='kpi' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
-                <button onClick={()=>gotoTab('social')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='social'?theme.text:'text-white/55 hover:text-white'}`}>
+                <button aria-current={activeTab==='social'?'page':undefined} onClick={()=>gotoTab('social')} className={`relative px-3.5 py-3 text-sm font-semibold transition-colors shrink-0 ${activeTab==='social'?theme.text:'text-white/55 hover:text-white'}`}>
                   Socials
                   {activeTab==='social' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
@@ -6871,7 +6943,7 @@
                 <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} loading={loading} onRefresh={()=>quickRefreshRef.current()} className="ml-auto shrink-0 pl-2"/>
               </div>
               <ScrollCues cue={deskNavCue}/>
-              </div>
+              </nav>
 
             </div>
           </header>
@@ -6894,12 +6966,12 @@
                 </div>
               </div>
             )}
-            <div className="relative">
+            <nav aria-label="Dashboard sections" className="relative">
             <div ref={mobNavRef} className="flex items-center gap-0.5 px-2 overflow-x-auto overflow-y-hidden no-scrollbar" style={{scrollbarWidth:'none',WebkitOverflowScrolling:'touch'}}>
               {/* Same destinations as the desktop Row 2 nav above — keep the two lists in sync. */}
-              <button data-active={activeTab==='dashboard'?'1':'0'} onClick={()=>gotoTab('dashboard')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55'}`}>Dashboard{activeTab==='dashboard'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
-              <button data-active={activeTab==='kpi'?'1':'0'} onClick={()=>gotoTab('kpi')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55'}`}>KPI Report{activeTab==='kpi'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
-              <button data-active={activeTab==='social'?'1':'0'} onClick={()=>gotoTab('social')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='social'?theme.text:'text-white/55'}`}>Socials{activeTab==='social'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
+              <button data-active={activeTab==='dashboard'?'1':'0'} aria-current={activeTab==='dashboard'?'page':undefined} onClick={()=>gotoTab('dashboard')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='dashboard'?theme.text:'text-white/55'}`}>Dashboard{activeTab==='dashboard'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
+              <button data-active={activeTab==='kpi'?'1':'0'} aria-current={activeTab==='kpi'?'page':undefined} onClick={()=>gotoTab('kpi')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55'}`}>KPI Report{activeTab==='kpi'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
+              <button data-active={activeTab==='social'?'1':'0'} aria-current={activeTab==='social'?'page':undefined} onClick={()=>gotoTab('social')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='social'?theme.text:'text-white/55'}`}>Socials{activeTab==='social'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
               <a href={`./calculators.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Calculators</a>
               <a href="./charts.html" className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Charts</a>
               <button onClick={()=>setShowBeam(true)} className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Live Feed<span className="font-orbitron text-[7px] font-bold tracking-[0.18em] px-1.5 py-[2px] rounded-full leading-none" style={{background:cfg.colorHex,color:'#0a0a0a',boxShadow:`0 0 8px ${cfg.colorHex}`}}>NEW</span></button>
@@ -6908,7 +6980,7 @@
               <FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} loading={loading} onRefresh={()=>quickRefreshRef.current()} className="shrink-0 pl-2 pr-2"/>
             </div>
             <ScrollCues cue={mobNavCue}/>
-            </div>
+            </nav>
           </div>
           
           {/* u12: a thin sweep under the chrome says "working" while the numbers are placeholders */}
@@ -7943,10 +8015,10 @@
           
           {/* KPI Report Modal (legacy - kept for direct link) */}
           {showKPI&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>closeModalAndReturn(setShowKPI)}>
+            <Modal className="z-50 flex items-center justify-center p-4 overflow-auto" onClose={()=>closeModalAndReturn(setShowKPI)} label={`${token} KPI report`}>
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
               {/* X close button - always top right of screen */}
-              <button 
+              <button aria-label="Close" 
                 onClick={()=>closeModalAndReturn(setShowKPI)} 
                 className="fixed top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600"
               >
@@ -7955,7 +8027,7 @@
               <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
                 <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod}/>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* Tier Info Modal */}
@@ -7973,7 +8045,7 @@
           
           {/* RH Cores LP Modal */}
           {showRHModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowRHModal(false)}>
+            <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClose={()=>setShowRHModal(false)} label="LP with RH Core Coins">
               <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto`} onClick={e=>e.stopPropagation()}>
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-4">
@@ -7993,7 +8065,7 @@
                           <div className={`text-4xl font-bold ${theme.text}`}>{fmtUSD(rhCoresLiq)}</div>
                         </div>
                       </div>
-                      <button onClick={()=>setShowRHModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
+                      <button aria-label="Close" onClick={()=>setShowRHModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
                     </div>
                   </div>
                   
@@ -8038,12 +8110,12 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* Volume Details Modal */}
           {showVolumeModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClick={()=>setShowVolumeModal(false)}>
+            <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/80" onClose={()=>setShowVolumeModal(false)} label="Volume by period">
               <div className={`bg-[#111] border ${theme.border} rounded-2xl max-w-lg w-full`} onClick={e=>e.stopPropagation()}>
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
@@ -8054,7 +8126,7 @@
                         <div className="text-white/50 text-base">Volume Analytics</div>
                       </div>
                     </div>
-                    <button onClick={()=>setShowVolumeModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
+                    <button aria-label="Close" onClick={()=>setShowVolumeModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
                   </div>
                   
                   {/* Volume by Period */}
@@ -8123,7 +8195,7 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* LIVE FEED — the Abduction Deck, live value tape */}
@@ -8958,9 +9030,9 @@
           
           {/* Combined KPI Modal - triggers Twitter mode */}
           {showCombinedKPI&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" onClick={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}}>
+            <Modal className="z-50 flex items-center justify-center p-4 overflow-auto" onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} label="Combined KPI report">
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
-              <button 
+              <button aria-label="Close" 
                 onClick={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} 
                 className="fixed top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600"
               >
@@ -8969,7 +9041,7 @@
               <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
                 <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* RH Cores Liquidity Share Modal */}
@@ -9113,9 +9185,9 @@
           
           {/* PTGC Logos Modal */}
           {showPTGCLogosModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)}>
+            <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClose={()=>closeModalAndReturn(setShowPTGCLogosModal)} label="PTGC logos">
               <div className="relative bg-black/95 border border-[#D4AF37]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                <button aria-label="Close" onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
                   <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-12 h-12"/>
                   <div>
@@ -9145,14 +9217,14 @@
                   ))}
                 </div>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* UFO Logos Modal */}
           {showUFOLogosModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowUFOLogosModal)}>
+            <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClose={()=>closeModalAndReturn(setShowUFOLogosModal)} label="UFO logos">
               <div className="relative bg-black/95 border border-[#7CFC00]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowUFOLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                <button aria-label="Close" onClick={()=>closeModalAndReturn(setShowUFOLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
                   <img src={TOKENS.UFO.logo} alt="UFO" className="w-12 h-12"/>
                   <div>
@@ -9181,14 +9253,14 @@
                   ))}
                 </div>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* Combined Logos Modal */}
           {showCombinedLogosModal&&(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)}>
+            <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClose={()=>closeModalAndReturn(setShowCombinedLogosModal)} label="Combined logos">
               <div className="relative bg-black/95 border border-white/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
+                <button aria-label="Close" onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
                   <img src={COMBINED_LOGO} alt="Combined" className="h-12" style={{transform:'scale(1.5)'}}/>
                   <div className="ml-4">
@@ -9215,7 +9287,7 @@
                   ))}
                 </div>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* ===== SINGLE TOKEN X's SHARE MODAL ===== */}
@@ -9884,7 +9956,7 @@
       const progressPct=fetchTotal>0?Math.round((fetchProgress/fetchTotal)*100):0;
 
       return(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/80" style={{backdropFilter:'blur(6px)'}} onClick={onClose}>
+        <Modal className="z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/80" style={{backdropFilter:'blur(6px)'}} onClose={onClose} label="Referrer details">
           <div className="bg-[#111] border border-[#D4AF37]/30 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
 
             {/* Header — matches referrer card style */}
@@ -9897,7 +9969,7 @@
                     <div className="flex items-center gap-1.5">
                       <code className="text-gray-500 text-[10px] truncate">{referrerDetails?.wallet?`${referrerDetails.wallet.slice(0,6)}...${referrerDetails.wallet.slice(-4)}`:'—'}</code>
                       {referrerDetails?.wallet&&(
-                        <button onClick={(e)=>{e.stopPropagation();navigator.clipboard.writeText(referrerDetails.wallet);setHeaderCopied(true);setTimeout(()=>setHeaderCopied(false),1500);}} className="text-gray-500 hover:text-white transition inline-flex items-center" title="Copy wallet">
+                        <button aria-label="Copy wallet address" onClick={(e)=>{e.stopPropagation();navigator.clipboard.writeText(referrerDetails.wallet);setHeaderCopied(true);setTimeout(()=>setHeaderCopied(false),1500);}} className="text-gray-500 hover:text-white transition inline-flex items-center" title="Copy wallet">
                           {headerCopied?<svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
                         </button>
                       )}
@@ -9916,7 +9988,7 @@
                   </div>
                 </div>
               </div>
-              <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl transition leading-none ml-4 flex-shrink-0">×</button>
+              <button aria-label="Close" onClick={onClose} className="text-gray-400 hover:text-white text-2xl transition leading-none ml-4 flex-shrink-0">×</button>
             </div>
 
             {/* Fetch progress */}
@@ -9978,7 +10050,7 @@
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{backgroundColor:COLORS[i%COLORS.length]}}/>
                           <code className="text-gray-300 text-xs font-mono truncate">{w.wallet.slice(0,8)}...{w.wallet.slice(-4)}</code>
-                          <button
+                          <button aria-label="Copy wallet address"
                             onClick={(e)=>{e.stopPropagation();navigator.clipboard.writeText(w.wallet);setCopiedWallet(w.wallet);setTimeout(()=>setCopiedWallet(null),1500);}}
                             className="text-gray-500 hover:text-[#D4AF37] transition flex-shrink-0" title="Copy wallet address"
                           >
@@ -10007,7 +10079,7 @@
               <button onClick={onClose} className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition font-medium">Close</button>
             </div>
           </div>
-        </div>
+        </Modal>
       );
     };
 
@@ -10173,7 +10245,7 @@
       const CopyBtn=({text,className="text-gray-400 hover:text-white"})=>{
         const[copied,setCopied]=useState(false);
         return(
-          <button
+          <button aria-label="Copy"
             onClick={(e)=>{
               e.stopPropagation();
               navigator.clipboard.writeText(text);
@@ -10438,7 +10510,7 @@
             
             return(
               <>
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}}>
+              <Modal className="z-[100] flex items-center justify-center p-4 bg-black/90" onClose={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} label="Referrer details">
                 <div className="bg-[#111] border border-[#D4AF37]/30 rounded-2xl max-w-3xl w-full max-h-[90vh] shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
                   <div className="overflow-y-auto flex-1">
                   {/* Header */}
@@ -10488,7 +10560,7 @@
                         <span className="text-purple-300 font-semibold text-sm">{details.username}'s Referral Link</span>
                         <span className="text-purple-400/60 text-xs">Click to copy</span>
                       </button>
-                      <button onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} className="text-gray-400 hover:text-white text-2xl">×</button>
+                      <button aria-label="Close" onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} className="text-gray-400 hover:text-white text-2xl">×</button>
                     </div>
                   </div>
                   
@@ -10791,7 +10863,7 @@
                     <button onClick={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
                   </div>
                 </div>
-              </div>
+              </Modal>
               {showBuyerDist&&<BuyerDistributionModal allTx={allTx} referrerDetails={details} onClose={()=>setShowBuyerDist(false)}/>}
               </>
             );
@@ -10873,12 +10945,12 @@
             };
             
             return(
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm" onClick={()=>setShowLeaderboard(false)}>
+              <Modal className="z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm" onClose={()=>setShowLeaderboard(false)} label="Affiliate leaderboard">
                 <div className="bg-gradient-to-b from-[#151515] to-[#0a0a0a] border border-[#D4AF37]/20 rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
                   
                   {/* Header with Logo */}
                   <div className="relative border-b border-[#D4AF37]/20 bg-gradient-to-b from-[#D4AF37]/10 to-transparent">
-                    <button onClick={()=>setShowLeaderboard(false)} className="absolute right-4 top-4 text-gray-400 hover:text-white text-2xl z-10">×</button>
+                    <button aria-label="Close" onClick={()=>setShowLeaderboard(false)} className="absolute right-4 top-4 text-gray-400 hover:text-white text-2xl z-10">×</button>
                     <div className="flex flex-col items-center pt-6 pb-4">
                       <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-32 h-32 mb-3" style={{filter:'drop-shadow(0 0 25px rgba(212,175,55,0.5))'}}/>
                       <h1 className="font-orbitron text-2xl md:text-3xl font-bold text-[#D4AF37] tracking-wider">AFFILIATE PROGRAM</h1>
@@ -10972,17 +11044,17 @@
                     <button onClick={()=>setShowLeaderboard(false)} className="px-8 py-2.5 bg-gradient-to-r from-[#D4AF37]/20 to-[#D4AF37]/10 border border-[#D4AF37]/30 hover:border-[#D4AF37]/50 text-[#D4AF37] font-semibold rounded-lg transition-all hover:shadow-lg hover:shadow-[#D4AF37]/10">Close</button>
                   </div>
                 </div>
-              </div>
+              </Modal>
             );
           })()}
           
           {/* Payment Receipts Modal */}
           {showPayments&&(
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={()=>setShowPayments(false)}>
+            <Modal className="z-[100] flex items-center justify-center p-4 bg-black/90" onClose={()=>setShowPayments(false)} label="Payment receipts">
               <div className="bg-[#111] border border-purple-500/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
                 <div className="flex items-center justify-between p-4 border-b border-white/10">
                   <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">💰 Payment Receipts ({data?.receipts?.length||0})</h2>
-                  <button onClick={()=>setShowPayments(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
+                  <button aria-label="Close" onClick={()=>setShowPayments(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
                 </div>
                 
                 {(data?.receipts?.length||0)===0?(
@@ -11038,7 +11110,7 @@
                   <button onClick={()=>setShowPayments(false)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition">Close</button>
                 </div>
               </div>
-            </div>
+            </Modal>
           )}
           
           {/* Header */}
@@ -11046,7 +11118,7 @@
             <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
               <div className="flex items-center justify-between flex-wrap gap-3 sm:gap-4">
                 <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                  <button onClick={onBack} className="text-[#D4AF37] hover:text-[#D4AF37]/80 transition shrink-0">
+                  <button aria-label="Back" onClick={onBack} className="text-[#D4AF37] hover:text-[#D4AF37]/80 transition shrink-0">
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
                   </button>
                   <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -11374,7 +11446,7 @@
     // Disclaimer Modal Component
     const DisclaimerModal=({onAccept})=>{
       return(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95">
+        <Modal className="z-[100] flex items-center justify-center p-4 bg-black/95" label="Disclaimer">
           <div className="bg-[#111] border border-yellow-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl" style={{maxHeight:'90vh',overflowY:'auto'}}>
             <div className="text-center mb-6">
               <div className="text-4xl mb-3">⚠️</div>
@@ -11424,7 +11496,7 @@
               </p>
             </div>
           </div>
-        </div>
+        </Modal>
       );
     };
     
