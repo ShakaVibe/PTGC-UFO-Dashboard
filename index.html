@@ -6815,7 +6815,7 @@
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
 
               {/* Row 1: ONE continuous data strip — packed, no justify-between. Stats use flex-1 to absorb slack. */}
-              <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 lg:gap-2.5 xl:gap-5 flex-wrap">
 
                 {/* Back arrow — minimal, no pill */}
                 <button onClick={onBack} aria-label="Back to Home" className="group tap text-white/40 hover:text-white transition-colors -ml-1.5 shrink-0">
@@ -6825,12 +6825,12 @@
                 {/* Logo with subtle halo */}
                 <div className="relative shrink-0">
                   <div className="absolute inset-0 rounded-full blur-xl opacity-30 scale-110" style={{background:`radial-gradient(circle, ${cfg.colorHex} 0%, transparent 60%)`}}></div>
-                  <img src={cfg.logo} alt={token} className="relative w-14 h-14 sm:w-20 sm:h-20 lg:w-24 lg:h-24"/>
+                  <img src={cfg.logo} alt={token} className="relative w-14 h-14 sm:w-20 sm:h-20 xl:w-24 xl:h-24"/>
                 </div>
 
                 {/* Token name + address */}
                 <div className="shrink-0">
-                  <div className={`font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold leading-none tracking-wide ${isGold?'metallic-gold':theme.text}`}>{token}</div>
+                  <div className={`font-orbitron text-3xl sm:text-4xl xl:text-5xl font-bold leading-none tracking-wide ${isGold?'metallic-gold':theme.text}`}>{token}</div>
                   <div className="flex items-center gap-1.5 mt-2">
                     <span className="text-white/40 text-xs font-mono tabular-nums">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span>
                     <button onClick={copyAddress} aria-label={copied?'Copied':'Copy contract address'} className="tap -my-2 -mx-2 text-white/40 hover:text-white/80 transition-colors text-xs">{copied?'\u2713':'\u{1F4CB}'}</button>
@@ -6846,43 +6846,45 @@
 
                 {/* Price + change (stacked) */}
                 <div className="shrink-0">
-                  {loading?<Sk w={120} h={28} className="sm:!h-8 lg:!h-9 sm:!w-[150px] lg:!w-[180px]"/>:<Price p={data?.price} c={`font-bold leading-none tabular-nums text-2xl sm:text-3xl lg:text-4xl ${isGold?'metallic-gold':theme.text}`}/>}
-                  {loading?<Sk w={56} h={16} className="mt-2"/>:<div className={`mt-2 text-xs sm:text-sm lg:text-base font-bold tabular-nums ${priceUp?'text-emerald-400':'text-rose-400'}`}>
+                  {loading?<Sk w={120} h={28} className="sm:!h-8 xl:!h-9 sm:!w-[150px] xl:!w-[180px]"/>:<Price p={data?.price} c={`font-bold leading-none tabular-nums text-2xl sm:text-3xl xl:text-4xl ${isGold?'metallic-gold':theme.text}`}/>}
+                  {loading?<Sk w={56} h={16} className="mt-2"/>:<div className={`mt-2 text-xs sm:text-sm xl:text-base font-bold tabular-nums ${priceUp?'text-emerald-400':'text-rose-400'}`}>
                     {priceUp?'\u2191':'\u2193'} {Math.abs(data?.change||0).toFixed(2)}%
                   </div>}
                 </div>
 
                 {/* hairline divider */}
-                <div className="hidden xl:block w-px self-stretch bg-white/10 mx-1"></div>
+                <div className="hidden lg:block w-px self-stretch bg-white/10 lg:mx-0 xl:mx-1"></div>
 
                 {/* Stats — flex-1 absorbs slack into spacing instead of leaving a void.
-                    Inline only from xl (1280px): between lg and xl the row is ~250px short and
-                    "X's to a Penny" / the values were being clipped mid-number. Below xl the
-                    wrap row underneath carries them. */}
-                <div className="hidden xl:flex items-center flex-1 min-w-0 justify-around gap-4">
+                    Inline from lg (1024px). Between lg and xl everything in the row runs one
+                    size smaller and tighter (logo, name, price, these values, the gaps) so the
+                    three stats stay on the line instead of dropping to the wrap row below —
+                    Shaka, 2026-09-09: "closer together and a bit smaller beats a second row".
+                    Below lg the wrap row underneath carries them. */}
+                <div className="hidden lg:flex items-center flex-1 min-w-0 justify-around lg:gap-2 xl:gap-4">
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio<InfoTip label="PLS Ratio">{EXPLAINERS.plsRatio(token)}</InfoTip></span>
-                    {loading?<Sk w={64} h={30}/>:<span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{plsRatio}</span>}
+                    <span className="flex items-center gap-1 text-[10px] xl:text-xs uppercase tracking-[0.08em] xl:tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio<InfoTip label="PLS Ratio">{EXPLAINERS.plsRatio(token)}</InfoTip></span>
+                    {loading?<Sk w={64} h={30} className="lg:!h-6 xl:!h-[30px]"/>:<span className={`text-2xl xl:text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{plsRatio}</span>}
                   </div>
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH<InfoTip label="X's to ATH">{EXPLAINERS.xToATH(token,athPrice)}</InfoTip></span>
-                    {loading?<Sk w={64} h={30}/>:<span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{fmtX(xToATH)}</span>}
+                    <span className="flex items-center gap-1 text-[10px] xl:text-xs uppercase tracking-[0.08em] xl:tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to ATH<InfoTip label="X's to ATH">{EXPLAINERS.xToATH(token,athPrice)}</InfoTip></span>
+                    {loading?<Sk w={64} h={30} className="lg:!h-6 xl:!h-[30px]"/>:<span className={`text-2xl xl:text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{fmtX(xToATH)}</span>}
                   </div>
                   <div className="flex flex-col items-start gap-0.5">
-                    <span className="flex items-center gap-1 text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny<InfoTip label="X's to a Penny">{EXPLAINERS.xToPenny()}</InfoTip></span>
-                    {loading?<Sk w={64} h={30}/>:<span className={`text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{fmtX(xToPenny)}</span>}
+                    <span className="flex items-center gap-1 text-[10px] xl:text-xs uppercase tracking-[0.08em] xl:tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">X's to a Penny<InfoTip label="X's to a Penny">{EXPLAINERS.xToPenny()}</InfoTip></span>
+                    {loading?<Sk w={64} h={30} className="lg:!h-6 xl:!h-[30px]"/>:<span className={`text-2xl xl:text-3xl font-bold tabular-nums leading-none ${isGold?'metallic-gold':theme.text}`}>{fmtX(xToPenny)}</span>}
                   </div>
                 </div>
 
                 {/* hairline divider */}
-                <div className="hidden xl:block w-px self-stretch bg-white/10 mx-1"></div>
+                <div className="hidden lg:block w-px self-stretch bg-white/10 lg:mx-0 xl:mx-1"></div>
 
                 {/* Actions — packed right next to stats, no gap created by justify-between */}
-                <div className="flex items-center gap-2 shrink-0 ml-auto xl:ml-0">
+                <div className="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
                   {/* BUY hidden on UFO for now — its onboarding page still uses the old token.
                       Re-show by removing the token!=='UFO' guard once that page is migrated. */}
-                  {token!=='UFO'&&(<a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
-                    <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9"/>
+                  {token!=='UFO'&&(<a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 lg:py-3 xl:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
+                    <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9 lg:hidden xl:block"/>
                     <span className={`font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] ${isGold?'metallic-gold':theme.text}`}>BUY</span>
                   </a>)}
                   <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
@@ -6892,8 +6894,8 @@
                 </div>
               </div>
 
-              {/* Stats fallback below xl (they're hidden in row 1 until then) */}
-              <div className="xl:hidden flex items-center gap-x-4 sm:gap-x-5 gap-y-1.5 mt-3 flex-wrap">
+              {/* Stats fallback below lg (they're hidden in row 1 until then) */}
+              <div className="lg:hidden flex items-center gap-x-4 sm:gap-x-5 gap-y-1.5 mt-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-xs uppercase tracking-[0.2em] text-white/60 font-semibold whitespace-nowrap">PLS Ratio</span>
                   {loading?<Sk w={40} h={18}/>:<span className={`text-base font-bold tabular-nums ${theme.text}`}>{plsRatio}</span>}
