@@ -4901,31 +4901,71 @@
      * Wallet connect, quotes and slippage (the widget detects the token tax) all happen INSIDE
      * the iframe — nothing here touches a wallet. Foreign origin, so the headless harness only
      * ever shows the loading shell; check the real widget live. Phone: bottom sheet; sm+: card. */
-    const SwapModal=({token,onClose})=>{
+    const SwapModal=({token,data,onClose})=>{
       const[tok,setTok]=useState(token);
       const[ready,setReady]=useState(false);
+      const[copied,setCopied]=useState(false);
+      const[quote,setQuote]=useState({});   // other token's price after a Switch: {[tok]:{price,change}|null}; undefined = loading
       const cfg=TOKENS[tok],other=tok==='PTGC'?'UFO':'PTGC';
       const isGold=cfg.color==='gold';
       const hex=cfg.colorHex;
       const url=switchWidgetUrl(tok,'buy');
-      const flip=()=>{setReady(false);setTok(other);};
+      const flip=()=>{setReady(false);setCopied(false);setTok(other);};
+      const copy=()=>{try{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000);}catch(e){}};
+      /* Price pill: the dashboard's own (live-refreshed) figure for its token; for the other
+         token one DexScreener main-pair read, cached for the life of the modal. Same
+         undefined = loading / null = failed / object = data semantics as burnPeriods (gotcha 3). */
+      const live=tok===token?(data?{price:data.price,change:data.change||0}:undefined):quote[tok];
+      useEffect(()=>{
+        if(tok===token||quote[tok]!==undefined)return;
+        let dead=false;
+        (async()=>{
+          let q=null;
+          try{const p=dsOnePair(await dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS[tok].mainPair,6000));const price=parseFloat(p?.priceUsd)||0;if(price>0)q={price,change:parseFloat(p?.priceChange?.h24)||0};}catch(e){}
+          if(!dead)setQuote(prev=>({...prev,[tok]:q}));
+        })();
+        return()=>{dead=true;};
+      },[tok]);
       return(
         <Modal onClose={onClose} label={`Buy or sell ${tok} on Switch`} className="z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-overlay bg-black/80">
           <div onClick={e=>e.stopPropagation()} className="relative w-full sm:max-w-[460px] max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-t-3xl sm:rounded-3xl border bg-[#0a0a0a] overflow-hidden" style={{borderColor:`${hex}66`,boxShadow:`0 0 80px -20px ${hex}99, 0 30px 80px rgba(0,0,0,.7)`}}>
             <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[220px] rounded-full blur-3xl opacity-25" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
-            <div className="relative flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
-              <img src={cfg.logo} alt="" className="w-10 h-10"/>
-              <div className="flex-1 min-w-0">
-                <div className={`font-orbitron text-lg font-bold leading-none tracking-wide ${isGold?'metallic-gold':'text-[#7CFC00]'}`}>{tok}</div>
-                <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] sm:tracking-[0.25em] mt-1.5 whitespace-nowrap">Swap on switch.win</div>
+            {/* Header: big haloed logo, eyebrow + token name, SWITCH / close top-right; then a
+                pill row — contract address (tap to copy) and the live price with 24h change. */}
+            <div className="relative px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="relative shrink-0">
+                  <div aria-hidden="true" className="absolute inset-0 rounded-full blur-xl opacity-40 scale-110" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 60%)`}}></div>
+                  <img src={cfg.logo} alt="" className="relative w-16 h-16 sm:w-20 sm:h-20"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.25em] truncate">Swap on switch.win</div>
+                  <div className={`font-orbitron text-3xl sm:text-4xl font-bold leading-none tracking-wide mt-1 ${isGold?'metallic-gold':'text-[#7CFC00]'}`}>{tok}</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-start">
+                  <button onClick={flip} aria-label={`Switch to ${other}`} title={`Switch to ${other}`} className="tap flex items-center gap-1.5 px-1.5 sm:px-2 py-1.5 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+                    <img src={TOKENS[other].logo} alt="" className="w-7 h-7"/>
+                    <span className="hidden sm:inline text-white/70 text-[10px] font-semibold uppercase tracking-[0.15em]">Switch</span>
+                  </button>
+                  <button onClick={onClose} aria-label="Close" className="tap w-9 h-9 -mr-1 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors text-sm">{'\u2715'}</button>
+                </div>
               </div>
-              <button onClick={flip} aria-label={`Switch to ${other}`} className="tap flex items-center gap-1.5 px-2 py-1.5 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
-                <img src={TOKENS[other].logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7"/>
-                <span className="text-white/70 text-[10px] font-semibold uppercase tracking-[0.15em]">Switch</span>
-              </button>
-              <button onClick={onClose} aria-label="Close" className="tap w-9 h-9 -mr-1 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors text-sm">{'\u2715'}</button>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button onClick={copy} aria-label={copied?'Copied':`Copy ${tok} contract address`} className="tap inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/20 transition-colors pl-2.5 pr-2 py-1">
+                  <span className="font-mono text-[11px] tabular-nums text-white/60">{cfg.address.slice(0,6)}{'\u2026'}{cfg.address.slice(-4)}</span>
+                  <span className={`text-[11px] leading-none ${copied?'text-emerald-400 font-semibold':'text-white/40'}`}>{copied?'\u2713 Copied':'\u{1F4CB}'}</span>
+                </button>
+                {live===undefined&&<Sk w={128} h={26} className="rounded-full"/>}
+                {live&&live.price>0&&(
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${hex}`}}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{background:hex,boxShadow:`0 0 6px ${hex}`}}></span>
+                    <Price p={live.price} c={`font-orbitron text-xs font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}/>
+                    <span className={`text-[10px] font-bold tabular-nums leading-none ${live.change>=0?'text-emerald-400':'text-rose-400'}`}>{live.change>=0?'\u2191':'\u2193'} {Math.abs(live.change).toFixed(2)}%</span>
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="relative mx-4 sm:mx-5 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black" style={{height:'min(680px, calc(100dvh - 160px))',minHeight:360}}>
+            <div className="relative mx-4 sm:mx-5 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black" style={{height:'min(720px, calc(100dvh - 236px))',minHeight:340}}>
               {!ready&&(
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6" aria-live="polite">
                   <div className="w-10 h-10 rounded-full border-2 border-white/10 animate-spin" style={{borderTopColor:hex}}></div>
@@ -8281,7 +8321,7 @@
           )}
           
           {/* BUY / SELL — switch.win widget */}
-          {showSwap&&<SwapModal token={token} onClose={()=>setShowSwap(false)}/>}
+          {showSwap&&<SwapModal token={token} data={data} onClose={()=>setShowSwap(false)}/>}
 
           {/* LIVE FEED — the Abduction Deck, live value tape */}
           <AbductionDeckModal

@@ -16,9 +16,8 @@ Update it at the end of every session.
 
 Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
-handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built** (uncommitted at the
-time of writing — see `sessions/2026-09-13.md`; the live iframe check is the first thing to do
-after the push). Check `git --no-optional-locks status` before starting.
+handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live** (see
+`sessions/2026-09-13.md`). Check `git --no-optional-locks status` before starting.
 
 | Area | Status |
 |---|---|
@@ -33,7 +32,7 @@ after the push). Check `git --no-optional-locks status` before starting.
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — everything else (u3–u6, u11, u13, u14) | Not started. Suggested order: u4/u5/u6, u11/u13/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
-| Phase 4 — Buy/Sell via switch.win (new, not on the artifact yet) | **Built 2026-09-13**, awaiting push + live iframe check |
+| Phase 4 — Buy/Sell via switch.win (new, not on the artifact yet) | **Done, live** (2026-09-13; header v2 + in-window Switch in the last push) |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -132,10 +131,10 @@ after the push). Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
-0. **Buy/Sell (switch.win) — live check.** After pushing, open ptgc-ufo.com, click Buy/Sell
-   on PTGC and UFO, confirm the Switch widget renders inside the frame and the BUY/SELL toggle
-   works (sell = the widget's own flip arrow). Then tell the Switch founder we embed
-   `/widget`, and add the item to the roadmap artifact as Phase 4 and tick it.
+0. **Buy/Sell (switch.win)** — built and confirmed live on 2026-09-13 (widget renders in the
+   frame). Left: tell the Switch founder we embed `/widget?…` with the builder's params, and
+   add the item to the roadmap artifact as Phase 4 and tick it. Details + v2 header in
+   `sessions/2026-09-13.md`.
 1. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
    not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
    back on the button that opened it.
