@@ -4896,25 +4896,33 @@
      * Opened by the header's Buy/Sell button. A <Modal> (gotcha 12) holding the switch.win
      * widget in an iframe, themed with the token colour through the URL params. Opens as
      * PLS → token; selling is the widget's own flip arrow (Shaka: no Buy/Sell controls of our
-     * own inside the window). Wallet connect, quotes and slippage (the widget detects the
-     * token tax) all happen INSIDE the iframe — nothing here touches a wallet. Foreign origin,
-     * so the headless harness only ever shows the loading shell; check the real widget live.
-     * Phone: bottom sheet; sm+: centred card. */
-    const SwapModal=({token,cfg,onClose})=>{
+     * own inside the window). The SWITCH button top-right swaps the window to the OTHER
+     * token's widget — modal-local state (`tok`), the dashboard behind stays on `token`.
+     * Wallet connect, quotes and slippage (the widget detects the token tax) all happen INSIDE
+     * the iframe — nothing here touches a wallet. Foreign origin, so the headless harness only
+     * ever shows the loading shell; check the real widget live. Phone: bottom sheet; sm+: card. */
+    const SwapModal=({token,onClose})=>{
+      const[tok,setTok]=useState(token);
       const[ready,setReady]=useState(false);
+      const cfg=TOKENS[tok],other=tok==='PTGC'?'UFO':'PTGC';
       const isGold=cfg.color==='gold';
       const hex=cfg.colorHex;
-      const url=switchWidgetUrl(token,'buy');
+      const url=switchWidgetUrl(tok,'buy');
+      const flip=()=>{setReady(false);setTok(other);};
       return(
-        <Modal onClose={onClose} label={`Buy or sell ${token} on Switch`} className="z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-overlay bg-black/80">
+        <Modal onClose={onClose} label={`Buy or sell ${tok} on Switch`} className="z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-overlay bg-black/80">
           <div onClick={e=>e.stopPropagation()} className="relative w-full sm:max-w-[460px] max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-t-3xl sm:rounded-3xl border bg-[#0a0a0a] overflow-hidden" style={{borderColor:`${hex}66`,boxShadow:`0 0 80px -20px ${hex}99, 0 30px 80px rgba(0,0,0,.7)`}}>
             <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[220px] rounded-full blur-3xl opacity-25" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
             <div className="relative flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
               <img src={cfg.logo} alt="" className="w-10 h-10"/>
               <div className="flex-1 min-w-0">
-                <div className={`font-orbitron text-lg font-bold leading-none tracking-wide ${isGold?'metallic-gold':'text-[#7CFC00]'}`}>{token}</div>
-                <div className="text-white/40 text-[10px] font-semibold uppercase tracking-[0.25em] mt-1.5">Swap on switch.win</div>
+                <div className={`font-orbitron text-lg font-bold leading-none tracking-wide ${isGold?'metallic-gold':'text-[#7CFC00]'}`}>{tok}</div>
+                <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] sm:tracking-[0.25em] mt-1.5 whitespace-nowrap">Swap on switch.win</div>
               </div>
+              <button onClick={flip} aria-label={`Switch to ${other}`} className="tap flex items-center gap-1.5 px-2 py-1.5 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+                <img src={TOKENS[other].logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7"/>
+                <span className="text-white/70 text-[10px] font-semibold uppercase tracking-[0.15em]">Switch</span>
+              </button>
               <button onClick={onClose} aria-label="Close" className="tap w-9 h-9 -mr-1 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors text-sm">{'\u2715'}</button>
             </div>
             <div className="relative mx-4 sm:mx-5 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black" style={{height:'min(680px, calc(100dvh - 160px))',minHeight:360}}>
@@ -4924,11 +4932,11 @@
                   <div className="text-white/50 text-xs uppercase tracking-[0.2em]">Loading Switch\u2026</div>
                 </div>
               )}
-              <iframe src={url} title={`Switch widget \u2014 ${token}`} allow="clipboard-read; clipboard-write" onLoad={()=>setReady(true)} className="w-full h-full" style={{border:0,opacity:ready?1:0,transition:'opacity .35s ease'}}></iframe>
+              <iframe key={url} src={url} title={`Switch widget \u2014 ${tok}`} allow="clipboard-read; clipboard-write" onLoad={()=>setReady(true)} className="w-full h-full" style={{border:0,opacity:ready?1:0,transition:'opacity .35s ease'}}></iframe>
             </div>
             <div className="flex items-center justify-between gap-3 px-4 sm:px-5 pb-4 text-[11px] text-white/40">
               <span>Connect your wallet inside the widget.</span>
-              <a href={switchDappUrl(token)} target="_blank" rel="noopener noreferrer" className={`shrink-0 font-semibold whitespace-nowrap hover:underline ${isGold?'text-[#F0DC78]':'text-[#7CFC00]'}`}>Open in Switch {'\u2197'}</a>
+              <a href={switchDappUrl(tok)} target="_blank" rel="noopener noreferrer" className={`shrink-0 font-semibold whitespace-nowrap hover:underline ${isGold?'text-[#F0DC78]':'text-[#7CFC00]'}`}>Open in Switch {'\u2197'}</a>
             </div>
           </div>
         </Modal>
@@ -6947,20 +6955,16 @@
                 <div className="flex items-center gap-2 lg:gap-1.5 xl:gap-2 shrink-0 ml-auto lg:ml-0">
                   {/* BUY / SELL — opens SwapModal (the switch.win widget). Replaced the goptgc
                       onboarding link on 2026-09-13 (that link still lives in the Affiliates tab).
-                      Wider than the old BUY pill, so from lg up the logo is hidden and padding/tracking
-                      are tighter — the header is capped at max-w-7xl, so the row never gets more room
-                      than it has at 1280 and "X's to a Penny" ⓘ was clipped at 1024/1280/1600 (measured).
-                      `--g` feeds the .buy-btn glow pulse in the CSS block. The sub-line deliberately
-                      does not say "Switch" — the token-toggle button right next to it is called Switch. */}
-                  <button onClick={()=>setShowSwap(true)} aria-haspopup="dialog" className="buy-btn tap flex items-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-4 lg:px-2.5 xl:px-3.5 py-1.5 sm:py-2 lg:py-3 xl:py-2 rounded-xl" style={{'--g':isGold?'rgba(212,175,55,0.28)':'rgba(124,252,0,0.28)',background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.38), rgba(212,175,55,0.12))':'linear-gradient(135deg, rgba(124,252,0,0.38), rgba(124,252,0,0.12))',border:isGold?'1px solid rgba(212,175,55,0.55)':'1px solid rgba(124,252,0,0.55)'}}>
-                    <img src={cfg.logo} alt="" className="w-7 h-7 sm:w-9 sm:h-9 lg:hidden"/>
-                    <span className="flex flex-col items-start">
-                      <span className="flex items-center font-orbitron font-bold text-xs sm:text-sm lg:text-xs xl:text-sm tracking-[0.2em] lg:tracking-[0.06em] xl:tracking-[0.16em] leading-none whitespace-nowrap">
-                        <span className={isGold?'metallic-gold':theme.text}>BUY</span>
-                        <span className="text-white/30 mx-1 lg:mx-0.5 xl:mx-1 font-normal">/</span>
-                        <span className={isGold?'metallic-gold':theme.text}>SELL</span>
-                      </span>
-                      <span className="hidden sm:block text-[8px] font-semibold uppercase tracking-[0.28em] text-white/45 mt-1.5 leading-none whitespace-nowrap">PLS {'\u21C4'} {token}</span>
+                      Layout = Shaka's pick "B" from the 2026-09-13 mockups: logo left, BUY stacked
+                      over SELL with a hairline, SELL muted so BUY reads as the primary. No sub-text.
+                      `--g` feeds the .buy-btn glow pulse in the CSS block. Between lg and xl the row
+                      runs one size smaller (see the stats comment above) — the header is capped at
+                      max-w-7xl, so 1024px is the tightest case; "X's to a Penny" ⓘ must stay visible. */}
+                  <button onClick={()=>setShowSwap(true)} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="buy-btn tap flex items-center gap-2 lg:gap-1.5 xl:gap-2.5 px-2.5 sm:px-3.5 lg:px-2.5 xl:px-3.5 py-1 sm:py-1.5 rounded-xl" style={{'--g':isGold?'rgba(212,175,55,0.28)':'rgba(124,252,0,0.28)',background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.38), rgba(212,175,55,0.12))':'linear-gradient(135deg, rgba(124,252,0,0.38), rgba(124,252,0,0.12))',border:isGold?'1px solid rgba(212,175,55,0.55)':'1px solid rgba(124,252,0,0.55)'}}>
+                    <img src={cfg.logo} alt="" className="w-8 h-8 sm:w-9 sm:h-9 lg:w-7 lg:h-7 xl:w-9 xl:h-9"/>
+                    <span className="flex flex-col items-stretch leading-none">
+                      <span className={`font-orbitron font-extrabold text-[11px] sm:text-xs lg:text-[10px] xl:text-xs tracking-[0.2em] lg:tracking-[0.14em] xl:tracking-[0.2em] whitespace-nowrap pb-1 ${isGold?'metallic-gold':theme.text}`}>BUY</span>
+                      <span className="font-orbitron font-extrabold text-[11px] sm:text-xs lg:text-[10px] xl:text-xs tracking-[0.2em] lg:tracking-[0.14em] xl:tracking-[0.2em] whitespace-nowrap pt-1 border-t border-white/15 text-white/55">SELL</span>
                     </span>
                   </button>
                   <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 lg:px-2 xl:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
@@ -8277,7 +8281,7 @@
           )}
           
           {/* BUY / SELL — switch.win widget */}
-          {showSwap&&<SwapModal token={token} cfg={cfg} onClose={()=>setShowSwap(false)}/>}
+          {showSwap&&<SwapModal token={token} onClose={()=>setShowSwap(false)}/>}
 
           {/* LIVE FEED — the Abduction Deck, live value tape */}
           <AbductionDeckModal
