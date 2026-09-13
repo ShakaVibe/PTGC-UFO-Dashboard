@@ -116,6 +116,7 @@ const dsAnswer=(url)=>{
     if(kind==='evalfile'){const v=await page.evaluate(fs.readFileSync(arg,'utf8'));console.log('EVAL',arg,'=>',JSON.stringify(v,null,1));}
     if(kind==='eval'){const v=await page.evaluate(arg);console.log('EVAL',arg,'=>',JSON.stringify(v));}
     if(kind==='shot'){await page.screenshot({path:`${out}-${arg}.png`,fullPage:false});}
+    if(kind==='hoverfile'){const pt=await page.evaluate(fs.readFileSync(arg,'utf8'));if(pt&&pt.x!=null){await page.mouse.move(pt.x,pt.y);await page.waitForTimeout(500);}else errors.push('HOVERFAIL '+arg+' returned '+JSON.stringify(pt));}   // hoverfile=<js file returning {x,y} in viewport px> → move the mouse there (tooltips)
   }
   await page.screenshot({path:`${out}.png`,fullPage:true});
   const txt=await page.evaluate(()=>document.body.innerText.slice(0,400).replace(/\n+/g,' | '));
