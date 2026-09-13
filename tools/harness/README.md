@@ -20,12 +20,15 @@ RPC_DOWN=1 node run.js "#/ptgc" 375 812 out/rpcdown      # every RPC returns 503
 DS_DOWN=1  node run.js "#/ufo"  375 812 out/dsdown       # DexScreener returns 503
 SLOW=9000  node run.js "#/ptgc" 375 812 out/loading      # every data reply waits 9 s → screenshot the loading shell
 SLOW_HISTORY=6000 node run.js "#/ptgc" 1280 900 out/hist  # only data/*history*.json wait → modals opened before history lands (u13)
+node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label='DAO Buys chart (preview)'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
 ```
 
 Actions (semicolon-separated, in order): `shot=<name>` viewport screenshot, `scroll=<y>`,
 `click=<playwright selector>` (add `:visible` — several controls exist twice for phone/desktop),
-`key=<Key>`, `wait=<ms>`, `eval=<js>` (no semicolons), `evalfile=<path>`. A full-page screenshot is
+`key=<Key>`, `wait=<ms>`, `eval=<js>` (no semicolons), `evalfile=<path>`, `hoverfile=<path>` (a
+JS file that returns `{x,y}` in viewport px — the mouse moves there, for tooltips; see
+`probes/dao-buys-dot.js`, which finds the biggest DAO-buy dot). A full-page screenshot is
 always written to `<outPrefix>.png` at the end, and the run prints the first 400 chars of body text,
 the RPC request count, and console errors (the Babel "deoptimised" note is expected).
 

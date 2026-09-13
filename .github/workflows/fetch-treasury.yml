@@ -31,6 +31,13 @@ jobs:
       
       - name: Fetch Treasury Transactions
         run: node scripts/fetch-treasury-transactions.js
+
+      # DAO Buys chart data: derived from the two wallet-1 files above, priced on-chain,
+      # checkpointed in data/dao-buys.json (normally a few RPC calls; ~30 s from scratch).
+      # continue-on-error so an RPC hiccup here never blocks the treasury commit.
+      - name: Build DAO buys (data/dao-buys.json)
+        run: node scripts/build-dao-buys.mjs
+        continue-on-error: true
       
       - name: Commit if changed (race-proof rebase + retry)
         run: |
