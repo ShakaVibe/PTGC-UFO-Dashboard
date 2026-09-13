@@ -4078,10 +4078,30 @@
     const fmtUSD2=n=>{if(n==null||isNaN(n))return'—';if(n>0&&n<0.01)return'$'+n.toFixed(3);const d=Math.floor(n),c=Math.round((n-d)*100);return'$'+d.toLocaleString('en-US')+(d<1000&&c?'.'+String(c).padStart(2,'0'):'');};
 
     // ===== HOLDER ANALYTICS MODAL =====
+    /* u4: hoisted out of HolderAnalyticsModal — was re-declared on every render, so React remounted it each time. */
+    const PctBadge=({val})=>{
+      if(val===null||val===undefined)return<span className="text-white/30 text-sm">—</span>;
+      const pos=val>=0;
+      return<span className={`font-bold text-lg ${pos?'text-green-400':'text-red-400'}`}>{pos?'▲':'▼'} {Math.abs(val).toFixed(1)}%</span>;
+    };
+
     const HolderAnalyticsModal=({open,close,token,cfg,theme,holders,holderChange,holdersByPeriod})=>{
       const[chartPeriod,setChartPeriod]=useState('30D');
       const chartRef=React.useRef(null);
       const chartInst=React.useRef(null);
+      /* u13: holder-history.json lives in a module variable, not state, so a modal opened before
+         it landed used to draw an empty chart and sit on "Loading chart data..." until the user
+         toggled the period. Now: if the cache is empty on open, fetch it and bump `histTick`,
+         which is a dep of the chart effect → redraw + the overlay clears. `histFailed` keeps the
+         overlay honest when the fetch fails instead of promising data that is not coming. */
+      const[histTick,setHistTick]=useState(0);
+      const[histFailed,setHistFailed]=useState(false);
+      useEffect(()=>{
+        if(!open||holderHistoryCacheNew?.snapshots?.length)return;
+        let dead=false;setHistFailed(false);
+        fetchHolderHistoryNew().then(()=>{if(dead)return;if(holderHistoryCacheNew?.snapshots?.length)setHistTick(t=>t+1);else setHistFailed(true);});
+        return()=>{dead=true;};
+      },[open]);
 
       useEffect(()=>{
         if(!open||!chartRef.current||!window.Chart)return;
@@ -4143,14 +4163,15 @@
                 y:{
                   grid:{color:'#1e1e1e'},
                   ticks:{color:'#555',callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
-                  suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[token]||Infinity));return Math.floor(mn*0.997)})(),
+                  /* u13: with no history points every value is Infinity → Chart.js got suggestedMin:Infinity */
+                  suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[token]).filter(v=>v>0));return isFinite(mn)?Math.floor(mn*0.997):undefined})(),
                 }
               }
             }
           });
         }catch(e){console.error('HolderAnalyticsModal chart error:',e);}
         return()=>{if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}};
-      },[open,chartPeriod,token,holders]);
+      },[open,chartPeriod,token,holders,histTick]);
 
       if(!open)return null;
 
@@ -4182,11 +4203,6 @@
       const ratePct30d=calcRatePct(chg24h,dailyAvg30d);
       const ratePct90d=calcRatePct(chg24h,dailyAvg90d);
 
-      const PctBadge=({val})=>{
-        if(val===null||val===undefined)return<span className="text-white/30 text-sm">—</span>;
-        const pos=val>=0;
-        return<span className={`font-bold text-lg ${pos?'text-green-400':'text-red-400'}`}>{pos?'▲':'▼'} {Math.abs(val).toFixed(1)}%</span>;
-      };
       const fmtRate=r=>{
         if(r===null||r===undefined)return null;
         const abs=Math.abs(r);
@@ -4304,7 +4320,7 @@
                         <canvas ref={chartRef} style={{width:'100%',height:'100%'}}></canvas>
                         {(!holderHistoryCacheNew?.snapshots?.length)&&(
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-white/30 text-sm">Loading chart data...</span>
+                            <span className="text-white/30 text-sm">{histFailed?'History unavailable right now':'Loading chart data...'}</span>
                           </div>
                         )}
                       </>
@@ -4376,6 +4392,100 @@
       );
     };
     // ===== END MAINT-MIGRATION components =====
+
+    /* u4: hoisted out of Home (was `Card`; its copied-state and both logos reset on every 5-minute refresh) — was re-declared on every render, so React remounted it each time. */
+    const HomeCard=({token,d,pls,onSelect,onMaint,onSwap})=>{
+      const cfg=TOKENS[token],isGold=cfg.color==='gold';
+      const masked=(token==='UFO'&&UFO_MAINTENANCE); // MAINT-MIGRATION: hide all live figures
+      const border=isGold?'border-[#D4AF37]/50':'border-[#7CFC00]/50',text=isGold?'text-[#D4AF37]':'text-[#7CFC00]';
+      const bg=isGold?'bg-gradient-to-r from-[#D4AF37]/20 via-[#1a1a1a] to-[#1a1a1a]':'bg-gradient-to-r from-[#7CFC00]/20 via-[#1a1a1a] to-[#1a1a1a]';
+      const hover=isGold?'token-card-gold':'token-card-green',up=(d?.change||0)>=0;
+      const plsRatio=pls>0&&d?.price?(d.price/pls).toFixed(2):'\u2014';
+      const[copied,setCopied]=useState(false);
+      const handleCopy=(e)=>{e.stopPropagation();navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),1500)};
+      const _firstPool=d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
+      const daysOld=(_firstPool&&isFinite(_firstPool))?Math.max(0,Math.floor((Date.now()-_firstPool)/86400000)):null;
+      return(
+        <div onClick={()=>{if(masked){onMaint()}else{onSelect(token)}}} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8 relative ${masked?'opacity-60':''}`}>
+          {masked&&<div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/20 border border-yellow-400/40">{/* MAINT-MIGRATION badge */}<span className="text-yellow-300 text-xs">⚠</span><span className="text-yellow-200 text-[10px] font-bold uppercase tracking-wider">Under Maintenance</span></div>}
+          {/* BUY / SELL (Shaka's pick "E", 2026-09-13): a vertical rail down the card's right
+              edge from lg up, a full-width footer bar below that. The row's content needs ~680 px
+              at lg, so the cards widen to max-w-4xl there (was 3xl) to make room for the rail;
+              below lg the card is too narrow for a rail at all. Opens SwapModal for this token
+              without leaving Home; stopPropagation keeps the card's own click (open dashboard)
+              from firing. HomeCardSkeleton mirrors the sm:pr-24 / footer geometry (gotcha 11).
+              No `.tap` on either button: .tap sets display:inline-flex, which beats `hidden` /
+              `sm:hidden` depending on which stylesheet loads last; u9's button:focus-visible
+              ring covers them anyway. */}
+          {!masked&&(
+            <button onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="buy-btn hidden lg:flex top-3.5 right-3.5 bottom-3.5 w-[78px] rounded-2xl flex-col items-center justify-center gap-3" style={{position:'absolute',/* inline: .buy-btn's position:relative outranks Tailwind's `absolute` when the play-CDN styles land first */'--g':isGold?'rgba(212,175,55,0.28)':'rgba(124,252,0,0.28)',background:isGold?'linear-gradient(180deg, rgba(212,175,55,0.38), rgba(212,175,55,0.12))':'linear-gradient(180deg, rgba(124,252,0,0.38), rgba(124,252,0,0.12))',border:isGold?'1px solid rgba(212,175,55,0.55)':'1px solid rgba(124,252,0,0.55)'}}>
+              <img src={cfg.logo} alt="" className="w-9 h-9"/>
+              <span className="flex flex-col items-center leading-none">
+                <span className={`font-orbitron font-extrabold text-[11px] tracking-[0.2em] pb-1.5 ${isGold?'metallic-gold':text}`}>BUY</span>
+                <span className="font-orbitron font-extrabold text-[11px] tracking-[0.2em] pt-1.5 border-t border-white/15 text-white/55">SELL</span>
+              </span>
+            </button>
+          )}
+          <div className={`flex flex-col sm:flex-row items-center gap-4 sm:gap-6 ${masked?'':'lg:pr-24'}`}>
+            <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
+            <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button aria-label="Copy contract address" onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
+            <div className="flex-1 text-center sm:text-right">{masked?(
+              <>
+                <div className="text-white/25 font-bold text-xl sm:text-2xl lg:text-3xl tracking-widest">———</div>
+                <div className="text-white/30 text-xs sm:text-base mt-1">MCap: —</div>
+                <div className="text-white/30 text-xs sm:text-sm">Vol: —</div>
+                <div className="text-white/30 text-xs sm:text-sm">PLS Ratio: —</div>
+              </>
+            ):(
+              <>
+                <Price p={d?.price} c="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/>
+                <div className="text-white/50 text-xs sm:text-base mt-1">MCap: {fmtUSD(d?.mcap)}</div>
+                <div className="text-white/50 text-xs sm:text-sm">Vol: {fmtUSD(d?.vol)}</div>
+                <div className="text-white/50 text-xs sm:text-sm">PLS Ratio: {plsRatio}</div>
+              </>
+            )}</div>
+            <div className="flex items-center gap-2 sm:gap-4">{masked?(
+              <>
+                <svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points="0,12 30,12 60,12 100,12" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeDasharray="4 4"/></svg>
+                <div className="px-3 sm:px-4 py-2 rounded-lg bg-white/5 text-white/30"><span className="text-xl sm:text-2xl font-bold">—</span></div>
+              </>
+            ):(
+              <>
+                {/* REAL sparkline: prices at t-24h, t-6h, t-1h, t-5m, now, back-computed from
+                    DexScreener's % changes against the live price. Previously these points were
+                    hardcoded shapes that only matched the 24h direction — a fake chart. If the
+                    change data is missing we show a neutral dashed line, never an invented trend. */}
+                {(()=>{
+                  const pc=d?.priceChange,price=d?.price||0;
+                  const pts=(pc&&price>0)?[
+                    ['h24',24],['h6',6],['h1',1],['m5',5/60]
+                  ].filter(([k])=>pc[k]!=null&&isFinite(parseFloat(pc[k])))
+                   .map(([k,hrs])=>({t:-hrs,p:price/(1+parseFloat(pc[k])/100)}))
+                   .concat([{t:0,p:price}]):null;
+                  if(!pts||pts.length<2)return<svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points="0,12 100,12" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeDasharray="4 4"/></svg>;
+                  /* x uses sqrt-time spacing: with linear time the 6h/1h/5m points all land in
+                     the last 4% of width and vanish. Sqrt keeps chronological order and real
+                     values while making recent movement legible — standard sparkline license. */
+                  const tMax=Math.abs(pts[0].t)||1,ps=pts.map(x=>x.p);
+                  const pMin=Math.min(...ps),pMax=Math.max(...ps),span=pMax-pMin;
+                  const line=pts.map(x=>`${((1-Math.sqrt(Math.abs(x.t)/tMax))*100).toFixed(1)},${span===0?'12.0':(21-((x.p-pMin)/span)*18).toFixed(1)}`).join(' ');
+                  return<svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6" role="img" aria-label={`24h price trend, ${up?'up':'down'} ${Math.abs(d?.change||0).toFixed(2)}%`}><polyline points={line} fill="none" stroke={up?'#22c55e':'#ef4444'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/></svg>;
+                })()}
+                <div className={`px-3 sm:px-4 py-2 rounded-lg ${up?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}><span className="text-[10px]">{up?'\u25B2':'\u25BC'}</span> <span className="text-xl sm:text-2xl font-bold">{Math.abs(d?.change||0).toFixed(2)}%</span></div>
+              </>
+            )}</div>
+          </div>
+          {!masked&&(
+            <button onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="lg:hidden -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 px-4 py-3 w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] flex items-center justify-center gap-2.5 rounded-b-[14px] border-t" style={{borderColor:isGold?'rgba(212,175,55,0.3)':'rgba(124,252,0,0.3)',background:isGold?'linear-gradient(90deg, rgba(212,175,55,0.16), rgba(212,175,55,0.06))':'linear-gradient(90deg, rgba(124,252,0,0.16), rgba(124,252,0,0.06))'}}>
+              <img src={cfg.logo} alt="" className="w-6 h-6"/>
+              <span className={`font-orbitron font-extrabold text-xs tracking-[0.25em] ${isGold?'metallic-gold':text}`}>BUY</span>
+              <span className="font-orbitron text-white/30 text-xs">/</span>
+              <span className={`font-orbitron font-extrabold text-xs tracking-[0.25em] ${isGold?'metallic-gold':text}`}>SELL</span>
+            </button>
+          )}
+        </div>
+      );
+    };
 
     const Home=({onSelect})=>{
       const[data,setData]=useState({PTGC:null,UFO:null});
@@ -4454,102 +4564,10 @@
         document.addEventListener('visibilitychange',onVis);
         return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
       },[]);
-      const Card=({token,d})=>{
-        const cfg=TOKENS[token],isGold=cfg.color==='gold';
-        const masked=(token==='UFO'&&UFO_MAINTENANCE); // MAINT-MIGRATION: hide all live figures
-        const border=isGold?'border-[#D4AF37]/50':'border-[#7CFC00]/50',text=isGold?'text-[#D4AF37]':'text-[#7CFC00]';
-        const bg=isGold?'bg-gradient-to-r from-[#D4AF37]/20 via-[#1a1a1a] to-[#1a1a1a]':'bg-gradient-to-r from-[#7CFC00]/20 via-[#1a1a1a] to-[#1a1a1a]';
-        const hover=isGold?'token-card-gold':'token-card-green',up=(d?.change||0)>=0;
-        const plsRatio=pls>0&&d?.price?(d.price/pls).toFixed(2):'\u2014';
-        const[copied,setCopied]=useState(false);
-        const handleCopy=(e)=>{e.stopPropagation();navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),1500)};
-        const _firstPool=d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
-        const daysOld=(_firstPool&&isFinite(_firstPool))?Math.max(0,Math.floor((Date.now()-_firstPool)/86400000)):null;
-        return(
-          <div onClick={()=>{if(masked){setShowMaint(true)}else{onSelect(token)}}} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8 relative ${masked?'opacity-60':''}`}>
-            {masked&&<div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/20 border border-yellow-400/40">{/* MAINT-MIGRATION badge */}<span className="text-yellow-300 text-xs">⚠</span><span className="text-yellow-200 text-[10px] font-bold uppercase tracking-wider">Under Maintenance</span></div>}
-            {/* BUY / SELL (Shaka's pick "E", 2026-09-13): a vertical rail down the card's right
-                edge from lg up, a full-width footer bar below that. The row's content needs ~680 px
-                at lg, so the cards widen to max-w-4xl there (was 3xl) to make room for the rail;
-                below lg the card is too narrow for a rail at all. Opens SwapModal for this token
-                without leaving Home; stopPropagation keeps the card's own click (open dashboard)
-                from firing. HomeCardSkeleton mirrors the sm:pr-24 / footer geometry (gotcha 11).
-                No `.tap` on either button: .tap sets display:inline-flex, which beats `hidden` /
-                `sm:hidden` depending on which stylesheet loads last; u9's button:focus-visible
-                ring covers them anyway. */}
-            {!masked&&(
-              <button onClick={e=>{e.stopPropagation();setSwapToken(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="buy-btn hidden lg:flex top-3.5 right-3.5 bottom-3.5 w-[78px] rounded-2xl flex-col items-center justify-center gap-3" style={{position:'absolute',/* inline: .buy-btn's position:relative outranks Tailwind's `absolute` when the play-CDN styles land first */'--g':isGold?'rgba(212,175,55,0.28)':'rgba(124,252,0,0.28)',background:isGold?'linear-gradient(180deg, rgba(212,175,55,0.38), rgba(212,175,55,0.12))':'linear-gradient(180deg, rgba(124,252,0,0.38), rgba(124,252,0,0.12))',border:isGold?'1px solid rgba(212,175,55,0.55)':'1px solid rgba(124,252,0,0.55)'}}>
-                <img src={cfg.logo} alt="" className="w-9 h-9"/>
-                <span className="flex flex-col items-center leading-none">
-                  <span className={`font-orbitron font-extrabold text-[11px] tracking-[0.2em] pb-1.5 ${isGold?'metallic-gold':text}`}>BUY</span>
-                  <span className="font-orbitron font-extrabold text-[11px] tracking-[0.2em] pt-1.5 border-t border-white/15 text-white/55">SELL</span>
-                </span>
-              </button>
-            )}
-            <div className={`flex flex-col sm:flex-row items-center gap-4 sm:gap-6 ${masked?'':'lg:pr-24'}`}>
-              <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
-              <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button aria-label="Copy contract address" onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
-              <div className="flex-1 text-center sm:text-right">{masked?(
-                <>
-                  <div className="text-white/25 font-bold text-xl sm:text-2xl lg:text-3xl tracking-widest">———</div>
-                  <div className="text-white/30 text-xs sm:text-base mt-1">MCap: —</div>
-                  <div className="text-white/30 text-xs sm:text-sm">Vol: —</div>
-                  <div className="text-white/30 text-xs sm:text-sm">PLS Ratio: —</div>
-                </>
-              ):(
-                <>
-                  <Price p={d?.price} c="text-white font-bold text-xl sm:text-2xl lg:text-3xl"/>
-                  <div className="text-white/50 text-xs sm:text-base mt-1">MCap: {fmtUSD(d?.mcap)}</div>
-                  <div className="text-white/50 text-xs sm:text-sm">Vol: {fmtUSD(d?.vol)}</div>
-                  <div className="text-white/50 text-xs sm:text-sm">PLS Ratio: {plsRatio}</div>
-                </>
-              )}</div>
-              <div className="flex items-center gap-2 sm:gap-4">{masked?(
-                <>
-                  <svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points="0,12 30,12 60,12 100,12" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeDasharray="4 4"/></svg>
-                  <div className="px-3 sm:px-4 py-2 rounded-lg bg-white/5 text-white/30"><span className="text-xl sm:text-2xl font-bold">—</span></div>
-                </>
-              ):(
-                <>
-                  {/* REAL sparkline: prices at t-24h, t-6h, t-1h, t-5m, now, back-computed from
-                      DexScreener's % changes against the live price. Previously these points were
-                      hardcoded shapes that only matched the 24h direction — a fake chart. If the
-                      change data is missing we show a neutral dashed line, never an invented trend. */}
-                  {(()=>{
-                    const pc=d?.priceChange,price=d?.price||0;
-                    const pts=(pc&&price>0)?[
-                      ['h24',24],['h6',6],['h1',1],['m5',5/60]
-                    ].filter(([k])=>pc[k]!=null&&isFinite(parseFloat(pc[k])))
-                     .map(([k,hrs])=>({t:-hrs,p:price/(1+parseFloat(pc[k])/100)}))
-                     .concat([{t:0,p:price}]):null;
-                    if(!pts||pts.length<2)return<svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6"><polyline points="0,12 100,12" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeDasharray="4 4"/></svg>;
-                    /* x uses sqrt-time spacing: with linear time the 6h/1h/5m points all land in
-                       the last 4% of width and vanish. Sqrt keeps chronological order and real
-                       values while making recent movement legible — standard sparkline license. */
-                    const tMax=Math.abs(pts[0].t)||1,ps=pts.map(x=>x.p);
-                    const pMin=Math.min(...ps),pMax=Math.max(...ps),span=pMax-pMin;
-                    const line=pts.map(x=>`${((1-Math.sqrt(Math.abs(x.t)/tMax))*100).toFixed(1)},${span===0?'12.0':(21-((x.p-pMin)/span)*18).toFixed(1)}`).join(' ');
-                    return<svg viewBox="0 0 100 24" className="w-16 sm:w-20 h-6" role="img" aria-label={`24h price trend, ${up?'up':'down'} ${Math.abs(d?.change||0).toFixed(2)}%`}><polyline points={line} fill="none" stroke={up?'#22c55e':'#ef4444'} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/></svg>;
-                  })()}
-                  <div className={`px-3 sm:px-4 py-2 rounded-lg ${up?'bg-green-500/20 text-green-400':'bg-red-500/20 text-red-400'}`}><span className="text-[10px]">{up?'\u25B2':'\u25BC'}</span> <span className="text-xl sm:text-2xl font-bold">{Math.abs(d?.change||0).toFixed(2)}%</span></div>
-                </>
-              )}</div>
-            </div>
-            {!masked&&(
-              <button onClick={e=>{e.stopPropagation();setSwapToken(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="lg:hidden -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 px-4 py-3 w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] flex items-center justify-center gap-2.5 rounded-b-[14px] border-t" style={{borderColor:isGold?'rgba(212,175,55,0.3)':'rgba(124,252,0,0.3)',background:isGold?'linear-gradient(90deg, rgba(212,175,55,0.16), rgba(212,175,55,0.06))':'linear-gradient(90deg, rgba(124,252,0,0.16), rgba(124,252,0,0.06))'}}>
-                <img src={cfg.logo} alt="" className="w-6 h-6"/>
-                <span className={`font-orbitron font-extrabold text-xs tracking-[0.25em] ${isGold?'metallic-gold':text}`}>BUY</span>
-                <span className="font-orbitron text-white/30 text-xs">/</span>
-                <span className={`font-orbitron font-extrabold text-xs tracking-[0.25em] ${isGold?'metallic-gold':text}`}>SELL</span>
-              </button>
-            )}
-          </div>
-        );
-      };
       return(
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
-          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl lg:max-w-4xl w-full">{loading?<><HomeCardSkeleton gold/><HomeCardSkeleton/><div className="flex justify-center"><Sk w={150} h={16}/></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/>{swapToken&&<SwapModal token={swapToken} data={data[swapToken]} onClose={()=>setSwapToken(null)}/>}<div className="flex justify-center"><FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/></div></>}</div></div>
+          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl lg:max-w-4xl w-full">{loading?<><HomeCardSkeleton gold/><HomeCardSkeleton/><div className="flex justify-center"><Sk w={150} h={16}/></div></>:<><HomeCard token="PTGC" d={data.PTGC} pls={pls} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/><HomeCard token="UFO" d={data.UFO} pls={pls} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/>{swapToken&&<SwapModal token={swapToken} data={data[swapToken]} onClose={()=>setSwapToken(null)}/>}<div className="flex justify-center"><FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/></div></>}</div></div>
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
@@ -5070,6 +5088,115 @@
       </div>
     );
 
+    /* u4: hoisted out of KPIContent — was re-declared on every render, so React remounted it each time. */
+    const TwitterCard=({t,c,d,b,bp,h,pls})=>{
+      const isPTGC=t==='PTGC';
+      const pc=isPTGC?'#D4AF37':'#7CFC00';
+      const price=d?.price||0;
+      const change=d?.change||0;
+      const plsRatio=pls>0?(price/pls).toFixed(2):'—';
+      const priceFormatted=formatPriceTwitter(price);
+      const creatures=getBurnCreaturesTwitter(b.total||0,t);
+      const burn7d=bp?.d7||0;
+      const burn7dCreature=get24hBurnCreature(burn7d,t);
+      const date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const liqMcapPct=d?.mcap>0?((d?.liq||0)/d.mcap*100).toFixed(1)+'%':'—';
+      
+      return(
+        <div className="rounded-2xl p-4 flex flex-col border-2 overflow-hidden h-full" style={{borderColor:pc,background:`linear-gradient(180deg, ${pc}20 0%, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0.95) 100%)`,boxShadow:`0 -20px 60px ${pc}40, inset 0 1px 0 ${pc}40`}}>
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-16 h-16 rounded-xl flex items-center justify-center border-2" style={{background:`${pc}20`,borderColor:`${pc}50`}}>
+              <img src={c.logo} alt={t} className="w-14 h-14 object-contain"/>
+            </div>
+            <div className="flex-1">
+              <div className="font-orbitron font-bold text-4xl" style={{color:pc}}>{t}</div>
+              <div className="text-xs text-white/50 uppercase tracking-wider">KPI Report</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-white/60">{date}</div>
+              <div className="mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-[#7CFC00]/20 border border-[#7CFC00]/40 text-[#7CFC00]">24H</div>
+            </div>
+          </div>
+          
+          {/* Price Row */}
+          <div className="flex gap-2 mb-3">
+            <div className="flex-1 rounded-xl p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}15 0%, transparent 100%)`}}>
+              <div className="text-4xl font-bold" style={{color:pc}}>
+                {typeof priceFormatted==='object'?<>{priceFormatted.base}<sub className="text-lg opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>:priceFormatted}
+              </div>
+            </div>
+            <div className={`px-5 rounded-xl flex items-center justify-center text-3xl font-bold ${change>=0?'bg-gradient-to-b from-green-500/20 to-transparent border border-green-500/50 text-green-400':'bg-gradient-to-b from-red-500/20 to-transparent border border-red-500/50 text-red-400'}`}>
+              {change>=0?'▲':'▼'}{Math.abs(change).toFixed(2)}%
+            </div>
+            <div className="rounded-xl px-3 py-2 text-center border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}15 0%, transparent 100%)`}}>
+              <div className="text-xs text-white/50 uppercase">PLS Ratio</div>
+              <div className="text-2xl font-bold text-white">{plsRatio}</div>
+            </div>
+          </div>
+          
+          {/* Metrics Grid */}
+          <div className="grid grid-cols-2 gap-2 flex-1 mb-3">
+            <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
+              <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>📊</span> Market Cap</div>
+              <div className="text-3xl font-bold text-white">{fmtUSD(d?.mcap)}</div>
+            </div>
+            <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
+              <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>💧</span> Liquidity</div>
+              <div className="text-3xl font-bold text-white">{fmtUSD(d?.liq)}</div>
+            </div>
+            <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
+              <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>👥</span> Holders</div>
+              <div className="text-3xl font-bold text-white">{fmt(h)}</div>
+            </div>
+            <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
+              <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>📈</span> Volume</div>
+              <div className="text-3xl font-bold text-white">{fmtUSD(d?.vol)}</div>
+            </div>
+            <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
+              <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>⚖️</span> Liq/MC</div>
+              <div className="text-3xl font-bold text-white">{liqMcapPct}</div>
+            </div>
+            <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
+              <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>💰</span> PLS Ratio</div>
+              <div className="text-3xl font-bold text-white">{plsRatio}</div>
+            </div>
+          </div>
+          
+          {/* Burn Section */}
+          <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-3 overflow-hidden">
+            <div className="flex justify-between mb-2">
+              <div>
+                <div className="flex items-center gap-2 text-xs text-orange-400/90 uppercase font-semibold mb-1">🔥 Total Burned</div>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-bold text-orange-400">{fmtAbbr(b.total)}</span>
+                  <span className="text-lg font-bold text-green-400">{fmtUSD((b.total||0)*price)}</span>
+                  <span className="text-base text-white/50">{(b.pct||0).toFixed(2)}%</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-orange-400/90 uppercase font-semibold mb-1">🔥 7D</div>
+                <div className="flex items-center gap-3 justify-end">
+                  <span className="text-xl font-bold text-orange-400">{fmtAbbr(burn7d)}</span>
+                  <span className="text-lg font-bold text-green-400">{fmtUSD(burn7d*price)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">🔥</span>
+              {creatures.slice(0,5).map((cr,i)=>(<span key={i} className="flex items-center gap-1"><span className="text-3xl">{cr.emoji}</span><span className="text-white/80 text-sm font-bold">x{cr.count}</span></span>))}
+              <span className="ml-auto text-3xl">{burn7dCreature}</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    /* u4: hoisted out of KPIContent (LB / Badge / MB) — was re-declared on every render, so React remounted it each time. */
+    const ShareLB=({emoji,text,pc})=>(<div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md" style={{background:`${pc}30`}}><span className="text-xs">{emoji}</span><span className="text-xs font-bold text-gray-200">{text}</span></div>);
+    const ShareBadge=({v,pct=true})=>{if(v===null||v===undefined)return null;if(v===0)return<span className="text-gray-500 text-xs font-bold">— 0</span>;const u=v>=0;return(<span className={`text-xs font-bold ${u?'text-green-400':'text-red-500'}`}>{u?'▲':'▼'} {pct?Math.abs(v).toFixed(1)+'%':(v>=0?'+':'')+v}</span>);};
+    const ShareMB=({emoji,label,value,change,pct=true,tag,pc,pcRgb})=>(<div className="p-3 sm:p-4 rounded-xl flex flex-col justify-center relative min-w-0" style={{background:`rgba(${pcRgb},0.08)`,border:`1px solid rgba(${pcRgb},0.2)`,minHeight:'100px'}}>{tag&&<span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded" style={{background:`${pc}50`,color:'white'}}>{tag}</span>}<div className="flex items-center justify-between mb-2 gap-1"><ShareLB pc={pc} emoji={emoji} text={label}/>{!tag&&<ShareBadge v={change} pct={pct}/>}</div>{tag?<div className="flex items-center justify-between gap-1"><div className="font-bold text-lg sm:text-2xl text-white truncate">{value}</div><ShareBadge v={change} pct={pct}/></div>:<div className="font-bold text-lg sm:text-2xl text-white truncate">{value}</div>}</div>);
+
     const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7dUsd})=>{
       const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
@@ -5187,9 +5314,6 @@
         const nextC=currentIdx>0?BURN_C[currentIdx-1]:BURN_C[0];
         const progressToNext=nextC.p>currentC.p?((burnPctNum-currentC.p)/(nextC.p-currentC.p))*100:whaleP.progress;
         
-        const LB=({emoji,text})=>(<div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md" style={{background:`${pc}30`}}><span className="text-xs">{emoji}</span><span className="text-xs font-bold text-gray-200">{text}</span></div>);
-        const Badge=({v,pct=true})=>{if(v===null||v===undefined)return null;if(v===0)return<span className="text-gray-500 text-xs font-bold">— 0</span>;const u=v>=0;return(<span className={`text-xs font-bold ${u?'text-green-400':'text-red-500'}`}>{u?'▲':'▼'} {pct?Math.abs(v).toFixed(1)+'%':(v>=0?'+':'')+v}</span>);};
-        const MB=({emoji,label,value,change,pct=true,tag})=>(<div className="p-3 sm:p-4 rounded-xl flex flex-col justify-center relative min-w-0" style={{background:`rgba(${pcRgb},0.08)`,border:`1px solid rgba(${pcRgb},0.2)`,minHeight:'100px'}}>{tag&&<span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded" style={{background:`${pc}50`,color:'white'}}>{tag}</span>}<div className="flex items-center justify-between mb-2 gap-1"><LB emoji={emoji} text={label}/>{!tag&&<Badge v={change} pct={pct}/>}</div>{tag?<div className="flex items-center justify-between gap-1"><div className="font-bold text-lg sm:text-2xl text-white truncate">{value}</div><Badge v={change} pct={pct}/></div>:<div className="font-bold text-lg sm:text-2xl text-white truncate">{value}</div>}</div>);
         
         return(
           <div className="rounded-2xl overflow-hidden relative w-full max-w-md flex-shrink-0" style={{background:'#0d0d0d',border:`2px solid ${pc}40`}}>
@@ -5217,7 +5341,7 @@
               <div className="mx-3 sm:mx-4 mb-3 p-3 sm:p-4 rounded-xl" style={{background:`${pc}12`,border:`1px solid ${pc}30`}}>
                 <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
-                    <LB emoji="💰" text="PRICE"/>
+                    <ShareLB pc={pc} emoji="💰" text="PRICE"/>
                     <div className="font-bold text-2xl sm:text-4xl mt-2 truncate" style={{color:pc}}>{formatSubPrice(d?.price)}</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -5232,12 +5356,12 @@
                 </div>
               </div>
               <div className="px-3 sm:px-4 pb-3 grid grid-cols-2 gap-2 sm:gap-2.5">
-                <MB emoji="📊" label="MARKET CAP" value={fmtUSD(d?.mcap)} change={mcapChange}/>
-                <MB emoji="💧" label="LIQUIDITY" value={fmtUSD(d?.liq)} change={null}/>
-                <MB emoji="⚖️" label="LIQ/MC RATIO" value={`${liqMcapPct.toFixed(1)}%`} change={null}/>
-                <MB emoji="📈" label="VOLUME" value={fmtUSD(d?.vol)} change={volChange}/>
-                <MB emoji="👥" label="HOLDERS" value={fmt(h)} change={hChange} pct={false}/>
-                <MB emoji="⚡" label="VALUE GEN" value={valueGenPending?<span className="animate-pulse text-white/40">—</span>:fmtUSD(valueGen7d)} change={valueGenPending?null:volChange} tag="7D"/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="📊" label="MARKET CAP" value={fmtUSD(d?.mcap)} change={mcapChange}/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="💧" label="LIQUIDITY" value={fmtUSD(d?.liq)} change={null}/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="⚖️" label="LIQ/MC RATIO" value={`${liqMcapPct.toFixed(1)}%`} change={null}/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="📈" label="VOLUME" value={fmtUSD(d?.vol)} change={volChange}/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="👥" label="HOLDERS" value={fmt(h)} change={hChange} pct={false}/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="⚡" label="VALUE GEN" value={valueGenPending?<span className="animate-pulse text-white/40">—</span>:fmtUSD(valueGen7d)} change={valueGenPending?null:volChange} tag="7D"/>
               </div>
               <div className="mx-3 sm:mx-4 mb-4 p-3 sm:p-4 rounded-xl" style={{background:'rgba(249,115,22,0.1)',border:'1px solid rgba(249,115,22,0.3)'}}>
                 <div className="flex gap-3 sm:gap-4">
@@ -5280,108 +5404,6 @@
       const otherBurnPeriods=getOtherBurnPeriods();
       
       // Twitter Card Component for screenshot
-      const TwitterCard=({t,c,d,b,bp,h})=>{
-        const isPTGC=t==='PTGC';
-        const pc=isPTGC?'#D4AF37':'#7CFC00';
-        const price=d?.price||0;
-        const change=d?.change||0;
-        const plsRatio=pls>0?(price/pls).toFixed(2):'—';
-        const priceFormatted=formatPriceTwitter(price);
-        const creatures=getBurnCreaturesTwitter(b.total||0,t);
-        const burn7d=bp?.d7||0;
-        const burn7dCreature=get24hBurnCreature(burn7d,t);
-        const date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-        const liqMcapPct=d?.mcap>0?((d?.liq||0)/d.mcap*100).toFixed(1)+'%':'—';
-        
-        return(
-          <div className="rounded-2xl p-4 flex flex-col border-2 overflow-hidden h-full" style={{borderColor:pc,background:`linear-gradient(180deg, ${pc}20 0%, rgba(0,0,0,0.95) 30%, rgba(0,0,0,0.95) 100%)`,boxShadow:`0 -20px 60px ${pc}40, inset 0 1px 0 ${pc}40`}}>
-            {/* Header */}
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-16 h-16 rounded-xl flex items-center justify-center border-2" style={{background:`${pc}20`,borderColor:`${pc}50`}}>
-                <img src={c.logo} alt={t} className="w-14 h-14 object-contain"/>
-              </div>
-              <div className="flex-1">
-                <div className="font-orbitron font-bold text-4xl" style={{color:pc}}>{t}</div>
-                <div className="text-xs text-white/50 uppercase tracking-wider">KPI Report</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-white/60">{date}</div>
-                <div className="mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-[#7CFC00]/20 border border-[#7CFC00]/40 text-[#7CFC00]">24H</div>
-              </div>
-            </div>
-            
-            {/* Price Row */}
-            <div className="flex gap-2 mb-3">
-              <div className="flex-1 rounded-xl p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}15 0%, transparent 100%)`}}>
-                <div className="text-4xl font-bold" style={{color:pc}}>
-                  {typeof priceFormatted==='object'?<>{priceFormatted.base}<sub className="text-lg opacity-70">{priceFormatted.sub}</sub>{priceFormatted.rest}</>:priceFormatted}
-                </div>
-              </div>
-              <div className={`px-5 rounded-xl flex items-center justify-center text-3xl font-bold ${change>=0?'bg-gradient-to-b from-green-500/20 to-transparent border border-green-500/50 text-green-400':'bg-gradient-to-b from-red-500/20 to-transparent border border-red-500/50 text-red-400'}`}>
-                {change>=0?'▲':'▼'}{Math.abs(change).toFixed(2)}%
-              </div>
-              <div className="rounded-xl px-3 py-2 text-center border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}15 0%, transparent 100%)`}}>
-                <div className="text-xs text-white/50 uppercase">PLS Ratio</div>
-                <div className="text-2xl font-bold text-white">{plsRatio}</div>
-              </div>
-            </div>
-            
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2 flex-1 mb-3">
-              <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>📊</span> Market Cap</div>
-                <div className="text-3xl font-bold text-white">{fmtUSD(d?.mcap)}</div>
-              </div>
-              <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>💧</span> Liquidity</div>
-                <div className="text-3xl font-bold text-white">{fmtUSD(d?.liq)}</div>
-              </div>
-              <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>👥</span> Holders</div>
-                <div className="text-3xl font-bold text-white">{fmt(h)}</div>
-              </div>
-              <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>📈</span> Volume</div>
-                <div className="text-3xl font-bold text-white">{fmtUSD(d?.vol)}</div>
-              </div>
-              <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>⚖️</span> Liq/MC</div>
-                <div className="text-3xl font-bold text-white">{liqMcapPct}</div>
-              </div>
-              <div className="rounded-lg p-3 border" style={{borderColor:`${pc}30`,background:`linear-gradient(180deg, ${pc}10 0%, transparent 100%)`}}>
-                <div className="text-sm text-white/50 uppercase flex items-center gap-1"><span style={{color:pc}}>💰</span> PLS Ratio</div>
-                <div className="text-3xl font-bold text-white">{plsRatio}</div>
-              </div>
-            </div>
-            
-            {/* Burn Section */}
-            <div className="bg-gradient-to-r from-orange-500/15 via-orange-600/10 to-orange-500/15 border border-orange-500/30 rounded-xl p-3 overflow-hidden">
-              <div className="flex justify-between mb-2">
-                <div>
-                  <div className="flex items-center gap-2 text-xs text-orange-400/90 uppercase font-semibold mb-1">🔥 Total Burned</div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl font-bold text-orange-400">{fmtAbbr(b.total)}</span>
-                    <span className="text-lg font-bold text-green-400">{fmtUSD((b.total||0)*price)}</span>
-                    <span className="text-base text-white/50">{(b.pct||0).toFixed(2)}%</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-orange-400/90 uppercase font-semibold mb-1">🔥 7D</div>
-                  <div className="flex items-center gap-3 justify-end">
-                    <span className="text-xl font-bold text-orange-400">{fmtAbbr(burn7d)}</span>
-                    <span className="text-lg font-bold text-green-400">{fmtUSD(burn7d*price)}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-3xl">🔥</span>
-                {creatures.slice(0,5).map((cr,i)=>(<span key={i} className="flex items-center gap-1"><span className="text-3xl">{cr.emoji}</span><span className="text-white/80 text-sm font-bold">x{cr.count}</span></span>))}
-                <span className="ml-auto text-3xl">{burn7dCreature}</span>
-              </div>
-            </div>
-          </div>
-        );
-      };
       
       // Check if both tokens data is loaded for Twitter view
       const bothLoaded=showBoth&&otherData&&otherBurn.total>0;
@@ -5400,8 +5422,8 @@
               }}
             >
               <div className="w-full h-full p-5 grid grid-cols-2 gap-5">
-                <TwitterCard t={token} c={cfg} d={data} b={burn} bp={burnPeriods} h={holders}/>
-                <TwitterCard t={otherToken} c={otherCfg} d={otherData} b={otherBurn} bp={otherBurnPeriods} h={otherHolders}/>
+                <TwitterCard pls={pls} t={token} c={cfg} d={data} b={burn} bp={burnPeriods} h={holders}/>
+                <TwitterCard pls={pls} t={otherToken} c={otherCfg} d={otherData} b={otherBurn} bp={otherBurnPeriods} h={otherHolders}/>
               </div>
             </div>
           </ShareCardModal>
@@ -5633,6 +5655,30 @@
     };
     
     // Tier Info Modal - Shows token supply and holder tier thresholds
+    /* u4: hoisted out of TierInfoModal — was re-declared on every render, so React remounted it each time. */
+    const formatTierPrice=(p,isPTGC)=>{
+      if(!p||isNaN(p)||p===0)return'—';
+      if(isPTGC){
+        // PTGC format - like main page
+        if(p>=1)return'$'+p.toFixed(2);
+        return'$'+p.toFixed(6);
+      }else{
+        // UFO format - subscript for small values
+        if(p>=1)return{type:'string',val:'$'+p.toFixed(2)};
+        if(p>=0.01)return{type:'string',val:'$'+p.toFixed(4)};
+        const s=p.toExponential(4);
+        const[m,e]=s.split('e');
+        const exp=Math.abs(parseInt(e));
+        return{type:'sub',pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)};
+      }
+    };
+    const TierPrice=({p,isPTGC})=>{
+      const f=formatTierPrice(p,isPTGC);
+      if(typeof f==='string')return<span>{f}</span>;
+      if(f.type==='string')return<span>{f.val}</span>;
+      return<span>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>;
+    };
+
     const TierInfoModal=({open,close,token,cfg,price,holders,burn,holderTiers,theme})=>{
       // 'start' = starting supply (default) | 'circ' = circulating supply (starting − burned)
       const[supplyMode,setSupplyMode]=useState('start');
@@ -5670,29 +5716,6 @@
       };
       
       // Format token price at top - PTGC normal, UFO with subscript
-      const formatTokenPrice=(p)=>{
-        if(!p||isNaN(p)||p===0)return'—';
-        if(isPTGC){
-          // PTGC format - like main page
-          if(p>=1)return'$'+p.toFixed(2);
-          return'$'+p.toFixed(6);
-        }else{
-          // UFO format - subscript for small values
-          if(p>=1)return{type:'string',val:'$'+p.toFixed(2)};
-          if(p>=0.01)return{type:'string',val:'$'+p.toFixed(4)};
-          const s=p.toExponential(4);
-          const[m,e]=s.split('e');
-          const exp=Math.abs(parseInt(e));
-          return{type:'sub',pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)};
-        }
-      };
-      
-      const TokenPriceDisplay=()=>{
-        const f=formatTokenPrice(price);
-        if(typeof f==='string')return<span>{f}</span>;
-        if(f.type==='string')return<span>{f.val}</span>;
-        return<span>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>;
-      };
       
       return(
         <Modal className="z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClose={close} label="Holder tiers">
@@ -5710,7 +5733,7 @@
               </div>
               <div className="text-sm sm:text-lg text-white/60">Price {date}</div>
               <div className="text-2xl sm:text-3xl font-bold truncate" style={{color:pc}}>
-                <TokenPriceDisplay/>
+                <TierPrice p={price} isPTGC={isPTGC}/>
               </div>
             </div>
             
@@ -5762,6 +5785,120 @@
       );
     };
     
+
+    /* u4: hoisted out of Dashboard (Combined share card) — was re-declared on every render, so React remounted it each time. */
+    const PriceEl=({p,style={}})=>{
+      if(!p||isNaN(p)||p===0)return<span style={style}>—</span>;
+      if(p>=1)return<span style={style}>{'$'+p.toFixed(2)}</span>;
+      if(p>=0.01)return<span style={style}>{'$'+p.toFixed(4)}</span>;
+      if(p>=0.0001)return<span style={style}>{'$'+p.toFixed(6)}</span>;
+      const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));
+      const z=exp-1,d=parseFloat(m).toFixed(4).replace('.','').slice(0,4);
+      return<span style={style}>$0.0<sub style={{fontSize:'0.65em',verticalAlign:'sub'}}>{z}</sub>{d}</span>;
+    };
+
+    /* Leagues fonts for the share cards: Orbitron = titles/labels only, Rajdhani = all numbers & data.
+       Module-level so the hoisted card blocks below can use them (u4). */
+    const OB="'Orbitron',monospace";
+    const RJ="'Rajdhani',sans-serif";
+    /* u4: hoisted out of Dashboard (Combined share cards; getC is only used by TokenBlock) — was re-declared on every render, so React remounted it each time. */
+    const getC=(val,supply)=>{const pct=supply>0?(val/supply)*100:0;return val>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};};
+    const TokenBlock=({logo,name,totalAmt,usdVal,supplyPct,periods,supply,price,accent,rgb})=>{
+      const rows=[{label:'24H',val:periods?.h24},{label:'7D',val:periods?.d7},{label:'30D',val:periods?.d30},{label:'90D',val:periods?.d90}];
+      return(
+        <div style={{borderRadius:'12px',padding:'16px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`,position:'relative'}}>
+
+          {/* Supply % badge — top right, Rajdhani numbers */}
+          <div style={{position:'absolute',top:'12px',right:'14px',display:'flex',flexDirection:'column',alignItems:'center',gap:'10px'}}>
+            <div style={{background:`linear-gradient(135deg,rgba(${rgb},0.22),rgba(${rgb},0.1))`,border:`1.5px solid rgba(${rgb},0.55)`,borderRadius:'20px',padding:'5px 13px',boxShadow:`0 0 14px rgba(${rgb},0.28)`,display:'flex',alignItems:'center',gap:'5px'}}>
+              <span style={{fontFamily:RJ,fontSize:'17px',fontWeight:800,color:accent,letterSpacing:'0.5px'}}>{supplyPct.toFixed(2)}%</span>
+              <span style={{fontFamily:OB,fontSize:'10px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>burned</span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
+              <span style={{fontSize:'20px',lineHeight:1}}>{'\u{1F40B}'}</span>
+              <span style={{fontFamily:RJ,fontSize:'17px',fontWeight:800,color:accent}}>x{supplyPct.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Token summary — Rajdhani for all numbers */}
+          <div style={{display:'flex',alignItems:'center',gap:'16px',marginBottom:'14px',paddingRight:'145px'}}>
+            <img src={logo} alt={name} style={{width:'56px',height:'56px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 16px rgba(${rgb},0.3)`}}/>
+            <div>
+              <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'nowrap'}}>
+                {/* Hero USD — Rajdhani like Leagues USD column */}
+                <span style={{fontFamily:RJ,fontWeight:700,fontSize:'34px',color:'#4ade80',lineHeight:1,whiteSpace:'nowrap'}}>{fmtUSD(usdVal)}</span>
+                <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',whiteSpace:'nowrap'}}>USD Burned</span>
+              </div>
+              <div style={{marginTop:'4px'}}>
+                <span style={{fontFamily:RJ,fontSize:'18px',fontWeight:700,color:accent}}>{fmtAbbr(totalAmt)} {name}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Period rows — Orbitron labels, Rajdhani numbers */}
+          <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+            {rows.map(({label,val})=>{
+              const unknown=(val==null);
+              const c=getC(val||0,supply);
+              const usdAmt=(val||0)*price;
+              return(
+                <div key={label} style={{display:'flex',alignItems:'center',padding:'7px 12px',borderRadius:'8px',background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.15)`,gap:'10px'}}>
+                  {/* Period label — Orbitron, title treatment */}
+                  <span style={{width:'38px',fontFamily:OB,fontSize:'13px',fontWeight:700,letterSpacing:'1px',color:accent,textTransform:'uppercase',flexShrink:0}}>{label}</span>
+                  <span style={{width:'1px',height:'24px',background:`rgba(${rgb},0.3)`,flexShrink:0}}/>
+                  {/* Creature + multiplier — Rajdhani for xN */}
+                  <div style={{display:'flex',alignItems:'center',gap:'3px',width:'72px',flexShrink:0}}>
+                    <span style={{fontSize:'26px',lineHeight:1}}>{c.e}</span>
+                    <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:800,color:accent,lineHeight:1}}>x{c.cnt}</span>
+                  </div>
+                  {/* Dotted fill */}
+                  <div style={{flex:1,borderBottom:`1px dashed rgba(${rgb},0.2)`,alignSelf:'center'}}/>
+                  {/* USD — Rajdhani bold like Leagues */}
+                  <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:700,color:unknown?'rgba(255,255,255,0.35)':'#4ade80',flexShrink:0,marginRight:'16px'}}>{unknown?'\u2014':fmtUSD(usdAmt)}</span>
+                  {/* Token count — Rajdhani semibold like Leagues token column */}
+                  <span style={{width:'105px',textAlign:'right',fontFamily:RJ,fontSize:'16px',fontWeight:600,color:`rgba(${rgb},0.6)`,flexShrink:0}}>{unknown?'\u2014':fmtAbbr(val)} {name}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+    const FeeBlock=({tokenCfg,vol,accent,rgb,measured})=>{
+      const totalGen=measured?measured.total:(vol*tokenCfg.taxRate);
+      return(
+        <div style={{borderRadius:'12px',padding:'14px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'12px'}}>
+            {/* Left: logo + hero amount */}
+            <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
+              <img src={tokenCfg.logo} alt={tokenCfg.name} style={{width:'64px',height:'64px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 20px rgba(${rgb},0.4)`}}/>
+              <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'wrap'}}>
+                <span style={{fontFamily:RJ,fontWeight:700,fontSize:'38px',color:'#4ade80',lineHeight:1}}>{fmtUSD(totalGen)}</span>
+                <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Value Generated</span>
+              </div>
+            </div>
+            {/* Right: token name + vol, right-justified */}
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontFamily:OB,fontSize:'13px',fontWeight:700,color:accent,letterSpacing:'0.5px'}}>{tokenCfg.name}</div>
+              <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {fmtUSD(vol)}</div>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.taxBreakdown.length},1fr)`,gap:'6px'}}>
+            {tokenCfg.taxBreakdown.map((item,i)=>{
+              const dollarVal=measured?(measured.byKey[item.key]||0):(vol*(item.pct/100));
+              return(
+                <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'8px 6px',textAlign:'center'}}>
+                  <div style={{fontSize:'18px',marginBottom:'3px'}}>{item.emoji}</div>
+                  <div style={{fontFamily:OB,fontSize:'9px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:'3px',lineHeight:1.2}}>{item.name}</div>
+                  <div style={{fontFamily:RJ,fontWeight:700,fontSize:'19px',color:'#4ade80'}}>{fmtUSD(dollarVal)}</div>
+                  <div style={{fontFamily:RJ,fontSize:'14px',color:`rgba(${rgb},0.55)`,fontWeight:500,marginTop:'1px'}}>{item.pct}%</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
 
     const Dashboard=({token,onBack,onSwitch,onAffiliates,routeTab='dashboard',onTabRoute})=>{
       const[showMaintNotice,setShowMaintNotice]=useState(false); // MAINT-MIGRATION
@@ -6400,7 +6537,7 @@
                     display:true,
                     grid:{color:'rgba(255,255,255,0.05)',drawBorder:false},
                     ticks:{color:'rgba(255,255,255,0.3)',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v,maxTicksLimit:4},
-                    suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[tokenKey]||Infinity));return Math.floor(mn*0.997)})()
+                    suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[tokenKey]).filter(v=>v>0));return isFinite(mn)?Math.floor(mn*0.997):undefined})()   // u13: no Infinity
                   }
                 }
               }
@@ -8483,72 +8620,8 @@
             const ufoUSD=(ufoBurn.total||0)*ufoPriceV;
             const combinedUSD=ptgcUSD+ufoUSD;
             const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-            const getC=(val,supply)=>{const pct=supply>0?(val/supply)*100:0;return val>0?getHighestCreatureWithCount(pct):{e:'\u{1F41A}',cnt:0};};
             // Leagues fonts: Orbitron = titles/labels only, Rajdhani = all numbers & data
-            const OB="'Orbitron',monospace";
-            const RJ="'Rajdhani',sans-serif";
-
-            const TokenBlock=({logo,name,totalAmt,usdVal,supplyPct,periods,supply,price,accent,rgb})=>{
-              const rows=[{label:'24H',val:periods?.h24},{label:'7D',val:periods?.d7},{label:'30D',val:periods?.d30},{label:'90D',val:periods?.d90}];
-              return(
-                <div style={{borderRadius:'12px',padding:'16px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`,position:'relative'}}>
-
-                  {/* Supply % badge — top right, Rajdhani numbers */}
-                  <div style={{position:'absolute',top:'12px',right:'14px',display:'flex',flexDirection:'column',alignItems:'center',gap:'10px'}}>
-                    <div style={{background:`linear-gradient(135deg,rgba(${rgb},0.22),rgba(${rgb},0.1))`,border:`1.5px solid rgba(${rgb},0.55)`,borderRadius:'20px',padding:'5px 13px',boxShadow:`0 0 14px rgba(${rgb},0.28)`,display:'flex',alignItems:'center',gap:'5px'}}>
-                      <span style={{fontFamily:RJ,fontSize:'17px',fontWeight:800,color:accent,letterSpacing:'0.5px'}}>{supplyPct.toFixed(2)}%</span>
-                      <span style={{fontFamily:OB,fontSize:'10px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>burned</span>
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:'4px'}}>
-                      <span style={{fontSize:'20px',lineHeight:1}}>{'\u{1F40B}'}</span>
-                      <span style={{fontFamily:RJ,fontSize:'17px',fontWeight:800,color:accent}}>x{supplyPct.toFixed(2)}</span>
-                    </div>
-                  </div>
-
-                  {/* Token summary — Rajdhani for all numbers */}
-                  <div style={{display:'flex',alignItems:'center',gap:'16px',marginBottom:'14px',paddingRight:'145px'}}>
-                    <img src={logo} alt={name} style={{width:'56px',height:'56px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 16px rgba(${rgb},0.3)`}}/>
-                    <div>
-                      <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'nowrap'}}>
-                        {/* Hero USD — Rajdhani like Leagues USD column */}
-                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'34px',color:'#4ade80',lineHeight:1,whiteSpace:'nowrap'}}>{fmtUSD(usdVal)}</span>
-                        <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',whiteSpace:'nowrap'}}>USD Burned</span>
-                      </div>
-                      <div style={{marginTop:'4px'}}>
-                        <span style={{fontFamily:RJ,fontSize:'18px',fontWeight:700,color:accent}}>{fmtAbbr(totalAmt)} {name}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Period rows — Orbitron labels, Rajdhani numbers */}
-                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                    {rows.map(({label,val})=>{
-                      const unknown=(val==null);
-                      const c=getC(val||0,supply);
-                      const usdAmt=(val||0)*price;
-                      return(
-                        <div key={label} style={{display:'flex',alignItems:'center',padding:'7px 12px',borderRadius:'8px',background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.15)`,gap:'10px'}}>
-                          {/* Period label — Orbitron, title treatment */}
-                          <span style={{width:'38px',fontFamily:OB,fontSize:'13px',fontWeight:700,letterSpacing:'1px',color:accent,textTransform:'uppercase',flexShrink:0}}>{label}</span>
-                          <span style={{width:'1px',height:'24px',background:`rgba(${rgb},0.3)`,flexShrink:0}}/>
-                          {/* Creature + multiplier — Rajdhani for xN */}
-                          <div style={{display:'flex',alignItems:'center',gap:'3px',width:'72px',flexShrink:0}}>
-                            <span style={{fontSize:'26px',lineHeight:1}}>{c.e}</span>
-                            <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:800,color:accent,lineHeight:1}}>x{c.cnt}</span>
-                          </div>
-                          {/* Dotted fill */}
-                          <div style={{flex:1,borderBottom:`1px dashed rgba(${rgb},0.2)`,alignSelf:'center'}}/>
-                          {/* USD — Rajdhani bold like Leagues */}
-                          <span style={{fontFamily:RJ,fontSize:'20px',fontWeight:700,color:unknown?'rgba(255,255,255,0.35)':'#4ade80',flexShrink:0,marginRight:'16px'}}>{unknown?'\u2014':fmtUSD(usdAmt)}</span>
-                          {/* Token count — Rajdhani semibold like Leagues token column */}
-                          <span style={{width:'105px',textAlign:'right',fontFamily:RJ,fontSize:'16px',fontWeight:600,color:`rgba(${rgb},0.6)`,flexShrink:0}}>{unknown?'\u2014':fmtAbbr(val)} {name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            };
+            /* OB / RJ (share-card fonts) are module-level now — see the u4 block above Dashboard. */
 
             return(
               <ShareCardModal onClose={()=>closeModalAndReturn(setShowCombinedBurnModal)} width={600} height={540} label="Combined burn stats share card" filename={`combined-burn-${new Date().toISOString().slice(0,10)}.png`}>
@@ -8602,8 +8675,7 @@
           {/* Combined Value Generated Modal */}
           {showCombinedValueGenModal&&(()=>{
             const isPTGCActive=token==='PTGC';
-            const OB="'Orbitron',monospace";
-            const RJ="'Rajdhani',sans-serif";
+            /* OB / RJ (share-card fonts) are module-level now — see the u4 block above Dashboard. */
             const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
             const ptgcCfg=TOKENS.PTGC;
             const ufoCfg=TOKENS.UFO;
@@ -8646,42 +8718,6 @@
             const ptgcTotal=ptgcVol*ptgcCfg.taxRate;
             const ufoTotal=ufoMeasured?ufoMeasured.total:(ufoVol*ufoCfg.taxRate);
             const combinedTotal=ptgcTotal+ufoTotal;
-
-            const FeeBlock=({tokenCfg,vol,accent,rgb,measured})=>{
-              const totalGen=measured?measured.total:(vol*tokenCfg.taxRate);
-              return(
-                <div style={{borderRadius:'12px',padding:'14px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'12px'}}>
-                    {/* Left: logo + hero amount */}
-                    <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
-                      <img src={tokenCfg.logo} alt={tokenCfg.name} style={{width:'64px',height:'64px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 20px rgba(${rgb},0.4)`}}/>
-                      <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'wrap'}}>
-                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'38px',color:'#4ade80',lineHeight:1}}>{fmtUSD(totalGen)}</span>
-                        <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Value Generated</span>
-                      </div>
-                    </div>
-                    {/* Right: token name + vol, right-justified */}
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontFamily:OB,fontSize:'13px',fontWeight:700,color:accent,letterSpacing:'0.5px'}}>{tokenCfg.name}</div>
-                      <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {fmtUSD(vol)}</div>
-                    </div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.taxBreakdown.length},1fr)`,gap:'6px'}}>
-                    {tokenCfg.taxBreakdown.map((item,i)=>{
-                      const dollarVal=measured?(measured.byKey[item.key]||0):(vol*(item.pct/100));
-                      return(
-                        <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'8px 6px',textAlign:'center'}}>
-                          <div style={{fontSize:'18px',marginBottom:'3px'}}>{item.emoji}</div>
-                          <div style={{fontFamily:OB,fontSize:'9px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:'3px',lineHeight:1.2}}>{item.name}</div>
-                          <div style={{fontFamily:RJ,fontWeight:700,fontSize:'19px',color:'#4ade80'}}>{fmtUSD(dollarVal)}</div>
-                          <div style={{fontFamily:RJ,fontSize:'14px',color:`rgba(${rgb},0.55)`,fontWeight:500,marginTop:'1px'}}>{item.pct}%</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            };
 
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
 
@@ -9461,8 +9497,7 @@
           
           {/* ===== SINGLE TOKEN X's SHARE MODAL ===== */}
           {showXsShareModal&&(()=>{
-            const OB="'Orbitron',monospace";
-            const RJ="'Rajdhani',sans-serif";
+            /* OB / RJ (share-card fonts) are module-level now — see the u4 block above Dashboard. */
             const isGold=token==='PTGC';
             const col=isGold?'#D4AF37':'#7CFC00';
             const rgb=isGold?'212,175,55':'124,252,0';
@@ -9472,15 +9507,6 @@
             const supply=cfg.totalSupply||0;
             const priceUp=(data?.change||0)>=0;
             // Subscript-zero price renderer
-            const PriceEl=({p,style={}})=>{
-              if(!p||isNaN(p)||p===0)return<span style={style}>—</span>;
-              if(p>=1)return<span style={style}>{'$'+p.toFixed(2)}</span>;
-              if(p>=0.01)return<span style={style}>{'$'+p.toFixed(4)}</span>;
-              if(p>=0.0001)return<span style={style}>{'$'+p.toFixed(6)}</span>;
-              const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));
-              const z=exp-1,d=parseFloat(m).toFixed(4).replace('.','').slice(0,4);
-              return<span style={style}>$0.0<sub style={{fontSize:'0.65em',verticalAlign:'sub'}}>{z}</sub>{d}</span>;
-            };
             const fmtMC=(v)=>{if(!v)return'—';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(0)+'K';return'$'+Math.floor(v);};
             const calcPX=(t)=>{if(!price||price<=0||t<=price)return null;return t/price;};
             const calcMCX=(mc)=>{if(!supply||!price||price<=0)return null;const tp=mc/supply;return tp<=price?null:tp/price;};
@@ -10252,6 +10278,82 @@
       );
     };
 
+    /* u4: hoisted out of AffiliatesPage — was re-declared on every render, so React remounted it each time. */
+    const medal=(i)=>i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    const LeaderboardCard=({title,subtitle,entries,valueKey,valueFormatter,isGold,showCreatures=false,onPick})=>{
+      const borderColor=isGold?'border-[#D4AF37]/30':'border-green-500/30';
+      const headerBg=isGold?'from-[#D4AF37]/20 to-transparent':'from-green-500/20 to-transparent';
+      const titleColor=isGold?'text-[#D4AF37]':'text-green-400';
+      const accentColor=isGold?'text-[#D4AF37]':'text-green-400';
+      const glowColor=isGold?'shadow-[#D4AF37]/10':'shadow-green-500/10';
+      
+      return(
+        <div className={`bg-black/60 border ${borderColor} rounded-xl overflow-hidden shadow-lg ${glowColor}`}>
+          <div className={`bg-gradient-to-b ${headerBg} px-4 py-3 border-b ${borderColor}`}>
+            <h3 className={`${titleColor} font-orbitron font-bold text-lg text-center tracking-wide`}>{title}</h3>
+            {subtitle&&<p className="text-white/40 text-xs text-center mt-1">{subtitle}</p>}
+          </div>
+          <div className="p-3 space-y-2">
+            {entries.length>0?entries.map((entry,i)=>{
+              const name=entry.name||entry.username;
+              /* Was `entry[valueKey]||entry.buysCount||entry.ptgcAmount||0`: a "Most Referrals" row
+                 with 0 buys fell through to its PTGC amount and displayed volume as a count. */
+              const rawValue=Number(entry[valueKey])||0;
+              const value=valueFormatter(rawValue);
+              const creature=showCreatures?getCreatureForPtgc(rawValue):null;
+              return(
+                <div key={name} className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all hover:bg-white/5 ${i<3?'bg-gradient-to-r from-white/5 to-transparent':''}`} onClick={()=>onPick(name)}>
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 flex items-center justify-center rounded-full bg-black/50 border border-white/10">
+                      {medal(i)||<span className="text-white/50 text-sm font-bold">{i+1}</span>}
+                    </span>
+                    <span className={`${accentColor} font-semibold hover:underline`}>{name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`${valueKey==='buys'||valueKey==='buysCount'?'text-blue-400':'text-[#D4AF37]'} font-bold text-lg`}>{value}</span>
+                    {creature&&(
+                      <span className="min-w-[70px] text-right text-sm" title={creature.name}>
+                        <span className="text-lg">{creature.emoji}</span>
+                        <span className="text-white/60 ml-1">x{creature.count}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }):<div className="text-white/30 text-center py-6 text-sm">No data available</div>}
+          </div>
+        </div>
+      );
+    };
+
+    /* u4: hoisted out of AffiliatesPage (SortIcon + CommSortIcon, one component now) — was re-declared on every render, so React remounted it each time. */
+    const SortGlyph=({active,dir})=>!active?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D4AF37] ml-1">{dir==='asc'?'↑':'↓'}</span>;
+
+    /* u4: hoisted out of AffiliatesPage — was re-declared on every render, so React remounted it each time. */
+    const CopyIcon=({className="w-3.5 h-3.5"})=>(
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+    );
+    const CopyBtn=({text,className="text-gray-400 hover:text-white"})=>{
+      const[copied,setCopied]=useState(false);
+      return(
+        <button aria-label="Copy"
+          onClick={(e)=>{
+            e.stopPropagation();
+            navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(()=>setCopied(false),1500);
+          }}
+          className={`${className} transition inline-flex items-center`}
+          title="Copy"
+        >
+          {copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<CopyIcon/>}
+        </button>
+      );
+    };
+
     const AffiliatesPage=({onBack})=>{
       const[data,setData]=useState(null);
       const[loading,setLoading]=useState(true);
@@ -10403,31 +10505,7 @@
       
       
       // Copy icon SVG component
-      const CopyIcon=({className="w-3.5 h-3.5"})=>(
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-        </svg>
-      );
       
-      // Copy button component for addresses
-      const CopyBtn=({text,className="text-gray-400 hover:text-white"})=>{
-        const[copied,setCopied]=useState(false);
-        return(
-          <button aria-label="Copy"
-            onClick={(e)=>{
-              e.stopPropagation();
-              navigator.clipboard.writeText(text);
-              setCopied(true);
-              setTimeout(()=>setCopied(false),1500);
-            }}
-            className={`${className} transition inline-flex items-center`}
-            title="Copy"
-          >
-            {copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<CopyIcon/>}
-          </button>
-        );
-      };
       const formatDate=(d)=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
       const formatDateTime=(d)=>d?new Date(d).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';
       const formatMonthYear=(m)=>m?new Date(m+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
@@ -10566,14 +10644,12 @@
         else{setSortCol(col);setSortDir(col==='name'?'asc':'desc');}
       };
       
-      const SortIcon=({col})=>sortCol!==col?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D4AF37] ml-1">{sortDir==='asc'?'↑':'↓'}</span>;
       
       const toggleCommSort=(col)=>{
         if(commSortCol===col)setCommSortDir(commSortDir==='asc'?'desc':'asc');
         else{setCommSortCol(col);setCommSortDir(col==='username'?'asc':'desc');}
       };
       
-      const CommSortIcon=({col})=>commSortCol!==col?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D4AF37] ml-1">{commSortDir==='asc'?'↑':'↓'}</span>;
       
       const getEntryStatus=(e)=>{
         if(!e.buys?.length){if(e.meetsThreshold===false)return'below';return e.status||'unpaid';}
@@ -11040,7 +11116,6 @@
           
           {/* Leaderboard Modal */}
           {showLeaderboard&&(()=>{
-            const medal=(i)=>i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
             const lbMonth=leaderboardMonth||currentMonth;
             
             // Calculate sea creature for PTGC amount (based on % of total supply) - uses module-level getCreatureForPtgc
@@ -11067,51 +11142,6 @@
             const monthPtgcLB=[...monthEntries].sort((a,b)=>(b.ptgcAmount||0)-(a.ptgcAmount||0)).slice(0,5);
             
             // Leaderboard card component
-            const LeaderboardCard=({title,subtitle,entries,valueKey,valueFormatter,isGold,showCreatures=false})=>{
-              const borderColor=isGold?'border-[#D4AF37]/30':'border-green-500/30';
-              const headerBg=isGold?'from-[#D4AF37]/20 to-transparent':'from-green-500/20 to-transparent';
-              const titleColor=isGold?'text-[#D4AF37]':'text-green-400';
-              const accentColor=isGold?'text-[#D4AF37]':'text-green-400';
-              const glowColor=isGold?'shadow-[#D4AF37]/10':'shadow-green-500/10';
-              
-              return(
-                <div className={`bg-black/60 border ${borderColor} rounded-xl overflow-hidden shadow-lg ${glowColor}`}>
-                  <div className={`bg-gradient-to-b ${headerBg} px-4 py-3 border-b ${borderColor}`}>
-                    <h3 className={`${titleColor} font-orbitron font-bold text-lg text-center tracking-wide`}>{title}</h3>
-                    {subtitle&&<p className="text-white/40 text-xs text-center mt-1">{subtitle}</p>}
-                  </div>
-                  <div className="p-3 space-y-2">
-                    {entries.length>0?entries.map((entry,i)=>{
-                      const name=entry.name||entry.username;
-                      /* Was `entry[valueKey]||entry.buysCount||entry.ptgcAmount||0`: a "Most Referrals" row
-                         with 0 buys fell through to its PTGC amount and displayed volume as a count. */
-                      const rawValue=Number(entry[valueKey])||0;
-                      const value=valueFormatter(rawValue);
-                      const creature=showCreatures?getCreatureForPtgc(rawValue):null;
-                      return(
-                        <div key={name} className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all hover:bg-white/5 ${i<3?'bg-gradient-to-r from-white/5 to-transparent':''}`} onClick={()=>{setShowLeaderboard(false);setSelectedReferrer(name);}}>
-                          <div className="flex items-center gap-3">
-                            <span className="w-8 h-8 flex items-center justify-center rounded-full bg-black/50 border border-white/10">
-                              {medal(i)||<span className="text-white/50 text-sm font-bold">{i+1}</span>}
-                            </span>
-                            <span className={`${accentColor} font-semibold hover:underline`}>{name}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className={`${valueKey==='buys'||valueKey==='buysCount'?'text-blue-400':'text-[#D4AF37]'} font-bold text-lg`}>{value}</span>
-                            {creature&&(
-                              <span className="min-w-[70px] text-right text-sm" title={creature.name}>
-                                <span className="text-lg">{creature.emoji}</span>
-                                <span className="text-white/60 ml-1">x{creature.count}</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }):<div className="text-white/30 text-center py-6 text-sm">No data available</div>}
-                  </div>
-                </div>
-              );
-            };
             
             return(
               <Modal className="z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm" onClose={()=>setShowLeaderboard(false)} label="Affiliate leaderboard">
@@ -11157,7 +11187,7 @@
                         <div className="h-px flex-1 bg-gradient-to-l from-transparent to-[#D4AF37]/30"></div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <LeaderboardCard 
+                        <LeaderboardCard onPick={name=>{setShowLeaderboard(false);setSelectedReferrer(name);}}
                           title="MOST REFERRALS" 
                           subtitle="Total buy transactions referred"
                           entries={allTimeBuysLB} 
@@ -11166,7 +11196,7 @@
                           isGold={true}
                           showCreatures={false}
                         />
-                        <LeaderboardCard 
+                        <LeaderboardCard onPick={name=>{setShowLeaderboard(false);setSelectedReferrer(name);}}
                           title="MOST PTGC BOUGHT" 
                           subtitle="Total PTGC volume referred"
                           entries={allTimePtgcLB} 
@@ -11186,7 +11216,7 @@
                         <div className="h-px flex-1 bg-gradient-to-l from-transparent to-green-500/30"></div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <LeaderboardCard 
+                        <LeaderboardCard onPick={name=>{setShowLeaderboard(false);setSelectedReferrer(name);}}
                           title="MOST REFERRALS" 
                           subtitle={`Top performers for ${formatMonthYear(lbMonth)}`}
                           entries={monthBuysLB} 
@@ -11195,7 +11225,7 @@
                           isGold={false}
                           showCreatures={false}
                         />
-                        <LeaderboardCard 
+                        <LeaderboardCard onPick={name=>{setShowLeaderboard(false);setSelectedReferrer(name);}}
                           title="MOST PTGC BOUGHT" 
                           subtitle={`Top volume for ${formatMonthYear(lbMonth)}`}
                           entries={monthPtgcLB} 
@@ -11480,14 +11510,14 @@
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-gray-400 border-b border-white/10 bg-black/20">
-                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('name')}>Name<SortIcon col="name"/></th>
+                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('name')}>Name<SortGlyph active={sortCol==='name'} dir={sortDir}/></th>
                         <th className="text-left py-3 px-4">Wallet</th>
-                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('buys')}>Buys<SortIcon col="buys"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('ptgc')}>PTGC Bought<SortIcon col="ptgc"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('usd')}>Value (USD)<SortIcon col="usd"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaid')}>Comm. Paid<SortIcon col="commPaid"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaidUsd')}>Paid (USD)<SortIcon col="commPaidUsd"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('pending')}>Pending<SortIcon col="pending"/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('buys')}>Buys<SortGlyph active={sortCol==='buys'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('ptgc')}>PTGC Bought<SortGlyph active={sortCol==='ptgc'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('usd')}>Value (USD)<SortGlyph active={sortCol==='usd'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaid')}>Comm. Paid<SortGlyph active={sortCol==='commPaid'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaidUsd')}>Paid (USD)<SortGlyph active={sortCol==='commPaidUsd'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('pending')}>Pending<SortGlyph active={sortCol==='pending'} dir={sortDir}/></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -11528,13 +11558,13 @@
                   <table className="w-full text-sm table-fixed">
                     <thead>
                       <tr className="text-gray-400 border-b border-white/10 bg-black/20">
-                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('username')}>User<CommSortIcon col="username"/></th>
+                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('username')}>User<SortGlyph active={commSortCol==='username'} dir={commSortDir}/></th>
                         <th className="text-left py-3 px-4" style={{width:'14%'}}>Wallet</th>
-                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'8%'}} onClick={()=>toggleCommSort('buys')}>Buys<CommSortIcon col="buys"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'18%'}} onClick={()=>toggleCommSort('ptgc')}>PTGC Bought<CommSortIcon col="ptgc"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('usd')}>USD Value<CommSortIcon col="usd"/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('commission')}>Commission<CommSortIcon col="commission"/></th>
-                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'12%'}} onClick={()=>toggleCommSort('status')}>Status<CommSortIcon col="status"/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'8%'}} onClick={()=>toggleCommSort('buys')}>Buys<SortGlyph active={commSortCol==='buys'} dir={commSortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'18%'}} onClick={()=>toggleCommSort('ptgc')}>PTGC Bought<SortGlyph active={commSortCol==='ptgc'} dir={commSortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('usd')}>USD Value<SortGlyph active={commSortCol==='usd'} dir={commSortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('commission')}>Commission<SortGlyph active={commSortCol==='commission'} dir={commSortDir}/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'12%'}} onClick={()=>toggleCommSort('status')}>Status<SortGlyph active={commSortCol==='status'} dir={commSortDir}/></th>
                       </tr>
                     </thead>
                     <tbody>
