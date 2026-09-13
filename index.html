@@ -5499,9 +5499,8 @@
       const[range,setRange]=useState('ALL');
       const[unit,setUnit]=useState('USD');           // chart price unit: 'USD' | 'PLS'
       const[logY,setLogY]=useState(false);
-      const[copied,setCopied]=useState(false);
       const[share,setShare]=useState(false);
-      const canvasRef=useRef(null),chartRef=useRef(null),copyTimer=useRef(null),tipRef=useRef(null),plotRef=useRef(null);
+      const canvasRef=useRef(null),chartRef=useRef(null),tipRef=useRef(null),plotRef=useRef(null);
       const touch=(()=>{try{return window.matchMedia('(hover: none)').matches;}catch(e){return false;}})();   // phones: tap shows the card (with a tx link) instead of jumping to PulseScan
       const phone=window.innerWidth<640;
       useEffect(()=>{
@@ -5515,12 +5514,8 @@
           if(f.length)setFresh(f);
           if(p>0)setLivePls(p);
         }).catch(e=>{console.warn('dao-buys.json:',e.message);if(!dead)setFile(null);});
-        return()=>{dead=true;clearTimeout(copyTimer.current);};
+        return()=>{dead=true;};
       },[]);
-      const copy=()=>{
-        if(!navigator.clipboard)return;
-        navigator.clipboard.writeText(wallet).then(()=>{setCopied(true);clearTimeout(copyTimer.current);copyTimer.current=setTimeout(()=>setCopied(false),2000);}).catch(()=>{});
-      };
       const livePrice=data&&data.price>0?data.price:(file&&file.price&&file.price.latest?file.price.latest.ptgcUsd:0);
       const rangeDef=DAO_BUYS_RANGES.find(r=>r.k===range)||DAO_BUYS_RANGES.find(r=>r.k==='ALL');
       const view=React.useMemo(()=>computeDaoBuysView({file,fresh,rangeDef,livePrice,livePls,unit,phone}),[file,fresh,range,livePrice,livePls,unit,phone]);
@@ -5558,12 +5553,6 @@
                       <p>USD / PLS switches the price axis — the DAO pays in PLS, so the PLS view is the actual trade rate. LP withdrawals and transfers are not buys and are left out.</p>
 </InfoTip></div>
                   <div className="font-orbitron text-[22px] sm:text-4xl font-bold leading-none tracking-wide mt-1 metallic-gold"><span className="whitespace-nowrap">DAO BUYS</span> <span className="block sm:inline text-[0.55em] tracking-wider mt-1 sm:mt-0">of PTGC</span></div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <button onClick={copy} aria-label={copied?'Copied':'Copy the DAO treasury wallet address'} className="tap inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/20 transition-colors pl-2.5 pr-2 py-1">
-                      <span className="font-mono text-[11px] tabular-nums text-white/60">{wallet.slice(0,6)}{'…'}{wallet.slice(-4)}</span>
-                      <span className={`text-[11px] leading-none ${copied?'text-emerald-400 font-semibold':'text-white/40'}`}>{copied?'✓ Copied':'\u{1F4CB}'}</span>
-                    </button>
-                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={()=>setShare(true)} disabled={!view} aria-label="Share the DAO Buys chart as an image" className="tap w-9 h-9 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors text-sm disabled:opacity-30">{'\u{1F4F7}'}</button>
