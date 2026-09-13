@@ -5203,7 +5203,10 @@
       for(const b of buys){cUsd+=b.usd;cPls+=b.pls;cPtgc+=b.ptgc;avgPts.push({x:b.ts*1000,y:cPtgc>0?(pls?cPls:cUsd)/cPtgc:0});}
       const rangeAvg=cPtgc>0?(pls?cPls:cUsd)/cPtgc:0;
       const lifetimeAvg=rangeAvg;   // name kept for the chart/tag code below: "the dashed line's final value"
-      if(avgPts.length)avgPts.push({x:nowMs,y:rangeAvg});   // carry the dashed line to the right edge
+      if(avgPts.length){
+        avgPts.unshift({x:fromMs,y:avgPts[0].y});   // held flat from the left edge to the first buy (round 7: it used to start mid-chart)
+        avgPts.push({x:nowMs,y:rangeAvg});          // and carried to the right edge
+      }
       // price line: hourly inside 90 days, daily beyond; then the live price as "now"
       const src=(rangeDef.days&&rangeDef.days<=90&&file.price.hourly&&file.price.hourly.length>10)?file.price.hourly:(file.price.daily||[]);
       const line=src.filter(p=>p[1]*1000>=fromMs-86400000).map(p=>({x:p[1]*1000,y:pls?(p[3]>0?p[2]/p[3]:0):p[2]})).filter(p=>p.y>0);
@@ -5452,7 +5455,8 @@
             </div>
           </div>
           <div className="relative mx-8 mt-4 rounded-2xl border border-white/[0.06] bg-[#0b0b0b] overflow-hidden px-2 pt-1 pb-1">
-            <canvas ref={ref} width={1136} height={262} style={{width:1136,height:262}}></canvas>
+            <img src={cfg.logo} alt="" aria-hidden="true" className="absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 h-[200px] w-auto opacity-[0.07] pointer-events-none"/>
+            <canvas ref={ref} width={1136} height={262} style={{width:1136,height:262,position:'relative'}}></canvas>
             <DaoBuysCadence view={view} hex={hex} phone={false} share/>
           </div>
         </div>
@@ -5589,6 +5593,7 @@
             <div className="relative shrink-0 mx-3 sm:mx-6 mb-3 rounded-2xl border border-white/[0.06] bg-[#0b0b0b] overflow-hidden order-2 sm:order-none">
               <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.35]" style={{background:`radial-gradient(ellipse at 50% 120%, ${hex}22 0%, transparent 60%)`}}></div>
               <div ref={plotRef} className="relative h-[260px] sm:h-[380px] lg:h-[420px] px-1 sm:px-2 pt-1">
+                <img src={cfg.logo} alt="" aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[72%] w-auto opacity-[0.07] pointer-events-none select-none"/>
                 {file===undefined&&<div className="absolute inset-0 flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-white/10 animate-spin" style={{borderTopColor:hex}}></div></div>}
                 {view&&<canvas ref={canvasRef} role="img" aria-label={`PTGC price with ${view.buys.length} DAO buys marked`}></canvas>}
                 {/* hover card, filled by the chart's external tooltip callback */}
