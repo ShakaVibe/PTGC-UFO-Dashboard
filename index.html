@@ -5217,8 +5217,10 @@
       const avgUsd=t.ptgc>0?t.usd/t.ptgc:0,avgPls=t.ptgc>0?t.pls/t.ptgc:0;
       const worth=t.ptgc*livePrice;
       const maxPtgc=buys.reduce((m,b)=>Math.max(m,b.ptgc),0);
-      const R_MIN=phone?5:7,R_MAX=phone?16:26;
-      const radius=b=>maxPtgc>0?R_MIN+(R_MAX-R_MIN)*Math.pow(b.ptgc/maxPtgc,0.4):R_MIN;
+      /* Sized now that they really draw (round 8): area ∝ PTGC bought, radius 4–15 px desktop.
+         Earlier 7–26 px with a 0.4 exponent was tuned against dots that were secretly 3 px. */
+      const R_MIN=phone?3:4,R_MAX=phone?10:15;
+      const radius=b=>maxPtgc>0?R_MIN+(R_MAX-R_MIN)*Math.sqrt(b.ptgc/maxPtgc):R_MIN;
       const dots=buys.map(b=>({x:b.ts*1000,y:DAO_BUYS_DOT_AT==='market'?marketOf(b):paidOf(b),r:radius(b),buy:b}));
       const yTop=Math.max(0,...line.map(p=>p.y),...dots.map(d=>d.y));
       const avgOffChart=lifetimeAvg>yTop*1.1;   // only possible now if every buy in range paid far above market — kept as a guard
@@ -5267,7 +5269,7 @@
         data:{datasets:[
           {type:'line',label:'PTGC price',data:view.line,parsing:false,borderColor:hex,borderWidth:phone?1.5:2,backgroundColor:grad,fill:true,tension:0.25,pointRadius:0,pointHitRadius:0,pointHoverRadius:0,order:3},
           {type:'line',label:'Avg cost (running)',data:view.avgPts,parsing:false,stepped:'after' /* hold each buy's average until the next buy — 'before' drew the NEXT average over the gap */,borderColor:'#34d399',borderDash:[6,5],borderWidth:1.5,pointRadius:0,pointHitRadius:0,pointHoverRadius:0,fill:false,order:2,animation:false /* the default 'grow up from the axis' entry flashed across the plot on ranges where this line lives above the visible y range */},
-          {type:'bubble',label:'DAO buy',data:view.dots,parsing:false,_glow:true,backgroundColor:'#F7C325',borderColor:'rgba(255,248,222,0.95)',borderWidth:phone?1.5:2,hoverBackgroundColor:'#FFE58A',hoverBorderColor:'#fff',hoverBorderWidth:2.5,hoverRadius:3,order:1}
+          {type:'bubble',label:'DAO buy',data:view.dots,parsing:false,_glow:true,radius:c=>(c.raw&&c.raw.r)||4 /* parsing:false means the bubble controller never reads point.r — every dot drew at the 3 px default until this (found round 8) */,backgroundColor:'#F7C325',borderColor:'rgba(255,248,222,0.95)',borderWidth:phone?1.5:2,hoverBackgroundColor:'#FFE58A',hoverBorderColor:'#fff',hoverBorderWidth:2.5,hoverRadius:3,order:1}
         ]},
         options:{
           responsive:!share,maintainAspectRatio:false,animation:share?false:{duration:450},devicePixelRatio:share?2:undefined,
