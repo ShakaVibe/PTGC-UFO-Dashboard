@@ -145,19 +145,25 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
 
 ## Next up (in order)
 
-0. **Buy/Sell (switch.win)** — done and live (2026-09-13, g7 ticked). Two things only Shaka can
-   do: a real wallet connect inside the window (desktop + phone), and a heads-up to the Switch
-   founder that we embed `/widget?…&partnerAddress=` with the builder's params. Optional
-   follow-ups in `sessions/2026-09-13.md` (demote "Open in Switch", sticky-bar button, Home cards).
-1. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
+0. **DAO Chart — Shaka's pick for the next session (2026-09-14 or later).** Not yet specified:
+   Shaka will explain what it should show when the session starts, so open by asking for the
+   brief before touching anything. Not on the roadmap artifact yet — add it (Phase 4, next id
+   g8) once scoped. Likely relevant existing pieces: the DAO Treasury panel on the PTGC
+   dashboard (`daoContract` / `daoTreasury` in `TOKENS.PTGC`), `data/treasury-summary.json` +
+   `treasury-wallet*-*.json` (hourly, "Update treasury data" Action), and `charts.html` for
+   how the other charts are built (Chart.js 4.4.1, SRI-pinned — gotcha 1).
+1. **Buy/Sell (switch.win)** — done and live (2026-09-13, g7 ticked). Shaka connected a wallet
+   and bought in-frame; the Switch founder has been told about the embed. Optional follow-up
+   left: a compact Buy/Sell in the phone sticky bar (`sessions/2026-09-13.md`).
+2. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
    not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
    back on the button that opened it.
-2. **Phase 3 leftovers** — u5/u6 next (see roadmap), then u11/u14. u3 (decomposition)
+3. **Phase 3 leftovers** — u5/u6 next (see roadmap), then u11/u14. u3 (decomposition)
    waits for the build.
-3. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
+4. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
    decision is Pages-from-`dist` vs a `gh-pages` branch. Do b3-style cleanup first; everything
    in Phase 3 gets easier after it.
-4. **October 6, 2026** — UFO day 90. Check the UFO dashboard and the "PTGC Burned by UFO" panel
+5. **October 6, 2026** — UFO day 90. Check the UFO dashboard and the "PTGC Burned by UFO" panel
    that day (both of the fixed 90-day bugs get their first real test; the `exactTo` bug found
    in dry-run would have shown up here too).
 
