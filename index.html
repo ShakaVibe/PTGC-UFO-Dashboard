@@ -5380,7 +5380,7 @@
     /* Cadence strip: PTGC bought per bucket, bars aligned with the chart above (same x range,
        same pinned y-axis width). Hover = bucket totals. */
     const DaoBuysCadence=({view,hex,phone,share=false})=>{
-      const ref=useRef(null),inst=useRef(null);
+      const ref=useRef(null),inst=useRef(null),tip=useRef(null),wrap=useRef(null);
       const cad=React.useMemo(()=>computeDaoBuysCadence(view),[view]);
       useEffect(()=>{
         if(!ref.current||!window.Chart)return;
@@ -5407,10 +5407,22 @@
               responsive:!share,maintainAspectRatio:false,animation:share?false:{duration:350},devicePixelRatio:share?2:undefined,events:share?[]:undefined,
               layout:{padding:{top:14,right:phone?4:12,left:phone?2:0,bottom:0}},
               plugins:{legend:{display:false},tooltip:{
-                enabled:!share,backgroundColor:'rgba(8,8,8,0.96)',borderColor:hex,borderWidth:1,padding:10,displayColors:false,
-                titleColor:'#fff',titleFont:{family:'Rajdhani',size:13,weight:'700'},bodyColor:'rgba(255,255,255,0.8)',bodyFont:{family:'Rajdhani',size:13,weight:'600'},
-                callbacks:{title:items=>{const bk=items[0]&&cad.points[items[0].dataIndex].bk;return bk?fmtRange(bk):'';},
-                  label:i=>{const bk=cad.points[i.dataIndex].bk;return bk.n?[`${bk.n} buy${bk.n===1?'':'s'} · ${fmtAbbr(bk.ptgc)} PTGC`,`${fmtAbbr(bk.pls)} PLS (${fmtDollar(bk.usd,0)})`]:'no buys';}}
+                enabled:false,
+                /* HTML card floated ABOVE the bar (it hangs over the main chart), so neither the
+                   card nor the pointer covers the bar being read (round 12). */
+                external:share?undefined:(c)=>{
+                  const el=tip.current,box=wrap.current;if(!el||!box)return;
+                  const tt=c.tooltip;const dp=tt&&tt.opacity!==0&&tt.dataPoints&&tt.dataPoints[0];
+                  if(!dp){el.style.opacity='0';return;}
+                  const bk=cad.points[dp.dataIndex].bk;
+                  el.innerHTML=`<div class="text-white font-bold text-[13px]">${fmtRange(bk)}</div>`+(bk.n
+                    ?`<div class="mt-1 text-[13px] text-white/80 tabular-nums">${bk.n} buy${bk.n===1?'':'s'} · <span class="text-[#F5DE83] font-semibold">${fmtAbbr(bk.ptgc)} PTGC</span></div><div class="text-[12px] text-white/55 tabular-nums">${fmtAbbr(bk.pls)} PLS (${fmtDollar(bk.usd,0)})</div>`
+                    :`<div class="mt-1 text-[12px] text-white/50">no buys</div>`);
+                  const bw=box.clientWidth,w=el.offsetWidth,h=el.offsetHeight;
+                  const el0=c.chart.getDatasetMeta(0).data[dp.dataIndex];const barTop=el0?el0.y:tt.caretY;
+                  let left=tt.caretX-w/2;left=Math.max(6,Math.min(bw-w-6,left));
+                  el.style.transform=`translate(${Math.round(left)}px,${Math.round(barTop-h-12)}px)`;el.style.opacity='1';
+                }
               }},
               scales:{
                 x:{type:'linear',min:view.fromMs,max:view.nowMs,display:false},
@@ -5423,8 +5435,9 @@
       },[cad,phone,share]);
       const unitWord=cad.kind==='day'?'day':cad.kind==='week'?'week':'month';
       return(
-        <div className="relative">
+        <div ref={wrap} className="relative">
           <div className={`absolute left-2 top-0 z-[1] ${share?'text-[12px]':'text-[10px] sm:text-[11px]'} uppercase tracking-[0.18em] font-semibold text-white/40 pointer-events-none`}>PTGC bought per {unitWord}</div>
+          {!share&&<div ref={tip} role="tooltip" className="absolute top-0 left-0 z-20 min-w-[150px] rounded-lg border border-[#D4AF37]/50 bg-[#0b0b0b]/95 px-3 py-2 opacity-0 transition-opacity duration-100 pointer-events-none whitespace-nowrap" style={{boxShadow:'0 0 30px -8px #D4AF37, 0 12px 30px rgba(0,0,0,.6)'}}></div>}
           {share
             ?<canvas ref={ref} width={1136} height={60} style={{width:1136,height:60}}></canvas>
             :<div className={phone?'h-[60px]':'h-[96px]'}><canvas ref={ref} role="img" aria-label={`PTGC bought per ${unitWord}`}></canvas></div>}
