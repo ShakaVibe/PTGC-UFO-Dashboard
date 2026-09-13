@@ -6,7 +6,8 @@ Update it at the end of every session.
 
 - Live site: https://ptgc-ufo.com (GitHub Pages from `main`, `deploy.yml`)
 - Roadmap + tick-off backlog (Claude artifact, shared state): "Grays Dashboard Roadmap"
-  in Shaka's Claude artifact gallery — 57 items across five phases (u10 dropped 2026-09-09).
+  in Shaka's Claude artifact gallery — 58 items across five phases (u10 dropped 2026-09-09,
+  g7 Buy/Sell via switch.win added + ticked 2026-09-13).
 - Repo layout: `index.html` is the whole app (React 18 + Babel-standalone + Tailwind play
   CDN, compiled in the browser). `scripts/` + `.github/workflows/` are the hourly data
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
@@ -14,7 +15,7 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-13)
 
-Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 38 of 58 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live** (see
 `sessions/2026-09-13.md`). Check `git --no-optional-locks status` before starting.
@@ -32,7 +33,7 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — everything else (u3–u6, u11, u13, u14) | Not started. Suggested order: u4/u5/u6, u11/u13/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
-| Phase 4 — Buy/Sell via switch.win (new, not on the artifact yet) | **Done, live** (2026-09-13; header v2 + in-window Switch in the last push) |
+| Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -139,10 +140,10 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
 
 ## Next up (in order)
 
-0. **Buy/Sell (switch.win)** — built and confirmed live on 2026-09-13 (widget renders in the
-   frame). Left: tell the Switch founder we embed `/widget?…` with the builder's params, and
-   add the item to the roadmap artifact as Phase 4 and tick it. Details + v2 header in
-   `sessions/2026-09-13.md`.
+0. **Buy/Sell (switch.win)** — done and live (2026-09-13, g7 ticked). Two things only Shaka can
+   do: a real wallet connect inside the window (desktop + phone), and a heads-up to the Switch
+   founder that we embed `/widget?…&partnerAddress=` with the builder's params. Optional
+   follow-ups in `sessions/2026-09-13.md` (demote "Open in Switch", sticky-bar button, Home cards).
 1. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
    not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
    back on the button that opened it.
