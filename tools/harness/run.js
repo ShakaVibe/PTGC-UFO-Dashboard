@@ -17,9 +17,15 @@ const html=html0
   .replace(/<script src="https:\/\/unpkg\.com\/react-dom@18\.3\.1\/umd\/react-dom\.production\.min\.js"[^>]*><\/script>/,'<script src="/__react-dom.js"></script>')
   .replace(/<script src="https:\/\/unpkg\.com\/@babel\/standalone@7\.26\.4\/babel\.min\.js"[^>]*><\/script>/,'<script src="/__babel.js"></script>')
   .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/chart\.js@4\.4\.1\/dist\/chart\.umd\.js"[^>]*><\/script>/,'<script src="/__chart.js"></script>')
-  .replace(/<link href="https:\/\/fonts\.googleapis\.com[^"]*" rel="stylesheet">/,'');
+  .replace(/<link href="https:\/\/fonts\.googleapis\.com[^"]*" rel="stylesheet">/,'<link rel="stylesheet" href="/__fonts.css">');
 if(html===html0)console.warn('WARNING: no CDN tags rewritten');
 
+// Real Orbitron / Rajdhani from @fontsource (same faces the Google Fonts link loads), so screenshots
+// show the page's actual type instead of a monospace fallback. Missing packages → the old empty-CSS stub.
+const FONT_DIR=(f)=>path.join(__dirname,'node_modules/@fontsource',f);
+const haveFonts=fs.existsSync(FONT_DIR('orbitron/files'))&&fs.existsSync(FONT_DIR('rajdhani/files'));
+const fontCss=haveFonts?[['Orbitron',[400,700,900]],['Rajdhani',[300,400,500,600,700]]].map(([fam,ws])=>ws.map(w=>
+  `@font-face{font-family:'${fam}';font-style:normal;font-weight:${w};font-display:swap;src:url(/__font/${fam.toLowerCase()}-latin-${w}-normal.woff2) format('woff2')}`).join('\n')).join('\n'):'';
 const files={
   '/__tw.css':['tw.out.css','text/css'],
   '/__react.js':['node_modules/react/umd/react.production.min.js','text/javascript'],
@@ -31,7 +37,9 @@ const mime={'.json':'application/json','.png':'image/png','.html':'text/html','.
 const server=http.createServer((req,res)=>{
   const u=req.url.split('?')[0];
   if(u==='/'||u==='/index.html'){res.writeHead(200,{'content-type':'text/html'});return res.end(html);}
+  if(u==='/__fonts.css'){res.writeHead(200,{'content-type':'text/css'});return res.end(fontCss);}
   if(files[u]){res.writeHead(200,{'content-type':files[u][1]});return res.end(fs.readFileSync(path.join(__dirname,files[u][0])));}
+  if(u.startsWith('/__font/')){const f=u.slice(8),fam=f.split('-')[0];const fp=path.join(FONT_DIR(fam+'/files'),f);if(fs.existsSync(fp)){res.writeHead(200,{'content-type':'font/woff2'});return res.end(fs.readFileSync(fp));}}
   const p=path.join(REPO,decodeURIComponent(u));
   if(fs.existsSync(p)&&fs.statSync(p).isFile()){res.writeHead(200,{'content-type':mime[path.extname(p)]||'application/octet-stream'});return res.end(fs.readFileSync(p));}
   res.writeHead(404);res.end('nf');

@@ -5105,13 +5105,41 @@
     };
     /* Module scope on purpose (gotcha 14): a component declared inside DaoBuysModal's render
        would be a new type every render and remount on each price tick. */
+    /* Same type as the DAO Treasury panel tiles: Rajdhani, medium, gold value; small caps label. */
     const DaoBuysStat=({label,children,sub,className=''})=>(
-      <div className={`min-w-0 ${className}`}>
-        <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] truncate">{label}</div>
-        <div className="mt-1 font-orbitron text-base sm:text-xl font-bold leading-none tabular-nums text-white truncate">{children}</div>
-        {sub&&<div className="mt-1 text-[11px] sm:text-xs text-white/45 tabular-nums truncate">{sub}</div>}
+      <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 min-w-0 flex flex-col justify-center ${className}`}>
+        <div className="text-white/55 text-[11px] sm:text-xs uppercase tracking-[0.18em] font-semibold mb-1.5 truncate">{label}</div>
+        <div className="text-lg sm:text-xl font-medium tabular-nums leading-none text-[#D4AF37] truncate">{children}</div>
+        {sub&&<div className="text-white/45 text-xs tabular-nums mt-1 truncate">{sub}</div>}
       </div>
     );
+    /* The most recent buy, as its own tile (Shaka, 2026-09-13 review). Lifetime-latest, not range-latest. */
+    const DaoBuysLatest=({buy,livePrice})=>{
+      if(!buy)return null;
+      const ago=fmtSnapshotAge(Date.now()-buy.ts*1000);
+      return(
+        <div className="relative rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/[0.06] px-3.5 py-3 min-w-0 overflow-hidden" style={{boxShadow:'0 0 30px -12px #D4AF37'}}>
+          <div aria-hidden="true" className="pointer-events-none absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl opacity-30" style={{background:'radial-gradient(circle,#D4AF37 0%,transparent 65%)'}}></div>
+          <div className="relative flex items-center justify-between gap-2">
+            <div className="text-[#F0C94A] text-[11px] sm:text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-1.5 truncate">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F7C325] shadow-[0_0_8px_#F7C325]"></span>Latest buy
+            </div>
+            <span className="text-white/45 text-[11px] tabular-nums whitespace-nowrap">{ago}</span>
+          </div>
+          <div className="relative mt-1.5 flex items-baseline gap-2 flex-wrap">
+            <span className="text-xl sm:text-2xl font-semibold tabular-nums leading-none metallic-gold">{fmtAbbr(buy.ptgc)}</span>
+            <span className="text-white/60 text-sm font-medium">PTGC</span>
+          </div>
+          <div className="relative mt-1.5 text-xs sm:text-[13px] text-white/70 tabular-nums leading-snug">
+            for <span className="text-white/90 font-medium">{fmtAbbr(buy.pls)} PLS</span> <span className="text-white/45">({fmtDollar(buy.usd,0)})</span> at <Price p={buy.price} c="text-white/90 font-medium"/>
+          </div>
+          <div className="relative mt-1.5 flex items-center justify-between gap-2 text-[11px] text-white/45">
+            <span className="tabular-nums truncate">{fmtDateTime(buy.ts)}</span>
+            <a href={`https://scan.pulsechain.com/tx/${buy.hash}`} target="_blank" rel="noopener noreferrer" className="tap-h shrink-0 text-[#F0C94A]/80 hover:text-[#F0C94A] hover:underline">View tx {'↗'}</a>
+          </div>
+        </div>
+      );
+    };
     const DaoBuysModal=({token,data,onClose})=>{
       const cfg=TOKENS[token];
       const hex=cfg.colorHex;
@@ -5120,7 +5148,8 @@
       const[range,setRange]=useState('ALL');
       const[logY,setLogY]=useState(false);
       const[copied,setCopied]=useState(false);
-      const canvasRef=useRef(null),chartRef=useRef(null),copyTimer=useRef(null);
+      const canvasRef=useRef(null),chartRef=useRef(null),copyTimer=useRef(null),tipRef=useRef(null),plotRef=useRef(null);
+      const touch=(()=>{try{return window.matchMedia('(hover: none)').matches;}catch(e){return false;}})();   // phones: tap shows the card (with a tx link) instead of jumping to PulseScan
       useEffect(()=>{
         let dead=false;
         fetchDaoBuys().then(j=>{if(!dead)setFile(j);}).catch(e=>{console.warn('dao-buys.json:',e.message);if(!dead)setFile(null);});
@@ -5155,14 +5184,13 @@
         const t=buys.reduce((a,b)=>({ptgc:a.ptgc+b.ptgc,pls:a.pls+b.pls,usd:a.usd+b.usd}),{ptgc:0,pls:0,usd:0});
         const avg=t.ptgc>0?t.usd/t.ptgc:0;
         const worth=t.ptgc*livePrice;
-        const pnlPct=t.usd>0?((worth-t.usd)/t.usd)*100:null;
         const maxPtgc=buys.reduce((m,b)=>Math.max(m,b.ptgc),0);
         /* Radius grows with the 0.4th power of size (not sqrt of area): the DAO's buys span 250x, and
            a strict area scale left everything but the top few as 4 px specks. */
         const R_MIN=window.innerWidth<640?4:5.5,R_MAX=window.innerWidth<640?14:22;
         const radius=b=>maxPtgc>0?R_MIN+(R_MAX-R_MIN)*Math.pow(b.ptgc/maxPtgc,0.4):R_MIN;
         const dots=buys.map(b=>({x:b.ts*1000,y:b.price,r:radius(b),buy:b}));
-        return{buys,buysAll,line,avgPts,lifetimeAvg,t,avg,worth,pnlPct,dots,fromMs,nowMs,last:buys.length?buys[buys.length-1]:null,first:buysAll[0]||null};
+        return{buys,buysAll,line,avgPts,lifetimeAvg,t,avg,worth,dots,fromMs,nowMs,last:buys.length?buys[buys.length-1]:null,latest:buysAll.length?buysAll[buysAll.length-1]:null,first:buysAll[0]||null};
       },[file,range,livePrice]);
 
       useEffect(()=>{
@@ -5194,6 +5222,7 @@
               interaction:{mode:'nearest',intersect:true},
               onHover:(e,els)=>{const c=e.native&&e.native.target;if(c)c.style.cursor=els.length?'pointer':'default';},
               onClick:(e,els)=>{
+                if(touch)return;
                 const el=els.find(x=>x.datasetIndex===2);if(!el)return;
                 const d=view.dots[el.index];if(d&&d.buy)window.open('https://scan.pulsechain.com/tx/'+d.buy.hash,'_blank','noopener');
               },
@@ -5201,13 +5230,33 @@
               plugins:{
                 legend:{display:false},
                 tooltip:{
-                  backgroundColor:'rgba(8,8,8,0.96)',borderColor:hex,borderWidth:1,padding:12,displayColors:false,
-                  titleColor:'#fff',titleFont:{family:'Orbitron',size:11,weight:'bold'},bodyColor:'rgba(255,255,255,0.8)',bodyFont:{family:'Rajdhani',size:13,weight:'600'},bodySpacing:4,
-                  filter:i=>i.datasetIndex===2,
-                  callbacks:{
-                    title:items=>{const d=items[0]&&view.dots[items[0].dataIndex];return d?fmtDateTime(d.buy.ts):'';},
-                    label:i=>{const b=view.dots[i.dataIndex].buy;const price=fmtAxisUsd(b.price,b.price/100);
-                      return[`Bought  ${fmtAbbr(b.ptgc)} PTGC`,`Spent   ${fmtAbbr(b.pls)} PLS  (${fmtDollar(b.usd,0)})`,`Price   ${price} per PTGC`,'Tap to open on PulseScan ↗'];}
+                  enabled:false,
+                  /* HTML card instead of the canvas tooltip (Shaka, 2026-09-13 review): logo, date, the
+                     four numbers, and on phones a real link — kept inside the plot box, flipped to the
+                     left of the dot when it would run off the right edge. */
+                  external:(ctx)=>{
+                    const el=tipRef.current,box=plotRef.current;if(!el||!box)return;
+                    const tt=ctx.tooltip;
+                    const dp=tt&&tt.opacity!==0&&tt.dataPoints&&tt.dataPoints.find(d=>d.datasetIndex===2);
+                    if(!dp){el.style.opacity='0';el.style.pointerEvents='none';return;}
+                    const b=view.dots[dp.dataIndex].buy;
+                    const priceHtml=p=>{const f=fmtPrice(p);return typeof f==='string'?f:`${f.pre}<sub class="text-[0.6em] opacity-70">${f.z}</sub>${f.d}`;};
+                    el.innerHTML=
+                      `<div class="flex items-center gap-2.5"><img src="${cfg.logo}" alt="" class="w-8 h-8 shrink-0"><div class="min-w-0"><div class="text-[#F0C94A] text-[10px] uppercase tracking-[0.18em] font-semibold">DAO buy</div><div class="text-white/60 text-[11px] tabular-nums truncate">${fmtDateTime(b.ts)}</div></div></div>`+
+                      `<div class="mt-2.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px] leading-tight">`+
+                      `<span class="text-white/45">Bought</span><span class="text-right text-white font-semibold tabular-nums">${fmtAbbr(b.ptgc)} PTGC</span>`+
+                      `<span class="text-white/45">Spent</span><span class="text-right text-white font-semibold tabular-nums">${fmtAbbr(b.pls)} PLS <span class="text-white/45 font-normal">(${fmtDollar(b.usd,0)})</span></span>`+
+                      `<span class="text-white/45">Price paid</span><span class="text-right text-[#F0C94A] font-semibold tabular-nums">${priceHtml(b.price)}</span>`+
+                      `<span class="text-white/45">Market then</span><span class="text-right text-white/80 tabular-nums">${priceHtml(b.marketUsd)}</span>`+
+                      `</div>`+
+                      (touch
+                        ?`<a href="https://scan.pulsechain.com/tx/${b.hash}" target="_blank" rel="noopener noreferrer" class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-[#F0C94A]/85"><span>Open on PulseScan</span><span>↗</span></a>`
+                        :`<div class="mt-2.5 pt-2 border-t border-white/10 text-[10px] text-white/40">Click the dot to open on PulseScan ↗</div>`);
+                    el.style.pointerEvents=touch?'auto':'none';
+                    const cw=box.clientWidth,chh=box.clientHeight,w=el.offsetWidth,h=el.offsetHeight;
+                    let left=tt.caretX+16;if(left+w>cw-8)left=tt.caretX-w-16;if(left<8)left=8;
+                    let top=tt.caretY-h/2;top=Math.max(8,Math.min(chh-h-8,top));
+                    el.style.transform=`translate(${Math.round(left)}px,${Math.round(top)}px)`;el.style.opacity='1';
                   }
                 }
               },
@@ -5231,7 +5280,6 @@
       const asOf=file&&file.generatedAt?new Date(file.generatedAt):null;
       const ageMs=asOf?Date.now()-asOf.getTime():null;
       const stale=ageMs!=null&&ageMs>6*3600000;
-      const pnlUp=view&&view.pnlPct!=null&&view.pnlPct>=0;
       return(
         <Modal onClose={onClose} label="DAO Treasury PTGC buys" className="z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay bg-black/85">
           <div onClick={e=>e.stopPropagation()} className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-6xl flex flex-col rounded-none sm:rounded-3xl border bg-[#070707] overflow-y-auto overflow-x-hidden overscroll-contain" style={{borderColor:`${hex}55`,boxShadow:`0 0 120px -30px ${hex}aa, 0 40px 100px rgba(0,0,0,.8)`}}>
@@ -5267,24 +5315,21 @@
             {/* Stats strip — for buys in the selected range */}
             <div className="relative px-4 sm:px-6 pt-3 pb-3">
               {file===undefined&&(
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4" aria-busy="true" aria-label="Loading DAO buys">
-                  {[0,1,2,3,4].map(i=><div key={i}><Sk w="55%" h={10}/><Sk w="80%" h={22} className="mt-2"/><Sk w="50%" h={12} className="mt-2"/></div>)}
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5" aria-busy="true" aria-label="Loading DAO buys">
+                  {[0,1,2,3].map(i=><div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5"><Sk w="55%" h={12}/><Sk w="80%" h={20} className="mt-2"/><Sk w="50%" h={12} className="mt-2"/></div>)}
+                  <div className="col-span-2 rounded-xl border border-[#D4AF37]/25 px-3.5 py-3"><Sk w="40%" h={12}/><Sk w="60%" h={24} className="mt-2"/><Sk w="90%" h={14} className="mt-2"/></div>
                 </div>
               )}
               {file===null&&(
                 <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">Couldn{'’'}t load the DAO buys file right now. Try again in a moment.</div>
               )}
               {view&&(
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-                  <DaoBuysStat label="PTGC bought" sub={view.buys.length?`${view.buys.length} buy${view.buys.length===1?'':'s'} ${rangeDef.days?`in ${rangeDef.label||rangeDef.k}`:'lifetime'}`:'no buys in range'}>
-                    <span className="metallic-gold">{fmtAbbr(view.t.ptgc)}</span>
-                  </DaoBuysStat>
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5">
+                  <DaoBuysStat label="PTGC bought" sub={view.buys.length?`${view.buys.length} buy${view.buys.length===1?'':'s'} ${rangeDef.days?`in ${rangeDef.label||rangeDef.k}`:'lifetime'}`:'no buys in range'}>{fmtAbbr(view.t.ptgc)}</DaoBuysStat>
                   <DaoBuysStat label="Spent" sub={`${fmtAbbr(view.t.pls)} PLS`}>{fmtDollar(view.t.usd,0)}</DaoBuysStat>
                   <DaoBuysStat label="Avg cost" sub={view.lifetimeAvg>0&&rangeDef.days?<span>lifetime <Price p={view.lifetimeAvg}/></span>:'per PTGC, paid'}><Price p={view.avg}/></DaoBuysStat>
                   <DaoBuysStat label="Worth today" sub={livePrice>0?<span>at <Price p={livePrice}/></span>:'no live price'}>{fmtDollar(view.worth,0)}</DaoBuysStat>
-                  <DaoBuysStat label="vs cost" className="col-span-2 sm:col-span-1" sub={view.pnlPct!=null?`${pnlUp?'+':'−'}${fmtDollar(Math.abs(view.worth-view.t.usd),0)}`:''}>
-                    {view.pnlPct==null?'—':<span className={pnlUp?'text-emerald-400':'text-rose-400'}>{pnlUp?'▲':'▼'} {Math.abs(view.pnlPct).toFixed(1)}%</span>}
-                  </DaoBuysStat>
+                  <div className="col-span-2"><DaoBuysLatest buy={view.latest} livePrice={livePrice}/></div>
                 </div>
               )}
             </div>
@@ -5307,9 +5352,11 @@
             {/* Chart */}
             <div className="relative mx-3 sm:mx-6 mb-3 rounded-2xl border border-white/[0.06] bg-[#0b0b0b] overflow-hidden">
               <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.35]" style={{background:`radial-gradient(ellipse at 50% 120%, ${hex}22 0%, transparent 60%)`}}></div>
-              <div className="relative h-[300px] sm:h-[420px] lg:h-[480px] px-1 sm:px-2 pt-1">
+              <div ref={plotRef} className="relative h-[300px] sm:h-[420px] lg:h-[480px] px-1 sm:px-2 pt-1">
                 {file===undefined&&<div className="absolute inset-0 flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-white/10 animate-spin" style={{borderTopColor:hex}}></div></div>}
                 {view&&<canvas ref={canvasRef} role="img" aria-label={`PTGC price with ${view.buys.length} DAO buys marked`}></canvas>}
+                {/* hover card, filled by the chart's external tooltip callback */}
+                <div ref={tipRef} role="tooltip" className="absolute top-0 left-0 z-10 w-[250px] rounded-xl border border-[#D4AF37]/50 bg-[#0b0b0b]/95 p-3 opacity-0 transition-opacity duration-150 pointer-events-none" style={{boxShadow:'0 0 40px -10px #D4AF37, 0 20px 40px rgba(0,0,0,.6)',backdropFilter:'blur(6px)'}}></div>
               </div>
             </div>
 
