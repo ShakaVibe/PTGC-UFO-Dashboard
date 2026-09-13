@@ -45,6 +45,7 @@
   <link rel="preconnect" href="https://cdn.tailwindcss.com">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://switch.win">   <!-- Buy/Sell widget iframe (SwapModal) -->
   <!-- Versions pinned exactly: a floating tag (react@18, babel@7) means an upstream
        release can change the code this site runs without any deploy on our side.
        SUBRESOURCE INTEGRITY: each hash is the SHA-384 of the exact bytes the CDN served on
@@ -4900,7 +4901,9 @@
      * token's widget — modal-local state (`tok`), the dashboard behind stays on `token`.
      * Wallet connect, quotes and slippage (the widget detects the token tax) all happen INSIDE
      * the iframe — nothing here touches a wallet. Foreign origin, so the headless harness only
-     * ever shows the loading shell; check the real widget live. Phone: bottom sheet; sm+: card. */
+     * ever shows the loading shell; check the real widget live. Phone: bottom sheet; sm+: card.
+     * Known gap: once the user has clicked INTO the widget, key events stay in switch.win's
+     * document, so Escape no longer reaches the Modal stack — ✕ and the backdrop still close. */
     const SwapModal=({token,data,onClose})=>{
       const[tok,setTok]=useState(token);
       const[ready,setReady]=useState(false);
@@ -4911,7 +4914,14 @@
       const hex=cfg.colorHex;
       const url=switchWidgetUrl(tok,'buy');
       const flip=()=>{setReady(false);setCopied(false);setTok(other);};
-      const copy=()=>{try{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000);}catch(e){}};
+      const copyTimer=useRef(null);
+      const copy=()=>{
+        if(!navigator.clipboard)return;                       // http / very old browsers: nothing to claim
+        navigator.clipboard.writeText(cfg.address).then(()=>{  // only say "Copied" once it actually is
+          setCopied(true);clearTimeout(copyTimer.current);copyTimer.current=setTimeout(()=>setCopied(false),2000);
+        }).catch(()=>{});
+      };
+      useEffect(()=>()=>clearTimeout(copyTimer.current),[]);
       /* Price pill: the dashboard's own (live-refreshed) figure for its token; for the other
          token one DexScreener main-pair read, cached for the life of the modal. Same
          undefined = loading / null = failed / object = data semantics as burnPeriods (gotcha 3). */
@@ -4928,7 +4938,7 @@
       },[tok]);
       return(
         <Modal onClose={onClose} label={`Buy or sell ${tok} on Switch`} className="z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-overlay bg-black/80">
-          <div onClick={e=>e.stopPropagation()} className="relative w-full sm:max-w-[460px] max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-t-3xl sm:rounded-3xl border bg-[#0a0a0a] overflow-hidden" style={{borderColor:`${hex}66`,boxShadow:`0 0 80px -20px ${hex}99, 0 30px 80px rgba(0,0,0,.7)`}}>
+          <div onClick={e=>e.stopPropagation()} className="relative w-full sm:max-w-[460px] max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-t-3xl sm:rounded-3xl border bg-[#0a0a0a] overflow-y-auto overflow-x-hidden overscroll-contain" style={{borderColor:`${hex}66`,boxShadow:`0 0 80px -20px ${hex}99, 0 30px 80px rgba(0,0,0,.7)`}}>
             <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[220px] rounded-full blur-3xl opacity-25" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
             {/* Header: big haloed logo, eyebrow + token name, SWITCH / close top-right; then a
                 pill row — contract address (tap to copy) and the live price with 24h change. */}
@@ -4965,7 +4975,9 @@
                 )}
               </div>
             </div>
-            <div className="relative mx-4 sm:mx-5 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black" style={{height:'min(720px, calc(100dvh - 236px))',minHeight:340}}>
+            {/* Fixed-height widget area (the widget scrolls inside its own frame). The 340 px floor
+                can exceed a landscape phone, which is why the panel above scrolls rather than clips. */}
+            <div className="relative shrink-0 mx-4 sm:mx-5 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black" style={{height:'min(720px, calc(100dvh - 236px))',minHeight:340}}>
               {!ready&&(
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6" aria-live="polite">
                   <div className="w-10 h-10 rounded-full border-2 border-white/10 animate-spin" style={{borderTopColor:hex}}></div>
@@ -6054,7 +6066,7 @@
       const[affiliateShareLoading,setAffiliateShareLoading]=useState(false);
       const[txnChange24h,setTxnChange24h]=useState(null);
       const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
-      const copyAddress=()=>{navigator.clipboard.writeText(cfg.address);setCopied(true);setTimeout(()=>setCopied(false),2000)};
+      const copyAddress=()=>{if(!navigator.clipboard)return;navigator.clipboard.writeText(cfg.address).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});};   // "Copied" only after the promise resolves
       
       // Load other token pairs when RH Cores modal opens
       useEffect(()=>{
