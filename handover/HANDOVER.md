@@ -12,10 +12,13 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-09)
+## Current state (end of 2026-09-13)
 
-Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09). Check
-`git --no-optional-locks status` there before starting.
+Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
+handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built** (uncommitted at the
+time of writing — see `sessions/2026-09-13.md`; the live iframe check is the first thing to do
+after the push). Check `git --no-optional-locks status` before starting.
 
 | Area | Status |
 |---|---|
@@ -30,6 +33,7 @@ Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09). Chec
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — everything else (u3–u6, u11, u13, u14) | Not started. Suggested order: u4/u5/u6, u11/u13/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
+| Phase 4 — Buy/Sell via switch.win (new, not on the artifact yet) | **Built 2026-09-13**, awaiting push + live iframe check |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -128,6 +132,10 @@ Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09). Chec
 
 ## Next up (in order)
 
+0. **Buy/Sell (switch.win) — live check.** After pushing, open ptgc-ufo.com, click Buy/Sell
+   on PTGC and UFO, confirm the Switch widget renders inside the frame and the BUY/SELL toggle
+   works (sell = the widget's own flip arrow). Then tell the Switch founder we embed
+   `/widget`, and add the item to the roadmap artifact as Phase 4 and tick it.
 1. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
    not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
    back on the button that opened it.
@@ -146,3 +154,7 @@ Roadmap: 37 of 57 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09). Chec
   share cards, Phase 2 leftovers, u7/u8 clarity + mobile pass, harness ported to `tools/`.
 - `sessions/2026-09-09.md` — u1 Modal shell (16 overlays migrated, key stack shared with
   ShareCardModal + InfoTip), u9 a11y (labels, nav landmarks, focus ring, reduced motion), u10 dropped.
+- `sessions/2026-09-11.md` — switch.win buy-button research: `/dapp?from&to` deep link (no
+  fee share) vs `/widget?…&partnerAddress=` iframe (50% fee share); both verified live. Build Sunday.
+- `sessions/2026-09-13.md` — Buy/Sell button (replaces the goptgc BUY pill, both tokens) +
+  `SwapModal` with the switch.win widget; header re-measured at 1024–1600; harness pass clean.
