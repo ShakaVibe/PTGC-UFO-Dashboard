@@ -123,6 +123,14 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
    Escape only closes the TOP layer (`MODAL_STACK`); `InfoTip` is on that stack too. Omit
    `onClose` for a modal the user must act on. `useDialog(ref,onClose)` is the hook if the
    overlay needs its own markup (only `ShareCardModal` does).
+13. **Buy/Sell = the switch.win widget in an iframe** (`SwapModal`, URLs from `switchWidgetUrl`
+   only; partner wallet in `ADDR.SWITCH_PARTNER`). Three things to keep in mind: (a) when the
+   CSP (b7) lands it MUST allow `frame-src https://switch.win` and `connect-src
+   https://api.dexscreener.com`, or the window goes silently black; (b) Escape does not close
+   the window once the user has clicked inside the widget (cross-origin key events) — ✕ and
+   backdrop do; (c) the widget URL params are from switch.win's builder, not their docs — if the
+   widget ever opens un-themed / un-prefilled, they renamed a param. Claude's in-app browser
+   pane paints third-party frames black; judge the widget in a real browser.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
