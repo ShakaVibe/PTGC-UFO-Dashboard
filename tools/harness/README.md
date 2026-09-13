@@ -8,7 +8,8 @@ The verification method from the handover, in the repo. Two steps:
    packages (versions in `package.json` match the `<script>` tags in `index.html`), the Tailwind
    play CDN replaced by a CLI build of the same classes, and the data APIs stubbed: RPC
    (`eth_*` returns canned values), DexScreener (four PTGC pairs), PulseScan counters/holders,
-   `raw.githubusercontent.com/.../data/*.json` (served from the local `data/`), fonts, html2canvas.
+   `raw.githubusercontent.com/.../data/*.json` (served from the local `data/`), html2canvas. Orbitron and
+   Rajdhani are served for real from `@fontsource` (devDependencies), so screenshots show the page's type.
 
 ```
 cd tools/harness
