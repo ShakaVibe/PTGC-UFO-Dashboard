@@ -147,9 +147,12 @@ Check `git --no-optional-locks status` before starting.
    module scope and pass what it needs as props. To check a hoist didn't lose a closure, run an
    acorn scope pass over `tools/harness/compiled.js` (the 2026-09-13 note has the script shape).
 15. **DAO Buys chart is hidden on purpose** (`DAO_BUYS_LIVE=false`, next to `DAO_BUYS_URL`).
-   The faint dot top-right of the PTGC header opens it; the "Buys" button next to Ledger
-   appears when the flag flips. Dots are plotted at the price PAID (PLS ÷ PTGC in USD at that
-   block), 3–14% above the market line — not a bug, it is the tax + slippage. The generator
+   The faint dot top-right of the PTGC header opens it (deliberately no hover/title — Shaka
+   does not want it found); the "Buys" button next to Ledger appears when the flag flips.
+   Dots sit ON the market line (`DAO_BUYS_DOT_AT='market'`); the price PAID is 3–14% higher
+   (tax + slippage) and lives in the hover card and the stats. Modal + share card share
+   `computeDaoBuysView` / `buildDaoBuysChartConfig` — change the chart there, not in JSX.
+   `fetchFreshDaoBuys` scans the chain for buys newer than the snapshot on open. The generator
    caches priced buys by hash and extends the price grid; if a buy's PLS/PTGC ever changes in
    the treasury files it is re-priced automatically. To rebuild from scratch, delete
    `data/dao-buys.json` and run the script (26 s). `removeLiquidityETH…` calls deliver PTGC to
