@@ -5061,6 +5061,7 @@
      * dot in the header's top-right corner is the preview entrance until Shaka flips it. */
     const DAO_BUYS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/dao-buys.json';
     const DAO_BUYS_LIVE=false;   // ← flip to true to show the "Buys" button next to Ledger (dot stays as a shortcut)
+    const DAO_BUYS_DOT_AT='paid';   // 'paid' = dot at the price the DAO actually paid (3–14% above the line: tax + slippage); 'market' = dot on the price line, paid price only in the hover card
     const DAO_BUYS_RANGES=[{k:'30D',days:30},{k:'90D',days:90},{k:'6M',days:182},{k:'12M',days:365},{k:'ALL',days:null,label:'Lifetime'}];
     let _daoBuysCache=null;   // {at:ms, data} — one fetch per page load, re-read after an hour
     const fetchDaoBuys=async()=>{
@@ -5107,40 +5108,43 @@
        would be a new type every render and remount on each price tick. */
     /* Same type as the DAO Treasury panel tiles: Rajdhani, medium, gold value; small caps label. */
     const DaoBuysStat=({label,children,sub,className=''})=>(
-      <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 min-w-0 flex flex-col justify-center ${className}`}>
-        <div className="text-white/55 text-[11px] sm:text-xs uppercase tracking-[0.18em] font-semibold mb-1.5 truncate">{label}</div>
-        <div className="text-lg sm:text-xl font-medium tabular-nums leading-none text-[#D4AF37] truncate">{children}</div>
-        {sub&&<div className="text-white/45 text-xs tabular-nums mt-1 truncate">{sub}</div>}
+      <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3.5 py-3 min-w-0 flex flex-col justify-center ${className}`}>
+        <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold mb-2 truncate">{label}</div>
+        <div className="text-2xl font-medium tabular-nums leading-none text-[#D4AF37] truncate">{children}</div>
+        {sub&&<div className="text-white/50 text-sm tabular-nums mt-1.5 truncate">{sub}</div>}
       </div>
     );
     /* The most recent buy, as its own tile (Shaka, 2026-09-13 review). Lifetime-latest, not range-latest. */
-    const DaoBuysLatest=({buy,livePrice})=>{
+    const DaoBuysLatest=({buy})=>{
       if(!buy)return null;
       const ago=fmtSnapshotAge(Date.now()-buy.ts*1000);
       return(
-        <div className="relative rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/[0.06] px-3.5 py-3 min-w-0 overflow-hidden" style={{boxShadow:'0 0 30px -12px #D4AF37'}}>
-          <div aria-hidden="true" className="pointer-events-none absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl opacity-30" style={{background:'radial-gradient(circle,#D4AF37 0%,transparent 65%)'}}></div>
+        <div className="relative rounded-xl border-2 border-[#D4AF37]/80 px-4 py-3.5 min-w-0 overflow-hidden h-full flex flex-col justify-center"
+             style={{background:'linear-gradient(135deg, rgba(212,175,55,0.22) 0%, rgba(212,175,55,0.06) 55%, rgba(0,0,0,0) 100%)',boxShadow:'0 0 0 1px rgba(250,222,140,0.25) inset, 0 0 50px -8px rgba(212,175,55,0.75), 0 0 18px -4px rgba(212,175,55,0.5)'}}>
+          <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 w-40 h-40 rounded-full blur-2xl opacity-40" style={{background:'radial-gradient(circle,#F5DE83 0%,transparent 65%)'}}></div>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{background:'linear-gradient(90deg,transparent,#FAEAA0,transparent)'}}></div>
           <div className="relative flex items-center justify-between gap-2">
-            <div className="text-[#F0C94A] text-[11px] sm:text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-1.5 truncate">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F7C325] shadow-[0_0_8px_#F7C325]"></span>Latest buy
+            <div className="text-[#F5DE83] text-xs sm:text-sm uppercase tracking-[0.22em] font-bold flex items-center gap-2 truncate">
+              <span className="relative flex w-2.5 h-2.5"><span className="absolute inline-flex h-full w-full rounded-full bg-[#F7C325] opacity-75 animate-ping"></span><span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-[#F7C325] shadow-[0_0_10px_#F7C325]"></span></span>
+              Latest buy
             </div>
-            <span className="text-white/45 text-[11px] tabular-nums whitespace-nowrap">{ago}</span>
+            <span className="text-[#F5DE83]/80 text-xs sm:text-sm font-semibold tabular-nums whitespace-nowrap rounded-full border border-[#D4AF37]/40 bg-black/30 px-2 py-0.5">{ago}</span>
           </div>
-          <div className="relative mt-1.5 flex items-baseline gap-2 flex-wrap">
-            <span className="text-xl sm:text-2xl font-semibold tabular-nums leading-none metallic-gold">{fmtAbbr(buy.ptgc)}</span>
-            <span className="text-white/60 text-sm font-medium">PTGC</span>
+          <div className="relative mt-2 flex items-baseline gap-2 flex-wrap">
+            <span className="text-3xl sm:text-4xl font-bold tabular-nums leading-none metallic-gold">{fmtAbbr(buy.ptgc)}</span>
+            <span className="text-white/75 text-base sm:text-lg font-semibold">PTGC</span>
           </div>
-          <div className="relative mt-1.5 text-xs sm:text-[13px] text-white/70 tabular-nums leading-snug">
-            for <span className="text-white/90 font-medium">{fmtAbbr(buy.pls)} PLS</span> <span className="text-white/45">({fmtDollar(buy.usd,0)})</span> at <Price p={buy.price} c="text-white/90 font-medium"/>
+          <div className="relative mt-2 text-sm sm:text-base text-white/80 tabular-nums leading-snug">
+            for <span className="text-white font-semibold">{fmtAbbr(buy.pls)} PLS</span> <span className="text-white/55">({fmtDollar(buy.usd,0)})</span> at <Price p={buy.price} c="text-[#F5DE83] font-semibold"/>
           </div>
-          <div className="relative mt-1.5 flex items-center justify-between gap-2 text-[11px] text-white/45">
+          <div className="relative mt-2 flex items-center justify-between gap-2 text-xs sm:text-sm text-white/55">
             <span className="tabular-nums truncate">{fmtDateTime(buy.ts)}</span>
-            <a href={`https://scan.pulsechain.com/tx/${buy.hash}`} target="_blank" rel="noopener noreferrer" className="tap-h shrink-0 text-[#F0C94A]/80 hover:text-[#F0C94A] hover:underline">View tx {'↗'}</a>
+            <a href={`https://scan.pulsechain.com/tx/${buy.hash}`} target="_blank" rel="noopener noreferrer" className="tap-h shrink-0 font-semibold text-[#F5DE83] hover:text-white hover:underline">View tx {'↗'}</a>
           </div>
         </div>
       );
     };
-    const DaoBuysModal=({token,data,onClose})=>{
+    const DaoBuysModal=({token,data,athPrice=0,onClose})=>{
       const cfg=TOKENS[token];
       const hex=cfg.colorHex;
       const wallet=cfg.daoTreasury;
@@ -5189,7 +5193,7 @@
            a strict area scale left everything but the top few as 4 px specks. */
         const R_MIN=window.innerWidth<640?4:5.5,R_MAX=window.innerWidth<640?14:22;
         const radius=b=>maxPtgc>0?R_MIN+(R_MAX-R_MIN)*Math.pow(b.ptgc/maxPtgc,0.4):R_MIN;
-        const dots=buys.map(b=>({x:b.ts*1000,y:b.price,r:radius(b),buy:b}));
+        const dots=buys.map(b=>({x:b.ts*1000,y:DAO_BUYS_DOT_AT==='market'?(b.marketUsd||b.price):b.price,r:radius(b),buy:b}));
         return{buys,buysAll,line,avgPts,lifetimeAvg,t,avg,worth,dots,fromMs,nowMs,last:buys.length?buys[buys.length-1]:null,latest:buysAll.length?buysAll[buysAll.length-1]:null,first:buysAll[0]||null};
       },[file,range,livePrice]);
 
@@ -5305,7 +5309,6 @@
                       <span className="font-mono text-[11px] tabular-nums text-white/60">{wallet.slice(0,6)}{'…'}{wallet.slice(-4)}</span>
                       <span className={`text-[11px] leading-none ${copied?'text-emerald-400 font-semibold':'text-white/40'}`}>{copied?'✓ Copied':'\u{1F4CB}'}</span>
                     </button>
-                    <a href={`https://scan.pulsechain.com/address/${wallet}`} target="_blank" rel="noopener noreferrer" className="tap-h px-2.5 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/20 text-[11px] text-white/55 hover:text-white/85 transition-colors">PulseScan {'↗'}</a>
                   </div>
                 </div>
                 <button onClick={onClose} aria-label="Close" className="tap w-9 h-9 -mr-1 shrink-0 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors text-sm">{'✕'}</button>
@@ -5315,21 +5318,22 @@
             {/* Stats strip — for buys in the selected range */}
             <div className="relative px-4 sm:px-6 pt-3 pb-3">
               {file===undefined&&(
-                <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5" aria-busy="true" aria-label="Loading DAO buys">
-                  {[0,1,2,3].map(i=><div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5"><Sk w="55%" h={12}/><Sk w="80%" h={20} className="mt-2"/><Sk w="50%" h={12} className="mt-2"/></div>)}
-                  <div className="col-span-2 rounded-xl border border-[#D4AF37]/25 px-3.5 py-3"><Sk w="40%" h={12}/><Sk w="60%" h={24} className="mt-2"/><Sk w="90%" h={14} className="mt-2"/></div>
+                <div className="grid grid-cols-2 lg:grid-cols-7 gap-2.5" aria-busy="true" aria-label="Loading DAO buys">
+                  {[0,1,2,3,4].map(i=><div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5"><Sk w="55%" h={12}/><Sk w="80%" h={20} className="mt-2"/><Sk w="50%" h={12} className="mt-2"/></div>)}
+                  <div className="col-span-2 lg:col-span-2 rounded-xl border border-[#D4AF37]/25 px-3.5 py-3"><Sk w="40%" h={12}/><Sk w="60%" h={24} className="mt-2"/><Sk w="90%" h={14} className="mt-2"/></div>
                 </div>
               )}
               {file===null&&(
                 <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">Couldn{'’'}t load the DAO buys file right now. Try again in a moment.</div>
               )}
               {view&&(
-                <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5">
+                <div className="grid grid-cols-2 lg:grid-cols-7 gap-2.5">
                   <DaoBuysStat label="PTGC bought" sub={view.buys.length?`${view.buys.length} buy${view.buys.length===1?'':'s'} ${rangeDef.days?`in ${rangeDef.label||rangeDef.k}`:'lifetime'}`:'no buys in range'}>{fmtAbbr(view.t.ptgc)}</DaoBuysStat>
                   <DaoBuysStat label="Spent" sub={`${fmtAbbr(view.t.pls)} PLS`}>{fmtDollar(view.t.usd,0)}</DaoBuysStat>
                   <DaoBuysStat label="Avg cost" sub={view.lifetimeAvg>0&&rangeDef.days?<span>lifetime <Price p={view.lifetimeAvg}/></span>:'per PTGC, paid'}><Price p={view.avg}/></DaoBuysStat>
                   <DaoBuysStat label="Worth today" sub={livePrice>0?<span>at <Price p={livePrice}/></span>:'no live price'}>{fmtDollar(view.worth,0)}</DaoBuysStat>
-                  <div className="col-span-2"><DaoBuysLatest buy={view.latest} livePrice={livePrice}/></div>
+                  <DaoBuysStat label="Worth at ATH" className="col-span-2 lg:col-span-1" sub={athPrice>0?<span>at <Price p={athPrice}/></span>:'no ATH price'}>{athPrice>0?fmtDollar(view.t.ptgc*athPrice,0):'—'}</DaoBuysStat>
+                  <div className="col-span-2"><DaoBuysLatest buy={view.latest}/></div>
                 </div>
               )}
             </div>
@@ -7434,9 +7438,10 @@
               is what stays pinned. */}
           <header className="sm:sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
             <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-4">
-              {/* DAO Buys preview entrance: a faint gold dot in the top-right corner (PTGC only). It stays
-                  after DAO_BUYS_LIVE flips as a shortcut; delete it then if it is not wanted. */}
-              {cfg.hasDAO&&<button onClick={()=>setShowDaoBuys(true)} aria-label="DAO Buys chart (preview)" title="DAO Buys" className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-6 h-6 flex items-center justify-center rounded-full opacity-25 hover:opacity-100 focus-visible:opacity-100 transition-opacity"><span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span></button>}
+              {/* DAO Buys preview entrance: a faint gold dot in the top-right corner (PTGC only). Deliberately
+                  does NOT brighten on hover/focus, has no title and a default cursor — Shaka does not want
+                  visitors to find it. Delete it when DAO_BUYS_LIVE flips (or keep as a shortcut). */}
+              {cfg.hasDAO&&<button onClick={()=>setShowDaoBuys(true)} aria-label="DAO Buys chart (preview)" className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-6 h-6 flex items-center justify-center rounded-full opacity-20 cursor-default outline-none"><span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex}}></span></button>}
 
               {/* Row 1: ONE continuous data strip — packed, no justify-between. Stats use flex-1 to absorb slack. */}
               <div className="flex items-center gap-2 sm:gap-3 lg:gap-2.5 xl:gap-5 flex-wrap">
@@ -8838,7 +8843,7 @@
           
           {/* BUY / SELL — switch.win widget */}
           {showSwap&&<SwapModal token={token} data={data} onClose={()=>setShowSwap(false)}/>}
-          {showDaoBuys&&cfg.hasDAO&&<DaoBuysModal token={token} data={data} onClose={()=>setShowDaoBuys(false)}/>}
+          {showDaoBuys&&cfg.hasDAO&&<DaoBuysModal token={token} data={data} athPrice={athPrice} onClose={()=>setShowDaoBuys(false)}/>}
 
           {/* LIVE FEED — the Abduction Deck, live value tape */}
           <AbductionDeckModal
