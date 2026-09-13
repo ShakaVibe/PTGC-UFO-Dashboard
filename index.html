@@ -5273,7 +5273,7 @@
           /* Dots: the same #F7C325 as the "Latest DAO buy" pulse dot, solid, glow in the same tone,
              hairline rim (round 10 — Shaka matched it to that dot by eye; a translucent fill
              dulled it against the dark plot). Glow blur steps down as the range gets crowded. */
-          {type:'bubble',label:'DAO buy',data:view.dots,parsing:false,_glow:true,_glowBlur:view.dots.length>120?3:view.dots.length>50?6:10,radius:c=>(c.raw&&c.raw.r)||4 /* parsing:false means the bubble controller never reads point.r — every dot drew at the 3 px default until this (found round 8) */,backgroundColor:'#F7C325',borderColor:'rgba(255,236,170,0.7)',borderWidth:1,hoverBackgroundColor:'#FFDD66',hoverBorderColor:'#FFF6D5',hoverBorderWidth:2,hoverRadius:3,order:1}
+          {type:'bubble',label:'DAO buy',data:view.dots,parsing:false,_glow:true,_glowBlur:view.dots.length>120?3:view.dots.length>50?6:10,radius:c=>(c.raw&&c.raw.r)||4 /* parsing:false means the bubble controller never reads point.r — every dot drew at the 3 px default until this (found round 8) */,backgroundColor:'#F7C325',borderColor:'#FFFBEA' /* bright rim: without it a pile of buys read as one gold blob (round 11) */,borderWidth:phone?1.5:2,hoverBackgroundColor:'#FFDD66',hoverBorderColor:'#fff',hoverBorderWidth:2.5,hoverRadius:3,order:1}
         ]},
         options:{
           responsive:!share,maintainAspectRatio:false,animation:share?false:{duration:450},devicePixelRatio:share?2:undefined,
@@ -5386,7 +5386,8 @@
         if(!ref.current||!window.Chart)return;
         if(inst.current){inst.current.destroy();inst.current=null;}
         const ctx=ref.current.getContext('2d');
-        const g=ctx.createLinearGradient(0,0,0,share?60:(phone?56:80));g.addColorStop(0,'#F5DE83');g.addColorStop(1,hex+'99');
+        const H=share?60:(phone?60:96);
+        const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#FAEAA0');g.addColorStop(0.35,'#E0B843');g.addColorStop(1,'#7A5C12');   // the site's metallic-gold ramp, top-lit
         const fmtRange=bk=>{const a=new Date(bk.start),b=new Date(bk.end-1);
           if(cad.kind==='day')return a.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
           if(cad.kind==='month')return a.toLocaleDateString('en-US',{month:'long',year:'numeric'});
@@ -5394,10 +5395,17 @@
         try{
           inst.current=new window.Chart(ctx,{
             type:'bar',
-            data:{datasets:[{data:cad.points,parsing:false,backgroundColor:g,hoverBackgroundColor:'#FFF1B0',borderRadius:3,borderSkipped:false,barPercentage:0.7,categoryPercentage:1,minBarLength:0}]},
+            plugins:[{id:'daoCadGlow',
+              beforeDatasetDraw(ch){ch.ctx.save();ch.ctx.shadowColor='rgba(247,195,37,0.55)';ch.ctx.shadowBlur=share?8:6;ch.ctx.shadowOffsetY=0;},
+              afterDatasetDraw(ch){ch.ctx.restore();
+                /* count of buys above each bar + a bright cap line on top */
+                const m=ch.getDatasetMeta(0),{ctx}=ch;ctx.save();ctx.font=`600 ${share?11:(phone?9:10)}px Rajdhani, sans-serif`;ctx.fillStyle='rgba(255,255,255,0.55)';ctx.textAlign='center';ctx.textBaseline='bottom';
+                m.data.forEach((e,i)=>{const bk=cad.points[i].bk;if(!bk.n)return;const w=e.width||6;ctx.fillStyle='rgba(255,246,213,0.9)';ctx.fillRect(e.x-w/2,e.y,w,1);if(!phone||bk.n>1){ctx.fillStyle='rgba(255,255,255,0.55)';ctx.fillText(String(bk.n),e.x,e.y-2);}});
+                ctx.restore();}}],
+            data:{datasets:[{data:cad.points,parsing:false,backgroundColor:g,hoverBackgroundColor:'#FFF1B0',borderRadius:{topLeft:4,topRight:4,bottomLeft:0,bottomRight:0},borderSkipped:false,barPercentage:0.62,categoryPercentage:1,minBarLength:0}]},
             options:{
               responsive:!share,maintainAspectRatio:false,animation:share?false:{duration:350},devicePixelRatio:share?2:undefined,events:share?[]:undefined,
-              layout:{padding:{top:2,right:phone?4:12,left:phone?2:0,bottom:0}},
+              layout:{padding:{top:14,right:phone?4:12,left:phone?2:0,bottom:0}},
               plugins:{legend:{display:false},tooltip:{
                 enabled:!share,backgroundColor:'rgba(8,8,8,0.96)',borderColor:hex,borderWidth:1,padding:10,displayColors:false,
                 titleColor:'#fff',titleFont:{family:'Rajdhani',size:13,weight:'700'},bodyColor:'rgba(255,255,255,0.8)',bodyFont:{family:'Rajdhani',size:13,weight:'600'},
@@ -5419,7 +5427,7 @@
           <div className={`absolute left-2 top-0 z-[1] ${share?'text-[12px]':'text-[10px] sm:text-[11px]'} uppercase tracking-[0.18em] font-semibold text-white/40 pointer-events-none`}>PTGC bought per {unitWord}</div>
           {share
             ?<canvas ref={ref} width={1136} height={60} style={{width:1136,height:60}}></canvas>
-            :<div className={phone?'h-[56px]':'h-[80px]'}><canvas ref={ref} role="img" aria-label={`PTGC bought per ${unitWord}`}></canvas></div>}
+            :<div className={phone?'h-[60px]':'h-[96px]'}><canvas ref={ref} role="img" aria-label={`PTGC bought per ${unitWord}`}></canvas></div>}
         </div>
       );
     };
@@ -5588,7 +5596,7 @@
                 </div>
               </div>
               <div className="flex items-center gap-3 text-[10px] sm:text-[11px] text-white/45">
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="w-3 h-3 rounded-full" style={{background:'#F7C325',boxShadow:'0 0 8px #F7C325'}}></span>DAO buy</span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="w-3 h-3 rounded-full border-2 border-[#FFFBEA]" style={{background:'#F7C325',boxShadow:'0 0 8px #F7C325'}}></span>DAO buy</span>
                 <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="w-4 h-0.5 rounded" style={{background:hex}}></span>PTGC price</span>
                 <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="w-4 border-t border-dashed border-emerald-400"></span>Avg cost{rangeDef.days?<span className="hidden sm:inline text-white/35"> ({rangeDef.label||rangeDef.k})</span>:null}{view&&view.avgOffChart&&!logY&&<span className="hidden sm:inline text-white/35"> (<DaoPrice v={view.lifetimeAvg} unit={unit}/> — above this range)</span>}</span>
                 <button onClick={()=>setLogY(v=>!v)} aria-pressed={logY} className={pill(logY)}>Log</button>
