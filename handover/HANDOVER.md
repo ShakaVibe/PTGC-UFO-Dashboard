@@ -15,7 +15,7 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-13)
 
-Roadmap: 38 of 58 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 40 of 58 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live** (see
 `sessions/2026-09-13.md`). Check `git --no-optional-locks status` before starting.
@@ -31,7 +31,8 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
 | Phase 3 — loading shell (u12) | **Done, live** |
 | Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`5c2d3cf93`, 2026-09-09) |
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
-| Phase 3 — everything else (u3–u6, u11, u13, u14) | Not started. Suggested order: u4/u5/u6, u11/u13/u14, u3 (decomposition — better after the build) |
+| Phase 3 — u4 (hoisted render-defined components), u13 (chart late-data) | **Done** (2026-09-13 evening) |
+| Phase 3 — u5, u6, u11, u14, u3 | Not started. Suggested order: u5/u6, u11/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 
@@ -132,6 +133,10 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
    backdrop do; (c) the widget URL params are from switch.win's builder, not their docs — if the
    widget ever opens un-themed / un-prefilled, they renamed a param. Claude's in-app browser
    pane paints third-party frames black; judge the widget in a real browser.
+14. **Don't declare components inside a component** (u4). A `const X=()=>…` inside a render body
+   is a new type every render → React remounts it (images re-request, state resets). Put it at
+   module scope and pass what it needs as props. To check a hoist didn't lose a closure, run an
+   acorn scope pass over `tools/harness/compiled.js` (the 2026-09-13 note has the script shape).
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -147,7 +152,7 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
 1. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
    not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
    back on the button that opened it.
-2. **Phase 3 leftovers** — u4/u5/u6 next (see roadmap), then u11/u13/u14. u3 (decomposition)
+2. **Phase 3 leftovers** — u5/u6 next (see roadmap), then u11/u14. u3 (decomposition)
    waits for the build.
 3. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
    decision is Pages-from-`dist` vs a `gh-pages` branch. Do b3-style cleanup first; everything
@@ -164,5 +169,8 @@ handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live
   ShareCardModal + InfoTip), u9 a11y (labels, nav landmarks, focus ring, reduced motion), u10 dropped.
 - `sessions/2026-09-11.md` — switch.win buy-button research: `/dapp?from&to` deep link (no
   fee share) vs `/widget?…&partnerAddress=` iframe (50% fee share); both verified live. Build Sunday.
-- `sessions/2026-09-13.md` — Buy/Sell button (replaces the goptgc BUY pill, both tokens) +
-  `SwapModal` with the switch.win widget; header re-measured at 1024–1600; harness pass clean.
+- `sessions/2026-09-13.md` — Buy/Sell via switch.win, end to end: header button (option B),
+  `SwapModal` (widget iframe, in-window Switch, header v2 with address copy + live price),
+  audit fixes, Home-card rail/footer bar (option E, cards now `lg:max-w-4xl`), wallet connect
+  + buy verified live by Shaka, g7 ticked on the roadmap. Evening: u4 (16 render-defined
+  components hoisted) + u13 (holder chart redraws when history lands; `SLOW_HISTORY` harness env).
