@@ -4380,6 +4380,7 @@
     const Home=({onSelect})=>{
       const[data,setData]=useState({PTGC:null,UFO:null});
       const[showMaint,setShowMaint]=useState(false); // MAINT-MIGRATION
+      const[swapToken,setSwapToken]=useState(null);  // BUY / SELL from a Home card → SwapModal (null = closed)
       const[pls,setPls]=useState(0);
       const[loading,setLoading]=useState(true);
       const[lastUpdate,setLastUpdate]=useState(null);
@@ -4467,7 +4468,25 @@
         return(
           <div onClick={()=>{if(masked){setShowMaint(true)}else{onSelect(token)}}} className={`token-card ${hover} cursor-pointer rounded-2xl border-2 ${border} ${bg} p-4 sm:p-6 lg:p-8 relative ${masked?'opacity-60':''}`}>
             {masked&&<div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/20 border border-yellow-400/40">{/* MAINT-MIGRATION badge */}<span className="text-yellow-300 text-xs">⚠</span><span className="text-yellow-200 text-[10px] font-bold uppercase tracking-wider">Under Maintenance</span></div>}
-            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+            {/* BUY / SELL (Shaka's pick "E", 2026-09-13): a vertical rail down the card's right
+                edge from lg up, a full-width footer bar below that. The row's content needs ~680 px
+                at lg, so the cards widen to max-w-4xl there (was 3xl) to make room for the rail;
+                below lg the card is too narrow for a rail at all. Opens SwapModal for this token
+                without leaving Home; stopPropagation keeps the card's own click (open dashboard)
+                from firing. HomeCardSkeleton mirrors the sm:pr-24 / footer geometry (gotcha 11).
+                No `.tap` on either button: .tap sets display:inline-flex, which beats `hidden` /
+                `sm:hidden` depending on which stylesheet loads last; u9's button:focus-visible
+                ring covers them anyway. */}
+            {!masked&&(
+              <button onClick={e=>{e.stopPropagation();setSwapToken(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="buy-btn hidden lg:flex top-3.5 right-3.5 bottom-3.5 w-[78px] rounded-2xl flex-col items-center justify-center gap-3" style={{position:'absolute',/* inline: .buy-btn's position:relative outranks Tailwind's `absolute` when the play-CDN styles land first */'--g':isGold?'rgba(212,175,55,0.28)':'rgba(124,252,0,0.28)',background:isGold?'linear-gradient(180deg, rgba(212,175,55,0.38), rgba(212,175,55,0.12))':'linear-gradient(180deg, rgba(124,252,0,0.38), rgba(124,252,0,0.12))',border:isGold?'1px solid rgba(212,175,55,0.55)':'1px solid rgba(124,252,0,0.55)'}}>
+                <img src={cfg.logo} alt="" className="w-9 h-9"/>
+                <span className="flex flex-col items-center leading-none">
+                  <span className={`font-orbitron font-extrabold text-[11px] tracking-[0.2em] pb-1.5 ${isGold?'metallic-gold':text}`}>BUY</span>
+                  <span className="font-orbitron font-extrabold text-[11px] tracking-[0.2em] pt-1.5 border-t border-white/15 text-white/55">SELL</span>
+                </span>
+              </button>
+            )}
+            <div className={`flex flex-col sm:flex-row items-center gap-4 sm:gap-6 ${masked?'':'lg:pr-24'}`}>
               <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
               <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button aria-label="Copy contract address" onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
               <div className="flex-1 text-center sm:text-right">{masked?(
@@ -4516,13 +4535,21 @@
                 </>
               )}</div>
             </div>
+            {!masked&&(
+              <button onClick={e=>{e.stopPropagation();setSwapToken(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`} className="lg:hidden -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 px-4 py-3 w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] flex items-center justify-center gap-2.5 rounded-b-[14px] border-t" style={{borderColor:isGold?'rgba(212,175,55,0.3)':'rgba(124,252,0,0.3)',background:isGold?'linear-gradient(90deg, rgba(212,175,55,0.16), rgba(212,175,55,0.06))':'linear-gradient(90deg, rgba(124,252,0,0.16), rgba(124,252,0,0.06))'}}>
+                <img src={cfg.logo} alt="" className="w-6 h-6"/>
+                <span className={`font-orbitron font-extrabold text-xs tracking-[0.25em] ${isGold?'metallic-gold':text}`}>BUY</span>
+                <span className="font-orbitron text-white/30 text-xs">/</span>
+                <span className={`font-orbitron font-extrabold text-xs tracking-[0.25em] ${isGold?'metallic-gold':text}`}>SELL</span>
+              </button>
+            )}
           </div>
         );
       };
       return(
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
-          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl w-full">{loading?<><HomeCardSkeleton gold/><HomeCardSkeleton/><div className="flex justify-center"><Sk w={150} h={16}/></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/><div className="flex justify-center"><FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/></div></>}</div></div>
+          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl lg:max-w-4xl w-full">{loading?<><HomeCardSkeleton gold/><HomeCardSkeleton/><div className="flex justify-center"><Sk w={150} h={16}/></div></>:<><Card token="PTGC" d={data.PTGC}/><Card token="UFO" d={data.UFO}/>{swapToken&&<SwapModal token={swapToken} data={data[swapToken]} onClose={()=>setSwapToken(null)}/>}<div className="flex justify-center"><FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/></div></>}</div></div>
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
@@ -4986,9 +5013,12 @@
               )}
               <iframe key={url} src={url} title={`Switch widget \u2014 ${tok}`} allow="clipboard-read; clipboard-write" onLoad={()=>setReady(true)} className="w-full h-full" style={{border:0,opacity:ready?1:0,transition:'opacity .35s ease'}}></iframe>
             </div>
+            {/* Footer. The /dapp deep link carries NO partnerAddress (no fee share), so it is a
+                muted last resort for a wallet that will not inject into a frame — not an equal
+                option. In-frame connect + buy verified by Shaka on 2026-09-13. */}
             <div className="flex items-center justify-between gap-3 px-4 sm:px-5 pb-4 text-[11px] text-white/40">
               <span>Connect your wallet inside the widget.</span>
-              <a href={switchDappUrl(tok)} target="_blank" rel="noopener noreferrer" className={`shrink-0 font-semibold whitespace-nowrap hover:underline ${isGold?'text-[#F0DC78]':'text-[#7CFC00]'}`}>Open in Switch {'\u2197'}</a>
+              <a href={switchDappUrl(tok)} target="_blank" rel="noopener noreferrer" className="shrink-0 whitespace-nowrap text-white/30 hover:text-white/60 hover:underline">Trouble connecting? Open in Switch {'\u2197'}</a>
             </div>
           </div>
         </Modal>
@@ -5028,13 +5058,15 @@
     /* Same wrapper, gaps and element sizes as Home's `Card`, so the skeleton is the card's height
        at every breakpoint (measured: 374px at 375w, 176px at 640w, 196px at 1440w). */
     const HomeCardSkeleton=({gold})=>(
-      <div aria-hidden="true" className={`rounded-2xl border-2 ${gold?'border-[#D4AF37]/25':'border-[#7CFC00]/25'} bg-[#1a1a1a]/60 p-4 sm:p-6 lg:p-8`}>
-        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+      <div aria-hidden="true" className={`relative rounded-2xl border-2 ${gold?'border-[#D4AF37]/25':'border-[#7CFC00]/25'} bg-[#1a1a1a]/60 p-4 sm:p-6 lg:p-8`}>
+        <Sk w={78} h="auto" className="hidden lg:block absolute top-3.5 right-3.5 bottom-3.5 rounded-2xl"/>{/* the BUY / SELL rail */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 lg:pr-24">
           <Sk w={80} h={80} className="rounded-full shrink-0 sm:!w-24 sm:!h-24 lg:!w-32 lg:!h-32"/>
           <div className="flex flex-col items-center sm:items-start"><Sk w={96} h={32} className="sm:!h-9 lg:!h-10"/><Sk w={120} h={14} className="mt-2"/><Sk w={104} h={26} className="mt-1.5 rounded-full"/></div>
           <div className="flex-1 flex flex-col items-center sm:items-end gap-1 sm:min-h-[124px] lg:min-h-0"><Sk w={120} h={26} className="sm:!h-8 lg:!h-9"/><Sk w={110} h={14} className="mt-1"/><Sk w={90} h={13}/><Sk w={100} h={13}/></div>
           <div className="flex items-center gap-2 sm:gap-4"><Sk w={64} h={24} className="sm:!w-20"/><Sk w={72} h={44} className="rounded-lg"/></div>
         </div>
+        <Sk w="calc(100% + 2rem)" h={48} className="lg:hidden -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 rounded-b-[14px] !rounded-t-none sm:!w-[calc(100%+3rem)]"/>{/* the BUY / SELL footer bar (below lg) */}
       </div>
     );
 
