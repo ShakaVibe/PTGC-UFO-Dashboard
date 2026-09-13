@@ -11784,6 +11784,12 @@
         window.addEventListener('hashchange',onHash);
         return()=>window.removeEventListener('hashchange',onHash);
       },[]);
+      /* A new view or token is a new page: start at the top. Without this the scroll position
+         carried over, so tapping a Home card (which sits ~500 px down the page) opened the
+         dashboard already scrolled to the KPI tiles (Shaka, 2026-09-13). Tab changes inside a
+         dashboard deliberately keep their scroll — the header is sticky and the nav stays put. */
+      const pageKey=route.view+'|'+(route.token||'');
+      useEffect(()=>{try{window.scrollTo({top:0,left:0,behavior:'instant'});}catch(e){window.scrollTo(0,0);}},[pageKey]);
       const navigate=(view,token,tab)=>{
         const h=hashForRoute(view,token,tab);
         if(window.location.hash===h){setRoute(routeFromHash());return;}
