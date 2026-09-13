@@ -96,7 +96,8 @@
     .clickable:hover{transform:scale(1.02);cursor:pointer}
     @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
     @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
-    .buy-btn{position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease}
+    .buy-btn{--g:rgba(212,175,55,.28);position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all 0.3s ease;box-shadow:0 0 20px var(--g),inset 0 1px 0 rgba(255,255,255,0.15);animation:buyGlow 3s ease-in-out infinite}
+    @keyframes buyGlow{0%,100%{box-shadow:0 0 18px var(--g),inset 0 1px 0 rgba(255,255,255,0.15)}50%{box-shadow:0 0 34px var(--g),0 0 3px var(--g),inset 0 1px 0 rgba(255,255,255,0.22)}}
     .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
     .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
     /* u8: a thumb-sized hit area for the small icon controls (ⓘ, 📷, USD/TOK, sort, the RH
@@ -120,7 +121,7 @@
     /* u9: honour the OS "reduce motion" setting. Looping/decorative animation stops and hover
        transforms go static; spinners (animate-spin) keep turning because they mean "working". */
     @media(prefers-reduced-motion:reduce){
-      .animate-fire,.animate-pulse-slow,.animate-pulse,[class*="animate-[sweep"],[class*="animate-[shimmer"],.buy-btn::after{animation:none!important}
+      .animate-fire,.animate-pulse-slow,.animate-pulse,[class*="animate-[sweep"],[class*="animate-[shimmer"],.buy-btn,.buy-btn::after{animation:none!important}
       .scroll-cue,.token-card,.buy-btn,.clickable,.transition-all,.transition-colors,.transition-opacity,.transition-transform,.transition{transition:none!important}
       .token-card:hover,.buy-btn:hover,.clickable:hover{transform:none}
     }
@@ -167,7 +168,9 @@
       PAIR_UFO_WETH:'0xc4434600F1f263Ee38c38dfe32c8DEf8c0047C0b',
       PAIR_UFO_EHEX:'0xe61aA9a9b7a13ceedEAa8D26bfF5222003a40634',
       PAIR_WPLS_DAI:'0xe56043671df55de5cdf8459710433c10324de0ae',   // V1, used to price PLS in USD
-      PAIR_WPLS_USDC:'0x6753560538eca67617a9ce605178f788be7e524e'   // V1, second PLS/USD source
+      PAIR_WPLS_USDC:'0x6753560538eca67617a9ce605178f788be7e524e',  // V1, second PLS/USD source
+      NATIVE_PLS:'0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',       // switch.win's sentinel for native PLS (not WPLS) — Buy/Sell widget
+      SWITCH_PARTNER:'0xF8FEb22eeE8E1d095E995658E4c79e13522E91A8'   // Buy/Sell widget fee-share wallet (Shaka, 2026-09-13). Empty string = no partnerAddress param sent.
     };
     const SUPPLY={PTGC:333333333333,UFO:999999999051};   // starting supplies; UFO confirmed against contract _tTotal
     const TOKENS={
@@ -196,6 +199,24 @@
           {key:'wethLP',name:'LP WETH',pct:1,emoji:'\u{1F4A7}',priceKey:'WETH',isLP:true}
         ]
       }
+    };
+
+    /* ===================== BUY / SELL (switch.win) =====================
+     * The header's Buy/Sell button opens SwapModal, which embeds the Switch widget. Both URLs
+     * are built HERE and nowhere else. The params are not in switch.win's public docs — they
+     * come from their widget builder and page source (handover/sessions/2026-09-11.md):
+     * `network`, `from`, `to` (native PLS = ADDR.NATIVE_PLS sentinel), the colour params, and
+     * `partnerAddress` (50% of the 0.10% router fee to that wallet; only sent when
+     * ADDR.SWITCH_PARTNER is a valid address). `side`: 'buy' = PLS → token, 'sell' = token → PLS. */
+    const SWITCH_ORIGIN='https://switch.win';
+    const switchPair=(token,side)=>{const t=TOKENS[token].address;return side==='sell'?{from:t,to:ADDR.NATIVE_PLS}:{from:ADDR.NATIVE_PLS,to:t};};
+    const switchDappUrl=(token,side='buy')=>{const p=switchPair(token,side);return `${SWITCH_ORIGIN}/dapp?network=pulsechain&from=${p.from}&to=${p.to}`;};
+    const switchWidgetUrl=(token,side='buy')=>{
+      const p=switchPair(token,side);
+      /* Param order + casing match the snippet Shaka pasted from switch.win's builder (2026-09-13). */
+      const q=new URLSearchParams({network:'pulsechain',background_color:'000000',font_color:'ffffff',secondary_font_color:'7a7a7a',border_color:TOKENS[token].colorHex.replace('#','').toLowerCase(),backdrop_color:'transparent',from:p.from,to:p.to});
+      if(/^0x[0-9a-fA-F]{40}$/.test(ADDR.SWITCH_PARTNER))q.set('partnerAddress',ADDR.SWITCH_PARTNER);
+      return `${SWITCH_ORIGIN}/widget?${q}`;
     };
     
     // ===== ALL-TIME HIGH PRICES =====
@@ -4871,6 +4892,48 @@
         </div>
       </section>
     );
+    /* ===================== SWAP MODAL (Buy / Sell) =====================
+     * Opened by the header's Buy/Sell button. A <Modal> (gotcha 12) holding the switch.win
+     * widget in an iframe, themed with the token colour through the URL params. Opens as
+     * PLS → token; selling is the widget's own flip arrow (Shaka: no Buy/Sell controls of our
+     * own inside the window). Wallet connect, quotes and slippage (the widget detects the
+     * token tax) all happen INSIDE the iframe — nothing here touches a wallet. Foreign origin,
+     * so the headless harness only ever shows the loading shell; check the real widget live.
+     * Phone: bottom sheet; sm+: centred card. */
+    const SwapModal=({token,cfg,onClose})=>{
+      const[ready,setReady]=useState(false);
+      const isGold=cfg.color==='gold';
+      const hex=cfg.colorHex;
+      const url=switchWidgetUrl(token,'buy');
+      return(
+        <Modal onClose={onClose} label={`Buy or sell ${token} on Switch`} className="z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-overlay bg-black/80">
+          <div onClick={e=>e.stopPropagation()} className="relative w-full sm:max-w-[460px] max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-t-3xl sm:rounded-3xl border bg-[#0a0a0a] overflow-hidden" style={{borderColor:`${hex}66`,boxShadow:`0 0 80px -20px ${hex}99, 0 30px 80px rgba(0,0,0,.7)`}}>
+            <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[420px] h-[220px] rounded-full blur-3xl opacity-25" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
+            <div className="relative flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
+              <img src={cfg.logo} alt="" className="w-10 h-10"/>
+              <div className="flex-1 min-w-0">
+                <div className={`font-orbitron text-lg font-bold leading-none tracking-wide ${isGold?'metallic-gold':'text-[#7CFC00]'}`}>{token}</div>
+                <div className="text-white/40 text-[10px] font-semibold uppercase tracking-[0.25em] mt-1.5">Swap on switch.win</div>
+              </div>
+              <button onClick={onClose} aria-label="Close" className="tap w-9 h-9 -mr-1 rounded-full border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors text-sm">{'\u2715'}</button>
+            </div>
+            <div className="relative mx-4 sm:mx-5 mb-3 rounded-2xl overflow-hidden border border-white/10 bg-black" style={{height:'min(680px, calc(100dvh - 160px))',minHeight:360}}>
+              {!ready&&(
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6" aria-live="polite">
+                  <div className="w-10 h-10 rounded-full border-2 border-white/10 animate-spin" style={{borderTopColor:hex}}></div>
+                  <div className="text-white/50 text-xs uppercase tracking-[0.2em]">Loading Switch\u2026</div>
+                </div>
+              )}
+              <iframe src={url} title={`Switch widget \u2014 ${token}`} allow="clipboard-read; clipboard-write" onLoad={()=>setReady(true)} className="w-full h-full" style={{border:0,opacity:ready?1:0,transition:'opacity .35s ease'}}></iframe>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 pb-4 text-[11px] text-white/40">
+              <span>Connect your wallet inside the widget.</span>
+              <a href={switchDappUrl(token)} target="_blank" rel="noopener noreferrer" className={`shrink-0 font-semibold whitespace-nowrap hover:underline ${isGold?'text-[#F0DC78]':'text-[#7CFC00]'}`}>Open in Switch {'\u2197'}</a>
+            </div>
+          </div>
+        </Modal>
+      );
+    };
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -5728,6 +5791,7 @@
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[showBeam,setShowBeam]=useState(()=>{try{if(sessionStorage.getItem('grays_deck_reopen')==='1'){sessionStorage.removeItem('grays_deck_reopen');return true;}}catch(e){}return false;}); // LIVE FEED: the Abduction Deck overlay, opened from the nav (or re-opened after its own token toggle)
+      const[showSwap,setShowSwap]=useState(false);   // BUY / SELL: the switch.win widget modal (SwapModal)
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       /* LIVE FEED: one figure per window for the Abduction Deck's pods, from the same sources as
          the Value Generated panel. Memoized — it used to be rebuilt as a fresh object on every
@@ -6880,14 +6944,26 @@
                 <div className="hidden lg:block w-px self-stretch bg-white/10 lg:mx-0 xl:mx-1"></div>
 
                 {/* Actions — packed right next to stats, no gap created by justify-between */}
-                <div className="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
-                  {/* BUY hidden on UFO for now — its onboarding page still uses the old token.
-                      Re-show by removing the token!=='UFO' guard once that page is migrated. */}
-                  {token!=='UFO'&&(<a href={token==='PTGC'?'https://goptgc.com/#/ptgc-onboarding':'https://goptgc.com/#/ufo-onboarding'} target="_blank" rel="noopener noreferrer" className="buy-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 lg:py-3 xl:py-2 rounded-xl" style={{background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:isGold?'1px solid rgba(212,175,55,0.5)':'1px solid rgba(124,252,0,0.5)',boxShadow:isGold?'0 0 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.15)':'0 0 20px rgba(124,252,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)'}}>
-                    <img src={cfg.logo} alt={token} className="w-7 h-7 sm:w-9 sm:h-9 lg:hidden xl:block"/>
-                    <span className={`font-orbitron font-bold text-xs sm:text-sm tracking-[0.2em] ${isGold?'metallic-gold':theme.text}`}>BUY</span>
-                  </a>)}
-                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
+                <div className="flex items-center gap-2 lg:gap-1.5 xl:gap-2 shrink-0 ml-auto lg:ml-0">
+                  {/* BUY / SELL — opens SwapModal (the switch.win widget). Replaced the goptgc
+                      onboarding link on 2026-09-13 (that link still lives in the Affiliates tab).
+                      Wider than the old BUY pill, so from lg up the logo is hidden and padding/tracking
+                      are tighter — the header is capped at max-w-7xl, so the row never gets more room
+                      than it has at 1280 and "X's to a Penny" ⓘ was clipped at 1024/1280/1600 (measured).
+                      `--g` feeds the .buy-btn glow pulse in the CSS block. The sub-line deliberately
+                      does not say "Switch" — the token-toggle button right next to it is called Switch. */}
+                  <button onClick={()=>setShowSwap(true)} aria-haspopup="dialog" className="buy-btn tap flex items-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-4 lg:px-2.5 xl:px-3.5 py-1.5 sm:py-2 lg:py-3 xl:py-2 rounded-xl" style={{'--g':isGold?'rgba(212,175,55,0.28)':'rgba(124,252,0,0.28)',background:isGold?'linear-gradient(135deg, rgba(212,175,55,0.38), rgba(212,175,55,0.12))':'linear-gradient(135deg, rgba(124,252,0,0.38), rgba(124,252,0,0.12))',border:isGold?'1px solid rgba(212,175,55,0.55)':'1px solid rgba(124,252,0,0.55)'}}>
+                    <img src={cfg.logo} alt="" className="w-7 h-7 sm:w-9 sm:h-9 lg:hidden"/>
+                    <span className="flex flex-col items-start">
+                      <span className="flex items-center font-orbitron font-bold text-xs sm:text-sm lg:text-xs xl:text-sm tracking-[0.2em] lg:tracking-[0.06em] xl:tracking-[0.16em] leading-none whitespace-nowrap">
+                        <span className={isGold?'metallic-gold':theme.text}>BUY</span>
+                        <span className="text-white/30 mx-1 lg:mx-0.5 xl:mx-1 font-normal">/</span>
+                        <span className={isGold?'metallic-gold':theme.text}>SELL</span>
+                      </span>
+                      <span className="hidden sm:block text-[8px] font-semibold uppercase tracking-[0.28em] text-white/45 mt-1.5 leading-none whitespace-nowrap">PLS {'\u21C4'} {token}</span>
+                    </span>
+                  </button>
+                  <button onClick={()=>onSwitch(token==='PTGC'?'UFO':'PTGC')} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 lg:px-2 xl:px-3 py-1.5 sm:py-2 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/[0.06] transition-all">
                     <img src={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt="Switch" className="w-6 h-6 sm:w-8 sm:h-8"/>
                     <span className="text-white/70 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.15em]">Switch</span>
                   </button>
@@ -8200,6 +8276,9 @@
             </Modal>
           )}
           
+          {/* BUY / SELL — switch.win widget */}
+          {showSwap&&<SwapModal token={token} cfg={cfg} onClose={()=>setShowSwap(false)}/>}
+
           {/* LIVE FEED — the Abduction Deck, live value tape */}
           <AbductionDeckModal
             open={showBeam}
