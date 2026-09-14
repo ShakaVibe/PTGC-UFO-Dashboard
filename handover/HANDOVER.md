@@ -16,7 +16,7 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-14)
 
-Roadmap: 41 of 59 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 43 of 59 items closed (u5 + u6 done 2026-09-14 night). u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -38,7 +38,8 @@ Check `git --no-optional-locks status` before starting.
 | Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`5c2d3cf93`, 2026-09-09) |
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — u4 (hoisted render-defined components), u13 (chart late-data) | **Done** (2026-09-13 evening) |
-| Phase 3 — u5, u6, u11, u14, u3 | Not started. Suggested order: u5/u6, u11/u14, u3 (decomposition — better after the build) |
+| Phase 3 — u5 (one Value Generated model), u6 (share-card parity) | **Done** (2026-09-14 night; `computeValueGen`, see gotcha 16) |
+| Phase 3 — u11, u14, u3 | Not started. Suggested order: u11/u14, then u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
@@ -177,6 +178,15 @@ Check `git --no-optional-locks status` before starting.
    the wallet too — they are excluded (`excluded.lpRemovals`), never count them as buys.
    Creature rows (tile + ledger) come from `DaoCreatures` → `getBurnC` (top three tiers,
    starting supply); the ledger lists `view.buysAll` (lifetime), not the selected range.
+16. **Value Generated has ONE model — `computeValueGen`** (module scope, after
+   `computeValueGenBuckets`). The Dashboard builds `valueGenView` (selected window) and
+   `valueGen7d` once per render and every surface prints those: panel headline + PTGC tiles,
+   Value Generated share card, Combined card (`FeeBlock vg=`), KPI card (`valueGen7d` prop).
+   `basis` = delivered | accrued | volume; `pending` = dash; `total:null` = "—". UFO is never
+   volume × fee unless `estimate:true` (only the KPI compare card from the PTGC page, tagged
+   "7D EST"). Per tile: `valueGenBucketUsd(vg,item)` (null → "—"). Don't add a fourth
+   Value Generated calculation anywhere — extend the model. Tier counts on cards and panel:
+   `tierCountLabel`. Card prices: `fmtPrice` via `Price`/`PriceEl`/`formatSubPrice`.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
