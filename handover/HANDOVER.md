@@ -48,6 +48,8 @@ the log below says otherwise. Check `git --no-optional-locks status` before star
    described under Testing, and updates `handover/` + the roadmap ticks.
 3. Shaka pushes: `cd ~/Desktop/PTGC-UFO && git add -A && git commit -m "…" && git pull --rebase && git push`.
    The `pull --rebase` is needed because the Actions bots commit `data/*.json` every few minutes.
+   **Claude ends every round of work with that full commit line, message filled in** (Shaka,
+   2026-09-14) — never "same as before".
    (Claude-side notes: run git in the linked folder with `git --no-optional-locks …` — a plain
    `git status` from the bridge leaves a `.git/index.lock` it cannot delete, and the next commit
    fails with "index.lock: File exists". Never run `rebase --continue` or anything that writes
