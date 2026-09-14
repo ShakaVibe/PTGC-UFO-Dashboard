@@ -1745,7 +1745,7 @@
       if(q>=1)return fmtAbbr(Math.floor(q));
       if(q>=0.001)return q.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
       if(q>=0.000001)return q.toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
-      return q.toExponential(2);
+      return '<0.000001';   // u6: dust, not "1.23e-7" on a share card
     };
 
     // Ordered buckets for the Value Generated panel. PTGC keeps its legacy shape.
@@ -1805,6 +1805,10 @@
       const qty=q(dollarVal,prices[item.priceKey]);
       return qty===null?null:[{qty,symbol:item.priceKey}];
     };
+
+    /* u6: one way to print a holder-tier count everywhere — "—" unknown, "≥N" when the scan
+       hit its page cap (a lower bound), otherwise the count. The panel and the cards share it. */
+    const tierCountLabel=(tiers,k)=>{const v=tiers?tiers[k]:null;if(v==null)return'\u2014';return(tiers.partial?'\u2265':'')+v;};
 
     const HOLDER_TIERS_DISPLAY=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
@@ -1914,16 +1918,9 @@
     const getHolderTier=(holdingPct)=>{for(const tier of HOLDER_TIERS){if(holdingPct>=tier.p)return tier.n}return'Shell'};
     
     // Twitter image helpers
-    const formatPriceTwitter=(price)=>{
-      if(!price||price===0)return'$0';
-      if(price>=1)return'$'+price.toFixed(2);
-      if(price>=0.01)return'$'+price.toFixed(4);
-      if(price>=0.0001)return'$'+price.toFixed(6);
-      const str=price.toFixed(18);
-      const match=str.match(/^0\.(0*)([1-9]\d{0,3})/);
-      if(match){const zeros=match[1].length;const digits=match[2].slice(0,4);return{base:'$0.0',sub:zeros,rest:digits};}
-      return'$'+price.toFixed(8);
-    };
+    /* u6: every share card prints prices the way the header does (fmtPrice): "—" for none,
+       2 dp ≥ $1, 6 dp ≥ $0.0001, subscript-zero notation below that. One formatter, one look. */
+    const formatPriceTwitter=(price)=>{const f=fmtPrice(price);return typeof f==='string'?f:{base:f.pre,sub:f.z,rest:f.d};};
     const getBurnCreaturesTwitter=(burnTotal,tokenName)=>{
       const supply=SUPPLY[tokenName]||SUPPLY.PTGC;
       const t={POSEIDON:supply*0.10,WHALE:supply*0.01,SHARK:supply*0.001,DOLPHIN:supply*0.0001,SQUID:supply*0.00001};
@@ -2689,6 +2686,59 @@
       };
       const total=byKey.reflection+byKey.ufoBurn+byKey.ptgcBurn+byKey.plsLP+byKey.plsxLP+byKey.wethLP;
       return {byKey,total};
+    };
+
+    /* u5 — ONE Value Generated model. The panel, the KPI card, the Value Generated share card
+       and the Combined card all ask this and print what it says, so no card can quote a figure
+       the panel does not. It answers with a `basis`:
+         'delivered' — UFO, measured: each bucket's delivered on-chain tokens × price
+                       (computeValueGenBuckets). byKey is per bucket.
+         'accrued'   — UFO, delivery scan still running: accrued fee tokens × price. Only the
+                       reflection bucket is known per bucket (byKey), the rest are null → "—",
+                       exactly as the panel shows them while it waits.
+         'volume'    — PTGC (there is no on-chain reading for PTGC): window volume × fee rate,
+                       buckets = volume × bucket %. byKey is per bucket, keyed by name.
+       pending:true  — UFO's chain read has not answered yet → show a dash, never an estimate.
+       total:null    — nothing honest to show (no volume for that window / the read failed).
+       UFO is NEVER volume × fee: that estimate is what used to balloon to ~$2M on a young token. */
+    const computeValueGen=({token,cfg,period,periodVol,delivered,realizedFees,prices,estimate=false})=>{
+      const none={basis:null,total:null,byKey:null,periodVol:periodVol==null?null:periodVol,pending:false};
+      if(token==='UFO'){
+        const m=computeValueGenBuckets(period,delivered,realizedFees,prices||{});
+        if(m)return{basis:'delivered',total:m.total,byKey:m.byKey,periodVol:none.periodVol,pending:false};
+        const live=(realizedFees&&realizedFees.ok&&realizedFees.byPeriod)?realizedFees.byPeriod[period]:null;
+        const ufoPx=(prices&&prices.UFO)||0;
+        if(live&&ufoPx>0){
+          const byKey={reflection:(live.tokens?.reflection||0)*ufoPx,ufoBurn:null,ptgcBurn:null,plsLP:null,plsxLP:null,wethLP:null};
+          return{basis:'accrued',total:(live.totalTokens||0)*ufoPx,byKey,periodVol:none.periodVol,pending:false};
+        }
+        if(realizedFees&&!realizedFees.ok)return{...none,error:realizedFees.error||'chain read failed'};
+        /* `estimate:true` is for a surface that has NO chain read at all (the KPI compare card
+           showing UFO from the PTGC page): volume × fee, and the caller must label it as an
+           estimate. Without the flag a missing read means "still reading" → dash. */
+        if(!estimate)return{...none,pending:true};
+      }
+      if(periodVol==null||!isFinite(periodVol))return none;
+      const byKey={};
+      (cfg.feeBreakdown||[]).forEach(b=>{byKey[b.key||b.name]=periodVol*((b.pct||0)/100);});
+      return{basis:'volume',total:periodVol*(cfg.feeRate||0),byKey,periodVol,pending:false};
+    };
+    /* One bucket's USD under the model above. null = not known → the caller prints "—". */
+    const valueGenBucketUsd=(vg,item)=>{
+      if(!vg||vg.pending||vg.total==null)return null;
+      if(vg.basis==='volume')return (vg.periodVol||0)*((item.pct||0)/100);   // includes PTGC's synthetic "Total H&S"
+      const k=item.key||item.name;
+      const v=vg.byKey?vg.byKey[k]:undefined;
+      if(vg.basis==='delivered')return v||0;
+      return v==null?null:v;                                                  // accrued: only reflection is known
+    };
+    /* 7-day window volume for a token — the same series the dashboard's Value Generated
+       panel uses (coingecko-data.json, hourly). For the KPI compare card, which has no
+       volumeByPeriod for the "other" token. null when the file has nothing usable. */
+    const vol7dFromCache=(tkn)=>{
+      const cg=(typeof coingeckoDataCache!=='undefined'&&coingeckoDataCache)||null;
+      const v=cg&&cg[tkn]&&cg[tkn].volume?cg[tkn].volume.vol7d:null;
+      return(v!=null&&isFinite(v)&&v>0)?v:null;
     };
     const historyEpochMs = (tkn) => (tkn === 'UFO') ? (ufoLaunchMs || UFO_LAUNCH_FALLBACK_MS) : 0;
 
@@ -4586,18 +4636,8 @@
     };
     
     // Format price with subscript zeros for very small prices
-    const formatSubPrice=(price)=>{
-      if(!price||price===0)return'$0.00';
-      if(price>=0.01)return`$${price.toFixed(6)}`;
-      const str=price.toFixed(12);
-      const match=str.match(/^0\.(0+)([1-9]\d*)/);
-      if(match){
-        const zeros=match[1].length;
-        const sig=match[2].slice(0,4);
-        return<>$0.0<sub style={{fontSize:'0.6em',verticalAlign:'baseline'}}>{zeros}</sub>{sig}</>;
-      }
-      return`$${price.toFixed(6)}`;
-    };
+    /* u6: the KPI card's price is the header's formatter (fmtPrice) — see formatPriceTwitter. */
+    const formatSubPrice=(price)=>{const f=fmtPrice(price);return typeof f==='string'?f:<>{f.pre}<sub style={{fontSize:'0.6em',verticalAlign:'baseline'}}>{f.z}</sub>{f.d}</>;};
     
     // KPI Content component with dual token support
     /* ===================== MODAL SHELL =====================
@@ -5811,8 +5851,10 @@
       const plsRatio=pls>0?(price/pls).toFixed(2):'—';
       const priceFormatted=formatPriceTwitter(price);
       const creatures=getBurnCreaturesTwitter(b.total||0,t);
-      const burn7d=bp?.d7||0;
-      const burn7dCreature=get24hBurnCreature(burn7d,t);
+      const burn7dKnown=bp!=null&&bp.d7!=null;          // u6: unknown window → "—", like the panel
+      const burn7d=burn7dKnown?bp.d7:0;
+      const burn7dCreature=burn7dKnown?get24hBurnCreature(burn7d,t):'\u{1F41A}';
+      const burnKnown=!!(b&&b.supply>0);
       const date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
       const liqMcapPct=d?.mcap>0?((d?.liq||0)/d.mcap*100).toFixed(1)+'%':'—';
       
@@ -5883,16 +5925,16 @@
               <div>
                 <div className="flex items-center gap-2 text-xs text-orange-400/90 uppercase font-semibold mb-1">🔥 Total Burned</div>
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-bold text-orange-400">{fmtAbbr(b.total)}</span>
-                  <span className="text-lg font-bold text-green-400">{fmtUSD((b.total||0)*price)}</span>
-                  <span className="text-base text-white/50">{(b.pct||0).toFixed(2)}%</span>
+                  <span className="text-2xl font-bold text-orange-400">{burnKnown?fmtAbbr(b.total):'\u2014'}</span>
+                  <span className="text-lg font-bold text-green-400">{burnKnown?fmtUSD((b.total||0)*price):'\u2014'}</span>
+                  <span className="text-base text-white/50">{burnKnown?(b.pct||0).toFixed(2)+'%':''}</span>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-orange-400/90 uppercase font-semibold mb-1">🔥 7D</div>
                 <div className="flex items-center gap-3 justify-end">
-                  <span className="text-xl font-bold text-orange-400">{fmtAbbr(burn7d)}</span>
-                  <span className="text-lg font-bold text-green-400">{fmtUSD(burn7d*price)}</span>
+                  <span className="text-xl font-bold text-orange-400">{burn7dKnown?fmtAbbr(burn7d):'\u2014'}</span>
+                  <span className="text-lg font-bold text-green-400">{burn7dKnown?fmtUSD(burn7d*price):'\u2014'}</span>
                 </div>
               </div>
             </div>
@@ -5911,7 +5953,7 @@
     const ShareBadge=({v,pct=true})=>{if(v===null||v===undefined)return null;if(v===0)return<span className="text-gray-500 text-xs font-bold">— 0</span>;const u=v>=0;return(<span className={`text-xs font-bold ${u?'text-green-400':'text-red-500'}`}>{u?'▲':'▼'} {pct?Math.abs(v).toFixed(1)+'%':(v>=0?'+':'')+v}</span>);};
     const ShareMB=({emoji,label,value,change,pct=true,tag,pc,pcRgb})=>(<div className="p-3 sm:p-4 rounded-xl flex flex-col justify-center relative min-w-0" style={{background:`rgba(${pcRgb},0.08)`,border:`1px solid rgba(${pcRgb},0.2)`,minHeight:'100px'}}>{tag&&<span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded" style={{background:`${pc}50`,color:'white'}}>{tag}</span>}<div className="flex items-center justify-between mb-2 gap-1"><ShareLB pc={pc} emoji={emoji} text={label}/>{!tag&&<ShareBadge v={change} pct={pct}/>}</div>{tag?<div className="flex items-center justify-between gap-1"><div className="font-bold text-lg sm:text-2xl text-white truncate">{value}</div><ShareBadge v={change} pct={pct}/></div>:<div className="font-bold text-lg sm:text-2xl text-white truncate">{value}</div>}</div>);
 
-    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7dUsd})=>{
+    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7d})=>{
       const[showBoth,setShowBoth]=useState(startWithBoth);
       const[twitterMode,setTwitterMode]=useState(false);
       const[otherData,setOtherData]=useState(null);
@@ -6004,20 +6046,28 @@
           ?(()=>{const v24=d?.vol||0;const v7=volumeByPeriod?.vol7d||0;const avg=v7/7;return(v24>0&&avg>0)?((v24-avg)/avg)*100:null;})()
           :(burnHistoryCache?.[t]?.changes?.volume24h??null);
         const mcapChange=priceChange;
-        const burn7dAmt=bp?.d7||0;
+        /* u6: same semantics as the panel — an unknown window (scan running / failed) is
+           "—", not 0; a burn total with no supply behind it is unknown, not 0. */
+        const burn7dKnown=bp!=null&&bp.d7!=null;
+        const burn7dAmt=burn7dKnown?bp.d7:0;
         const burn7dUSD=burn7dAmt*(d?.price||0);
+        const burnKnown=!!(b&&b.supply>0);
         const burnPctNum=b.pct||0;
         const burnUSD=b.total*(d?.price||0);
         const liqMcapPct=d?.mcap>0?((d?.liq||0)/(d?.mcap)*100):0;
         const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
         
-        /* For the main UFO card the Value Gen figure is measured on-chain (valueGen7dUsd),
-           which takes a few seconds to arrive. While it's still null, show a loading dash
-           rather than the crude estimate (which balloons to ~$2M on this token). undefined
-           means we're not on the measured path (compare card / modal) — keep the estimate. */
-        const valueGenMeasured=(t===token&&typeof valueGen7dUsd==='number');
-        const valueGenPending=(t===token&&valueGen7dUsd===null);
-        const valueGen7d=valueGenMeasured?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.feeRate;const ba=bp?.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.feeRate;})();
+        /* u5: Value Generated (7D) comes from the ONE model (computeValueGen) — the same object
+           the dashboard panel renders. For the active token the Dashboard hands it in as
+           `valueGen7d`; for the compare card (the other token) we build it here from the
+           other token's cached 7-day volume. UFO as the "other" token has no chain read on
+           this page, so its card says so ("est." tag) instead of quoting a measurement — and
+           it never uses the old burn÷burn-rate guess that ballooned to ~$2M. */
+        const vg7=(t===token&&valueGen7d)?valueGen7d
+          :computeValueGen({token:t,cfg:c,period:'7d',periodVol:(t===token?volumeByPeriod?.vol7d:vol7dFromCache(t)),delivered:null,realizedFees:null,prices:{},estimate:t!==token});
+        const valueGenPending=!!vg7.pending;
+        const valueGenUsd=vg7.total;                                   // null → "—"
+        const valueGenTag=vg7.basis==='volume'&&t==='UFO'?'7D EST':'7D';
         const creaturesRaw=getBurnC(burnPctNum,'Squid');
         const creatures=creaturesRaw.filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
         const burn7dPct=b.supply>0?(burn7dAmt/b.supply)*100:0;
@@ -6075,16 +6125,16 @@
                 <ShareMB pc={pc} pcRgb={pcRgb} emoji="⚖️" label="LIQ/MC RATIO" value={`${liqMcapPct.toFixed(1)}%`} change={null}/>
                 <ShareMB pc={pc} pcRgb={pcRgb} emoji="📈" label="VOLUME" value={fmtUSD(d?.vol)} change={volChange}/>
                 <ShareMB pc={pc} pcRgb={pcRgb} emoji="👥" label="HOLDERS" value={fmt(h)} change={hChange} pct={false}/>
-                <ShareMB pc={pc} pcRgb={pcRgb} emoji="⚡" label="VALUE GEN" value={valueGenPending?<span className="animate-pulse text-white/40">—</span>:fmtUSD(valueGen7d)} change={valueGenPending?null:volChange} tag="7D"/>
+                <ShareMB pc={pc} pcRgb={pcRgb} emoji="⚡" label="VALUE GEN" value={valueGenPending?<span className="animate-pulse text-white/40" title="reading fees from chain…">—</span>:fmtUSD(valueGenUsd)} change={(valueGenPending||valueGenUsd==null)?null:volChange} tag={valueGenTag}/>
               </div>
               <div className="mx-3 sm:mx-4 mb-4 p-3 sm:p-4 rounded-xl" style={{background:'rgba(249,115,22,0.1)',border:'1px solid rgba(249,115,22,0.3)'}}>
                 <div className="flex gap-3 sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-2"><span className="text-lg">🔥</span><span className="text-xs sm:text-sm font-bold text-orange-400 uppercase">Total Burned</span></div>
-                    <div className="text-lg sm:text-2xl font-bold text-orange-400 truncate">{fmt(b.total)} <span className="text-sm sm:text-base text-orange-400/70">{t}</span></div>
-                    <div className="text-gray-400 text-xs sm:text-sm mt-1 truncate">{fmtUSD(burnUSD)}<span className="text-orange-400/60 ml-2">{burnPctNum.toFixed(2)}%</span></div>
+                    <div className="text-lg sm:text-2xl font-bold text-orange-400 truncate">{burnKnown?fmt(b.total):'\u2014'} <span className="text-sm sm:text-base text-orange-400/70">{t}</span></div>
+                    <div className="text-gray-400 text-xs sm:text-sm mt-1 truncate">{burnKnown?fmtUSD(burnUSD):'\u2014'}<span className="text-orange-400/60 ml-2">{burnKnown?burnPctNum.toFixed(2)+'%':''}</span></div>
                     <div className="mt-3">
-                      <div className="flex items-center gap-1.5 mb-2 overflow-x-auto overflow-y-hidden no-scrollbar">{creatures.length>0?creatures.map((cr,i)=>(<span key={i} className="flex items-center gap-0.5 shrink-0"><span className="text-base">{cr.e}</span><span className="text-white text-xs font-bold">x{cr.cnt}</span></span>)):<span className="text-gray-500 text-xs">Building...</span>}</div>
+                      <div className="flex items-center gap-1.5 mb-2 overflow-x-auto overflow-y-hidden no-scrollbar">{creatures.length>0?creatures.map((cr,i)=>(<span key={i} className="flex items-center gap-0.5 shrink-0"><span className="text-base">{cr.e}</span><span className="text-white text-xs font-bold">x{cr.cnt}</span></span>)):<span className="text-gray-500 text-xs">{burnKnown?'Building...':'\u2014'}</span>}</div>
                       <div className="flex items-center gap-2">
                         <div className="w-[50%] h-1.5 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-orange-400 rounded-full" style={{width:`${whaleP.progress}%`}}/></div>
                         <span className="text-xs text-gray-500 whitespace-nowrap">{whaleP.progress.toFixed(0)}%</span>
@@ -6095,11 +6145,11 @@
                   <div className="w-24 sm:w-32 border-l border-orange-400/20 pl-3 sm:pl-4 flex flex-col">
                     <div className="flex items-center gap-1.5 mb-2 justify-center"><span className="text-base">🔥</span><span className="text-xs sm:text-sm font-bold text-orange-300 uppercase">7D Burn</span></div>
                     <div className="text-center min-w-0">
-                      <div className="text-base sm:text-xl font-bold text-orange-300 truncate">{fmtAbbr(burn7dAmt)}</div>
+                      <div className="text-base sm:text-xl font-bold text-orange-300 truncate">{burn7dKnown?fmtAbbr(burn7dAmt):'\u2014'}</div>
                       <div className="text-xs sm:text-sm text-orange-300/70">{t}</div>
-                      <div className="text-green-400 text-xs sm:text-sm font-semibold mt-1 truncate">{fmtUSD(burn7dUSD)}</div>
+                      <div className="text-green-400 text-xs sm:text-sm font-semibold mt-1 truncate">{burn7dKnown?fmtUSD(burn7dUSD):'\u2014'}</div>
                     </div>
-                    <div className="flex-1 flex items-center justify-center mt-2"><span className="text-3xl sm:text-4xl">{singleCreature7d.e}</span></div>
+                    <div className="flex-1 flex items-center justify-center mt-2"><span className={`text-3xl sm:text-4xl ${burn7dKnown?'':'opacity-25'}`}>{burn7dKnown?singleCreature7d.e:'\u{1F41A}'}</span></div>
                   </div>
                 </div>
               </div>
@@ -6501,14 +6551,10 @@
     
 
     /* u4: hoisted out of Dashboard (Combined share card) — was re-declared on every render, so React remounted it each time. */
-    const PriceEl=({p,style={}})=>{
-      if(!p||isNaN(p)||p===0)return<span style={style}>—</span>;
-      if(p>=1)return<span style={style}>{'$'+p.toFixed(2)}</span>;
-      if(p>=0.01)return<span style={style}>{'$'+p.toFixed(4)}</span>;
-      if(p>=0.0001)return<span style={style}>{'$'+p.toFixed(6)}</span>;
-      const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));
-      const z=exp-1,d=parseFloat(m).toFixed(4).replace('.','').slice(0,4);
-      return<span style={style}>$0.0<sub style={{fontSize:'0.65em',verticalAlign:'sub'}}>{z}</sub>{d}</span>;
+    const PriceEl=({p,style={}})=>{   // u6: fmtPrice, the header's formatter, in an inline-styled span
+      const f=fmtPrice(p);
+      if(typeof f==='string')return<span style={style}>{f}</span>;
+      return<span style={style}>{f.pre}<sub style={{fontSize:'0.65em',verticalAlign:'sub'}}>{f.z}</sub>{f.d}</span>;
     };
 
     /* Leagues fonts for the share cards: Orbitron = titles/labels only, Rajdhani = all numbers & data.
@@ -6578,8 +6624,11 @@
         </div>
       );
     };
-    const FeeBlock=({tokenCfg,vol,accent,rgb,measured})=>{
-      const totalGen=measured?measured.total:(vol*tokenCfg.feeRate);
+    const FeeBlock=({tokenCfg,vol,accent,rgb,vg})=>{
+      /* u5/u6: renders the shared Value Generated model for one token. null → "—" (never $0). */
+      const totalGen=vg?vg.total:null;
+      const note=!vg?null:vg.basis==='delivered'?'measured on chain':vg.basis==='accrued'?'accrued \u2014 delivery still being read':vg.pending?'reading fees from chain\u2026':vg.basis==='volume'&&tokenCfg.name==='UFO'?'est. from volume':null;
+      const items=tokenCfg.name==='PTGC'?tokenCfg.feeBreakdown:tokenCfg.feeBreakdown.filter(b=>(b.pct||0)>0);
       return(
         <div style={{borderRadius:'12px',padding:'14px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'12px'}}>
@@ -6587,24 +6636,24 @@
             <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
               <img src={tokenCfg.logo} alt={tokenCfg.name} style={{width:'64px',height:'64px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 20px rgba(${rgb},0.4)`}}/>
               <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'wrap'}}>
-                <span style={{fontFamily:RJ,fontWeight:700,fontSize:'38px',color:'#4ade80',lineHeight:1}}>{fmtUSD(totalGen)}</span>
-                <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Value Generated</span>
+                <span style={{fontFamily:RJ,fontWeight:700,fontSize:'38px',color:totalGen==null?'rgba(255,255,255,0.35)':'#4ade80',lineHeight:1}}>{totalGen==null?'\u2014':fmtUSD(totalGen)}</span>
+                <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Value Generated{note?<span style={{fontFamily:RJ,fontSize:'11px',letterSpacing:0,textTransform:'none',color:'rgba(255,255,255,0.35)',marginLeft:'6px'}}>{note}</span>:null}</span>
               </div>
             </div>
             {/* Right: token name + vol, right-justified */}
             <div style={{textAlign:'right',flexShrink:0}}>
               <div style={{fontFamily:OB,fontSize:'13px',fontWeight:700,color:accent,letterSpacing:'0.5px'}}>{tokenCfg.name}</div>
-              <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {fmtUSD(vol)}</div>
+              <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {vol>0?fmtUSD(vol):'\u2014'}</div>
             </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.feeBreakdown.length},1fr)`,gap:'6px'}}>
-            {tokenCfg.feeBreakdown.map((item,i)=>{
-              const dollarVal=measured?(measured.byKey[item.key]||0):(vol*(item.pct/100));
+          <div style={{display:'grid',gridTemplateColumns:`repeat(${items.length},1fr)`,gap:'6px'}}>
+            {items.map((item,i)=>{
+              const dollarVal=valueGenBucketUsd(vg,item);   // null → "—"
               return(
                 <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'8px 6px',textAlign:'center'}}>
                   <div style={{fontSize:'18px',marginBottom:'3px'}}>{item.emoji}</div>
                   <div style={{fontFamily:OB,fontSize:'9px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:'3px',lineHeight:1.2}}>{item.name}</div>
-                  <div style={{fontFamily:RJ,fontWeight:700,fontSize:'19px',color:'#4ade80'}}>{fmtUSD(dollarVal)}</div>
+                  <div style={{fontFamily:RJ,fontWeight:700,fontSize:'19px',color:dollarVal==null?'rgba(255,255,255,0.35)':'#4ade80'}}>{dollarVal==null?'\u2014':fmtUSD(dollarVal)}</div>
                   <div style={{fontFamily:RJ,fontSize:'14px',color:`rgba(${rgb},0.55)`,fontWeight:500,marginTop:'1px'}}>{item.pct}%</div>
                 </div>
               );
@@ -7760,6 +7809,15 @@
       const whaleProgress=getWhaleProgress(burn?.pct||0);
       const tokensInLP=data?.tokensInLP||0;
       const tokensInLPPct=cfg.totalSupply>0?((tokensInLP/cfg.totalSupply)*100).toFixed(2):'0';
+
+      /* u5: the ONE Value Generated model, built once here and handed to every surface —
+         the panel (selected window), the Value Generated share card (same window), the KPI
+         card (7D) and the Combined card (its own window). See computeValueGen. */
+      const vgPricesNow=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
+      const vgVolFor=p=>({'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d})[p];
+      const valueGenFor=p=>computeValueGen({token,cfg,period:p,periodVol:vgVolFor(p),delivered,realizedFees,prices:vgPricesNow});
+      const valueGenView=valueGenFor(valueGenPeriod);
+      const valueGen7d=valueGenFor('7d');
       
       const burnedPct=cfg.totalSupply>0?(burn?.total||0)/cfg.totalSupply*100:0;
       const lpPct=cfg.totalSupply>0?(tokensInLP/cfg.totalSupply)*100:0;
@@ -8207,7 +8265,9 @@
                     const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
                     const periodVol=volAmounts[valueGenPeriod];
                     const hasData=periodVol!==null&&periodVol!==undefined;
-                    const totalGen=hasData?periodVol*cfg.feeRate:0;
+                    /* u5: the headline and the PTGC buckets come from the shared model
+                       (valueGenView) — the same object the share cards print. */
+                    const totalGen=valueGenView.total!=null?valueGenView.total:0;
 
                     const orderedItems=buildValueGenItems(token,cfg);
                     const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
@@ -8305,7 +8365,13 @@
                     const accruedUsd=live?live.totalTokens*ufoPx:0;
                     const deliveredUsd=haveDelivered?liveItems.reduce((s,i)=>s+i.usd,0):0;
                     const gapUsd=Math.max(0,accruedUsd-deliveredUsd);
-                    const liveTotalUsd=haveDelivered?deliveredUsd:accruedUsd;
+                    /* u5: the headline is the shared model's total (delivered, else accrued) —
+                       the very number the KPI card and both share cards print. The tile maths
+                       above stays because it carries the queue/pending detail per bucket; if it
+                       ever disagrees with the model that is a bug, so say so in the console. */
+                    const liveTotalUsd=(valueGenView.total!=null)?valueGenView.total:(haveDelivered?deliveredUsd:accruedUsd);
+                    if(valueGenView.total!=null&&Math.abs(valueGenView.total-(haveDelivered?deliveredUsd:accruedUsd))>Math.max(1,valueGenView.total*0.005))
+                      console.warn('Value Generated: panel tiles and shared model disagree',{model:valueGenView.total,tiles:haveDelivered?deliveredUsd:accruedUsd,basis:valueGenView.basis});
                     /* Which LP buckets reverted is no longer INFERRED from the failure
                        event's action string — it is measured. A failed add emits no Mint,
                        so its bucket delivers nothing and reads $0. `undelivered` here is
@@ -8402,7 +8468,7 @@
                             than a footnote pinned to the bottom of it. */}
                         {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 flex-1 mt-2">
                           {((showLive?liveItems:orderedItems)||[]).map((item,i)=>{
-                            const dollarVal=showLive?item.usd:periodVol*(item.pct/100);
+                            const dollarVal=showLive?item.usd:(valueGenBucketUsd(valueGenView,item)||0);   // u5: PTGC buckets from the shared model
                             const parts=showLive?item.parts:valueGenParts(token,item,dollarVal,vgPrices);
                             const partsLabel=(parts&&parts.length)
                               ?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + ')
@@ -8488,10 +8554,10 @@
                         </div>
                       ):(
                         <div className="grid grid-cols-3 gap-x-4 sm:gap-x-5 gap-y-2.5 text-center">
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F531}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Poseidon==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Poseidon}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F40B}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Whale==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Whale}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F988}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Shark==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Shark}</div></div>
-                          <div><div className="text-2xl sm:text-3xl">{'\u{1F42C}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.Dolphin==null?'\u2014':(holderTiers.partial?'\u2265':'')+holderTiers.Dolphin}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F531}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{tierCountLabel(holderTiers,'Poseidon')}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F40B}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{tierCountLabel(holderTiers,'Whale')}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F988}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{tierCountLabel(holderTiers,'Shark')}</div></div>
+                          <div><div className="text-2xl sm:text-3xl">{'\u{1F42C}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{tierCountLabel(holderTiers,'Dolphin')}</div></div>
                           <div className="col-span-2"><div className="text-xl sm:text-2xl">{'\u{1F991}'}<span className="text-white/60 mx-0.5">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.SquidAndBelow==null?'\u2014':fmtAbbr(holderTiers.SquidAndBelow)}</div></div>
                         </div>
                       )}
@@ -8620,7 +8686,7 @@
                                     <span className="text-emerald-400 tabular-nums">{fmtUSD(daoData.availableUSD||0)}</span>
                                   </div>
                                   <div className="flex justify-between gap-3 text-white/55">
-                                    <span className="font-medium">{'\u{23F3}'} Pending in Proposals</span>
+                                    <span className="font-medium">{'\u{23F3}'} Pending in Live</span>
                                     <span className="text-emerald-400 tabular-nums">{fmtUSD(daoData.pendingUSD||0)}</span>
                                   </div>
                                   <div className="flex justify-between gap-3 text-white/55">
@@ -8805,26 +8871,13 @@
           
           {/* KPI Report Tab Content — LIVE. */}
           {activeTab==='kpi'&&loading&&<DashboardSkeleton token={token}/>}
-          {activeTab==='kpi'&&!loading&&((()=>{
-            /* Value Generated (7D) measured the same way as the dashboard's Value Generated
-               panel: sum the delivered on-chain buckets. The KPI card's own estimate divided
-               the total burn (mostly the one-off ~93B launch burn) by the 1% fee and blew up
-               to ~$2M — this is the real figure. null => the card falls back to its estimate. */
-            const valueGen7dUsd=(()=>{
-              if(token!=='UFO'||!delivered||!delivered.ok||!realizedFees||!realizedFees.ok)return null;
-              const dv=delivered.byPeriod['7d'],live=realizedFees.byPeriod['7d'];
-              if(!dv||!live)return null;
-              const uP=data?.price||0,pP=ptgcPrice||0,plsP=pls||0,pxP=plsxPrice||0,wP=wethPrice||0;
-              const lpUsd=(sym,q)=>{const e=dv.lp&&dv.lp[sym];return e?(e.ufo*uP+e.quote*q):0;};
-              return (live.tokens?.reflection||0)*uP+(dv.ufoBurned||0)*uP+(dv.ptgcBurned||0)*pP
-                     +lpUsd('WPLS',plsP)+lpUsd('PLSX',pxP)+lpUsd('WETH',wP);
-            })();
-            return(
-              <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>gotoTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7dUsd={valueGen7dUsd}/>
-              </div>
-            );
-          })())}
+          {activeTab==='kpi'&&!loading&&(
+            /* u5: the card's 7D Value Generated is `valueGen7d` — the same model object the
+               Value Generated panel renders (computeValueGen, built once per render below). */
+            <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2">
+              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>gotoTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d}/>
+            </div>
+          )}
           
           {/* Social Tab Content */}
           {/* MAINT-MIGRATION: Socials is now LIVE. Removed the "Under Maintenance" screen and the
@@ -9046,7 +9099,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-4xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d}/>
               </div>
             </Modal>
           )}
@@ -9428,15 +9481,16 @@
 
             const ptgcVol=ptgcVols[combinedValueGenPeriod]||0;
             const ufoVol=ufoVols[combinedValueGenPeriod]||0;
-            // MIGRATION: use the same MEASURED on-chain buckets the dashboard and single share
-            // card use for UFO (delivered + realizedFees -> computeValueGenBuckets), not the
-            // volume x fee estimate. Available for UFO only when it's the active token and the
-            // scan has completed; the PTGC side and any not-ready case fall back to the estimate.
-            const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
-            const ufoMeasured=(token==='UFO')?computeValueGenBuckets(combinedValueGenPeriod,delivered,realizedFees,vgPrices):null;
-            const ptgcTotal=ptgcVol*ptgcCfg.feeRate;
-            const ufoTotal=ufoMeasured?ufoMeasured.total:(ufoVol*ufoCfg.feeRate);
-            const combinedTotal=ptgcTotal+ufoTotal;
+            /* u5: both halves come from the ONE model. PTGC = window volume × fee (its only
+               basis). UFO = the chain read when UFO is the active token (delivered → accrued →
+               dash while reading, exactly like the panel); from the PTGC page there is no chain
+               read for UFO, so its half is volume × fee and the block is labelled "est.". A window
+               with no volume prints "—", not $0. */
+            const ptgcVg=computeValueGen({token:'PTGC',cfg:ptgcCfg,period:combinedValueGenPeriod,periodVol:ptgcVol>0?ptgcVol:null,prices:{}});
+            const ufoVg=(token==='UFO')?valueGenFor(combinedValueGenPeriod)
+              :computeValueGen({token:'UFO',cfg:ufoCfg,period:combinedValueGenPeriod,periodVol:ufoVol>0?ufoVol:null,delivered:null,realizedFees:null,prices:{},estimate:true});
+            const combinedTotal=(ptgcVg.total==null&&ufoVg.total==null)?null:(ptgcVg.total||0)+(ufoVg.total||0);
+            const combinedPartial=combinedTotal!=null&&(ptgcVg.total==null||ufoVg.total==null);
 
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
 
@@ -9473,10 +9527,10 @@
                       </div>
 
                       {/* PTGC Block */}
-                      <FeeBlock tokenCfg={ptgcCfg} vol={ptgcVol} accent="#D4AF37" rgb="212,175,55"/>
+                      <FeeBlock tokenCfg={ptgcCfg} vol={ptgcVol} accent="#D4AF37" rgb="212,175,55" vg={ptgcVg}/>
 
                       {/* UFO Block */}
-                      <FeeBlock tokenCfg={ufoCfg} vol={ufoVol} accent="#7CFC00" rgb="124,252,0" measured={ufoMeasured}/>
+                      <FeeBlock tokenCfg={ufoCfg} vol={ufoVol} accent="#7CFC00" rgb="124,252,0" vg={ufoVg}/>
 
                       {/* Combined total bar */}
                       <div style={{borderRadius:'12px',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(110deg,rgba(212,175,55,0.1),rgba(124,252,0,0.1))',border:'1px solid rgba(255,255,255,0.15)'}}>
@@ -9487,7 +9541,7 @@
                             <div style={{fontFamily:RJ,fontSize:'13px',color:'rgba(255,255,255,0.35)',marginTop:'1px',fontWeight:600}}>PTGC + UFO Combined</div>
                           </div>
                         </div>
-                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'40px',background:'linear-gradient(90deg,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>{fmtUSD(combinedTotal)}</span>
+                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'40px',background:'linear-gradient(90deg,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}} title={combinedPartial?'one token has no figure for this window yet':undefined}>{combinedTotal==null?'\u2014':fmtUSD(combinedTotal)}{combinedPartial?<span style={{fontSize:'16px',WebkitTextFillColor:'rgba(255,255,255,0.45)',marginLeft:'4px'}}>+</span>:null}</span>
                         <span style={{fontFamily:OB,fontSize:'11px',fontWeight:600,color:'rgba(255,255,255,0.55)'}}>ptgc-ufo.com</span>
                       </div>
 
@@ -9537,17 +9591,19 @@
                     
                     {/* Content */}
                     {(()=>{
-                      const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
-                      const periodVol=volAmounts[valueGenPeriod]||0;
+                      const periodVol=valueGenView.periodVol;
                       const orderedItems=buildValueGenItems(token,cfg);
-                      const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
-                      /* Measured on-chain value, same basis as the panel and KPI card. The old
-                         volume×fee estimate reads $0 while a young token has no volume baseline,
-                         which is why this card came out all $0. Falls back to the estimate only
-                         if the delivered scan isn't ready (or the token isn't UFO). */
-                      const vgMeasured=(token==='UFO')?computeValueGenBuckets(valueGenPeriod,delivered,realizedFees,vgPrices):null;
-                      const totalGen=vgMeasured?vgMeasured.total:(periodVol*cfg.feeRate);
-                      
+                      const vgPrices=vgPricesNow;
+                      /* u5/u6: the card prints the shared model (valueGenView) — the same object
+                         the panel renders for this window. While UFO's chain read is still
+                         running the card shows "—" like the panel, never a volume×fee estimate. */
+                      const totalGen=valueGenView.total;   // null → "—"
+                      const dash=<span className="text-white/35">{'\u2014'}</span>;
+                      const basisNote=valueGenView.basis==='delivered'?'measured on chain'
+                        :valueGenView.basis==='accrued'?'accrued \u2014 delivery still being read'
+                        :valueGenView.pending?'reading fees from chain\u2026'
+                        :`${(cfg.feeRate*100).toFixed(0)}% fee rate`;
+
                       return(
                         <div className="flex gap-3 flex-1">
                           {/* Left - totals */}
@@ -9555,15 +9611,15 @@
                             <div className="text-white/50 text-xs mb-1">{valueGenPeriod.toUpperCase()} Volume</div>
                             <div className="text-lg font-bold text-white/80 mb-2">{periodVol>0?fmtUSD(periodVol):'\u2014'}</div>
                             <div className="text-white/50 text-xs mb-1">Value Generated</div>
-                            <div className="text-4xl font-bold text-green-400">{fmtUSD(totalGen)}</div>
-                            <div className="text-white/40 text-xs mt-1">{(cfg.feeRate*100).toFixed(0)}% fee rate</div>
+                            <div className="text-4xl font-bold text-green-400">{totalGen==null?dash:fmtUSD(totalGen)}</div>
+                            <div className="text-white/40 text-xs mt-1">{basisNote}</div>
                           </div>
                           
                           {/* Right - breakdown boxes */}
                           <div className="flex-1 grid grid-cols-3 gap-1.5">
                             {orderedItems.map((item,i)=>{
-                              const dollarVal=vgMeasured?(vgMeasured.byKey[item.key]||0):(periodVol*(item.pct/100));
-                              const parts=valueGenParts(token,item,dollarVal,vgPrices);
+                              const dollarVal=valueGenBucketUsd(valueGenView,item);   // null → "—", same as the panel tile
+                              const parts=dollarVal==null?null:valueGenParts(token,item,dollarVal,vgPrices);
                               const partsLabel=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
                               return(
                                 <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg ${valueGenShowTokens?'p-1.5':'p-2'}`}>
@@ -9641,11 +9697,11 @@
                       <div className="flex-1 bg-black/30 border border-purple-500/30 rounded-lg p-3">
                         <div className="text-white/50 text-xs mb-2 uppercase">Holder Tiers</div>
                         <div className="grid grid-cols-5 gap-1 text-center">
-                          <div><div className="text-4xl">{'\u{1F531}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Poseidon||0}</div><div className="text-white/40 text-[10px]">Poseidon</div></div>
-                          <div><div className="text-4xl">{'\u{1F40B}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Whale||0}</div><div className="text-white/40 text-[10px]">Whale</div></div>
-                          <div><div className="text-4xl">{'\u{1F988}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Shark||0}</div><div className="text-white/40 text-[10px]">Shark</div></div>
-                          <div><div className="text-4xl">{'\u{1F42C}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.Dolphin||0}</div><div className="text-white/40 text-[10px]">Dolphin</div></div>
-                          <div><div className="text-2xl">{'\u{1F991}'}<span className="text-white/50">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-lg font-bold ${theme.text}`}>{fmtAbbr(holderTiers?.SquidAndBelow||0)}</div><div className="text-white/40 text-[10px]">Others</div></div>
+                          <div><div className="text-4xl">{'\u{1F531}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Poseidon')}</div><div className="text-white/40 text-[10px]">Poseidon</div></div>
+                          <div><div className="text-4xl">{'\u{1F40B}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Whale')}</div><div className="text-white/40 text-[10px]">Whale</div></div>
+                          <div><div className="text-4xl">{'\u{1F988}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Shark')}</div><div className="text-white/40 text-[10px]">Shark</div></div>
+                          <div><div className="text-4xl">{'\u{1F42C}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Dolphin')}</div><div className="text-white/40 text-[10px]">Dolphin</div></div>
+                          <div><div className="text-2xl">{'\u{1F991}'}<span className="text-white/50">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.SquidAndBelow==null?'\u2014':fmtAbbr(holderTiers.SquidAndBelow)}</div><div className="text-white/40 text-[10px]">Others</div></div>
                         </div>
                       </div>
                     </div>
@@ -9686,22 +9742,21 @@
                       <div className="flex-1 grid grid-cols-2 gap-3">
                         <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
                           <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F4B0}'} Available for Proposals</div>
-                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.availableUSD||0)}</div>
-                          <div className="text-white/50 text-sm">{fmtAbbr(daoData?.availablePLS||0)} PLS</div>
+                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.availableUSD||0):'\u2014'}</div>
+                          <div className="text-white/50 text-sm">{daoData?fmtAbbr(daoData.availablePLS||0)+' PLS':'\u00a0'}</div>
                         </div>
                         <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3 relative">
-                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{23F3}'} Pending in Proposals</div>
-                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.pendingUSD||0)}</div>
-                          <div className="text-white/50 text-sm">{fmtAbbr(daoData?.pendingPLS||0)} PLS</div>
-                          <div className="absolute bottom-2 right-3 text-blue-400/60 text-xs">{daoData?.pendingCount||0} pending</div>
+                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{23F3}'} Pending in Live{daoData?` (${daoData.pendingCount||0})`:''}</div>
+                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.pendingUSD||0):'\u2014'}</div>
+                          <div className="text-white/50 text-sm">{daoData?fmtAbbr(daoData.pendingPLS||0)+' PLS':'\u00a0'}</div>
                         </div>
                         <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
-                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F3E6}'} Ready for Deployment</div>
-                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.managementValue||0)}</div>
+                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F3E6}'} Ready to Deploy</div>
+                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.managementValue||0):'\u2014'}</div>
                         </div>
                         <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
                           <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F4CA}'} Total DAO Value</div>
-                          <div className="text-2xl font-bold text-green-400">{fmtUSD(daoData?.totalValue||0)}</div>
+                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.totalValue||0):'\u2014'}</div>
                         </div>
                       </div>
                     ):(
@@ -9763,8 +9818,8 @@
                                 <div key={l} className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 relative h-[80px]" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
                                   <div className="text-white font-bold text-base absolute top-1 left-2">{l}</div>
                                   <div className="text-right mt-5">
-                                    <div className="text-blue-300 font-bold text-xl">{fmtAbbr(v||0)}</div>
-                                    <div className="text-green-400 text-sm font-semibold">{fmtUSD((v||0)*ptgcPrice)}</div>
+                                    <div className="text-blue-300 font-bold text-xl">{v==null?'\u2014':fmtAbbr(v)}</div>
+                                    <div className="text-green-400 text-sm font-semibold">{v==null?'\u2014':fmtUSD(v*ptgcPrice)}</div>
                                   </div>
                                 </div>
                               ))}
@@ -9963,7 +10018,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d}/>
               </div>
             </Modal>
           )}
@@ -10228,7 +10283,10 @@
             // Subscript-zero price renderer
             const fmtMC=(v)=>{if(!v)return'—';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(0)+'K';return'$'+Math.floor(v);};
             const calcPX=(t)=>{if(!price||price<=0||t<=price)return null;return t/price;};
-            const calcMCX=(mc)=>{if(!supply||!price||price<=0)return null;const tp=mc/supply;return tp<=price?null:tp/price;};
+            /* u6: X's to a market cap = target ÷ the market cap shown in the tile beside it (the
+               same DexScreener figure as the dashboard). It used to divide by STARTING supply,
+               so the tile and its multiples disagreed by the burned share. */
+            const calcMCX=(mc)=>{if(!mcap||mcap<=0||mc<=mcap)return null;return mc/mcap;};
             const calcLX=(tl)=>{if(!liq||liq<=0||tl<=liq)return null;return tl/liq;};
             const calcHX=(t)=>{const h=holders||0;if(!h||h<=0||t<=h)return null;return t/h;};
             const calcATHX=()=>{const ap=athPrice;if(!price||price<=0||!ap||ap<=price)return null;return ap/price;};
@@ -10649,7 +10707,7 @@
                                     <span className="text-white font-bold text-xl">{core}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-white font-bold text-xl">${price<0.01?price.toFixed(6):price<1?price.toFixed(4):price.toFixed(2)}</span>
+                                    <span className="text-white font-bold text-xl"><Price p={price}/></span>
                                     {hasChange?(
                                       <span className={`text-xl font-bold ${isUp?'text-green-400':'text-red-400'}`}>
                                         {isUp?'▲':'▼'}{Math.abs(change).toFixed(1)}%
@@ -10672,7 +10730,7 @@
                           <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-40 h-40 mb-2" style={{filter:'drop-shadow(0 0 32px rgba(212,175,55,1)) drop-shadow(0 0 64px rgba(212,175,55,0.7))'}}/>
                           <div className="text-[#D4AF37] font-bold text-2xl mb-1">PTGC</div>
                           <div className="text-white font-extrabold text-5xl mb-3">
-                            ${grayPrices.ptgc.price?.toFixed(6)||'0.000000'}
+                            <Price p={grayPrices.ptgc.price}/>
                           </div>
                           {(()=>{
                             const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
@@ -10698,7 +10756,7 @@
                           <img src={TOKENS.UFO.logo} alt="UFO" className="w-40 h-40 mb-2" style={{filter:'drop-shadow(0 0 32px rgba(124,252,0,1)) drop-shadow(0 0 64px rgba(124,252,0,0.7))'}}/>
                           <div className="text-[#7CFC00] font-bold text-2xl mb-1">UFO</div>
                           <div className="text-white font-extrabold text-5xl mb-3">
-                            ${grayPrices.ufo.price?.toFixed(6)||'0.000000'}
+                            <Price p={grayPrices.ufo.price}/>
                           </div>
                           {(()=>{
                             const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
