@@ -5338,13 +5338,32 @@
 
     /* Same type as the DAO Treasury panel tiles: Rajdhani, medium, gold value; small caps label.
        Module scope on purpose (gotcha 14). */
-    const DaoBuysStat=({label,children,sub,className=''})=>(
+    const DaoBuysStat=({label,children,sub,foot,className=''})=>(
       <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3.5 py-3 min-w-0 flex flex-col justify-center ${className}`}>
         <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold mb-2 truncate">{label}</div>
         <div className="text-2xl font-medium tabular-nums leading-none text-[#D4AF37] truncate">{children}</div>
         {sub&&<div className="text-white/50 text-sm tabular-nums mt-1.5 truncate">{sub}</div>}
+        {foot&&<div className="mt-2 flex justify-center">{foot}</div>}
       </div>
     );
+    /* A PTGC amount as Grays creatures — the same greedy change-making as the burn tiles
+       (`getBurnC`: 🐋 = 1% of starting supply, 🦈 0.1%, 🐬 0.01%, 🦑 0.001% …), top three
+       tiers. Small counts are drawn as a row of creatures ("3 dolphins"); five or more as 🦈×12.
+       Used by the "PTGC bought" tile and the Recent-buys ledger in DaoBuysModal. */
+    const DaoCreatures=({ptgc,size='text-base',className=''})=>{
+      const list=getBurnC(((ptgc||0)/SUPPLY.PTGC)*100).slice(0,3);
+      if(!list.length)return<span role="img" aria-label="less than a shell" className={`${size} leading-none ${className}`}>{'\u{1F41A}'}</span>;
+      const words=list.map(c=>`${c.cnt} ${c.n}${c.cnt===1?'':'s'}`).join(', ');
+      return(
+        <span role="img" aria-label={words} className={`inline-flex items-center flex-wrap gap-x-1.5 gap-y-0.5 ${size} leading-none ${className}`}>
+          {list.map((c,i)=>c.cnt<=4
+            ?<span key={i} className="whitespace-nowrap">{c.e.repeat(c.cnt)}</span>
+            :<span key={i} className="whitespace-nowrap">{c.e}<span className="text-[0.65em] font-bold text-white/60 tabular-nums align-middle ml-0.5">{'\u00d7'}{c.cnt}</span></span>)}
+        </span>
+      );
+    };
+    const fmtLedgerTime=ts=>new Date(ts*1000).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const fmtLedgerDatePhone=ts=>{const d=new Date(ts*1000);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2019'+String(d.getFullYear()).slice(-2);};
     /* The most recent buy, as its own tile. Lifetime-latest, not range-latest. `compact` = share card. */
     const DaoBuysLatest=({buy,logo,unit='USD',compact=false})=>{
       if(!buy)return null;
@@ -5500,6 +5519,7 @@
       const[unit,setUnit]=useState('USD');           // chart price unit: 'USD' | 'PLS'
       const[logY,setLogY]=useState(false);
       const[share,setShare]=useState(false);
+      const[ledgerN,setLedgerN]=useState(10);        // Recent-buys ledger: rows shown (lifetime, newest first), +10 per click
       const canvasRef=useRef(null),chartRef=useRef(null),tipRef=useRef(null),plotRef=useRef(null);
       const touch=(()=>{try{return window.matchMedia('(hover: none)').matches;}catch(e){return false;}})();   // phones: tap shows the card (with a tx link) instead of jumping to PulseScan
       const phone=window.innerWidth<640;
@@ -5551,6 +5571,7 @@
                       <p>Every time the DAO treasury wallet swapped PLS for PTGC on PulseX, shown as a gold dot on the PTGC price line. Bigger dot = bigger buy.</p>
                       <p>Hover or tap a dot for the details. {'"'}Price paid{'"'} (PLS spent {'÷'} PTGC received) runs a little above the market price because of the 5% tax and slippage; the totals and the dashed running-average line use what was actually paid, and both are for the buys in the selected range.</p>
                       <p>USD / PLS switches the price axis — the DAO pays in PLS, so the PLS view is the actual trade rate. LP withdrawals and transfers are not buys and are left out.</p>
+                      <p>Grays = the buy in sea-creature tiers of the starting supply ({'\u{1F40B}'} 1%, {'\u{1F988}'} 0.1%, {'\u{1F42C}'} 0.01%, {'\u{1F991}'} 0.001%, {'\u{1F422}'} 0.0001%, {'\u{1F990}'} 0.00001%), biggest first, three tiers deep.</p>
 </InfoTip></div>
                   <div className="font-orbitron text-[22px] sm:text-4xl font-bold leading-none tracking-wide mt-1 metallic-gold"><span className="whitespace-nowrap">DAO BUYS</span> <span className="block sm:inline text-[0.55em] tracking-wider mt-1 sm:mt-0">of PTGC</span></div>
                 </div>
@@ -5566,7 +5587,7 @@
             <div className="relative shrink-0 px-4 sm:px-6 pt-3 pb-3 order-3 sm:order-none">
               {file===undefined&&(
                 <div className="grid grid-cols-2 lg:grid-cols-7 gap-2.5" aria-busy="true" aria-label="Loading DAO buys">
-                  {[0,1,2,3,4].map(i=><div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5"><Sk w="55%" h={12}/><Sk w="80%" h={20} className="mt-2"/><Sk w="50%" h={12} className="mt-2"/></div>)}
+                  {[0,1,2,3,4].map(i=><div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5"><Sk w="55%" h={12}/><Sk w="80%" h={20} className="mt-2"/><Sk w="50%" h={12} className="mt-2"/>{i===0&&<Sk w="60%" h={18} className="mt-2 mx-auto"/>}</div>)}
                   <div className="col-span-2 lg:col-span-2 rounded-xl border border-[#D4AF37]/25 px-3.5 py-3"><Sk w="40%" h={12}/><Sk w="60%" h={24} className="mt-2"/><Sk w="90%" h={14} className="mt-2"/></div>
                 </div>
               )}
@@ -5575,7 +5596,7 @@
               )}
               {view&&(
                 <div className="grid grid-cols-2 lg:grid-cols-7 gap-2.5">
-                  <DaoBuysStat label="PTGC bought" sub={view.buys.length?`${view.buys.length} buy${view.buys.length===1?'':'s'} ${rangeDef.days?`in ${rangeDef.label||rangeDef.k}`:'lifetime'}`:'no buys in range'}>{fmtAbbr(view.t.ptgc)}</DaoBuysStat>
+                  <DaoBuysStat label="PTGC bought" sub={view.buys.length?`${view.buys.length} buy${view.buys.length===1?'':'s'} ${rangeDef.days?`in ${rangeDef.label||rangeDef.k}`:'lifetime'}`:'no buys in range'} foot={view.t.ptgc>0?<DaoCreatures ptgc={view.t.ptgc} size="text-lg lg:text-base"/>:null}>{fmtAbbr(view.t.ptgc)}</DaoBuysStat>
                   <DaoBuysStat label="Spent" sub={`${fmtAbbr(view.t.pls)} PLS`}>{fmtDollar(view.t.usd,0)}</DaoBuysStat>
                   <DaoBuysStat label="Avg cost" sub={unit==='PLS'?<span><Price p={view.avgUsd}/>{rangeDef.days&&view.lifetimeAvgPls>0?<span> · lifetime {fmtPls(view.lifetimeAvgPls)} PLS</span>:null}</span>:(view.lifetimeAvgUsd>0&&rangeDef.days?<span>lifetime <Price p={view.lifetimeAvgUsd}/></span>:'per PTGC, paid')}><DaoPrice v={unit==='PLS'?view.avgPls:view.avgUsd} unit={unit}/></DaoBuysStat>
                   <DaoBuysStat label="Worth today" sub={livePrice>0?<span>at <Price p={livePrice}/></span>:'no live price'}>{fmtDollar(view.worth,0)}</DaoBuysStat>
@@ -5617,6 +5638,71 @@
               </div>
               {view&&<div className="relative px-1 sm:px-2 pb-1 border-t border-white/[0.05]"><DaoBuysCadence view={view} hex={hex} phone={phone}/></div>}
             </div>
+
+            {/* Recent-buys ledger: lifetime buys newest first (not the selected range), ten at a
+                time. Value = what was paid (PLS × PLS/USD at the block); Grays = the buy as
+                creature tiers. Date links to the tx. Phones get a stacked list, sm+ the table. */}
+            {view&&view.buysAll.length>0&&(()=>{
+              const rows=view.buysAll.slice(Math.max(0,view.buysAll.length-ledgerN)).reverse();
+              return(
+                <div className="relative shrink-0 mx-3 sm:mx-6 mb-3 rounded-2xl border border-white/[0.06] bg-[#0b0b0b] overflow-hidden order-3 sm:order-none">
+                  <div className="flex items-center justify-between gap-2 px-3.5 sm:px-5 pt-3 pb-1.5">
+                    <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold">Recent buys</div>
+                    <div className="text-white/40 text-[11px] sm:text-xs tabular-nums">{rows.length} of {view.buysAll.length}</div>
+                  </div>
+                  {/* phones: two lines per buy — date + PTGC, then PLS/$ + Grays */}
+                  <ul className="sm:hidden text-sm tabular-nums" aria-label="Recent DAO buys">
+                    {rows.map(b=>(
+                      <li key={b.hash} className="border-t border-white/[0.05] px-3.5 py-2.5">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <a href={`https://scan.pulsechain.com/tx/${b.hash}`} target="_blank" rel="noopener noreferrer" className="tap-h inline-flex items-center gap-1 text-white/80 whitespace-nowrap">{fmtLedgerDatePhone(b.ts)} <span className="text-white/45">{'\u00b7'} {fmtLedgerTime(b.ts)}</span><span aria-hidden="true" className="text-white/35 text-xs">{'\u2197'}</span>{b.fresh&&<span className="ml-1 rounded-full bg-emerald-400/20 text-emerald-300 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em]">NEW</span>}</a>
+                          <span className="text-[#D4AF37] font-semibold whitespace-nowrap">{fmtAbbr(b.ptgc)} <span className="text-white/45 text-xs font-normal">PTGC</span></span>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <span className="text-white/60 text-[13px] whitespace-nowrap">{fmtAbbr(b.pls)} PLS <span className="text-white/45">({fmtDollar(b.usd,0)})</span></span>
+                          <DaoCreatures ptgc={b.ptgc} className="justify-end"/>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full text-sm tabular-nums" aria-label="Recent DAO buys">
+                      <thead>
+                        <tr className="text-white/40 text-[10px] sm:text-[11px] uppercase tracking-[0.14em]">
+                          <th scope="col" className="text-left font-semibold px-3.5 sm:px-5 py-1.5 whitespace-nowrap">Date</th>
+                          <th scope="col" className="text-right font-semibold px-2 sm:px-4 py-1.5 whitespace-nowrap">PTGC bought</th>
+                          <th scope="col" className="text-right font-semibold px-2 sm:px-4 py-1.5 whitespace-nowrap">PLS spent</th>
+                          <th scope="col" className="text-right font-semibold px-2 sm:px-4 py-1.5 whitespace-nowrap">Value</th>
+                          <th scope="col" className="w-full text-left font-semibold pl-3 pr-3.5 sm:pl-4 sm:pr-5 py-1.5 whitespace-nowrap">Grays</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(b=>(
+                          <tr key={b.hash} className="border-t border-white/[0.05] hover:bg-white/[0.03] transition-colors">
+                            <td className="px-3.5 sm:px-5 py-2 whitespace-nowrap">
+                              <a href={`https://scan.pulsechain.com/tx/${b.hash}`} target="_blank" rel="noopener noreferrer" className="tap-h inline-flex items-center gap-1 text-white/80 hover:text-[#F5DE83] hover:underline">
+                                <span>{fmtDateShort(b.ts)} <span className="text-white/45">{'\u00b7'} {fmtLedgerTime(b.ts)}</span></span>
+                                <span aria-hidden="true" className="text-white/35 text-xs">{'\u2197'}</span>
+                              </a>
+                              {b.fresh&&<span className="ml-1.5 rounded-full bg-emerald-400/20 text-emerald-300 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] align-middle">NEW</span>}
+                            </td>
+                            <td className="text-right px-2 sm:px-4 py-2 whitespace-nowrap text-[#D4AF37] font-semibold">{fmtAbbr(b.ptgc)}</td>
+                            <td className="text-right px-2 sm:px-4 py-2 whitespace-nowrap text-white/75">{fmtAbbr(b.pls)} <span className="text-white/45 text-xs">PLS</span></td>
+                            <td className="text-right px-2 sm:px-4 py-2 whitespace-nowrap text-white">{fmtDollar(b.usd,0)}</td>
+                            <td className="pl-3 pr-3.5 sm:pl-4 sm:pr-5 py-2"><DaoCreatures ptgc={b.ptgc}/></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rows.length<view.buysAll.length&&(
+                    <div className="px-3.5 sm:px-5 pb-3 pt-1.5 border-t border-white/[0.05]">
+                      <button onClick={()=>setLedgerN(n=>n+10)} className="tap-h w-full sm:w-auto px-4 rounded-full border border-white/10 text-white/60 hover:text-white hover:border-white/30 hover:bg-white/5 text-[11px] font-bold tracking-wider uppercase transition-colors">Show 10 more</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Footer: freshness + hint */}
             <div className="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 sm:px-6 pb-4 text-[11px] text-white/40 order-4 sm:order-none">
