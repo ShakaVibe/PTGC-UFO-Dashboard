@@ -4721,7 +4721,9 @@
       });
       return new Promise((res,rej)=>{try{canvas.toBlob(b=>b?res(b):rej(new Error('empty image')),'image/png');}catch(e){rej(e);}});
     };
-    const ShareCardModal=({onClose,width,height,filename='grays-share-card.png',label='Share card',controls=null,footer=null,zIndex=50,children})=>{
+    /* `screenshot` (DAO Buys card, Shaka 2026-09-14): no Download/Share buttons — the card is laid out
+       to be screenshotted, because html2canvas cannot paint the metallic-gold text. */
+    const ShareCardModal=({onClose,width,height,filename='grays-share-card.png',label='Share card',controls=null,footer=null,zIndex=50,screenshot=false,children})=>{
       const[sc,setSc]=useState(()=>Math.min(1,(window.innerWidth-32)/width,(window.innerHeight-150)/height));
       const[busy,setBusy]=useState(false);
       const[msg,setMsg]=useState(null);   // {kind:'ok'|'err', text}
@@ -4768,11 +4770,11 @@
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap min-w-0">{controls}</div>
               <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                <button onClick={()=>save(false)} disabled={busy} aria-label="Download PNG" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">
+                {!screenshot&&<button onClick={()=>save(false)} disabled={busy} aria-label="Download PNG" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">
                   <svg className={`w-3.5 h-3.5 ${busy?'animate-spin':''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>{busy?<path strokeLinecap="round" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0119 7.5M18.5 15A7.5 7.5 0 015 16.5"/>:<path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/>}</svg>
                   {busy?'Rendering…':'Download PNG'}
-                </button>
-                {canShareFiles&&<button onClick={()=>save(true)} disabled={busy} aria-label="Share image" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">Share</button>}
+                </button>}
+                {!screenshot&&canShareFiles&&<button onClick={()=>save(true)} disabled={busy} aria-label="Share image" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">Share</button>}
                 <button onClick={onClose} aria-label="Close" className="px-2.5 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/[0.08] text-sm transition-colors">✕</button>
               </div>
             </div>
@@ -4784,7 +4786,7 @@
             </div>
             <div className="text-center mt-3 text-xs min-h-[1.25rem]" aria-live="polite">
               {msg?<span className={msg.kind==='err'?'text-amber-300/90':'text-emerald-300/90'}>{msg.text}</span>
-                  :footer||<span className="text-white/40">{width}×{height} · Download PNG saves the card at 2× for sharing</span>}
+                  :footer||<span className="text-white/40">{screenshot?`${width}×${height} · take a screenshot of the card to share it`:`${width}×${height} · Download PNG saves the card at 2× for sharing`}</span>}
             </div>
           </div>
         </div>,
@@ -5392,7 +5394,7 @@
               <span className="relative flex w-2.5 h-2.5"><span className={`absolute inline-flex h-full w-full rounded-full bg-[#F7C325] opacity-75 ${compact?'':'animate-ping'}`}></span><span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-[#F7C325] shadow-[0_0_10px_#F7C325]"></span></span>
               Latest DAO buy{buy.fresh&&<span className="ml-1 rounded-full bg-emerald-400/20 text-emerald-300 px-1.5 py-0.5 text-[10px] tracking-[0.12em]">NEW</span>}
             </div>
-            <span className={`text-[#F5DE83]/80 text-xs sm:text-sm font-semibold tabular-nums whitespace-nowrap ${compact?'':'rounded-full border border-[#D4AF37]/40 bg-black/30 px-2 py-0.5'}`}>{ago}</span>
+            <span className="text-[#F5DE83]/80 text-xs sm:text-sm font-semibold tabular-nums whitespace-nowrap rounded-full border border-[#D4AF37]/40 bg-black/30 px-2 py-0.5">{ago}</span>
           </div>
           {/* One line, no wrap (Shaka: creatures to the RIGHT of PTGC, never under). The tile is
               ~290 px in the desktop grid, so the amount stays 3xl and the creatures text-base until xl. */}
@@ -5745,7 +5747,7 @@
             </div>
           </div>
           {share&&view&&(
-            <ShareCardModal onClose={()=>setShare(false)} width={1200} height={675} zIndex={60} label="DAO Buys share card" filename={`ptgc-dao-buys-${(rangeDef.label||rangeDef.k).toLowerCase()}-${new Date().toISOString().slice(0,10)}.png`}>
+            <ShareCardModal onClose={()=>setShare(false)} width={1200} height={675} zIndex={60} screenshot label="DAO Buys share card" filename={`ptgc-dao-buys-${(rangeDef.label||rangeDef.k).toLowerCase()}-${new Date().toISOString().slice(0,10)}.png`}>
               <DaoBuysShareCard view={view} unit={unit} logY={logY} hex={hex} cfg={cfg} rangeDef={rangeDef} livePrice={livePrice} asOf={asOf}/>
             </ShareCardModal>
           )}
