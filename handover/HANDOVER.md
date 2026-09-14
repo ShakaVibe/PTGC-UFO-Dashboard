@@ -111,6 +111,13 @@ the log below says otherwise. Check `git --no-optional-locks status` before star
    removed — `data-share-wrap` is what the export looks for. Cross-origin logos (DexScreener CDN)
    can taint the canvas; the shell then shows a "take a screenshot" message instead of failing
    silently. The overlay is portalled to `<body>` so it can open from inside the KPI modal.
+   **html2canvas is not the browser** (2026-09-14): it cannot do `background-clip:text` (every
+   `metallic-gold` word became a solid gold bar) and draws text inside `white-space:nowrap` /
+   `truncate` elements half a line too low, then clips it. `shareCardPng`'s `onclone` now flattens
+   `.metallic-gold` to `#E8C044` and turns nowrap/truncate off inside `[data-share-wrap]` — so in a
+   card, never rely on nowrap to hold a layout, and don't put a bordered pill around text (the box
+   lands ~12 px above the text; the DAO Buys card shows its "4.6d ago" as plain text for that
+   reason). Check every card change with `H2C=1` + `probes/share-png-real.js` (harness README).
 6. **`ufo-ptgc-burns.json` schema 2**: `PTGCbyUFO` is now the COMBINED total across both UFO
    contracts; `byContract.v1` / `byContract.v2` split it. The deployed `index.html` reads
    `byContract.v1` as the historical base. Do not deploy the new generator with an older

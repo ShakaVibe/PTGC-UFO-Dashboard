@@ -106,7 +106,7 @@ const dsAnswer=(url)=>{
     if(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/.*)/.test(u)){const f=u.match(/main\/(data\/[^?]*)/)[1];const p=path.join(REPO,f);if(fs.existsSync(p))return r.fulfill({status:200,contentType:'application/json',body:fs.readFileSync(p)});return r.fulfill({status:404,body:''});}
     if(/ptgcapi/.test(u))return r.fulfill({status:200,contentType:'application/json',body:'{"entries":[]}'});
     if(/fonts\.g/.test(u))return r.fulfill({status:200,contentType:'text/css',body:''});
-    if(/cdnjs.*html2canvas/.test(u))return r.fulfill({status:200,contentType:'text/javascript',body:'window.html2canvas=null;'});
+    if(/cdnjs.*html2canvas/.test(u))return r.fulfill({status:200,contentType:'text/javascript',body:process.env.H2C?fs.readFileSync(path.join(__dirname,'node_modules/html2canvas/dist/html2canvas.min.js'),'utf8'):'window.html2canvas=null;'});
     return r.fulfill({status:404,body:''});
   });
   const t0=Date.now();

@@ -23,7 +23,13 @@ SLOW=9000  node run.js "#/ptgc" 375 812 out/loading      # every data reply wait
 SLOW_HISTORY=6000 node run.js "#/ptgc" 1280 900 out/hist  # only data/*history*.json wait → modals opened before history lands (u13)
 node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label='DAO Buys chart (preview)'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
+H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label='DAO Buys chart (preview)'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"
 ```
+
+`H2C=1` serves the real html2canvas 1.4.1 (devDependency, `npm install` once) instead of the
+`window.html2canvas=null` stub, and `probes/share-png-real.js` presses the card's own Download
+button, intercepts the blob and puts the PNG on the page at 1× so `shot=` shows exactly what the
+user would download. Run it for any share-card change — html2canvas ≠ the browser (gotcha 5).
 
 Actions (semicolon-separated, in order): `shot=<name>` viewport screenshot, `scroll=<y>`,
 `click=<playwright selector>` (add `:visible` — several controls exist twice for phone/desktop),
