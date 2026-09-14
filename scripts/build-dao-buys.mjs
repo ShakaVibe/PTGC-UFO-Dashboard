@@ -191,7 +191,7 @@ async function main() {
     if (b.plsUsd == null && p) { b.plsUsd = p.plsUsd; b.marketUsd = p.marketUsd; }
     if (!(b.plsUsd > 0)) { console.error(`buy ${b.hash} has no price — aborting write`); process.exit(1); }
     b.usd = b.pls * b.plsUsd;
-    b.price = b.ptgc > 0 ? b.usd / b.ptgc : 0;       // effective USD per PTGC (after tax + slippage)
+    b.price = b.ptgc > 0 ? b.usd / b.ptgc : 0;       // effective USD per PTGC (after fee + slippage)
   }
 
   // ---- price line on a fixed block grid, extended from the previous file
