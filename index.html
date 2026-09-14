@@ -149,6 +149,7 @@
       PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',
       UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',
       UFO_V1:'0x456548A9B56eFBbD89Ca0309edd17a9E20b04018',   // retired contract; reference only — its burns arrive via ufo-ptgc-burns.json (byContract.v1)
+      DAO_WALLET2:'0x440773B5104a102c00EF26979a5c897155336A34',   // second DAO treasury wallet (treasury-wallet2-*.json); bought PTGC Oct 2023 → May 2025 — DAO Buys counts it (2026-09-14)
       WPLS:'0xA1077a294dDE1B09bB078844df40758a5D0f9a27',
       PLSX:'0x95B303987A60C71504D99Aa1b13B4DA07b0790ab',
       WETH:'0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C',
@@ -5095,14 +5096,15 @@
        way the generator checks it (sent by the wallet, paid PLS, not an LP removal). Priced at
        TODAY's PLS rate and market — close enough for a few hours; the hourly file re-prices it
        at its own block and this copy is dropped (dedupe by hash). Any failure → []. */
+    const DAO_BUY_WALLETS=()=>[TOKENS.PTGC.daoTreasury,ADDR.DAO_WALLET2].map(a=>a.toLowerCase());
     const fetchFreshDaoBuys=async(file)=>{
       try{
-        const wallet=TOKENS.PTGC.daoTreasury.toLowerCase();
+        const wallets=(Array.isArray(file.wallets)&&file.wallets.length?file.wallets:DAO_BUY_WALLETS()).map(a=>a.toLowerCase());
         const hr=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
         const head=parseInt((hr&&hr.result)||'0x0',16);
         const from=(file.headBlock||0)+1;
         if(!head||head<from)return[];
-        const logs=await getLogsChunked(ADDR.PTGC,[TRANSFER_TOPIC,null,'0x'+encodeAddress(wallet)],Math.max(from,head-60000),head,LOG_CHUNK,true);
+        const logs=await getLogsChunked(ADDR.PTGC,[TRANSFER_TOPIC,null,wallets.map(w=>'0x'+encodeAddress(w))],Math.max(from,head-60000),head,LOG_CHUNK,true);   // topic[2] = OR-list of the wallets
         if(!logs||!logs.length)return[];
         const known=new Set(file.buys.map(b=>b.hash));
         const inn={};
@@ -5116,14 +5118,15 @@
         for(const h of hashes){
           const tr=await rpcFetch({jsonrpc:'2.0',method:'eth_getTransactionByHash',params:[h],id:1});
           const t=tr&&tr.result;
-          if(!t||(t.from||'').toLowerCase()!==wallet)continue;
+          const from_=(t&&t.from||'').toLowerCase();
+          if(!t||!wallets.includes(from_))continue;
           const val=BigInt(t.value||'0x0');
           if(val===0n||DAO_BUYS_LP_REMOVAL.has((t.input||'').slice(0,10)))continue;
           const block=parseInt(t.blockNumber||'0x0',16);
           const ts=block?await getBlockTs(block):0;
           if(!ts)continue;
           const ptgc=Number(inn[h])/1e18,pls=Number(val)/1e18,usd=pls*(plsUsd||0);
-          out.push({hash:h,block,ts,ptgc,pls,plsUsd:plsUsd||0,usd,price:ptgc>0?usd/ptgc:0,marketUsd:marketPls*(plsUsd||0),fresh:true});
+          out.push({hash:h,wallet:from_,block,ts,ptgc,pls,plsUsd:plsUsd||0,usd,price:ptgc>0?usd/ptgc:0,marketUsd:marketPls*(plsUsd||0),fresh:true});
         }
         return out.sort((a,b)=>a.ts-b.ts);
       }catch(e){console.warn('fresh DAO buys scan failed:',e.message);return[];}
@@ -5318,6 +5321,7 @@
                   `<span class="text-white/45">Spent</span><span class="text-right text-white font-semibold tabular-nums">${fmtAbbr(b.pls)} PLS <span class="text-white/45 font-normal">(${fmtDollar(b.usd,0)})</span></span>`+
                   `<span class="text-white/45">Price paid</span><span class="text-right text-[#F0C94A] font-semibold tabular-nums">${daoPriceHtml(view.paidOf(b),unit)}</span>`+
                   `<span class="text-white/45">Market then</span><span class="text-right text-white/80 tabular-nums">${daoPriceHtml(view.marketOf(b),unit)}</span>`+
+                  (b.wallet?`<span class="text-white/45">Wallet</span><span class="text-right text-white/60 tabular-nums font-mono text-[11px]">${b.wallet.slice(0,6)}…${b.wallet.slice(-4)}</span>`:'')+
                   `</div>`+
                   (b.fresh?`<div class="mt-2 text-[10px] text-emerald-300/80">Found on chain since the hourly snapshot — priced at today’s rate until the file catches up.</div>`:'')+
                   (touch
@@ -5585,7 +5589,7 @@
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.25em] flex items-center gap-1 min-w-0"><span className="truncate">{'\u{1F3DB}️'} DAO Treasury {'·'} PTGC</span><InfoTip label="DAO Buys" className="-my-2 ml-0.5" glyphClass="text-[10px]">
-                      <p>Every time the DAO treasury wallet swapped PLS for PTGC on PulseX, shown as a gold dot on the PTGC price line. Bigger dot = bigger buy.</p>
+                      <p>Every time a DAO treasury wallet swapped PLS for PTGC on PulseX, shown as a gold dot on the PTGC price line. Bigger dot = bigger buy. Two wallets are tracked: the treasury ({TOKENS.PTGC.daoTreasury.slice(0,6)}…{TOKENS.PTGC.daoTreasury.slice(-4)}) and the earlier buying wallet ({ADDR.DAO_WALLET2.slice(0,6)}…{ADDR.DAO_WALLET2.slice(-4)}, Oct 2023 – May 2025); the hover card says which.</p>
                       <p>Hover or tap a dot for the details. {'"'}Price paid{'"'} (PLS spent {'÷'} PTGC received) runs a little above the market price because of the 5% tax and slippage; the totals and the dashed running-average line use what was actually paid, and both are for the buys in the selected range.</p>
                       <p>USD / PLS switches the price axis — the DAO pays in PLS, so the PLS view is the actual trade rate. LP withdrawals and transfers are not buys and are left out.</p>
                       <p>Grays = the buy in sea-creature tiers of the starting supply ({'\u{1F40B}'} 1%, {'\u{1F988}'} 0.1%, {'\u{1F42C}'} 0.01%, {'\u{1F991}'} 0.001%, {'\u{1F422}'} 0.0001%, {'\u{1F990}'} 0.00001%), biggest first, three tiers deep.</p>

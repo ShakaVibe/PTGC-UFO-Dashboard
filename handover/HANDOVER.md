@@ -73,10 +73,13 @@ Check `git --no-optional-locks status` before starting.
 - **UFO Value Generated**: `data/value-generated.json` (hourly, `build-value-generated.yml`); the
   browser falls back to a live scan when the file is >3 h old.
 - **DAO Buys (PTGC)**: `data/dao-buys.json` (hourly, second step of `fetch-treasury.yml`,
-  generator `scripts/build-dao-buys.mjs`). Buys = wallet-sent, PLS-paid txs that delivered PTGC
-  to `TOKENS.PTGC.daoTreasury`; priced from pair reserves at the buy's block (PLS/USD via
-  `PAIR_WPLS_DAI`, PTGC via `PAIR_PTGC_WPLS`). Price line = same reserves on a block grid.
-  No third-party API anywhere in it.
+  generator `scripts/build-dao-buys.mjs`, schema 2). Buys = wallet-sent, PLS-paid txs that
+  delivered PTGC to one of the TWO DAO wallets (`WALLETS` in the script = `TOKENS.PTGC.daoTreasury`
+  0xeeac…31e1 and `ADDR.DAO_WALLET2` 0x4407…6A34 — the second bought Oct 2023 → May 2025 and was
+  added 2026-09-14; each buy carries `wallet`); priced from pair reserves at the buy's block
+  (PLS/USD via `PAIR_WPLS_DAI`, PTGC via `PAIR_PTGC_WPLS`). Price line = same reserves on a
+  block grid, extended backwards when an older wallet appears. No third-party API anywhere in it.
+  Run the generator locally with `NODE_USE_ENV_PROXY=1` (Node's fetch ignores the VM proxy).
 - **PTGC burned by UFO** — always OLD + NEW contract, headline and period boxes alike (Shaka's
   explicit intent). Three sources, combined in `computePtgcBurnedByUfo` in `index.html`:
   v1 (retired contract) lifetime from `data/ufo-ptgc-burns.json` → `byContract.v1`;
@@ -165,7 +168,8 @@ Check `git --no-optional-locks status` before starting.
    Dots sit ON the market line (`DAO_BUYS_DOT_AT='market'`); the price PAID is 3–14% higher
    (tax + slippage) and lives in the hover card and the stats. Modal + share card share
    `computeDaoBuysView` / `buildDaoBuysChartConfig` — change the chart there, not in JSX.
-   `fetchFreshDaoBuys` scans the chain for buys newer than the snapshot on open. The generator
+   `fetchFreshDaoBuys` scans the chain for buys newer than the snapshot on open — for every
+   wallet in the file's `wallets` (topic[2] is an OR-list). The generator
    caches priced buys by hash and extends the price grid; if a buy's PLS/PTGC ever changes in
    the treasury files it is re-priced automatically. To rebuild from scratch, delete
    `data/dao-buys.json` and run the script (26 s). `removeLiquidityETH…` calls deliver PTGC to

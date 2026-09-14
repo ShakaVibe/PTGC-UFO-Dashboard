@@ -1,12 +1,16 @@
 // build-dao-buys.mjs
 // Prebuilds data/dao-buys.json for the PTGC dashboard's "DAO Buys" chart: every PTGC buy the
-// DAO treasury wallet has ever made, priced in PLS and USD at the block it happened, plus a
-// PTGC/USD price line (daily for the lifetime of the wallet, hourly for the last 90 days) so
+// DAO treasury wallets have ever made, priced in PLS and USD at the block it happened, plus a
+// PTGC/USD price line (daily from 30 days before the first buy, hourly for the last 90 days) so
 // the chart opens instantly with no third-party API calls in the browser.
 //
-// Inputs (written by scripts/fetch-treasury-transactions.js, same workflow, earlier step):
-//   data/treasury-wallet1-txns.json    normal transactions of the treasury wallet
-//   data/treasury-wallet1-tokens.json  ERC-20 transfers touching the treasury wallet
+// Inputs (written by scripts/fetch-treasury-transactions.js, same workflow, earlier step), one
+// pair per wallet in WALLETS below:
+//   data/treasury-wallet1-txns.json    normal transactions of wallet 1 (0xeeac…31e1, TOKENS.PTGC.daoTreasury)
+//   data/treasury-wallet1-tokens.json  ERC-20 transfers touching wallet 1
+//   data/treasury-wallet2-txns.json    the same for wallet 2 (0x4407…6A34 — bought PTGC Oct 2023 → May 2025;
+//   data/treasury-wallet2-tokens.json  added 2026-09-14 when Shaka found it)
+// Every buy carries `wallet`, so the chart can tell them apart if it ever needs to.
 //
 // What counts as a buy: a transaction SENT BY the wallet, that succeeded, that paid native PLS
 // (value > 0) and in which PTGC was transferred TO the wallet. That is the router swap path
@@ -34,12 +38,15 @@
 import fs from 'node:fs';
 
 const OUT_PATH = process.env.OUT_PATH || 'data/dao-buys.json';
-const TXNS_PATH = process.env.TXNS_PATH || 'data/treasury-wallet1-txns.json';
-const TOKENS_PATH = process.env.TOKENS_PATH || 'data/treasury-wallet1-tokens.json';
 const RPC = process.env.RPC || 'https://rpc.pulsechain.com';
 
 // Same addresses as ADDR in index.html — keep in sync if the main pair ever changes.
-const WALLET = '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1';   // DAO treasury (TOKENS.PTGC.daoTreasury)
+// The wallets mirror WALLET1/WALLET2 in fetch-treasury-transactions.js and ADDR.DAO_TREASURY /
+// ADDR.DAO_WALLET2 in index.html (fetchFreshDaoBuys scans the same set).
+const WALLETS = [
+  { addr: '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1', txns: 'data/treasury-wallet1-txns.json', tokens: 'data/treasury-wallet1-tokens.json' },
+  { addr: '0x440773b5104a102c00ef26979a5c897155336a34', txns: 'data/treasury-wallet2-txns.json', tokens: 'data/treasury-wallet2-tokens.json' },
+];
 const PTGC = '0x94534eeee131840b1c0f61847c572228bdfdde93';
 const PAIR_PTGC_WPLS = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // token0 = PTGC, token1 = WPLS (checked on chain)
 const PAIR_WPLS_DAI = '0xe56043671df55de5cdf8459710433c10324de0ae';  // token0 = WPLS, token1 = DAI (checked on chain)
@@ -51,7 +58,7 @@ const HOURLY_KEEP_DAYS = 92;   // the chart's 90-day range plus margin
 const LIFETIME_LEAD_DAYS = 30; // price line starts this long before the first buy
 const CONCURRENCY = 24;
 
-const SCHEMA = 1;
+const SCHEMA = 2;   // 2 = multi-wallet (`wallets`, per-buy `wallet`)
 const GET_RESERVES = '0x0902f1ac';
 
 // ---------------------------------------------------------------- RPC helpers
@@ -109,7 +116,8 @@ const pmap = async (items, fn, limit = CONCURRENCY) => {
 
 // ---------------------------------------------------------------- buys (pure)
 const lc = s => (s || '').toLowerCase();
-export function deriveBuys(txns, transfers) {
+export function deriveBuys(txns, transfers, wallet) {
+  const WALLET = lc(wallet);
   const byHash = new Map();
   for (const t of transfers) {
     if (lc(t.contractAddress) !== PTGC) continue;
@@ -140,7 +148,8 @@ export function deriveBuys(txns, transfers) {
       ts: Number(tx.timeStamp),
       ptgc: Number(flow.inn) / 1e18,
       pls: Number(plsWei) / 1e18,
-      router: lc(tx.to)
+      router: lc(tx.to),
+      wallet: WALLET
     });
   }
   buys.sort((a, b) => a.ts - b.ts || a.block - b.block);
@@ -153,14 +162,21 @@ const round = (x, d) => Number(x.toPrecision(d));
 
 async function main() {
   const t0 = Date.now();
-  const txnsFile = readJson(TXNS_PATH, null), tokensFile = readJson(TOKENS_PATH, null);
-  if (!txnsFile || !tokensFile) { console.error('missing treasury input files'); process.exit(1); }
-  if (lc(txnsFile.wallet) !== WALLET) { console.error(`txns file is for ${txnsFile.wallet}, expected ${WALLET}`); process.exit(1); }
   const prev = readJson(OUT_PATH, null);
   const prevBuys = new Map(((prev && prev.buys) || []).map(b => [b.hash, b]));
 
-  const { buys, lpRemovals, noPlsPaid } = deriveBuys(txnsFile.transactions || [], tokensFile.transfers || []);
-  console.log(`buys: ${buys.length} (cached ${[...prevBuys.keys()].length}, excluded: ${lpRemovals} LP removals, ${noPlsPaid} with no PLS paid)`);
+  const buys = []; let lpRemovals = 0, noPlsPaid = 0; const source = {};
+  for (const w of WALLETS) {
+    const txnsFile = readJson(w.txns, null), tokensFile = readJson(w.tokens, null);
+    if (!txnsFile || !tokensFile) { console.error(`missing treasury input files for ${w.addr}`); process.exit(1); }
+    if (lc(txnsFile.wallet) !== w.addr || lc(tokensFile.wallet) !== w.addr) { console.error(`treasury files for ${w.addr} are for ${txnsFile.wallet} / ${tokensFile.wallet}`); process.exit(1); }
+    const d = deriveBuys(txnsFile.transactions || [], tokensFile.transfers || [], w.addr);
+    console.log(`${w.addr.slice(0, 6)}…${w.addr.slice(-4)}: ${d.buys.length} buys (excluded: ${d.lpRemovals} LP removals, ${d.noPlsPaid} with no PLS paid)`);
+    buys.push(...d.buys); lpRemovals += d.lpRemovals; noPlsPaid += d.noPlsPaid;
+    source[w.addr] = { txns: txnsFile.lastUpdated, tokens: tokensFile.lastUpdated };
+  }
+  buys.sort((a, b) => a.ts - b.ts || a.block - b.block);
+  console.log(`buys: ${buys.length} across ${WALLETS.length} wallets (cached ${[...prevBuys.keys()].length})`);
 
   // ---- price each buy at its own block (cached by hash)
   const toPrice = buys.filter(b => {
@@ -184,16 +200,26 @@ async function main() {
   const price = { daily: [], hourly: [], latest: null };
   const prevPrice = (prev && prev.price) || {};
   try {
-    const extend = async (series, stride, startBlock) => {
-      const pts = Array.isArray(series) ? series.slice() : [];
-      let from = pts.length ? pts[pts.length - 1][0] + stride : startBlock;
-      const blocks = []; for (let b = from; b <= head; b += stride) blocks.push(b);
+    const sample = async (blocks, stride) => {
       if (blocks.length) console.log(`  +${blocks.length} points (stride ${stride})`);
       const fresh = await pmap(blocks, async (b) => {
-        const [ts, p] = await Promise.all([blockTs(b), pricesAt(b)]);
+        const ts = await blockTs(b);
+        let p; try { p = await pricesAt(b); } catch (e) { return null; }   // pair not deployed yet / empty → no point
         return [b, ts, round(p.ptgcUsd, 6), round(p.plsUsd, 6)];
       });
-      return pts.concat(fresh);
+      return fresh.filter(Boolean);
+    };
+    const extend = async (series, stride, startBlock) => {
+      const pts = Array.isArray(series) ? series.slice() : [];
+      // forward: from the last point (or the start) to the head
+      let from = pts.length ? pts[pts.length - 1][0] + stride : startBlock;
+      const fwd = []; for (let b = from; b <= head; b += stride) fwd.push(b);
+      // backward: when the start moved earlier (a wallet with older buys was added), fill the
+      // gap on the same grid so the existing points stay where they are
+      const back = [];
+      if (pts.length && startBlock < pts[0][0]) for (let b = pts[0][0] - stride; b >= startBlock; b -= stride) back.push(b);
+      const [b1, f1] = await Promise.all([sample(back.reverse(), stride), sample(fwd, stride)]);
+      return b1.concat(pts, f1);
     };
     const firstBuyBlock = buys.length ? buys[0].block : head;
     const dailyStart = Math.max(1, firstBuyBlock - LIFETIME_LEAD_DAYS * DAILY_STRIDE);
@@ -217,12 +243,12 @@ async function main() {
   const out = {
     schema: SCHEMA,
     generatedAt: new Date().toISOString(),
-    wallet: WALLET, token: PTGC, pair: PAIR_PTGC_WPLS, plsPair: PAIR_WPLS_DAI,
+    wallets: WALLETS.map(w => w.addr), token: PTGC, pair: PAIR_PTGC_WPLS, plsPair: PAIR_WPLS_DAI,
     headBlock: head,
-    source: { txns: txnsFile.lastUpdated, tokens: tokensFile.lastUpdated },
+    source,
     totals: { ...totals, ptgc: round(totals.ptgc, 12), pls: round(totals.pls, 12), usd: round(totals.usd, 10), avgPrice: round(totals.avgPrice, 8) },
     excluded: { lpRemovals, noPlsPaid },
-    buys: buys.map(b => ({ hash: b.hash, block: b.block, ts: b.ts, ptgc: round(b.ptgc, 10), pls: round(b.pls, 10),
+    buys: buys.map(b => ({ hash: b.hash, wallet: b.wallet, block: b.block, ts: b.ts, ptgc: round(b.ptgc, 10), pls: round(b.pls, 10),
       plsUsd: round(b.plsUsd, 6), usd: round(b.usd, 8), price: round(b.price, 6), marketUsd: round(b.marketUsd || b.price, 6) })),
     price
   };
