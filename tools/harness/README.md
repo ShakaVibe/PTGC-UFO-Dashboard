@@ -21,9 +21,9 @@ RPC_DOWN=1 node run.js "#/ptgc" 375 812 out/rpcdown      # every RPC returns 503
 DS_DOWN=1  node run.js "#/ufo"  375 812 out/dsdown       # DexScreener returns 503
 SLOW=9000  node run.js "#/ptgc" 375 812 out/loading      # every data reply waits 9 s → screenshot the loading shell
 SLOW_HISTORY=6000 node run.js "#/ptgc" 1280 900 out/hist  # only data/*history*.json wait → modals opened before history lands (u13)
-node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label='DAO Buys chart (preview)'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
+node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label^='PTGC Buys'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
-H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label='DAO Buys chart (preview)'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"
+H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"
 ```
 
 `H2C=1` serves the real html2canvas 1.4.1 (devDependency, `npm install` once) instead of the
