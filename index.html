@@ -4706,7 +4706,18 @@
         /* The on-screen card sits inside a scaled wrapper. html2canvas renders a CLONE of the
            document, so drop the transform there: the clone lays out at the true W×H and the
            visible page never flickers. */
-        onclone:(doc)=>{doc.querySelectorAll('[data-share-wrap]').forEach(w=>{w.style.transform='none';});}
+        onclone:(doc)=>{
+          doc.querySelectorAll('[data-share-wrap]').forEach(w=>{w.style.transform='none';});
+          /* html2canvas 1.4.1 limits, found on the DAO Buys card (2026-09-14):
+             - `background-clip:text` is unsupported → every `.metallic-gold` word painted as a solid
+               gradient BAR. Swap to flat gold in the clone (the screen keeps the gradient).
+             - text inside `white-space:nowrap` / `truncate` elements is drawn ~half a line too low and
+               then clipped by `overflow:hidden`. Let it wrap and overflow in the clone — the cards are
+               fixed-size and everything fits, so nothing actually moves. */
+          doc.querySelectorAll('[data-share-wrap] .metallic-gold').forEach(el=>{el.classList.remove('metallic-gold');el.style.background='none';el.style.webkitTextFillColor='#E8C044';el.style.color='#E8C044';});
+          const win=doc.defaultView;
+          doc.querySelectorAll('[data-share-wrap] *').forEach(el=>{const cs=win.getComputedStyle(el);if(cs.whiteSpace==='nowrap')el.style.whiteSpace='normal';if(cs.overflow==='hidden'&&cs.textOverflow==='ellipsis')el.style.overflow='visible';});
+        }
       });
       return new Promise((res,rej)=>{try{canvas.toBlob(b=>b?res(b):rej(new Error('empty image')),'image/png');}catch(e){rej(e);}});
     };
@@ -5381,7 +5392,7 @@
               <span className="relative flex w-2.5 h-2.5"><span className={`absolute inline-flex h-full w-full rounded-full bg-[#F7C325] opacity-75 ${compact?'':'animate-ping'}`}></span><span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-[#F7C325] shadow-[0_0_10px_#F7C325]"></span></span>
               Latest DAO buy{buy.fresh&&<span className="ml-1 rounded-full bg-emerald-400/20 text-emerald-300 px-1.5 py-0.5 text-[10px] tracking-[0.12em]">NEW</span>}
             </div>
-            <span className="text-[#F5DE83]/80 text-xs sm:text-sm font-semibold tabular-nums whitespace-nowrap rounded-full border border-[#D4AF37]/40 bg-black/30 px-2 py-0.5">{ago}</span>
+            <span className={`text-[#F5DE83]/80 text-xs sm:text-sm font-semibold tabular-nums whitespace-nowrap ${compact?'':'rounded-full border border-[#D4AF37]/40 bg-black/30 px-2 py-0.5'}`}>{ago}</span>
           </div>
           {/* One line, no wrap (Shaka: creatures to the RIGHT of PTGC, never under). The tile is
               ~290 px in the desktop grid, so the amount stays 3xl and the creatures text-base until xl. */}
