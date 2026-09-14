@@ -21,9 +21,10 @@ tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the l
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
 the faint gold dot top-right of the PTGC dashboard header (see `sessions/2026-09-13.md`).
-2026-09-14: **Grays creature line in the "PTGC bought" tile + a Recent-buys ledger box** under
-the chart (`DaoCreatures`, `sessions/2026-09-14.md`) — uncommitted when the session ended unless
-the log below says otherwise. Check `git --no-optional-locks status` before starting.
+2026-09-14: **DAO Buys went LIVE** — "PTGC Buys" button left of Ledger in the DAO Treasury panel,
+header dot and `DAO_BUYS_LIVE` gate removed; creature lines (`DaoCreatures`), Recent DAO Buys
+ledger, screenshot-only share card, phone header Buy/Sell row (`sessions/2026-09-14.md`).
+Check `git --no-optional-locks status` before starting.
 
 | Area | Status |
 |---|---|
@@ -40,7 +41,7 @@ the log below says otherwise. Check `git --no-optional-locks status` before star
 | Phase 3 — u5, u6, u11, u14, u3 | Not started. Suggested order: u5/u6, u11/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
-| Phase 4 — g8 DAO Buys chart | **Built, hidden** (2026-09-13 night; creatures + ledger 2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly). Flip `DAO_BUYS_LIVE` to show the Buys button |
+| Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -157,9 +158,10 @@ the log below says otherwise. Check `git --no-optional-locks status` before star
    is a new type every render → React remounts it (images re-request, state resets). Put it at
    module scope and pass what it needs as props. To check a hoist didn't lose a closure, run an
    acorn scope pass over `tools/harness/compiled.js` (the 2026-09-13 note has the script shape).
-15. **DAO Buys chart is hidden on purpose** (`DAO_BUYS_LIVE=false`, next to `DAO_BUYS_URL`).
-   The faint dot top-right of the PTGC header opens it (deliberately no hover/title — Shaka
-   does not want it found); the "Buys" button next to Ledger appears when the flag flips.
+15. **DAO Buys chart** — live since 2026-09-14 via the "PTGC Buys" button (DAO Treasury panel
+   header, left of Ledger; `aria-label^="PTGC Buys"` is the harness entrance). The preview dot
+   and the `DAO_BUYS_LIVE` gate are gone. Its share card is screenshot-only (`ShareCardModal
+   screenshot`) because html2canvas cannot paint metallic text.
    Dots sit ON the market line (`DAO_BUYS_DOT_AT='market'`); the price PAID is 3–14% higher
    (tax + slippage) and lives in the hover card and the stats. Modal + share card share
    `computeDaoBuysView` / `buildDaoBuysChartConfig` — change the chart there, not in JSX.
@@ -178,11 +180,10 @@ the log below says otherwise. Check `git --no-optional-locks status` before star
 
 ## Next up (in order)
 
-0. **DAO Buys chart (g8) — built 2026-09-13 night, hidden.** Shaka reviews it via the header
-   dot on the live site, then: (a) says "make it live" → set `DAO_BUYS_LIVE=true` (and decide
-   if the dot stays); (b) optional share card; (c) after the first hourly `fetch-treasury` run
-   check `data/dao-buys.json` `generatedAt` moved and the buy count is still 211+ (the Action
-   step is `continue-on-error`, so a failure only shows in the workflow log).
+0. **DAO Buys chart (g8) — LIVE 2026-09-14.** Still worth a look after a few hourly
+   `fetch-treasury` runs: `data/dao-buys.json` `generatedAt` should keep moving and the buy
+   count stay 211+ (the Action step is `continue-on-error`, so a failure only shows in the
+   workflow log). Tick g8's follow-ups on the roadmap artifact if Shaka wants them tracked.
 1. **Buy/Sell (switch.win)** — done and live (2026-09-13, g7 ticked). Shaka connected a wallet
    and bought in-frame; the Switch founder has been told about the embed. Optional follow-up
    left: a compact Buy/Sell in the phone sticky bar (`sessions/2026-09-13.md`).

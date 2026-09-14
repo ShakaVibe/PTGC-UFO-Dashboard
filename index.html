@@ -5075,10 +5075,8 @@
      *   - Share card: a 1200×675 PNG through ShareCardModal with its own fixed-size chart.
      * Everything the modal and the share card both need (view maths, chart config) is a
      * module-level function so the two cannot drift.
-     * Gated: DAO_BUYS_LIVE=false hides the "Buys" button in the DAO Treasury panel; the faint
-     * dot in the header's top-right corner is the preview entrance until Shaka flips it. */
+     * Live since 2026-09-14: the "PTGC Buys" button in the DAO Treasury panel header, left of Ledger. */
     const DAO_BUYS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/dao-buys.json';
-    const DAO_BUYS_LIVE=false;   // ← flip to true to show the "Buys" button next to Ledger (dot stays as a shortcut)
     const DAO_BUYS_DOT_AT='market';   // 'market' = dot ON the price line, paid price only in the hover card (Shaka: the visual gap confuses); 'paid' = dot at the price actually paid (3–14% above the line: tax + slippage)
     const DAO_BUYS_RANGES=[{k:'7D',days:7},{k:'30D',days:30},{k:'90D',days:90},{k:'6M',days:182},{k:'12M',days:365},{k:'ALL',days:null,label:'Lifetime'}];
     const DAO_BUYS_LP_REMOVAL=new Set(['0x2195995c','0x02751cec','0xded9382a','0x5b0d5984','0xaf2979eb']);   // removeLiquidityETH* — deliver PTGC to the wallet but are not buys (same list as the generator)
@@ -6733,7 +6731,7 @@
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[showBeam,setShowBeam]=useState(()=>{try{if(sessionStorage.getItem('grays_deck_reopen')==='1'){sessionStorage.removeItem('grays_deck_reopen');return true;}}catch(e){}return false;}); // LIVE FEED: the Abduction Deck overlay, opened from the nav (or re-opened after its own token toggle)
       const[showSwap,setShowSwap]=useState(false);   // BUY / SELL: the switch.win widget modal (SwapModal)
-      const[showDaoBuys,setShowDaoBuys]=useState(false);   // DAO Buys chart (DaoBuysModal) — preview dot / gated Buys button
+      const[showDaoBuys,setShowDaoBuys]=useState(false);   // DAO Buys chart (DaoBuysModal) — "PTGC Buys" button in the DAO Treasury panel
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       /* LIVE FEED: one figure per window for the Abduction Deck's pods, from the same sources as
          the Value Generated panel. Memoized — it used to be rebuilt as a fresh object on every
@@ -7819,11 +7817,6 @@
               is what stays pinned. */}
           <header className="sm:sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
             <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-4">
-              {/* DAO Buys preview entrance: a faint gold dot in the top-right corner (PTGC only). Deliberately
-                  does NOT brighten on hover/focus, has no title and a default cursor — Shaka does not want
-                  visitors to find it. Delete it when DAO_BUYS_LIVE flips (or keep as a shortcut). */}
-              {cfg.hasDAO&&<button onClick={()=>setShowDaoBuys(true)} aria-label="DAO Buys chart (preview)" className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-6 h-6 flex items-center justify-center rounded-full opacity-20 cursor-default outline-none"><span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex}}></span></button>}
-
               {/* Row 1: ONE continuous data strip — packed, no justify-between. Stats use flex-1 to absorb slack. */}
               <div className="flex items-center gap-2 sm:gap-3 lg:gap-2.5 xl:gap-5 flex-wrap">
 
@@ -8547,16 +8540,16 @@
                 <section className="relative bg-[#050505] border border-sky-400/45 rounded-2xl">
                   <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-sky-400/90 to-transparent"></div>
                   <div className="p-5 sm:p-6">
-                    <div className="flex justify-between items-center mb-5 gap-3">
+                    <div className="flex justify-between items-center mb-5 gap-3 flex-wrap">{/* wraps on phones: "PTGC Buys" + "Ledger" no longer fit beside the title */}
                       <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>
                         DAO Treasury
                         <span className="text-white/55 font-normal tracking-normal normal-case ml-0.5 whitespace-nowrap">/ {token}</span>
                         <button onClick={()=>setShowDAOShareModal(true)} aria-label="Share the DAO Treasury panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
                       </h3>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* DAO Buys chart — gated by DAO_BUYS_LIVE until Shaka says go; the faint header dot is the preview entrance. */}
-                        {DAO_BUYS_LIVE&&<button onClick={()=>setShowDaoBuys(true)} className="tap-h px-2.5 rounded-md text-[11px] font-semibold tracking-wider uppercase text-[#F0C94A] border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 hover:border-[#D4AF37]/70 transition-all">Buys</button>}
+                      <div className="flex items-center gap-2 shrink-0 ml-auto">
+                        {/* DAO Buys chart (DaoBuysModal) — live 2026-09-14 */}
+                        <button onClick={()=>setShowDaoBuys(true)} aria-haspopup="dialog" aria-label="PTGC Buys — DAO Buys chart" className="tap-h px-2.5 rounded-md text-[11px] font-semibold tracking-wider uppercase text-[#F0C94A] border border-[#D4AF37]/40 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 hover:border-[#D4AF37]/70 transition-all whitespace-nowrap">PTGC Buys</button>
                         <a href="ledger.html" className="tap-h px-2.5 rounded-md text-[11px] font-semibold tracking-wider uppercase text-sky-300 border border-sky-400/30 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/60 transition-all">Ledger</a>
                       </div>
                     </div>
