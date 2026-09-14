@@ -206,26 +206,26 @@
     // the wallet's Transfer-log history: reflections = balanceOf(now) - net principal transferred in.
     //
     // FEE STRUCTURE — derived empirically from on-chain logs (the contract is NOT verified on the explorer,
-    // so this was measured, not assumed). A taxed transfer emits TWO Transfer events from the sender:
+    // so this was measured, not assumed). A fee-paying transfer emits TWO Transfer events from the sender:
     //   Transfer(sender, recipient, 94% of gross)  and  Transfer(sender, tokenContract, 5% of gross)
-    // The 1% reflection fee (tFee) is NEVER emitted — it only shrinks _rTotal. Across every taxed send
+    // The 1% reflection fee (tFee) is NEVER emitted — it only shrinks _rTotal. Across every fee-paying send
     // sampled, the two emitted legs sit at exactly 94/99 = 94.9495% and 5/99 = 5.0505% of the emitted
     // total, which confirms the 94/5/1 split to 6 significant figures.
     //
     // CONSEQUENCE: the emitted legs sum to only 99% of what actually left the sender's balance. Summing
-    // them raw under-counts outflow by 1% of every taxed send, which inflates "net received" and drives
+    // them raw under-counts outflow by 1% of every fee-paying send, which inflates "net received" and drives
     // reflections down — often below zero, where the clamp turned it into a flat 0. That is why wallets
     // that had ever sold showed nothing.
     //
     // CORRECTION: the fee legs are unambiguous (they are the only sends addressed to the token contract),
-    // so taxed gross = feeLegs / 0.05, and true outflow = emittedTotal + feeLegs / 5. This is exact and
-    // degrades gracefully: untaxed sends have no fee leg, so they pass through at face value, and a tx
-    // mixing taxed and untaxed sends still resolves correctly because the correction is driven purely by
-    // the fee legs rather than by assuming every send was taxed.
+    // so fee-paying gross = feeLegs / 0.05, and true outflow = emittedTotal + feeLegs / 5. This is exact and
+    // degrades gracefully: fee-free sends have no fee leg, so they pass through at face value, and a tx
+    // mixing fee-paying and fee-free sends still resolves correctly because the correction is driven purely by
+    // the fee legs rather than by assuming every send was fee-paying.
     //
     // VERIFIED: on fee-excluded accounts (LP pairs / router), which by definition earn zero reflections,
     // the reconstruction must land on exactly 0. Before the correction it was off by -85,108,352 and
-    // -46,551,638 tokens; after it, 258 wei and 111 wei — pure integer-division dust, one wei per taxed
+    // -46,551,638 tokens; after it, 258 wei and 111 wei — pure integer-division dust, one wei per fee-paying
     // send. All arithmetic below is BigInt wei so nothing is lost to float rounding.
     //
     // Every failure returns null (renders "—"), never a fake 0.
@@ -327,7 +327,7 @@
       const sumWei=(logs)=>logs.reduce((s,l)=>s+parseWord(l.data),0n);
       const contractTopic=('0x'+padAddr(UFO_TOKEN_ADDR)).toLowerCase();
       const inWei=sumWei(recv);                                 // received amounts are emitted at face value
-      const outEmitted=sumWei(sent);                            // = 99% of gross on taxed sends
+      const outEmitted=sumWei(sent);                            // = 99% of gross on fee-paying sends
       // The 5% contract-fee legs are the only sends addressed to the token itself. gross = fee/0.05,
       // so the unemitted 1% reflection slice = fee/5. Adding it back makes outflow exact.
       const feeLegs=sumWei(sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic));
@@ -1494,7 +1494,7 @@
               </p>
               
               <p>
-                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, legal, or tax advice. Always do your own research (DYOR) before making any investment decisions.
+                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, or legal advice. Always do your own research (DYOR) before making any investment decisions.
               </p>
               
               <p>

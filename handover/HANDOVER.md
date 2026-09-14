@@ -41,6 +41,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 3 — u5, u6, u11, u14, u3 | Not started. Suggested order: u5/u6, u11/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
+| Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
 
 ### How a session goes
@@ -166,7 +167,7 @@ Check `git --no-optional-locks status` before starting.
    and the `DAO_BUYS_LIVE` gate are gone. Its share card is screenshot-only (`ShareCardModal
    screenshot`) because html2canvas cannot paint metallic text.
    Dots sit ON the market line (`DAO_BUYS_DOT_AT='market'`); the price PAID is 3–14% higher
-   (tax + slippage) and lives in the hover card and the stats. Modal + share card share
+   (fee + slippage) and lives in the hover card and the stats. Modal + share card share
    `computeDaoBuysView` / `buildDaoBuysChartConfig` — change the chart there, not in JSX.
    `fetchFreshDaoBuys` scans the chain for buys newer than the snapshot on open — for every
    wallet in the file's `wallets` (topic[2] is an OR-list). The generator
@@ -188,6 +189,9 @@ Check `git --no-optional-locks status` before starting.
    `fetch-treasury` runs: `data/dao-buys.json` `generatedAt` should keep moving and the buy
    count stay 211+ (the Action step is `continue-on-error`, so a failure only shows in the
    workflow log). Tick g8's follow-ups on the roadmap artifact if Shaka wants them tracked.
+0b. **Account hardening, unfinished** — GitHub 2FA is SMS-only. Next: passkey added, SMS removed,
+   recovery codes saved, collaborators/tokens reviewed, `main` ruleset, registrar 2FA
+   (`security-buy-sell-2026-09-14.md`, "Do" list). Ask Shaka where he got to.
 1. **Buy/Sell (switch.win)** — done and live (2026-09-13, g7 ticked). Shaka connected a wallet
    and bought in-frame; the Switch founder has been told about the embed. Optional follow-up
    left: a compact Buy/Sell in the phone sticky bar (`sessions/2026-09-13.md`).

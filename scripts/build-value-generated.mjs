@@ -325,8 +325,8 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
       return Math.max(0,currentBlock-blocks);
     };
 
-    /* Which addresses does the contract not tax? A tax leg can never originate
-       from an exempt sender, because an exempt transfer pays no tax. That single
+    /* Which addresses does the contract not charge a fee? A fee leg can never originate
+       from an exempt sender, because an exempt transfer pays no fee. That single
        fact identifies the impostors we cannot spot structurally.
        null means "we don't know" and is never treated as false. */
     const exemptCache={};
@@ -405,9 +405,9 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
           });
         }
 
-        /* ---- (a) direct sends from taxed wallets: two legs, one tx, one sender ----
+        /* ---- (a) direct sends from fee-paying wallets: two legs, one tx, one sender ----
            A PAIR can legitimately emit several fee legs in one transaction: an arb or
-           multi-hop route hits the same pool more than once, and each taxed leg emits
+           multi-hop route hits the same pool more than once, and each fee-paying leg emits
            Transfer(pair -> contract, fee). Their ratio is just the ratio of the two
            trades, so it is arbitrary. Flagging those as "not understood" was noise:
            33 of them on the first run. Pairs are known; exclude them from the test. */
@@ -436,7 +436,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
             principal.drop='direct send: principal, not a fee';
             directSendCount++;directSendTokens+=principal.tokens;
           }else{
-            /* Two same-sender inbound legs that do not match the tax ratio. We do
+            /* Two same-sender inbound legs that do not match the fee ratio. We do
                not understand this, so we do not silently drop it. Count it, and
                say on screen that we could not classify it. Silence is what hid
                the last three bugs. */
@@ -464,7 +464,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
         });
         const exemptSet={};exemptSenders.forEach(a=>{exemptSet[a]=true;});
         for(const r of rows){
-          if(!r.drop&&exemptSet[r.from])r.drop='sender is fee-exempt: cannot originate a tax leg';
+          if(!r.drop&&exemptSet[r.from])r.drop='sender is fee-exempt: cannot originate a fee leg';
         }
         const uncheckedShare=liveTotal>0?Math.max(0,(liveTotal-covered)/liveTotal):0;
 
@@ -501,7 +501,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
           unknownSenders:unknownSenders,
           uncheckedShare:uncheckedShare,
           droppedTotal:droppedTotal,
-          // A tx with several taxed transfers from one sender is a normal multicall bundle,
+          // A tx with several fee-paying transfers from one sender is a normal multicall bundle,
           // not an anomaly. Only a ratio MATCH means anything. Don't cry wolf.
           any:(directSendCount>0||exemptSenders.length>0||unknownSenders>0)
         };
@@ -633,7 +633,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
           const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
           addTo(parseInt(l.blockNumber,16),a=>{a.ufoBurned+=amt;});
         }
-        /* pTGC taxes its own transfers 5%, and part of that tax is itself a burn.
+        /* pTGC charges a 5% fee on its own transfers, and part of that fee is itself a burn.
            So a swapback's pTGC buyback emits TWO transfers to 0x369:
                232,845.95  the tokens UFO actually bought and burned   (95.0% of gross)
                  1,225.505 pTGC's own burn fee on that same transfer   ( 0.5% of gross)
@@ -644,7 +644,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
         const PTGC_FEE_RATIO=0.005/0.95;
         const ptgcByTx={};
         for(const l of ptgcBurns){
-          if(!swapbackTxs[l.transactionHash])continue;      // pTGC's own tax burn elsewhere
+          if(!swapbackTxs[l.transactionHash])continue;      // pTGC's own fee burn elsewhere
           (ptgcByTx[l.transactionHash]=ptgcByTx[l.transactionHash]||[]).push(l);
         }
         let ptgcFeeLegsDropped=0;
@@ -688,7 +688,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
            same windows. The panel compares this against the volume IMPLIED by the fees
            the contract collected. If the fee stream is clean the ratio sits near 1.06–1.10x
            (a sell delivers only 94% of its tokens to the pair, so pair volume structurally
-           under-reports; taxed wallet-to-wallet transfers push it up a little). A ratio
+           under-reports; fee-paying wallet-to-wallet transfers push it up a little). A ratio
            outside that band means the fee measurement is off — which is how the original
            bug was caught. This is the smoke detector, and it now lives in the always-on
            scan rather than the dev audit. */

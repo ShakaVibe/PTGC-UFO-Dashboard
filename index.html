@@ -176,11 +176,11 @@
     };
     const SUPPLY={PTGC:333333333333,UFO:999999999051};   // starting supplies; UFO confirmed against contract _tTotal
     const TOKENS={
-      PTGC:{name:'PTGC',address:ADDR.PTGC,logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D4AF37',decimals:18,mainPair:ADDR.PAIR_PTGC_WPLS,pulseScanUrl:'https://scan.pulsechain.com/token/'+ADDR.PTGC,totalSupply:SUPPLY.PTGC,taxRate:0.05,hasDAO:true,
+      PTGC:{name:'PTGC',address:ADDR.PTGC,logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D4AF37',decimals:18,mainPair:ADDR.PAIR_PTGC_WPLS,pulseScanUrl:'https://scan.pulsechain.com/token/'+ADDR.PTGC,totalSupply:SUPPLY.PTGC,feeRate:0.05,hasDAO:true,
         daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
         daoTreasury:'0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',
         stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
-        taxBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
+        feeBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
       UFO:{name:'UFO',address:ADDR.UFO,logo:'07_Ufo_transparent.png',color:'green',colorHex:'#7CFC00',decimals:18,
         /* MIGRATION: seeded with the known UFO/WPLS pair; re-confirmed on-chain at boot
@@ -188,11 +188,11 @@
         mainPair:ADDR.PAIR_UFO_WPLS,
         pulseScanUrl:'https://scan.pulsechain.com/token/'+ADDR.UFO,
         totalSupply:SUPPLY.UFO,
-        /* MIGRATION: taxRate + taxBreakdown below are FALLBACKS ONLY (contract defaults, 1% each).
+        /* MIGRATION: feeRate + feeBreakdown below are FALLBACKS ONLY (contract defaults, 1% each).
            At boot they are overwritten by the live on-chain fee values. The founder can change
            these at any time via updateFees(); the site reads whatever the contract currently says. */
-        taxRate:0.06,hasDAO:false,
-        taxBreakdown:[
+        feeRate:0.06,hasDAO:false,
+        feeBreakdown:[
           {key:'reflection',name:'Holders',pct:1,emoji:'\u{1F48E}',priceKey:'UFO'},
           {key:'ufoBurn',name:'Burn UFO',pct:1,emoji:'\u{1F525}',priceKey:'UFO'},
           {key:'ptgcBurn',name:'Burn PTGC',pct:1,emoji:'\u{1F525}',priceKey:'PTGC'},
@@ -401,7 +401,7 @@
     const encodeAddress=a=>a.slice(2).toLowerCase().padStart(64,'0');
     const isZeroAddress=a=>!a||/^0x0{40}$/i.test(a);
 
-    // Returns {breakdown,totalBps,taxRate} or null on any failure (caller falls back to config).
+    // Returns {breakdown,totalBps,feeRate} or null on any failure (caller falls back to config).
     const fetchUfoFees=async(tokenAddress)=>{
       try{
         const raw=await Promise.all(UFO_FEE_BUCKETS.map(b=>ethCallRead(tokenAddress,b.sel)));
@@ -411,7 +411,7 @@
         const totalBps=bps.reduce((a,b)=>a+b,0);
         if(totalBps>600)return null; // contract caps total at 6%; anything higher means a bad read
         const breakdown=UFO_FEE_BUCKETS.map((b,i)=>({...b,bps:bps[i],pct:bps[i]/100}));
-        return{breakdown,totalBps,taxRate:totalBps/10000};
+        return{breakdown,totalBps,feeRate:totalBps/10000};
       }catch(e){console.error('fetchUfoFees error:',e);return null;}
     };
 
@@ -436,9 +436,9 @@
     };
 
     /* ============ MIGRATION: REALIZED on-chain fees (not a volume estimate) ============
-     * Every taxed transfer emits Transfer(sender, tokenContract, tContract), where
+     * Every fee-paying transfer emits Transfer(sender, tokenContract, tContract), where
      *     tContract = amount * contractBps / 10000
-     * Reflections emit nothing, but they're proportional to the same taxed amount:
+     * Reflections emit nothing, but they're proportional to the same fee-paying amount:
      *     tFee = amount * reflectionBps / 10000  =>  tFee = tContract * reflectionBps / contractBps
      * So summing Transfer-to-contract logs recovers EVERY bucket exactly, provided we
      * know the fee rates in force at each log's block. FeesUpdated gives us that timeline.
@@ -786,8 +786,8 @@
       return Math.max(0,currentBlock-blocks);
     };
 
-    /* Which addresses does the contract not tax? A tax leg can never originate
-       from an exempt sender, because an exempt transfer pays no tax. That single
+    /* Which addresses does the contract not charge a fee? A fee leg can never originate
+       from an exempt sender, because an exempt transfer pays no fee. That single
        fact identifies the impostors we cannot spot structurally.
        null means "we don't know" and is never treated as false. */
     const exemptCache={};
@@ -834,10 +834,10 @@
        WHAT THIS SCAN MATCHES, AND WHY THAT IS NOT THE SAME THING AS "FEES"
 
        The filter [Transfer, *, contract] matches EVERY inbound UFO transfer, not
-       only tax legs. Two impostors get counted as fees unless you look:
+       only fee legs. Two impostors get counted as fees unless you look:
 
-       (a) A TAXED wallet sends UFO straight to the contract. That transfer is
-           itself taxed, so it emits TWO inbound legs in one transaction from the
+       (a) A FEE-PAYING wallet sends UFO straight to the contract. That transfer is
+           itself fee-paying, so it emits TWO inbound legs in one transaction from the
            same sender: the fee (contractBps of gross) and the principal
            (10000-totalBps of gross). Both land on the contract. The principal is
            ~19x the fee and is not a fee at all.
@@ -847,18 +847,18 @@
            At today's rates, 500/9400 = 0.05319. Nothing else produces two
            same-sender inbound legs in one tx at that ratio.
 
-           It is NOT fee/(fee+principal): the reflection share is taxed away but
+           It is NOT fee/(fee+principal): the reflection share is taken as fee but
            emits no Transfer, so it is missing from both legs.
 
        (b) A FEE-EXEMPT wallet sends UFO straight to the contract. One leg,
            structurally identical to a fee. Unrecoverable from log shape. But an
-           exempt sender pays no tax, so it can never originate a tax leg. Ask the
+           exempt sender pays no fee, so it can never originate a fee leg. Ask the
            chain. Senders are checked biggest-first until everything unchecked is
            under 0.5% of the total, so the residual error is bounded and reported
            rather than hidden.
 
        Legitimate senders here are the pairs (a BUY's fee leg has the pair as
-       `from`) and ordinary taxed wallets. Neither is exempt.
+       `from`) and ordinary fee-paying wallets. Neither is exempt.
 
        Neither check costs an extra log scan. (b) costs a handful of cached
        eth_calls on the first load.
@@ -904,9 +904,9 @@
           });
         }
 
-        /* ---- (a) direct sends from taxed wallets: two legs, one tx, one sender ----
+        /* ---- (a) direct sends from fee-paying wallets: two legs, one tx, one sender ----
            A PAIR can legitimately emit several fee legs in one transaction: an arb or
-           multi-hop route hits the same pool more than once, and each taxed leg emits
+           multi-hop route hits the same pool more than once, and each fee-paying leg emits
            Transfer(pair -> contract, fee). Their ratio is just the ratio of the two
            trades, so it is arbitrary. Flagging those as "not understood" was noise:
            33 of them on the first run. Pairs are known; exclude them from the test. */
@@ -935,7 +935,7 @@
             principal.drop='direct send: principal, not a fee';
             directSendCount++;directSendTokens+=principal.tokens;
           }else{
-            /* Two same-sender inbound legs that do not match the tax ratio. We do
+            /* Two same-sender inbound legs that do not match the fee ratio. We do
                not understand this, so we do not silently drop it. Count it, and
                say on screen that we could not classify it. Silence is what hid
                the last three bugs. */
@@ -963,7 +963,7 @@
         });
         const exemptSet={};exemptSenders.forEach(a=>{exemptSet[a]=true;});
         for(const r of rows){
-          if(!r.drop&&exemptSet[r.from])r.drop='sender is fee-exempt: cannot originate a tax leg';
+          if(!r.drop&&exemptSet[r.from])r.drop='sender is fee-exempt: cannot originate a fee leg';
         }
         const uncheckedShare=liveTotal>0?Math.max(0,(liveTotal-covered)/liveTotal):0;
 
@@ -1000,7 +1000,7 @@
           unknownSenders:unknownSenders,
           uncheckedShare:uncheckedShare,
           droppedTotal:droppedTotal,
-          // A tx with several taxed transfers from one sender is a normal multicall bundle,
+          // A tx with several fee-paying transfers from one sender is a normal multicall bundle,
           // not an anomaly. Only a ratio MATCH means anything. Don't cry wolf.
           any:(directSendCount>0||exemptSenders.length>0||unknownSenders>0)
         };
@@ -1039,10 +1039,10 @@
        DELIVERED VALUE — what each fee bucket ACTUALLY produced.
 
        The old panel measured fees at ACCRUAL: Transfer(seller -> contract).
-       Every bucket is 1% of the same taxed volume, so every bucket accrues the
+       Every bucket is 1% of the same fee-paying volume, so every bucket accrues the
        same number of UFO, so all six boxes printed the same number. That number
        is real, but it is the INPUT. Between it and the output sit two swaps, the
-       contract's own price impact, pTGC's separate tax, and — while the LP adds
+       contract's own price impact, pTGC's separate fee, and — while the LP adds
        revert — nothing at all.
 
        Per swapback, each bucket accrues 2,000,000 UFO. What it becomes:
@@ -1050,7 +1050,7 @@
          Burn UFO   2,053,910.78 UFO burned            (MORE: buys back after the
                                                         sell has depressed price)
          Burn pTGC  232,845.95 pTGC burned             (a different token, after
-                                                        pTGC's own tax)
+                                                        pTGC's own fee)
          LP PLS     999,999.9 UFO + 837,089.02 PLS     (13,764.95 PLS stranded)
          LP PLSX    955,284.63 UFO + 1,111,817.53 PLSX (44,715.27 UFO stranded)
          LP WETH    nothing, when the add reverts
@@ -1169,7 +1169,7 @@
           const amt=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
           addTo(parseInt(l.blockNumber,16),a=>{a.ufoBurned+=amt;});
         }
-        /* pTGC taxes its own transfers 5%, and part of that tax is itself a burn.
+        /* pTGC charges a 5% fee on its own transfers, and part of that fee is itself a burn.
            So a swapback's pTGC buyback emits TWO transfers to 0x369:
                232,845.95  the tokens UFO actually bought and burned   (95.0% of gross)
                  1,225.505 pTGC's own burn fee on that same transfer   ( 0.5% of gross)
@@ -1180,7 +1180,7 @@
         const PTGC_FEE_RATIO=0.005/0.95;
         const ptgcByTx={};
         for(const l of ptgcBurns){
-          if(!swapbackTxs[l.transactionHash])continue;      // pTGC's own tax burn elsewhere
+          if(!swapbackTxs[l.transactionHash])continue;      // pTGC's own fee burn elsewhere
           (ptgcByTx[l.transactionHash]=ptgcByTx[l.transactionHash]||[]).push(l);
         }
         let ptgcFeeLegsDropped=0;
@@ -1224,7 +1224,7 @@
            same windows. The panel compares this against the volume IMPLIED by the fees
            the contract collected. If the fee stream is clean the ratio sits near 1.06–1.10x
            (a sell delivers only 94% of its tokens to the pair, so pair volume structurally
-           under-reports; taxed wallet-to-wallet transfers push it up a little). A ratio
+           under-reports; fee-paying wallet-to-wallet transfers push it up a little). A ratio
            outside that band means the fee measurement is off — which is how the original
            bug was caught. This is the smoke detector, and it now lives in the always-on
            scan rather than the dev audit. */
@@ -1414,7 +1414,7 @@
 
     /* MIGRATION: PTGC burned BY UFO, measured on-chain for the NEW contract.
        Problem: a PTGC transfer to 0x369 looks identical whether UFO burned it or PTGC's
-       own tax did. Discriminator: UFO's buybackBurnpTGC() only ever runs inside _swapBack,
+       own fee did. Discriminator: UFO's buybackBurnpTGC() only ever runs inside _swapBack,
        and every _swapBack starts by sending UFO out of the contract (swapTokensForPLS).
        So a PTGC burn belongs to UFO iff its transaction ALSO contains a UFO transfer
        whose sender is the UFO contract. We intersect on transactionHash. */
@@ -1458,21 +1458,21 @@
     };
 
     /* ============ FEE-EXEMPTION AUDIT ============================================
-     * Question: were any UFO swaps executed WITHOUT paying the 6% tax, and by whom?
+     * Question: were any UFO swaps executed WITHOUT paying the 6% fee, and by whom?
      *
      * The contract skips the fee when isExcludedFromFee[from] || isExcludedFromFee[to].
      * The constructor exempts exactly three: owner, the contract itself, and BURN.
      * But the owner can exempt any address later via excludeFromFee(). If a plain wallet
-     * is exempt and trading, that is a tax bypass and the operator needs to know.
+     * is exempt and trading, that is a fee bypass and the operator needs to know.
      *
-     * Swapback runs INSIDE a user's sell transaction, so one tx contains both taxed and
-     * untaxed legs. A per-transaction "did this tx pay a fee" test is therefore wrong.
+     * Swapback runs INSIDE a user's sell transaction, so one tx contains both fee-paying and
+     * fee-free legs. A per-transaction "did this tx pay a fee" test is therefore wrong.
      * We match PER LEG: the fee event is Transfer(sender -> contract), where `sender` is
-     * the original transfer's `from`. So a swap leg is taxed iff a fee log exists in the
+     * the original transfer's `from`. So a swap leg is fee-paying iff a fee log exists in the
      * same tx with the same `from`. (For a buy, that `from` is the pair, not the buyer.)
      *
-     * Every untaxed counterparty is then checked against isExcludedFromFee() on chain.
-     * Anything untaxed that is NOT exempt is a real problem and we shout about it.
+     * Every fee-free counterparty is then checked against isExcludedFromFee() on chain.
+     * Anything fee-free that is NOT exempt is a real problem and we shout about it.
      * ============================================================================ */
     const SEL_IS_EXCLUDED_FROM_FEE='0x5342acb4'; // isExcludedFromFee(address)
     const SEL_OWNER='0x8da5cb5b';                // owner()
@@ -1665,9 +1665,9 @@
           return true;
         };
 
-        let swapLegs=0,taxedLegs=0,untaxedLegs=0,untaxedTokens=0,taxedTokens=0;
-        let untaxedSwapTokens=0,untaxedLiqTokens=0,taxedLiqTokens=0;
-        const untaxedBy={}; // counterparty -> {legs, tokens, swapTokens, liqTokens}
+        let swapLegs=0,feePaidLegs=0,feeFreeLegs=0,feeFreeTokens=0,feePaidTokens=0;
+        let feeFreeSwapTokens=0,feeFreeLiqTokens=0,feePaidLiqTokens=0;
+        const feeFreeBy={}; // counterparty -> {legs, tokens, swapTokens, liqTokens}
         for(const tx of Object.keys(byTx)){
           const ls=byTx[tx];
           const feeSenders={};
@@ -1678,25 +1678,25 @@
             if(!fromPair&&!toPair)continue;                    // not a swap leg
             swapLegs++;
             if(feeSenders[l.from]>0){
-              feeSenders[l.from]--;taxedLegs++;
+              feeSenders[l.from]--;feePaidLegs++;
               const pr=fromPair?l.from:l.to;
-              if(matchLiquidity(tx,pr,l.amt))taxedLiqTokens+=l.amt; else taxedTokens+=l.amt;
+              if(matchLiquidity(tx,pr,l.amt))feePaidLiqTokens+=l.amt; else feePaidTokens+=l.amt;
               continue;
             }
-            untaxedLegs++; untaxedTokens+=l.amt;
+            feeFreeLegs++; feeFreeTokens+=l.amt;
             const pair=fromPair?l.from:l.to;
             const isLiq=matchLiquidity(tx,pair,l.amt);
-            if(isLiq)untaxedLiqTokens+=l.amt; else untaxedSwapTokens+=l.amt;
+            if(isLiq)feeFreeLiqTokens+=l.amt; else feeFreeSwapTokens+=l.amt;
             const cp=fromPair?l.to:l.from;
-            const e=untaxedBy[cp]||(untaxedBy[cp]={legs:0,tokens:0,swapTokens:0,liqTokens:0,txs:[]});
+            const e=feeFreeBy[cp]||(feeFreeBy[cp]={legs:0,tokens:0,swapTokens:0,liqTokens:0,txs:[]});
             e.legs++; e.tokens+=l.amt;
             if(isLiq)e.liqTokens+=l.amt; else e.swapTokens+=l.amt;
             if(e.txs.length<4)e.txs.push({tx,dir:fromPair?'out of pool':'into pool',kind:isLiq?'liquidity':'SWAP',amt:l.amt});
           }
         }
 
-        // Ask the contract whether each untaxed counterparty is actually exempt.
-        const parties=Object.keys(untaxedBy);
+        // Ask the contract whether each fee-free counterparty is actually exempt.
+        const parties=Object.keys(feeFreeBy);
         const flags=await Promise.all(parties.map(async a=>{
           const r=await ethCallRead(tokenAddress,SEL_IS_EXCLUDED_FROM_FEE+encodeAddress(a));
           return r===null?null:(BigInt(r)!==0n);
@@ -1706,33 +1706,33 @@
         const ownerAddr=wordToAddress(await ethCallRead(tokenAddress,SEL_OWNER));
         const ownerLc=ownerAddr?lc(ownerAddr):null;
         const rows=parties.map((a,i)=>({
-          address:a, legs:untaxedBy[a].legs, tokens:untaxedBy[a].tokens,
-          swapTokens:untaxedBy[a].swapTokens, liqTokens:untaxedBy[a].liqTokens, txs:untaxedBy[a].txs,
+          address:a, legs:feeFreeBy[a].legs, tokens:feeFreeBy[a].tokens,
+          swapTokens:feeFreeBy[a].swapTokens, liqTokens:feeFreeBy[a].liqTokens, txs:feeFreeBy[a].txs,
           excluded:flags[i],
           known:(a===contract?'UFO contract':(a===lc(BURN_ADDRESS)?'burn address':(a===ownerLc?'owner':null)))
         })).sort((x,y)=>y.tokens-x.tokens);
 
-        // The alarm: untaxed AND not exempt, and not the contract/burn.
+        // The alarm: fee-free AND not exempt, and not the contract/burn.
         const unexplained=rows.filter(r=>r.excluded===false);
         const unknownExempt=rows.filter(r=>r.excluded===true&&!r.known);
 
         /* The decisive cross-check: on-chain swap volume measured from the transfer
            amounts themselves. If this is far below DexScreener's reported volume, then
            the gap is a MEASUREMENT problem (missing logs / different window), not
-           fee-exempt trading. Note transfer amounts are post-tax for taxed legs, so we
-           gross them up by the tax rate to compare like-for-like with DEX volume. */
-        const swapTokens=taxedTokens+untaxedSwapTokens; // real swaps only; LP moves excluded
-        const out={ok:true,liqDetectionOk,liqDiag,totalPairSwapUfo,totalPairSwapCount,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,lastFailBlock,lastFailHoursAgo,health,swapLegs,taxedLegs,untaxedLegs,untaxedTokens,taxedTokens,taxedLiqTokens,swapTokens,untaxedSwapTokens,untaxedLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
+           fee-exempt trading. Note transfer amounts are net of fee for fee-paying legs, so we
+           gross them up by the fee rate to compare like-for-like with DEX volume. */
+        const swapTokens=feePaidTokens+feeFreeSwapTokens; // real swaps only; LP moves excluded
+        const out={ok:true,liqDetectionOk,liqDiag,totalPairSwapUfo,totalPairSwapCount,swapbackFailures,swapbackFailQueryOk,swapbackFailTxs,lastFailBlock,lastFailHoursAgo,health,swapLegs,feePaidLegs,feeFreeLegs,feeFreeTokens,feePaidTokens,feePaidLiqTokens,swapTokens,feeFreeSwapTokens,feeFreeLiqTokens,rows,unexplained,unknownExempt,ownerAddr,fromBlock,toBlock:cur};
         putBucketed(feeAuditCache,key,out);
 
         console.log(`%c=== UFO fee-exemption audit (blocks ${fromBlock}-${cur}) ===`,'font-weight:bold');
-        console.log(`swap legs: ${swapLegs} | taxed: ${taxedLegs} | untaxed: ${untaxedLegs}`);
-        console.log(`on-chain swap volume: ${Math.round(swapTokens).toLocaleString()} UFO  (taxed ${Math.round(taxedTokens).toLocaleString()} + untaxed ${Math.round(untaxedTokens).toLocaleString()})`);
-        console.log(`untaxed breakdown: ${Math.round(untaxedSwapTokens).toLocaleString()} UFO were real SWAPS, ${Math.round(untaxedLiqTokens).toLocaleString()} UFO were LIQUIDITY add/remove`);
-        if(rows.length)console.table(rows.map(r=>({address:r.address,role:r.known||'(other)',untaxed_legs:r.legs,untaxed_UFO:Math.round(r.tokens),exemptOnChain:r.excluded})));
-        if(unexplained.length)console.error('*** TAX BYPASS: untaxed swaps by addresses that are NOT fee-exempt ***',unexplained);
-        else if(unknownExempt.length)console.warn('Untaxed swaps by exempt addresses other than the contract/burn/owner:',unknownExempt);
-        else console.log('%cAll untaxed swaps are the contract, the burn address, or the owner. No bypass.','color:#7CFC00');
+        console.log(`swap legs: ${swapLegs} | fee-paying: ${feePaidLegs} | fee-free: ${feeFreeLegs}`);
+        console.log(`on-chain swap volume: ${Math.round(swapTokens).toLocaleString()} UFO  (fee-paying ${Math.round(feePaidTokens).toLocaleString()} + fee-free ${Math.round(feeFreeTokens).toLocaleString()})`);
+        console.log(`fee-free breakdown: ${Math.round(feeFreeSwapTokens).toLocaleString()} UFO were real SWAPS, ${Math.round(feeFreeLiqTokens).toLocaleString()} UFO were LIQUIDITY add/remove`);
+        if(rows.length)console.table(rows.map(r=>({address:r.address,role:r.known||'(other)',feeFree_legs:r.legs,feeFree_UFO:Math.round(r.tokens),exemptOnChain:r.excluded})));
+        if(unexplained.length)console.error('*** FEE BYPASS: fee-free swaps by addresses that are NOT fee-exempt ***',unexplained);
+        else if(unknownExempt.length)console.warn('Fee-free swaps by exempt addresses other than the contract/burn/owner:',unknownExempt);
+        else console.log('%cAll fee-free swaps are the contract, the burn address, or the owner. No bypass.','color:#7CFC00');
         return out;
       }catch(e){console.error('fetchFeeExemptionAudit error:',e);return{ok:false,error:e.message};}
     };
@@ -1751,14 +1751,14 @@
     // Ordered buckets for the Value Generated panel. PTGC keeps its legacy shape.
     const buildValueGenItems=(token,cfg)=>{
       if(token==='PTGC'){
-        const find=n=>cfg.taxBreakdown.find(t=>t.name===n);
+        const find=n=>cfg.feeBreakdown.find(t=>t.name===n);
         const holders=find('Holders'),stakers=find('Stakers');
         const items=[find('DAO'),find('Add LP'),find('Buy & Burn'),holders,stakers].filter(Boolean);
         items.push({name:'Total H&S',pct:(holders?.pct||0)+(stakers?.pct||0),emoji:'\u{1F48E}\u{1F48E}\u{1F48E}',isTotal:true});
         return items;
       }
       // UFO: driven entirely by live on-chain fees. Buckets set to 0% are hidden.
-      return cfg.taxBreakdown.filter(b=>(b.pct||0)>0);
+      return cfg.feeBreakdown.filter(b=>(b.pct||0)>0);
     };
 
     /* BUGFIX — "only a couple boxes change to tokens".
@@ -2671,7 +2671,7 @@
 
     /* Measured Value Generated per bucket for a period — the same delivered on-chain basis as
        the Value Generated panel and the KPI card (each bucket's delivered tokens × price; LP
-       buckets are UFO + partner). The share card used volume × tax, which reads $0 while a
+       buckets are UFO + partner). The share card used volume × fee, which reads $0 while a
        young token has no volume baseline. Returns null until the delivered scan is ready. */
     const computeValueGenBuckets=(period,delivered,realizedFees,prices)=>{
       if(!delivered||!delivered.ok||!realizedFees||!realizedFees.ok)return null;
@@ -3234,16 +3234,16 @@
     // ===== LIVE FEED / ABDUCTION DECK — opened from the nav (Live Feed) =====
     /* The live value tape, staged in The Grays' world:
          the token logo hovers over the chain; every swap on any of its pools lands on the
-         ground as a CONTACT; the beam lifts that trade's tax into the ship, and the ship
-         dispatches it to the pods (one per tax bucket) that hold the 24h totals.
+         ground as a CONTACT; the beam lifts that trade's fee into the ship, and the ship
+         dispatches it to the pods (one per fee bucket) that hold the 24h totals.
        DATA
          · swaps: PulseX Swap events on every pool DexScreener knows for the token, read
            straight from the chain (eth_getLogs, same helpers the fee scan uses). A short
            backfill fills the tape on open; then every ~12s new blocks are polled.
          · a trade's USD = the token-side amount × the dashboard's live price. Its value
-           generated = USD × the live tax rate, split by the live bucket weights.
+           generated = USD × the live fee rate, split by the live bucket weights.
          · pod totals start from the 24h figure the Value Generated panel shows (on-chain
-           realized for UFO, volume × tax for PTGC) and grow as live contacts land.
+           realized for UFO, volume × fee for PTGC) and grow as live contacts land.
        Contacts link to PulseScan. Static (no chips) when the visitor prefers reduced motion. */
     const DECK_BACKFILL_BLOCKS=900;      // ~2.5h of PulseChain at 10s blocks
     const DECK_POLL_MS=6000;             // ~one block; each tick is one eth_blockNumber + one eth_getLogs only when a block landed
@@ -3262,7 +3262,7 @@
     /* TOP POOLS (the ticker beside the signal lock). Per-pool swap volume over the deck's
        windows, read straight from the chain: Swap logs across every known pool, bucketed by
        block into ~12h slices, in TOKENS so the live price applies at render time. Buys and
-       sells both count — a pool's share is its share of all taxed swap volume.
+       sells both count — a pool's share is its share of all fee-paying swap volume.
 
        SPEED. A 90d scan over ~20 pools is ~80 eth_getLogs ranges on a public RPC, and the
        first version made the ticker wait for all of them. Now:
@@ -3426,7 +3426,7 @@
       },[open,windows,win,token]);
       useEffect(()=>{if(!open)return;const id=setInterval(()=>setTickNow(Date.now()),500);return()=>clearInterval(id);},[open]);
       const[reduced]=useState(()=>{try{return window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){return false;}});
-      const stateRef=useRef({seen:new Set(),last:0,price:0,tax:0,pods:[],pending:[]});
+      const stateRef=useRef({seen:new Set(),last:0,price:0,fee:0,pods:[],pending:[]});
       const[replayQueue,setReplayQueue]=useState(null);
       const replayTimersRef=useRef([]);
       useEffect(()=>{ // the opening replay starts only once the pods have their real totals
@@ -3436,9 +3436,9 @@
       },[open,ready,replayQueue]);
       useEffect(()=>{if(open)return;replayTimersRef.current.forEach(clearTimeout);replayTimersRef.current=[];setReplayQueue(null);},[open]);
 
-      /* pods = live tax buckets, all in the token's colour */
+      /* pods = live fee buckets, all in the token's colour */
       const pods=useMemo(()=>{
-        const items=(cfg.taxBreakdown||[]).filter(b=>(b.pct||0)>0);
+        const items=(cfg.feeBreakdown||[]).filter(b=>(b.pct||0)>0);
         const tot=items.reduce((s,b)=>s+b.pct,0)||1;
         const unit=b=>{
           if(token==='PTGC')return(b.name==='DAO'||b.name==='Add LP')?'PLS':'PTGC';
@@ -3446,8 +3446,8 @@
           return b.priceKey||'UFO';
         };
         return items.map(b=>({key:b.key||b.name,name:b.name,frac:b.pct/tot,unit:unit(b)}));
-      },[cfg,cfg.taxRate,cfg.taxBreakdown,token]);
-      stateRef.current.pods=pods;stateRef.current.price=data?.price||0;stateRef.current.tax=cfg.taxRate||0;
+      },[cfg,cfg.feeRate,cfg.feeBreakdown,token]);
+      stateRef.current.pods=pods;stateRef.current.price=data?.price||0;stateRef.current.fee=cfg.feeRate||0;
 
       /* pod totals seed from the window figure the panel shows (30d when available); the
          replayed opening contacts are subtracted here and added back as each one lands,
@@ -3455,7 +3455,7 @@
       const liftedSinceSeedRef=useRef(0);   // fees added to the pods by landed contacts since the last reseed (console reconciliation)
       const seedTotals=(replayRows)=>{
         const wg=(windows&&windows[win])||null;
-        const base=(wg&&wg.total)||((data?.vol||0)*(cfg.taxRate||0));
+        const base=(wg&&wg.total)||((data?.vol||0)*(cfg.feeRate||0));
         const byKey=wg&&wg.byKey;
         const t={};pods.forEach(p=>{
           const v=(byKey&&byKey[p.key]!=null)?byKey[p.key]:base*p.frac;
@@ -3474,7 +3474,7 @@
         setTotals(t);
       };
       const totalsRef=useRef({});totalsRef.current=totals;
-      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts((data?.buys||0)+(data?.sells||0));},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.taxRate]);
+      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts((data?.buys||0)+(data?.sells||0));},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.feeRate]);
 
       /* ---------- chain feed ---------- */
       useEffect(()=>{
@@ -3503,9 +3503,9 @@
           const amt=tokIn+tokOut;if(!(amt>0))return null;
           const side=tokOut>=tokIn?'BUY':'SELL';    // token leaving the pool = someone bought it
           const usd=amt*st.price;
-          return{id:l.transactionHash+':'+l.logIndex,tx:l.transactionHash,block:parseInt(l.blockNumber,16),side,tokens:amt,usd,gen:usd*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial,pair:(l.address||'').toLowerCase()};
+          return{id:l.transactionHash+':'+l.logIndex,tx:l.transactionHash,block:parseInt(l.blockNumber,16),side,tokens:amt,usd,gen:usd*st.fee,pool:m.symbol,logo:m.logo,initial:m.initial,pair:(l.address||'').toLowerCase()};
         };
-        /* Fee legs: Transfer(from → token contract). Every taxed move emits one — buys (from the
+        /* Fee legs: Transfer(from → token contract). Every fee-paying move emits one — buys (from the
            pair), sells (from the wallet) and plain wallet-to-wallet transfers. Legs in a tx that
            also carries a pool Swap are already on the tape as that swap; the rest are TRANSFER
            contacts, and the leg IS the fee, so the amount is exact. */
@@ -3516,10 +3516,10 @@
                     DAO 2% + LP 0.5% = 2.5% reaches the contract.
            So a transfer's true size = contract leg ÷ that share, and its fee = size × the full rate. */
         const contractShare=(()=>{
-          const items=cfg.taxBreakdown||[];
+          const items=cfg.feeBreakdown||[];
           if(token==='UFO')return items.filter(b=>b.key!=='reflection').reduce((a,b)=>a+(b.pct||0),0)/100;
           return items.filter(b=>b.name==='DAO'||b.name==='Add LP').reduce((a,b)=>a+(b.pct||0),0)/100;
-        })()||st.tax;
+        })()||st.fee;
         const pairSet=new Set(pairs.map(p=>p.pairAddress.toLowerCase()));
         /* UNKNOWN POOLS. A trade can route through a pool DexScreener never told us about (the
            PTGC/WPLS v2 pool, for one). Its fee legs would otherwise be mistaken for a transfer.
@@ -3556,11 +3556,11 @@
             const m=meta[pa]||{symbol:'pool',logo:null,initial:'?'};
             if(outOf>=into){                                   // token left the pool → a BUY; the pool's fee legs belong to it
               tok.filter(t=>t.from===pa&&t.to===mainAddr).forEach(t=>consumed.add(pa));
-              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'BUY',tokens:outOf,usd:outOf*st.price,gen:outOf*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
+              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'BUY',tokens:outOf,usd:outOf*st.price,gen:outOf*st.price*st.fee,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
             }else{                                             // token entered the pool → a SELL; the seller's fee legs belong to it
-              const seller=(tok.find(t=>t.to===pa)||{}).from;const gross=st.tax<1?into/(1-st.tax):into;
+              const seller=(tok.find(t=>t.to===pa)||{}).from;const gross=st.fee<1?into/(1-st.fee):into;
               if(seller)consumed.add(seller);
-              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'SELL',tokens:gross,usd:gross*st.price,gen:gross*st.price*st.tax,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
+              trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'SELL',tokens:gross,usd:gross*st.price,gen:gross*st.price*st.fee,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
             }
           }
           const rest=x.legs.filter(l=>!consumed.has(l.from)).reduce((a,l)=>a+l.fee,0);
@@ -3598,7 +3598,7 @@
             const size=contractShare>0?x.feeTokens/contractShare:x.feeTokens;   // tokens the sender actually sent
             const usd=size*st.price;
             if(st.price>0&&usd<DECK_MIN_XFER_USD)return;   // dust transfer: a $0.01 skim lifting $0.001 is noise on the tape
-            out.push({id:x.id,tx:x.tx,block:x.block,side:'XFER',tokens:size,usd,gen:usd*st.tax,pool:'transfer',logo:cfg.logo,initial:token[0]});
+            out.push({id:x.id,tx:x.tx,block:x.block,side:'XFER',tokens:size,usd,gen:usd*st.fee,pool:'transfer',logo:cfg.logo,initial:token[0]});
           });
           return out;
         };
@@ -3832,13 +3832,13 @@
         const entries=Object.keys(poolVol.per).map(pa=>({pa,...(poolVol.per[pa][win]||{tokens:0,buys:0,sells:0}),meta:poolVol.meta[pa]||{}})).filter(e=>e.tokens>0);
         const totTok=entries.reduce((s,e)=>s+e.tokens,0);
         entries.sort((a,b)=>b.tokens-a.tokens);
-        const price=data?.price||0,tax=cfg.taxRate||0;
-        const base=(ready&&!missingSet.size&&wg&&wg.total>0)?wg.total:(totTok*price*tax);
+        const price=data?.price||0,feeRate=cfg.feeRate||0;
+        const base=(ready&&!missingSet.size&&wg&&wg.total>0)?wg.total:(totTok*price*feeRate);
         const top=entries.slice(0,3).map(e=>({...e,share:totTok>0?e.tokens/totTok:0,usd:totTok>0?base*e.tokens/totTok:0}));
         const rest=entries.slice(3);
         const restShare=totTok>0?rest.reduce((s,e)=>s+e.tokens,0)/totTok:0;
         return{top,restN:rest.length,restUsd:base*restShare,restShare,totTok,usdOk:base>0};
-      },[poolVol,win,windows,ready,missingSet,data?.price,cfg.taxRate]);
+      },[poolVol,win,windows,ready,missingSet,data?.price,cfg.feeRate]);
 
       if(!open)return null;
       const poolCov=(poolVol.coverage&&poolVol.coverage[win]!=null)?poolVol.coverage[win]:(poolVol.status==='ok'?1:0);
@@ -4012,7 +4012,7 @@
               <div className="relative overflow-x-auto">
                 <div style={{minWidth:1040}}>
                   <div className="grid font-mono text-[10px] tracking-[0.18em] uppercase text-white/35 px-[18px] pt-2 pb-1.5" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.18)}`}}>
-                    <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5 whitespace-nowrap">Lifted <span className="normal-case tracking-normal" style={{color:hi}}>@ {(cfg.taxRate*100).toFixed(2)}%</span></span>
+                    <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5 whitespace-nowrap">Lifted <span className="normal-case tracking-normal" style={{color:hi}}>@ {(cfg.feeRate*100).toFixed(2)}%</span></span>
                     {pods.map(p=><span key={p.key} className="text-center">→ {p.name}</span>)}
                   </div>
                   <div key={lastScan?lastScan.at:0} className="deck-scanline flash flex items-center gap-2 px-[18px] py-1.5 font-mono text-[11px] text-white/45 whitespace-nowrap overflow-hidden" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
@@ -4058,7 +4058,7 @@
               </div>
             </div>
             <div className="mt-3 text-[11px] text-white/30 leading-relaxed">
-              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus taxed wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
+              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus fee-paying wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
             </div>
           </div>
         </Modal>
@@ -4866,16 +4866,16 @@
     };
 
     /* Explainer copy, in one place. Each is a function of the token so the wording can name
-       it and quote live figures (tax rate, ATH). Keep these to two or three sentences. */
+       it and quote live figures (fee rate, ATH). Keep these to two or three sentences. */
     const EXPLAINERS={
       valueGenerated:(token,cfg)=>{
-        const rate=cfg&&cfg.taxRate>0?(cfg.taxRate*100).toFixed(cfg.taxRate*100%1?1:0):null;
+        const rate=cfg&&cfg.feeRate>0?(cfg.feeRate*100).toFixed(cfg.feeRate*100%1?1:0):null;
         return(
           <>
-            <p>Every {token} trade pays a {rate?`${rate}% `:''}tax. This panel shows what that tax produced in the selected window, split by where it went — each tile is one destination.</p>
+            <p>Every {token} trade pays a {rate?`${rate}% `:''}fee. This panel shows what that fee produced in the selected window, split by where it went — each tile is one destination.</p>
             {token==='UFO'
               ?<p>Figures are measured from the fee transfers on chain, not estimated from volume.</p>
-              :<p>Figures are estimated as trading volume × the tax rate for the window.</p>}
+              :<p>Figures are estimated as trading volume × the fee rate for the window.</p>}
           </>
         );
       },
@@ -4958,7 +4958,7 @@
      * PLS → token; selling is the widget's own flip arrow (Shaka: no Buy/Sell controls of our
      * own inside the window). The SWITCH button top-right swaps the window to the OTHER
      * token's widget — modal-local state (`tok`), the dashboard behind stays on `token`.
-     * Wallet connect, quotes and slippage (the widget detects the token tax) all happen INSIDE
+     * Wallet connect, quotes and slippage (the widget detects the token fee) all happen INSIDE
      * the iframe — nothing here touches a wallet. Foreign origin, so the headless harness only
      * ever shows the loading shell; check the real widget live. Phone: bottom sheet; sm+: card.
      * Known gap: once the user has clicked INTO the widget, key events stay in switch.win's
@@ -5066,7 +5066,7 @@
      * over the blocks since the snapshot so a buy from ten minutes ago shows up before the
      * hourly Action has run (marked `fresh`, priced at today's PLS rate; the file replaces it).
      *   - Dots sit ON the market line (DAO_BUYS_DOT_AT='market'). The EFFECTIVE price paid (PLS
-     *     spent ÷ PTGC received) is 3-14% above it because of the 5% tax + slippage; it is shown
+     *     spent ÷ PTGC received) is 3-14% above it because of the 5% fee + slippage; it is shown
      *     in the hover card and is what the stats + running average use.
      *   - Dot radius: R_MIN + (R_MAX-R_MIN) × (ptgc/max)^0.4 — buys span 250×, sqrt left specks.
      *   - Range pills: stats strip = buys IN the window; dashed line = running LIFETIME average.
@@ -5078,7 +5078,7 @@
      * module-level function so the two cannot drift.
      * Live since 2026-09-14: the "PTGC Buys" button in the DAO Treasury panel header, left of Ledger. */
     const DAO_BUYS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/dao-buys.json';
-    const DAO_BUYS_DOT_AT='market';   // 'market' = dot ON the price line, paid price only in the hover card (Shaka: the visual gap confuses); 'paid' = dot at the price actually paid (3–14% above the line: tax + slippage)
+    const DAO_BUYS_DOT_AT='market';   // 'market' = dot ON the price line, paid price only in the hover card (Shaka: the visual gap confuses); 'paid' = dot at the price actually paid (3–14% above the line: fee + slippage)
     const DAO_BUYS_RANGES=[{k:'7D',days:7},{k:'30D',days:30},{k:'90D',days:90},{k:'6M',days:182},{k:'12M',days:365},{k:'ALL',days:null,label:'Lifetime'}];
     const DAO_BUYS_LP_REMOVAL=new Set(['0x2195995c','0x02751cec','0xded9382a','0x5b0d5984','0xaf2979eb']);   // removeLiquidityETH* — deliver PTGC to the wallet but are not buys (same list as the generator)
     let _daoBuysCache=null;   // {at:ms, data} — one fetch per page load, re-read after an hour
@@ -5590,7 +5590,7 @@
                 <div className="flex-1 min-w-0">
                   <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.25em] flex items-center gap-1 min-w-0"><span className="truncate">{'\u{1F3DB}️'} DAO Treasury {'·'} PTGC</span><InfoTip label="DAO Buys" className="-my-2 ml-0.5" glyphClass="text-[10px]">
                       <p>Every time a DAO treasury wallet swapped PLS for PTGC on PulseX, shown as a gold dot on the PTGC price line. Bigger dot = bigger buy. Two wallets are tracked: the treasury ({TOKENS.PTGC.daoTreasury.slice(0,6)}…{TOKENS.PTGC.daoTreasury.slice(-4)}) and the earlier buying wallet ({ADDR.DAO_WALLET2.slice(0,6)}…{ADDR.DAO_WALLET2.slice(-4)}, Oct 2023 – May 2025); the hover card says which.</p>
-                      <p>Hover or tap a dot for the details. {'"'}Price paid{'"'} (PLS spent {'÷'} PTGC received) runs a little above the market price because of the 5% tax and slippage; the totals and the dashed running-average line use what was actually paid, and both are for the buys in the selected range.</p>
+                      <p>Hover or tap a dot for the details. {'"'}Price paid{'"'} (PLS spent {'÷'} PTGC received) runs a little above the market price because of the 5% fee and slippage; the totals and the dashed running-average line use what was actually paid, and both are for the buys in the selected range.</p>
                       <p>USD / PLS switches the price axis — the DAO pays in PLS, so the PLS view is the actual trade rate. LP withdrawals and transfers are not buys and are left out.</p>
                       <p>Grays = the buy in sea-creature tiers of the starting supply ({'\u{1F40B}'} 1%, {'\u{1F988}'} 0.1%, {'\u{1F42C}'} 0.01%, {'\u{1F991}'} 0.001%, {'\u{1F422}'} 0.0001%, {'\u{1F990}'} 0.00001%), biggest first, three tiers deep.</p>
 </InfoTip></div>
@@ -6017,7 +6017,7 @@
            means we're not on the measured path (compare card / modal) — keep the estimate. */
         const valueGenMeasured=(t===token&&typeof valueGen7dUsd==='number');
         const valueGenPending=(t===token&&valueGen7dUsd===null);
-        const valueGen7d=valueGenMeasured?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.taxRate;const ba=bp?.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.taxRate;})();
+        const valueGen7d=valueGenMeasured?valueGen7dUsd:(()=>{const vol7d=volumeByPeriod?.vol7d;if(vol7d!=null&&vol7d>0)return vol7d*c.feeRate;const ba=bp?.d7||0;const pr=d?.price||0;const br=isPTGC?0.005:0.01;const v=ba>0?(ba*pr)/br:0;return v*c.feeRate;})();
         const creaturesRaw=getBurnC(burnPctNum,'Squid');
         const creatures=creaturesRaw.filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
         const burn7dPct=b.supply>0?(burn7dAmt/b.supply)*100:0;
@@ -6579,7 +6579,7 @@
       );
     };
     const FeeBlock=({tokenCfg,vol,accent,rgb,measured})=>{
-      const totalGen=measured?measured.total:(vol*tokenCfg.taxRate);
+      const totalGen=measured?measured.total:(vol*tokenCfg.feeRate);
       return(
         <div style={{borderRadius:'12px',padding:'14px 18px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'12px'}}>
@@ -6597,8 +6597,8 @@
               <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {fmtUSD(vol)}</div>
             </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.taxBreakdown.length},1fr)`,gap:'6px'}}>
-            {tokenCfg.taxBreakdown.map((item,i)=>{
+          <div style={{display:'grid',gridTemplateColumns:`repeat(${tokenCfg.feeBreakdown.length},1fr)`,gap:'6px'}}>
+            {tokenCfg.feeBreakdown.map((item,i)=>{
               const dollarVal=measured?(measured.byKey[item.key]||0):(vol*(item.pct/100));
               return(
                 <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'8px 6px',textAlign:'center'}}>
@@ -6639,7 +6639,7 @@
       const[realizedLoading,setRealizedLoading]=useState(false);
       const[ptgcByUfoLive,setPtgcByUfoLive]=useState(null); // MIGRATION: NEW contract's PTGC burns
       const[feeRetry,setFeeRetry]=useState(0);
-      const[feeAudit,setFeeAudit]=useState(null); // MIGRATION: were any swaps untaxed, and by whom?
+      const[feeAudit,setFeeAudit]=useState(null); // MIGRATION: were any swaps fee-free, and by whom?
       // MIGRATION: what each fee bucket ACTUALLY delivered, measured at the point of delivery.
       const[delivered,setDelivered]=useState(null);
       /* RESILIENCE: when the panels are rendering from a prebuilt snapshot, this records how
@@ -6748,7 +6748,7 @@
       const deckWindows=useMemo(()=>{
         const prices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
         const missing=token==='UFO'
-          ?(cfg.taxBreakdown||[]).filter(b=>(b.pct||0)>0&&!((prices[b.priceKey||'UFO']||0)>0)).map(b=>b.key||b.name)
+          ?(cfg.feeBreakdown||[]).filter(b=>(b.pct||0)>0&&!((prices[b.priceKey||'UFO']||0)>0)).map(b=>b.key||b.name)
           :[];
         const out={};
         ['7d','30d','90d'].forEach(w=>{
@@ -6758,7 +6758,7 @@
             const px=data?.price||0,t=realizedFees.byPeriod[w].totalTokens||0;if(px>0&&t>0){out[w]={label:w,total:t*px,byKey:null,missing:[]};return;}
           }
           const v=volumeByPeriod&&volumeByPeriod['vol'+w];
-          if(v>0)out[w]={label:w,total:v*cfg.taxRate,byKey:null,missing:[]};
+          if(v>0)out[w]={label:w,total:v*cfg.feeRate,byKey:null,missing:[]};
         });
         return out;
       },[token,data,ptgcPrice,pls,plsxPrice,wethPrice,realizedFees,delivered,volumeByPeriod,feeVersion]);
@@ -7521,7 +7521,7 @@
             usdOf(UFO_WETH).then(p=>{if(!loadCancelled)setWethPrice(p);}).catch(()=>{});
             // Re-read live fees each refresh so founder changes appear without a redeploy.
             fetchUfoFees(cfg.address).then(f=>{
-              if(f){cfg.taxRate=f.taxRate;cfg.taxBreakdown=f.breakdown;if(!loadCancelled)setFeeVersion(v=>v+1);}
+              if(f){cfg.feeRate=f.feeRate;cfg.feeBreakdown=f.breakdown;if(!loadCancelled)setFeeVersion(v=>v+1);}
             }).catch(()=>{});
           }
           
@@ -8177,7 +8177,7 @@
                 <div className="p-5 sm:p-6 flex flex-col h-full">
                   {/* u8: on phones the two control groups take their own full-width row under the
                       title (w-full sm:w-auto) — the header used to wrap to three ragged lines at
-                      320–375px. u7: ⓘ explains the term; the note line says where the tax goes. */}
+                      320–375px. u7: ⓘ explains the term; the note line says where the fee goes. */}
                   <div className="flex justify-between items-center mb-1.5 gap-x-3 gap-y-2 flex-wrap">
                     <h3 className="font-orbitron text-xs sm:text-sm lg:text-xs xl:text-sm uppercase tracking-[0.18em] lg:tracking-[0.14em] xl:tracking-[0.18em] text-white/85 flex items-center gap-2 lg:gap-1.5 xl:gap-2 min-w-0">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)] shrink-0"></span>
@@ -8200,11 +8200,6 @@
                       </div>
                     </div>
                   </div>
-                  {/* u7: the one-line "tax → buckets" note. Reads the live rate for UFO (cfg.taxRate is
-                      overwritten from chain at boot) and the fixed 5% for PTGC. */}
-                  <div className="text-[11px] text-white/40 mb-3 leading-snug">
-                    {cfg.taxRate>0?`${(cfg.taxRate*100).toFixed(cfg.taxRate*100%1?1:0)}% tax on every trade`:'The tax on every trade'}, split across the tiles below{token==='UFO'?' — measured on chain':' — estimated from volume'}.
-                  </div>
 
                   <div className="flex-1 flex flex-col">
                   {(()=>{
@@ -8212,7 +8207,7 @@
                     const volAmounts={'24h':volumeByPeriod.vol24h,'7d':volumeByPeriod.vol7d,'30d':volumeByPeriod.vol30d,'90d':volumeByPeriod.vol90d};
                     const periodVol=volAmounts[valueGenPeriod];
                     const hasData=periodVol!==null&&periodVol!==undefined;
-                    const totalGen=hasData?periodVol*cfg.taxRate:0;
+                    const totalGen=hasData?periodVol*cfg.feeRate:0;
 
                     const orderedItems=buildValueGenItems(token,cfg);
                     const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
@@ -8232,7 +8227,7 @@
                     /* ---------------------------------------------------------
                        ACCRUED vs DELIVERED.
 
-                       Accrued: every bucket is 1% of the same taxed volume, so
+                       Accrued: every bucket is 1% of the same fee-paying volume, so
                        every bucket accrues the SAME number of UFO. Printing that
                        six times is printing total/6. It is the input.
 
@@ -8256,7 +8251,7 @@
                        The contract's UFO balance belongs to the five contract-bound buckets
                        pro-rata by their basis points. */
                     const healthNow=health||((feeAudit&&feeAudit.ok)?feeAudit.health:null);
-                    const bps=k=>{const t=cfg.taxBreakdown.find(x=>x.key===k);return t?(t.bps!=null?t.bps:t.pct*100):0;};
+                    const bps=k=>{const t=cfg.feeBreakdown.find(x=>x.key===k);return t?(t.bps!=null?t.bps:t.pct*100):0;};
                     const contractBpsNow=UFO_FEE_BUCKETS.filter(b=>b.key!=='reflection').reduce((s,b)=>s+bps(b.key),0);
                     const queuedUfoTotal=(token==='UFO'&&healthNow&&healthNow.contractUfoBalance!=null)?healthNow.contractUfoBalance:null;
                     const queuedFor=k=>(queuedUfoTotal==null||k==='reflection'||contractBpsNow<=0)
@@ -8266,7 +8261,7 @@
                        accrued view rather than rendering nothing. `liveItems` must never be
                        null when showLive is true — the grid maps over it. */
                     const liveItems=showLive?UFO_FEE_BUCKETS.map(b=>{
-                      const cur=cfg.taxBreakdown.find(x=>x.key===b.key);
+                      const cur=cfg.feeBreakdown.find(x=>x.key===b.key);
                       const pct=cur?cur.pct:0;
                       const accruedUfo=live.tokens[b.key]||0;
                       if(!haveDelivered){
@@ -8331,7 +8326,7 @@
                                 <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text}`}>{fmtUSD(liveTotalUsd)}</span>
                               )}
                               <span className="text-white/45 text-sm sm:text-base">
-                                {haveDelivered&&!priceless?'delivered':`from ${live.txCount.toLocaleString()} taxed transfer${live.txCount===1?'':'s'}`}
+                                {haveDelivered&&!priceless?'delivered':`from ${live.txCount.toLocaleString()} fee-paying transfer${live.txCount===1?'':'s'}`}
                               </span>
                               {priceless&&<span className="text-amber-300/70 text-[11px]">price feed unavailable — token amounts are still exact</span>}
                               {live.feeChanges>0&&<span className="text-white/35 text-[10px]">{live.feeChanges} fee change{live.feeChanges===1?'':'s'} in this window</span>}
@@ -8359,7 +8354,7 @@
                           )}
                         </div>
                         {/* Removed at the owner's request: the accrued/queued summary, the
-                            pricing caveat, the exclusion report, the swaps-taxed line and the
+                            pricing caveat, the exclusion report, the swaps-fee line and the
                             swapback-failure strip. All are OPERATOR information, not holder
                             information, and they were crowding the six numbers people come to
                             read. Every one of them still prints to the console, and the full
@@ -8859,7 +8854,7 @@
                   </button>
                   <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowValueGenShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-all text-left">
                     <div className="font-bold">💰 Value Generated</div>
-                    <div className="text-xs text-white/50">Tax distribution breakdown</div>
+                    <div className="text-xs text-white/50">Fee distribution breakdown</div>
                   </button>
                   <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowAllocationShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-all text-left">
                     <div className="font-bold">📊 Token Allocation</div>
@@ -8909,7 +8904,7 @@
                   </button>
                   <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowValueGenShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-all text-left">
                     <div className="font-bold">💰 Value Generated</div>
-                    <div className="text-xs text-white/50">Tax distribution breakdown</div>
+                    <div className="text-xs text-white/50">Fee distribution breakdown</div>
                   </button>
                   <button onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowAllocationShareModal(true),100)}} className="w-full px-4 py-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-all text-left">
                     <div className="font-bold">📊 Token Allocation</div>
@@ -9000,7 +8995,7 @@
                     }
                   }} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border border-emerald-400/30 text-emerald-300 hover:from-emerald-500/30 hover:to-emerald-600/30 transition-all text-left">
                     <div className="font-bold">💰 Combined Value Generated</div>
-                    <div className="text-xs text-white/50">Tax distribution for both tokens</div>
+                    <div className="text-xs text-white/50">Fee distribution for both tokens</div>
                   </button>
                   {/* Row 4: KPI Report */}
                   <button onClick={()=>{setSocialReturn(true);setShowCombinedKPI(true)}} className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-yellow-500/20 to-green-500/20 border border-white/20 text-white hover:from-yellow-500/30 hover:to-green-500/30 transition-all text-left">
@@ -9435,12 +9430,12 @@
             const ufoVol=ufoVols[combinedValueGenPeriod]||0;
             // MIGRATION: use the same MEASURED on-chain buckets the dashboard and single share
             // card use for UFO (delivered + realizedFees -> computeValueGenBuckets), not the
-            // volume x tax estimate. Available for UFO only when it's the active token and the
+            // volume x fee estimate. Available for UFO only when it's the active token and the
             // scan has completed; the PTGC side and any not-ready case fall back to the estimate.
             const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
             const ufoMeasured=(token==='UFO')?computeValueGenBuckets(combinedValueGenPeriod,delivered,realizedFees,vgPrices):null;
-            const ptgcTotal=ptgcVol*ptgcCfg.taxRate;
-            const ufoTotal=ufoMeasured?ufoMeasured.total:(ufoVol*ufoCfg.taxRate);
+            const ptgcTotal=ptgcVol*ptgcCfg.feeRate;
+            const ufoTotal=ufoMeasured?ufoMeasured.total:(ufoVol*ufoCfg.feeRate);
             const combinedTotal=ptgcTotal+ufoTotal;
 
             const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
@@ -9547,11 +9542,11 @@
                       const orderedItems=buildValueGenItems(token,cfg);
                       const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
                       /* Measured on-chain value, same basis as the panel and KPI card. The old
-                         volume×tax estimate reads $0 while a young token has no volume baseline,
+                         volume×fee estimate reads $0 while a young token has no volume baseline,
                          which is why this card came out all $0. Falls back to the estimate only
                          if the delivered scan isn't ready (or the token isn't UFO). */
                       const vgMeasured=(token==='UFO')?computeValueGenBuckets(valueGenPeriod,delivered,realizedFees,vgPrices):null;
-                      const totalGen=vgMeasured?vgMeasured.total:(periodVol*cfg.taxRate);
+                      const totalGen=vgMeasured?vgMeasured.total:(periodVol*cfg.feeRate);
                       
                       return(
                         <div className="flex gap-3 flex-1">
@@ -9561,7 +9556,7 @@
                             <div className="text-lg font-bold text-white/80 mb-2">{periodVol>0?fmtUSD(periodVol):'\u2014'}</div>
                             <div className="text-white/50 text-xs mb-1">Value Generated</div>
                             <div className="text-4xl font-bold text-green-400">{fmtUSD(totalGen)}</div>
-                            <div className="text-white/40 text-xs mt-1">{(cfg.taxRate*100).toFixed(0)}% tax rate</div>
+                            <div className="text-white/40 text-xs mt-1">{(cfg.feeRate*100).toFixed(0)}% fee rate</div>
                           </div>
                           
                           {/* Right - breakdown boxes */}
@@ -12391,7 +12386,7 @@
               </p>
 
               <p>
-                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, legal, or tax advice. Do not make any investment or financial decision based solely on information shown here. Always do your own research (DYOR) and consult a qualified professional before investing.
+                <span className="text-yellow-400 font-semibold">Not Financial Advice:</span> Nothing on this site constitutes financial, investment, or legal advice. Do not make any investment or financial decision based solely on information shown here. Always do your own research (DYOR) and consult a qualified professional before investing.
               </p>
 
               <p>
@@ -12558,7 +12553,7 @@
      * Before first render we ask the chain for:
      *   1. UFO's three PulseX pairs (they are `private immutable` in the contract, so the
      *      factory is the only way to get them). The UFO/WPLS pair becomes mainPair.
-     *   2. The six live fee values, which overwrite the fallback taxRate/taxBreakdown.
+     *   2. The six live fee values, which overwrite the fallback feeRate/feeBreakdown.
      * If either call fails we render anyway using the config fallbacks, so a flaky RPC
      * degrades the numbers rather than blanking the whole site.
      * =================================================================================== */
@@ -12587,8 +12582,8 @@
         console.warn('UFO pair resolution failed; using seeded pair addresses.');
       }
       if(fees){
-        ufo.taxRate=fees.taxRate;
-        ufo.taxBreakdown=fees.breakdown;
+        ufo.feeRate=fees.feeRate;
+        ufo.feeBreakdown=fees.breakdown;
       }else{
         console.warn('UFO fee read failed; falling back to config defaults (1% each).');
       }
