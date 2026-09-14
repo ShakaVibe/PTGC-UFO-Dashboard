@@ -14,14 +14,16 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-13)
+## Current state (end of 2026-09-14)
 
 Roadmap: 41 of 59 items closed. u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
 the faint gold dot top-right of the PTGC dashboard header (see `sessions/2026-09-13.md`).
-Check `git --no-optional-locks status` before starting.
+2026-09-14: **Grays creature line in the "PTGC bought" tile + a Recent-buys ledger box** under
+the chart (`DaoCreatures`, `sessions/2026-09-14.md`) — uncommitted when the session ended unless
+the log below says otherwise. Check `git --no-optional-locks status` before starting.
 
 | Area | Status |
 |---|---|
@@ -38,7 +40,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 3 — u5, u6, u11, u14, u3 | Not started. Suggested order: u5/u6, u11/u14, u3 (decomposition — better after the build) |
 | Phase 4 — product ideas (g1–g6) | Not started |
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
-| Phase 4 — g8 DAO Buys chart | **Built, hidden** (2026-09-13 night). `DaoBuysModal` + `data/dao-buys.json` (hourly). Flip `DAO_BUYS_LIVE` to show the Buys button |
+| Phase 4 — g8 DAO Buys chart | **Built, hidden** (2026-09-13 night; creatures + ledger 2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly). Flip `DAO_BUYS_LIVE` to show the Buys button |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -157,6 +159,8 @@ Check `git --no-optional-locks status` before starting.
    the treasury files it is re-priced automatically. To rebuild from scratch, delete
    `data/dao-buys.json` and run the script (26 s). `removeLiquidityETH…` calls deliver PTGC to
    the wallet too — they are excluded (`excluded.lpRemovals`), never count them as buys.
+   Creature rows (tile + ledger) come from `DaoCreatures` → `getBurnC` (top three tiers,
+   starting supply); the ledger lists `view.buysAll` (lifetime), not the selected range.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -200,3 +204,6 @@ Check `git --no-optional-locks status` before starting.
   components hoisted) + u13 (holder chart redraws when history lands; `SLOW_HISTORY` harness env).
   Night: g8 DAO Buys chart (`DaoBuysModal`, `scripts/build-dao-buys.mjs`, `data/dao-buys.json`,
   `hoverfile` harness action) — hidden behind `DAO_BUYS_LIVE`.
+- `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
+  "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
+  phones). Harness ran in the cloud workspace (no Chromium on the local VM).
