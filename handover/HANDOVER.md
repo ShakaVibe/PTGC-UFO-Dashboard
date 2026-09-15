@@ -14,13 +14,15 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-14)
+## Current state (end of 2026-09-15)
 
 Roadmap: 43 of 59 items closed (u5 + u6 done 2026-09-14 night). u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
 the faint gold dot top-right of the PTGC dashboard header (see `sessions/2026-09-13.md`).
+2026-09-15: Buy/Sell modal width moved to rem — a viewer with a larger browser font size saw the
+title clipped to "PTG" on a YouTube stream (gotcha 17, `sessions/2026-09-15.md`).
 2026-09-14: **DAO Buys went LIVE** — "PTGC Buys" button left of Ledger in the DAO Treasury panel,
 header dot and `DAO_BUYS_LIVE` gate removed; creature lines (`DaoCreatures`), Recent DAO Buys
 ledger, screenshot-only share card, phone header Buy/Sell row (`sessions/2026-09-14.md`).
@@ -187,6 +189,13 @@ Check `git --no-optional-locks status` before starting.
    "7D EST"). Per tile: `valueGenBucketUsd(vg,item)` (null → "—"). Don't add a fourth
    Value Generated calculation anywhere — extend the model. Tier counts on cards and panel:
    `tierCountLabel`. Card prices: `fmtPrice` via `Price`/`PriceEl`/`formatSubPrice`.
+17. **Containers in rem, not px, when what is inside is rem.** Tailwind sizes text, gaps, logos in
+   rem, so a viewer with a larger browser font size (Chrome "Large", macOS bigger text) scales all of
+   it — a px-capped container then squeezes its columns. Found 2026-09-15: `SwapModal` at
+   `max-w-[460px]` showed "PTG" on a stream; now `max-w-[28.75rem]`. Worse, `.metallic-gold` is
+   `background-clip:text`, so an overflowing glyph is invisible, not overlapping — a metallic title
+   that "loses a letter" is a width problem. Reproduce in the harness with
+   `eval=document.documentElement.style.fontSize='20px'` before the click.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -232,6 +241,8 @@ Check `git --no-optional-locks status` before starting.
   components hoisted) + u13 (holder chart redraws when history lands; `SLOW_HISTORY` harness env).
   Night: g8 DAO Buys chart (`DaoBuysModal`, `scripts/build-dao-buys.mjs`, `data/dao-buys.json`,
   `hoverfile` harness action) — hidden behind `DAO_BUYS_LIVE`.
+- `sessions/2026-09-15.md` — Swap modal `max-w` px→rem (title clipped to "PTG" on a larger browser
+  font), "Market then" vs "Price paid" explainer, pipeline freshness check.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
