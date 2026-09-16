@@ -94,6 +94,25 @@ async function fetchAPI(endpoint) {
 
 // ─── CoinGecko fetchers ────────────────────────────────────────────────────────
 
+/* 90-day change from the repo's own daily series (data/charts-data.json, built by
+   build-charts-data.js). CoinGecko's contract endpoint has 7d/30d/60d/200d/1y but NO 90d;
+   until 2026-09-16 d90 was filled with the 200-day figure and the dashboard printed it as
+   "90D" (roadmap a3). Same arithmetic as index.html's _chgAt fallback: the last point vs the
+   newest point at or before now-90d; null when the series is missing or too short. */
+function changeFromDailySeries(symbol, days) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'charts-data.json'), 'utf8'));
+    const s = j?.tokens?.[symbol]?.series;
+    if (!Array.isArray(s) || s.length < 2) return null;
+    const target = Date.now() - days * 86400000;
+    if (s[0][0] > target) return null;                 // series younger than the window — no honest figure
+    let base = s[0];
+    for (const p of s) { if (p[0] <= target) base = p; else break; }
+    const p0 = base[1], now = s[s.length - 1][1];
+    return (p0 > 0 && now > 0) ? ((now - p0) / p0) * 100 : null;
+  } catch (e) { return null; }
+}
+
 async function fetchPriceChanges(address, name) {
   console.log(`  Price changes: ${name} (${address.slice(0, 10)}...)`);
   try {
@@ -105,7 +124,7 @@ async function fetchPriceChanges(address, name) {
       d7:   md.price_change_percentage_7d   || null,
       d30:  md.price_change_percentage_30d  || null,
       d60:  md.price_change_percentage_60d  || null,
-      d90:  md.price_change_percentage_200d || null,
+      d90:  changeFromDailySeries(name, 90),        // CoinGecko has no 90d field — see above
       d200: md.price_change_percentage_200d || null,
       d1y:  md.price_change_percentage_1y   || null
     };
