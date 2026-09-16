@@ -21,6 +21,9 @@ RPC_DOWN=1 node run.js "#/ptgc" 375 812 out/rpcdown      # every RPC returns 503
 DS_DOWN=1  node run.js "#/ufo"  375 812 out/dsdown       # DexScreener returns 503
 SLOW=9000  node run.js "#/ptgc" 375 812 out/loading      # every data reply waits 9 s → screenshot the loading shell
 SLOW_HISTORY=6000 node run.js "#/ptgc" 1280 900 out/hist  # only data/*history*.json wait → modals opened before history lands (u13)
+DECK_LOGS=8 node run.js "#/ptgc" 1440 900 out/deck "click=button:has-text('Live Feed'):visible;wait=9000;shot=deck"   # 8 synthetic Swap events → the Live Feed has rows, lifts, count-ups (u11)
+REDUCED=1 DECK_LOGS=8 node run.js "#/ufo" 1280 900 out/deck-rm "click=button:has-text('Live Feed'):visible;wait=4000"   # prefers-reduced-motion for the run
+NO_ACCEPT=1 node run.js "#/ptgc" 1280 900 out/disc      # do NOT pre-accept the disclaimer (u14: the modal must show)
 node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label^='PTGC Buys'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
 H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"
@@ -33,13 +36,13 @@ user would download. Run it for any share-card change — html2canvas ≠ the br
 
 Actions (semicolon-separated, in order): `shot=<name>` viewport screenshot, `scroll=<y>`,
 `click=<playwright selector>` (add `:visible` — several controls exist twice for phone/desktop),
-`key=<Key>`, `wait=<ms>`, `eval=<js>` (no semicolons), `evalfile=<path>`, `hoverfile=<path>` (a
+`key=<Key>`, `wait=<ms>`, `reload=<ms>` (reload in place — localStorage survives — then wait), `eval=<js>` (no semicolons), `evalfile=<path>`, `hoverfile=<path>` (a
 JS file that returns `{x,y}` in viewport px — the mouse moves there, for tooltips; see
 `probes/dao-buys-dot.js`, which finds the biggest DAO-buy dot). A full-page screenshot is
 always written to `<outPrefix>.png` at the end, and the run prints the first 400 chars of body text,
 the RPC request count, and console errors (the Babel "deoptimised" note is expected).
 
-The disclaimer is pre-accepted via localStorage. The stub numbers are nonsense (a 33T market cap
+The disclaimer is pre-accepted via localStorage (`grays_disclaimer_v1` = the current `DISCLAIMER_VERSION`; `NO_ACCEPT=1` skips that). RPC `eth_getLogs` answers `[]` unless `DECK_LOGS=n` (Swap events on the stub pair only). The stub numbers are nonsense (a 33T market cap
 on the DexScreener-down run is the fake reserves, not a bug) — the harness checks that the page
 mounts, walks its tabs and degrades without throwing, not that the figures are right.
 

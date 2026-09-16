@@ -175,6 +175,38 @@
       SWITCH_PARTNER:'0xF8FEb22eeE8E1d095E995658E4c79e13522E91A8'   // Buy/Sell widget fee-share wallet (Shaka, 2026-09-13). Empty string = no partnerAddress param sent.
     };
     const SUPPLY={PTGC:333333333333,UFO:999999999051};   // starting supplies; UFO confirmed against contract _tTotal
+
+    /* ===================== LOCAL STORAGE KEYS (u14) =====================
+     * Every key this page writes, in one place, each carrying a version. Bump the version when
+     * the stored SHAPE or MEANING changes; readers ignore anything that fails their shape check
+     * and `lsSweep` below removes the retired names once per boot. The `ptgc_*` HANDOFF keys are
+     * not ours to rename: calculators.html, charts.html and portfolio.html set them to send the
+     * visitor back here (last token, tab, affiliates view). Read those with `lsTake` — they are
+     * one-shot messages, not state. */
+    const LS={
+      DISCLAIMER:'grays_disclaimer_v1',           // value = the DISCLAIMER_VERSION the visitor accepted
+      TIERS:'grays_tiers_v2_',                    // + token address → {ts,tiers:{Poseidon,Whale,Shark,Dolphin,SquidAndBelow,ok,partial,error}}
+      PTGC_PRE:'grays_ptgc_by_ufo_pre_v1',        // + ':'+UFO address → {launch,toBlock,amount} pre-window checkpoint
+      IMPLIED_SUPPLY:'grays_implied_supply_v1',   // {token:{supply,ts}} on-chain supply fallback
+      DECK_POOLS:'grays_deck_pools_v1',           // + ':'+token → learned Live Feed pools
+      HANDOFF_TOKEN:'ptgc_last_token',HANDOFF_TAB:'ptgc_nav_tab',HANDOFF_VIEW:'ptgc_nav_view',
+    };
+    /* Bump when the DisclaimerModal wording changes and every device is asked to accept it again.
+       The old bare-"true" key is upgraded to '1' once, so the current wording is not re-prompted. */
+    const DISCLAIMER_VERSION='1';
+    const LS_RETIRED=['ptgc_ufo_disclaimer_accepted'];          // exact names that no longer exist
+    const LS_RETIRED_PREFIXES=['grays_tiers_0x'];                // unversioned tier caches (pre 2026-09-16)
+    const lsGet=(key,shapeOk)=>{try{const raw=localStorage.getItem(key);if(raw==null)return null;const v=JSON.parse(raw);return (!shapeOk||shapeOk(v))?v:null;}catch(e){return null;}};
+    const lsSet=(key,v)=>{try{localStorage.setItem(key,JSON.stringify(v));}catch(e){}};
+    const lsTake=key=>{try{const v=localStorage.getItem(key);if(v!=null)localStorage.removeItem(key);return v;}catch(e){return null;}};   // read-and-clear (handoff messages)
+    const lsSweep=()=>{try{
+      const old=localStorage.getItem('ptgc_ufo_disclaimer_accepted');
+      if(old==='true'&&localStorage.getItem(LS.DISCLAIMER)==null)localStorage.setItem(LS.DISCLAIMER,'1');
+      const gone=[];
+      for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(LS_RETIRED.includes(k)||LS_RETIRED_PREFIXES.some(p=>k.startsWith(p)))gone.push(k);}
+      gone.forEach(k=>localStorage.removeItem(k));
+    }catch(e){}};
+    lsSweep();
     const TOKENS={
       PTGC:{name:'PTGC',address:ADDR.PTGC,logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D4AF37',decimals:18,mainPair:ADDR.PAIR_PTGC_WPLS,pulseScanUrl:'https://scan.pulsechain.com/token/'+ADDR.PTGC,totalSupply:SUPPLY.PTGC,feeRate:0.05,hasDAO:true,
         daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
@@ -1298,7 +1330,7 @@
        discrimination as the main scan. Returns {ok, amount}; ok:false means "unknown",
        and the panel then labels the headline as a 90-day figure instead of lifetime. */
     const PTGC_PRE_WINDOW_CHUNK=200000;
-    const PTGC_PRE_STORE='grays_ptgc_by_ufo_pre_v1';
+    const PTGC_PRE_STORE=LS.PTGC_PRE;
     const sumPtgcBurnedInSwapbacks=(ptgcBurns,swapbackTxs)=>{
       const PTGC_FEE_RATIO=0.005/0.95;
       const byTx={};
@@ -2126,7 +2158,7 @@
        remembered from the last good DexScreener answer. When DexScreener is down and the price
        comes from the chain, mcap = impliedSupply × price. Falls back to the configured max
        supply (an overstatement by the burned share — better than a stale or zero figure). */
-    const IMPLIED_SUPPLY_STORE='grays_implied_supply_v1';
+    const IMPLIED_SUPPLY_STORE=LS.IMPLIED_SUPPLY;
     const impliedSupplyCache=(()=>{try{const j=JSON.parse(localStorage.getItem(IMPLIED_SUPPLY_STORE)||'{}');return (j&&typeof j==='object')?j:{};}catch(e){return{};}})();
     const rememberImpliedSupply=(addr,supply)=>{
       impliedSupplyCache[addr.toLowerCase()]=supply;
@@ -3326,7 +3358,7 @@
     const DECK_POOL_WINDOWS=['7d','30d','90d'];
     const DECK_POOL_BUCKET=2160;                 // blocks per stored slice (~6h at 10s); windows resolve to slice edges
     const DECK_POOL_CONC=4;
-    const DECK_POOL_STORE='grays_deck_pools_v1';
+    const DECK_POOL_STORE=LS.DECK_POOLS;
     const deckPoolsLoad=token=>{try{const j=JSON.parse(localStorage.getItem(DECK_POOL_STORE+':'+token));if(j&&j.buckets&&j.head>0)return j;}catch(e){}return null;};
     const deckPoolsSave=(token,v)=>{try{localStorage.setItem(DECK_POOL_STORE+':'+token,JSON.stringify(v));}catch(e){}};
     const deckPoolsCache={};
@@ -3406,6 +3438,111 @@
       return p;
     };
     const DECK_POD_POS={5:[[12,74],[31,34],[50,14],[69,34],[88,74]],6:[[9,84],[25.5,40],[42,14],[58,14],[74.5,40],[91,84]],4:[[15,60],[38,14],[62,14],[85,60]],3:[[20,40],[50,14],[80,40]],2:[[30,24],[70,24]],1:[[50,14]]};
+    /* u11: a seventh fee bucket used to throw (`pos[6]` undefined). Hand-placed layouts up to six;
+       beyond that the pods sit on an arc, edge pods low, centre pod high, like the six-pod row. */
+    const deckPodPos=n=>DECK_POD_POS[n]||Array.from({length:n},(_,i)=>{const u=n>1?i/(n-1):0.5;return[8+84*u,14+70*Math.pow(2*u-1,2)];});
+    /* u11: a learned pool (one the trades revealed, not DexScreener) whose partner token had no
+       readable symbol() ranked as "pool / ?". Partners we already know are named from ADDR; the
+       rest by their short address, which at least tells two unknown pools apart. */
+    const DECK_KNOWN_SYMBOLS=(()=>{const m={};['WPLS','PLSX','WETH','EHEX','PRVX','HEX','INC','WBTC','USDC','USDT','DAI'].forEach(k=>{if(ADDR[k])m[ADDR[k].toLowerCase()]=k;});return m;})();
+    const deckAbiString=hex=>{try{const h=hex.slice(2);const len=parseInt(h.slice(64,128),16);const b=h.slice(128,128+len*2);let o='';for(let i=0;i<b.length;i+=2)o+=String.fromCharCode(parseInt(b.slice(i,i+2),16));return o.replace(/[^\x20-\x7e]/g,'');}catch(e){return'';}};
+    const deckShortAddr=a=>a?a.slice(0,6)+'…'+a.slice(-4):'pool';
+    const deckPartnerName=(addr,symRaw)=>{const a=(addr||'').toLowerCase();if(DECK_KNOWN_SYMBOLS[a])return DECK_KNOWN_SYMBOLS[a];const s=symRaw?deckAbiString(symRaw).trim():'';return(s&&s.length<=12)?s:deckShortAddr(a);};
+    const deckInitial=sym=>/^0x/i.test(sym)?'?':(sym||'?').slice(0,1);
+
+    /* u11: one row of the ground tape, memoised. The deck re-renders on every landing and every
+       poll, and forty rows × (4 + pods) cells were rebuilt each time. A contact object never
+       changes identity once on the tape, so a row renders once. `.deck-a.on` is switched on by
+       the dispatch animation (a DOM class); with the row never re-rendering React never
+       overwrites it. Under reduced motion there is no dispatch, so the cells start lit. */
+    const deckTimeOf=r=>{const d=new Date(r.ts);const t=d.toTimeString().slice(0,8);return r.est?'~'+t:t;};
+    const DeckRow=React.memo(({r,pods,token,ac,hi,reduced})=>(
+      <div data-id={r.id} className={`deck-row${r.fresh?' deck-new':''}`}>
+        <div className="text-white/35 font-mono text-[12px] tabular-nums">{deckTimeOf(r)}</div>
+        <div className="font-orbitron text-[10px] tracking-[0.1em] py-[3px] text-center" style={{color:r.side==='BUY'?'#34d399':r.side==='SELL'?'#fb7185':'#fbbf24',background:r.side==='BUY'?'rgba(52,211,153,0.12)':r.side==='SELL'?'rgba(251,113,133,0.12)':'rgba(251,191,36,0.12)',clipPath:'polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px)'}}>{r.side}</div>
+        <div className="min-w-0 flex items-center gap-3 text-white">
+          <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
+          <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
+            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
+            <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/35 font-normal font-mono hover:text-white/70">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
+          </div>
+        </div>
+        <div className="deck-gen flex items-center justify-end gap-2 pr-1.5"><span className="font-orbitron font-bold text-[15px] tabular-nums" style={{color:hi}}>+{fmtUSD2(r.gen)}</span><span style={{color:ac}}>{'⇧'}</span></div>
+        {pods.map(p=>(
+          <div key={p.key} data-k={p.key} className="deck-cell text-center">
+            <span className={`deck-a font-orbitron text-[13px] font-bold tabular-nums${(r.fresh&&!reduced)?'':' on'}`} style={{color:ac}}>{fmtUSD2(r.gen*p.frac)}</span>
+            <span className="block font-mono text-[10px] text-white/35">{p.unit}</span>
+          </div>
+        ))}
+      </div>
+    ));
+
+    /* u11: the scan line keeps its own half-second clock for the "next scan" countdown — that
+       tick used to re-render the whole deck twice a second. "Contacts 24h" is the DexScreener
+       24h count at seed time, aged out evenly over 24 h (the only rate we have), plus every
+       contact the deck has seen land since; between refreshes it used to only ever go up. */
+    const deckContacts24h=(c,now)=>Math.max(0,Math.round(c.base*Math.max(0,1-(now-c.at)/86400000)))+c.landed;
+    const DeckScanline=({contacts,lastScan,status,statusText,hi})=>{
+      const[now,setNow]=useState(Date.now());
+      useEffect(()=>{const id=setInterval(()=>setNow(Date.now()),500);return()=>clearInterval(id);},[]);
+      return(
+        <div key={lastScan?lastScan.at:0} className="deck-scanline flash flex items-center gap-2 px-[18px] py-1.5 font-mono text-[11px] text-white/45 whitespace-nowrap overflow-hidden" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+          <span className="inline-block w-[6px] h-[6px] rounded-full shrink-0" style={{background:lastScan&&lastScan.found>0?'#7CFC00':hi,boxShadow:`0 0 8px ${lastScan&&lastScan.found>0?'#7CFC00':hi}`}}></span>
+          <span className="shrink-0">Contacts 24h <b className="font-normal" style={{color:hi}}>{deckContacts24h(contacts,now).toLocaleString()}</b></span>
+          <span className="text-white/20">·</span>
+          {lastScan
+            ?(lastScan.found>0
+              ?<span><b className="font-normal" style={{color:'#7CFC00'}}>{lastScan.found} new contact{lastScan.found===1?'':'s'}</b> · block {lastScan.block.toLocaleString('en-US')}</span>
+              :<span>{lastScan.failed?'chain read failed — retrying':lastScan.same?'no new block yet':'block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'}</span>)
+            :<span>{status==='connecting'?'reading the chain…':'scanning for contacts…'}</span>}
+          {status==='live'&&lastScan
+            ?<span className="text-white/30">· next scan {Math.max(0,Math.ceil((DECK_POLL_MS-(now-lastScan.at))/1000))}s</span>
+            :status!=='connecting'&&<span className="text-white/30">· {statusText}</span>}
+        </div>
+      );
+    };
+
+    /* u11: the pods and the ship's readout count up on their own. The 1.1 s ease used to call
+       setState on the deck itself on every animation frame — sixty full re-renders per landing,
+       forty rows each. Now only this subtree redraws. `podRefs` is the deck's, so the dispatch
+       animation and the signal lines keep finding the pod elements. */
+    const DeckPods=({pods,pos,totals,ready,missingSet,ac,hi,reduced,podRefs,windowLabel,shipSize})=>{
+      const[disp,setDisp]=useState({});
+      const dispRef=useRef({});
+      useEffect(()=>{
+        let raf=0;const start=performance.now();const from={...dispRef.current};const to=totals;
+        const keys=Object.keys(to);
+        const big=keys.some(k=>Math.abs((to[k]||0)-(from[k]||0))>Math.max(50,(to[k]||0)*0.2)); // a reseed (window/token change) jumps instead of counting
+        if(big||reduced){dispRef.current=to;setDisp(to);return;}
+        const step=(now)=>{
+          const t=Math.min(1,(now-start)/1100);const e=1-Math.pow(1-t,3);
+          const cur={};keys.forEach(k=>{cur[k]=(from[k]||0)+((to[k]||0)-(from[k]||0))*e;});
+          dispRef.current=cur;setDisp(cur);
+          if(t<1)raf=requestAnimationFrame(step);
+        };
+        raf=requestAnimationFrame(step);
+        return()=>cancelAnimationFrame(raf);
+      },[totals,reduced]);
+      const gen24=Object.values(disp).length?Object.values(disp).reduce((s,v)=>s+v,0):Object.values(totals).reduce((s,v)=>s+v,0);
+      return(<>
+        <div className="deck-pods">
+        {pods.map((p,i)=>(
+          <div key={p.key} ref={el=>{podRefs.current[p.key]=el;}} className="deck-pod text-center" style={{left:pos[i][0]+'%',top:pos[i][1]+'px'}}>
+            <div className="deck-n font-orbitron text-[10px] tracking-[0.18em] uppercase whitespace-nowrap" style={{color:ac}}>{p.name}</div>
+            {ready&&!missingSet.has(p.key)
+              ?<div className="deck-tot font-orbitron font-bold text-[18px] mt-2 tabular-nums" style={{color:hi}}>{fmtUSD(disp[p.key]!=null?disp[p.key]:(totals[p.key]||0))}</div>
+              :<div className="deck-tot deck-loading font-mono text-[11px] tracking-[0.18em] uppercase mt-2 text-white/40" title={ready?'waiting for the '+String(p.unit||'').replace('UFO+','')+' price':''}>loading</div>}
+          </div>
+        ))}
+        </div>
+        {/* the ship's payload readout — the generated figure for the window, i.e. the sum of the pods */}
+        {/* sits below the scan ring (176px, centred on the 150px ship → 13px past its edge) with a clear gap */}
+        <div className="deck-readout absolute left-1/2 -translate-x-1/2 text-center pointer-events-none" style={{top:132+shipSize+20}}>
+          <div className="font-mono text-[9.5px] tracking-[0.22em] uppercase text-white/45">Generated {windowLabel}</div>
+          <div className="deck-readout-n font-orbitron font-bold text-[22px] leading-tight tabular-nums" style={{color:hi,textShadow:`0 0 16px ${deckHexA(hi,0.55)}, 0 1px 2px rgba(0,0,0,.9)`}}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</div>
+        </div>
+      </>);
+    };
 
     const AbductionDeckModal=({open,close,token,cfg,data,windows,onSwitch})=>{
       const[win,setWin]=useState('30d');
@@ -3414,15 +3551,12 @@
       const ac=cfg.colorHex,hi=isGold?'#F0DC78':'#bfff80';
       const deckRef=useRef(null),shipRef=useRef(null),feedRef=useRef(null),starsRef=useRef(null),skyRef=useRef(null),linksRef=useRef(null);
       const podRefs=useRef({});
-      const dispRef=useRef({});
       const[rows,setRows]=useState([]);           // newest first: {id,tx,block,ts,side,usd,gen,pool}
       const[status,setStatus]=useState('connecting');
       const[totals,setTotals]=useState({});
-      const[disp,setDisp]=useState({});             // what the pods show — eases toward `totals` so landings count up
-      const[contacts,setContacts]=useState(0);
+      const[contacts,setContacts]=useState({base:0,at:Date.now(),landed:0});   // {DexScreener 24h count, when it was seeded, landed since} → DeckScanline ages it
       const[scan,setScan]=useState({block:0,n:0});   // bumps every poll → ripple + block readout
       const[lastScan,setLastScan]=useState(null);   // {block,found,at} — what the last look found
-      const[tickNow,setTickNow]=useState(Date.now());
       /* TOP POOLS. What the ticker renders: {status:'scanning'|'ok'|'failed', per:{pairAddr:{'7d':{tokens,buys,sells},...}}, meta:{pairAddr:{symbol,logo,initial}}}
          It is a VIEW, rebuilt by publishPools() from two sources that are never reset by a
          dashboard refresh (the chain-feed effect re-runs on every one):
@@ -3474,7 +3608,6 @@
         const id=setTimeout(()=>setReady(true),20000);
         return()=>clearTimeout(id);
       },[open,windows,win,token]);
-      useEffect(()=>{if(!open)return;const id=setInterval(()=>setTickNow(Date.now()),500);return()=>clearInterval(id);},[open]);
       const[reduced]=useState(()=>{try{return window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){return false;}});
       const stateRef=useRef({seen:new Set(),last:0,price:0,fee:0,pods:[],pending:[]});
       const[replayQueue,setReplayQueue]=useState(null);
@@ -3524,7 +3657,7 @@
         setTotals(t);
       };
       const totalsRef=useRef({});totalsRef.current=totals;
-      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts((data?.buys||0)+(data?.sells||0));},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.feeRate]);
+      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts({base:(data?.buys||0)+(data?.sells||0),at:Date.now(),landed:0});},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.feeRate]);
 
       /* ---------- chain feed ---------- */
       useEffect(()=>{
@@ -3576,7 +3709,6 @@
            So for every fee-leg tx with no swap on a known pool, read the receipt once: if a Swap
            event's pool also moved the token in that tx, it was a buy or sell on that pool. The
            pool is then remembered, so its later trades are caught by the normal swap query. */
-        const abiString=hex=>{try{const h=hex.slice(2);const len=parseInt(h.slice(64,128),16);const b=h.slice(128,128+len*2);let o='';for(let i=0;i<b.length;i+=2)o+=String.fromCharCode(parseInt(b.slice(i,i+2),16));return o.replace(/[^\x20-\x7e]/g,'');}catch(e){return'';}};
         const learnPool=async(pa)=>{
           if(pairSet.has(pa))return;
           pairSet.add(pa);addrs.push(pa);
@@ -3585,11 +3717,11 @@
             const a0=wordToAddress(t0),a1=wordToAddress(t1);
             const isT0=!!a0&&a0.toLowerCase()===mainAddr;
             const other=(isT0?a1:a0)||'';
-            const symRaw=other?await ethCallRead(other,'0x95d89b41'):null;
-            const sym=(symRaw&&abiString(symRaw))||'pool';
             const oa=other.toLowerCase();
-            meta[pa]={isT0,symbol:sym,logo:oa===WETH_ADDRESS?ETH_LOGO:(oa?getLogo(oa):null),initial:sym.slice(0,1)};
-          }catch(e){meta[pa]={isT0:true,symbol:'pool',logo:null,initial:'?'};}
+            const symRaw=(other&&!DECK_KNOWN_SYMBOLS[oa])?await ethCallRead(other,'0x95d89b41').catch(()=>null):null;
+            const sym=deckPartnerName(other,symRaw);
+            meta[pa]={isT0,symbol:sym,logo:oa===WETH_ADDRESS?ETH_LOGO:(oa?getLogo(oa):null),initial:deckInitial(sym)};
+          }catch(e){const sym=deckShortAddr(pa);meta[pa]={isT0:true,symbol:sym,logo:null,initial:'?'};}
         };
         const resolveViaReceipt=async(x)=>{
           const rc=await rpcFetch({jsonrpc:'2.0',method:'eth_getTransactionReceipt',params:[x.tx],id:1});
@@ -3603,7 +3735,7 @@
             const into=tok.filter(t=>t.to===pa).reduce((a,t)=>a+t.amt,0);
             if(!(outOf>0)&&!(into>0))continue;               // a hop in another token, not ours
             await learnPool(pa);
-            const m=meta[pa]||{symbol:'pool',logo:null,initial:'?'};
+            const m=meta[pa]||{symbol:deckShortAddr(pa),logo:null,initial:'?'};
             if(outOf>=into){                                   // token left the pool → a BUY; the pool's fee legs belong to it
               tok.filter(t=>t.from===pa&&t.to===mainAddr).forEach(t=>consumed.add(pa));
               trades.push({id:x.tx+':'+pa,tx:x.tx,block:x.block,side:'BUY',tokens:outOf,usd:outOf*st.price,gen:outOf*st.price*st.fee,pool:m.symbol,logo:m.logo,initial:m.initial,pair:pa});
@@ -3811,7 +3943,7 @@
                 if(++landed>=podsNow.length)finish();
               };
             });
-            if(!r.replay)setContacts(c=>c+1);
+            if(!r.replay)setContacts(c=>({...c,landed:c.landed+1}));
           };
         };
         playRef.current=playOne;
@@ -3822,7 +3954,7 @@
         if(!open||!reduced||!ready)return;
         const fresh=rows.filter(r=>r.fresh&&!r._animated);
         if(!fresh.length)return;
-        fresh.forEach(r=>{r._animated=true;setTotals(t=>{const n={...t};pods.forEach(p=>{n[p.key]=(n[p.key]||0)+r.gen*p.frac;});return n;});if(!r.replay)setContacts(c=>c+1);});
+        fresh.forEach(r=>{r._animated=true;setTotals(t=>{const n={...t};pods.forEach(p=>{n[p.key]=(n[p.key]||0)+r.gen*p.frac;});return n;});if(!r.replay)setContacts(c=>({...c,landed:c.landed+1}));});
       },[rows,open,reduced,ready,pods]);
 
       /* ---------- stars + signal lines ---------- */
@@ -3851,21 +3983,6 @@
         return()=>ro.disconnect();
       },[open,ac,pods.length]);
 
-      useEffect(()=>{ // count-up: ease the displayed totals toward the real ones over ~1.1s
-        if(!open)return;
-        let raf=0;const start=performance.now();const from={...dispRef.current};const to=totals;
-        const keys=Object.keys(to);
-        const big=keys.some(k=>Math.abs((to[k]||0)-(from[k]||0))>Math.max(50,(to[k]||0)*0.2)); // a reseed (window/token change) jumps instead of counting
-        if(big||reduced){dispRef.current=to;setDisp(to);return;}
-        const step=(now)=>{
-          const t=Math.min(1,(now-start)/1100);const e=1-Math.pow(1-t,3);
-          const cur={};keys.forEach(k=>{cur[k]=(from[k]||0)+((to[k]||0)-(from[k]||0))*e;});
-          dispRef.current=cur;setDisp(cur);
-          if(t<1)raf=requestAnimationFrame(step);
-        };
-        raf=requestAnimationFrame(step);
-        return()=>cancelAnimationFrame(raf);
-      },[totals,open,reduced]);
       useEffect(()=>{
         if(!open)return;
         const k=e=>{if(e.key==='Escape')close();};
@@ -3892,14 +4009,12 @@
 
       if(!open)return null;
       const poolCov=(poolVol.coverage&&poolVol.coverage[win]!=null)?poolVol.coverage[win]:(poolVol.status==='ok'?1:0);
-      const pos=DECK_POD_POS[pods.length]||DECK_POD_POS[5];
-      const gen24=Object.values(disp).length?Object.values(disp).reduce((s,v)=>s+v,0):Object.values(totals).reduce((s,v)=>s+v,0);
+      const pos=deckPodPos(pods.length);
       const windowLabel=(windowGen&&windowGen.label)||'24h';
-      const timeOf=r=>{const d=new Date(r.ts);const t=d.toTimeString().slice(0,8);return r.est?'~'+t:t;};
       const shipSize=150;
       const statusText={connecting:'reading chain',live:'live · every block',partial:'live · backfill incomplete',retrying:'retrying',
         'no pools':'no pools loaded','chain read failed':'chain read failed'}[status]||status;
-      const cols=`64px 44px minmax(230px,1.4fr) 108px repeat(${pods.length},minmax(84px,1fr))`;
+      const cols=`64px 44px minmax(230px,1.4fr) 108px${pods.length?` repeat(${pods.length},minmax(84px,1fr))`:''}`;   // repeat(0,…) is invalid CSS
       return(
         <Modal className="z-[60] bg-[#06070a] overflow-y-auto" onClose={close} label={`${token} Live Feed`}>
           <style>{`
@@ -3943,7 +4058,7 @@
             .deck-chip.up{font-size:18px;padding:6px 14px}
             .deck-loading{animation:deckLoad 1.4s ease-in-out infinite}
             @keyframes deckLoad{50%{opacity:.35}}
-            .deck-scan{background:repeating-linear-gradient(180deg,rgba(255,255,255,0.025) 0 1px,transparent 1px 4px);mix-blend-mode:overlay}
+            .deck-scan{background:repeating-linear-gradient(180deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px)}   /* u11: was mix-blend-mode:overlay — a full-deck blend layer re-composited on every animation frame for an effect invisible on #0b0d12 */
             @media(prefers-reduced-motion:reduce){.deck-row.deck-new{animation:none}.deck-chip{display:none}}
             .deck-pods{position:absolute;inset:0;pointer-events:none}.deck-pod{pointer-events:auto}
             @media(max-width:900px){.deck-pod{width:112px;padding:9px 10px 8px}.deck-pod .deck-tot{font-size:14px}.deck-pod .deck-n{font-size:9px;letter-spacing:.12em}}
@@ -4021,28 +4136,13 @@
               {/* SKY */}
               <div ref={skyRef} className="relative" style={{height:380}}>
                 <svg ref={linksRef} className="deck-links absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none"></svg>
-                <div className="deck-pods">
-                {pods.map((p,i)=>(
-                  <div key={p.key} ref={el=>{podRefs.current[p.key]=el;}} className="deck-pod text-center" style={{left:pos[i][0]+'%',top:pos[i][1]+'px'}}>
-                    <div className="deck-n font-orbitron text-[10px] tracking-[0.18em] uppercase whitespace-nowrap" style={{color:ac}}>{p.name}</div>
-                    {ready&&!missingSet.has(p.key)
-                      ?<div className="deck-tot font-orbitron font-bold text-[18px] mt-2 tabular-nums" style={{color:hi}}>{fmtUSD(disp[p.key]!=null?disp[p.key]:(totals[p.key]||0))}</div>
-                      :<div className="deck-tot deck-loading font-mono text-[11px] tracking-[0.18em] uppercase mt-2 text-white/40" title={ready?'waiting for the '+String(p.unit||'').replace('UFO+','')+' price':''}>loading</div>}
-                  </div>
-                ))}
-                </div>
+                <DeckPods pods={pods} pos={pos} totals={totals} ready={ready} missingSet={missingSet} ac={ac} hi={hi} reduced={reduced} podRefs={podRefs} windowLabel={windowLabel} shipSize={shipSize}/>
                 <div ref={shipRef} className="deck-ship absolute left-1/2 -translate-x-1/2" style={{top:132,width:shipSize,height:shipSize}}>
                   <div className="deck-hover w-full h-full relative">
                     {scan.n>0&&<div key={'p'+scan.n} className="deck-ping"></div>}
                     {scan.n>0&&!reduced&&<div key={'r'+scan.n} className="deck-scanring"></div>}
                     <img src={cfg.logo} alt={token} className="block w-full h-full relative"/>
                   </div>
-                </div>
-                {/* the ship's payload readout — the generated figure for the window, i.e. the sum of the pods */}
-                {/* sits below the scan ring (176px, centred on the 150px ship → 13px past its edge) with a clear gap */}
-                <div className="deck-readout absolute left-1/2 -translate-x-1/2 text-center pointer-events-none" style={{top:132+shipSize+20}}>
-                  <div className="font-mono text-[9.5px] tracking-[0.22em] uppercase text-white/45">Generated {windowLabel}</div>
-                  <div className="deck-readout-n font-orbitron font-bold text-[22px] leading-tight tabular-nums" style={{color:hi,textShadow:`0 0 16px ${deckHexA(hi,0.55)}, 0 1px 2px rgba(0,0,0,.9)`}}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</div>
                 </div>
                 <div className="absolute left-0 right-0 bottom-0 pointer-events-none" style={{height:120}}>
                   <svg viewBox="0 0 1000 120" preserveAspectRatio="none" className="w-full h-full block" aria-hidden="true">
@@ -4065,43 +4165,12 @@
                     <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5 whitespace-nowrap">Lifted <span className="normal-case tracking-normal" style={{color:hi}}>@ {(cfg.feeRate*100).toFixed(2)}%</span></span>
                     {pods.map(p=><span key={p.key} className="text-center">→ {p.name}</span>)}
                   </div>
-                  <div key={lastScan?lastScan.at:0} className="deck-scanline flash flex items-center gap-2 px-[18px] py-1.5 font-mono text-[11px] text-white/45 whitespace-nowrap overflow-hidden" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
-                    <span className="inline-block w-[6px] h-[6px] rounded-full shrink-0" style={{background:lastScan&&lastScan.found>0?'#7CFC00':hi,boxShadow:`0 0 8px ${lastScan&&lastScan.found>0?'#7CFC00':hi}`}}></span>
-                    <span className="shrink-0">Contacts 24h <b className="font-normal" style={{color:hi}}>{contacts.toLocaleString()}</b></span>
-                    <span className="text-white/20">·</span>
-                    {lastScan
-                      ?(lastScan.found>0
-                        ?<span><b className="font-normal" style={{color:'#7CFC00'}}>{lastScan.found} new contact{lastScan.found===1?'':'s'}</b> · block {lastScan.block.toLocaleString('en-US')}</span>
-                        :<span>{lastScan.failed?'chain read failed — retrying':lastScan.same?'no new block yet':'block '+lastScan.block.toLocaleString('en-US')+' · no new contacts'}</span>)
-                      :<span>{status==='connecting'?'reading the chain…':'scanning for contacts…'}</span>}
-                    {status==='live'&&lastScan
-                      ?<span className="text-white/30">· next scan {Math.max(0,Math.ceil((DECK_POLL_MS-(tickNow-lastScan.at))/1000))}s</span>
-                      :status!=='connecting'&&<span className="text-white/30">· {statusText}</span>}
-                  </div>
+                  <DeckScanline contacts={contacts} lastScan={lastScan} status={status} statusText={statusText} hi={hi}/>
                   <div ref={feedRef} className="relative overflow-hidden" style={{maxHeight:520}}>
                     {rows.length===0&&(
                       <div className="px-[18px] py-8 text-white/40 text-sm font-mono">{status==='connecting'?'Reading the last few hours of swaps from the chain…':status==='no pools'?'No pools loaded for this token yet.':'No swaps in the last '+DECK_BACKFILL_BLOCKS+' blocks. Waiting for the next contact.'}</div>
                     )}
-                    {rows.map(r=>(
-                      <div key={r.id} data-id={r.id} className={`deck-row${r.fresh?' deck-new':''}`}>
-                        <div className="text-white/35 font-mono text-[12px] tabular-nums">{timeOf(r)}</div>
-                        <div className="font-orbitron text-[10px] tracking-[0.1em] py-[3px] text-center" style={{color:r.side==='BUY'?'#34d399':r.side==='SELL'?'#fb7185':'#fbbf24',background:r.side==='BUY'?'rgba(52,211,153,0.12)':r.side==='SELL'?'rgba(251,113,133,0.12)':'rgba(251,191,36,0.12)',clipPath:'polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px)'}}>{r.side}</div>
-                        <div className="min-w-0 flex items-center gap-3 text-white">
-                          <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
-                          <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
-                            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
-                            <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/35 font-normal font-mono hover:text-white/70">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
-                          </div>
-                        </div>
-                        <div className="deck-gen flex items-center justify-end gap-2 pr-1.5"><span className="font-orbitron font-bold text-[15px] tabular-nums" style={{color:hi}}>+{fmtUSD2(r.gen)}</span><span style={{color:ac}}>{'⇧'}</span></div>
-                        {pods.map(p=>(
-                          <div key={p.key} data-k={p.key} className="deck-cell text-center">
-                            <span className={`deck-a font-orbitron text-[13px] font-bold tabular-nums${r.fresh?'':' on'}`} style={{color:ac}}>{fmtUSD2(r.gen*p.frac)}</span>
-                            <span className="block font-mono text-[10px] text-white/35">{p.unit}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
+                    {rows.map(r=><DeckRow key={r.id} r={r} pods={pods} token={token} ac={ac} hi={hi} reduced={reduced}/>)}
                     <div className="absolute left-0 right-0 bottom-0 h-20 pointer-events-none" style={{background:'linear-gradient(180deg,rgba(11,13,18,0),#0b0d12)'}}></div>
                   </div>
                 </div>
@@ -6718,7 +6787,7 @@
       const[feeVersion,setFeeVersion]=useState(0); // MIGRATION: bumps when live fees are re-read
       const[holderChange,setHolderChange]=useState(null);
       const[showKPI,setShowKPI]=useState(false);
-      const _initTab=(()=>{try{const t=localStorage.getItem('ptgc_nav_tab');if(t&&['dashboard','kpi','social','calculators'].includes(t)){localStorage.removeItem('ptgc_nav_tab');if(t==='calculators'){window.location.href='./calculators.html';return'dashboard'}return t}}catch(e){}return'dashboard'})();
+      const _initTab=(()=>{try{const t=lsTake(LS.HANDOFF_TAB);if(t&&['dashboard','kpi','social','calculators'].includes(t)){if(t==='calculators'){window.location.href='./calculators.html';return'dashboard'}return t}}catch(e){}return'dashboard'})();
       /* ROUTING: the hash (routeTab) wins over the legacy localStorage handoff when it
          names a specific tab; otherwise the handoff value seeds the initial tab and is
          pushed back into the hash by the sync effect below. */
@@ -7494,7 +7563,7 @@
           //   3) live PulseScan scan (~14-18 pages / ~50s) — last resort; caches a complete result.
           // Until the Action publishes the file, step 1 simply misses and we behave as before.
           const lpPairAddresses=d?.pairs?.map(p=>p.pairAddress).filter(Boolean)||[];
-          const tierCacheKey='grays_tiers_'+cfg.address.toLowerCase();
+          const tierCacheKey=LS.TIERS+cfg.address.toLowerCase();
           const ALLOC_FILE='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/token-allocation.json';
           const applyTiers=(tierObj,cache)=>{
             if(loadCancelled)return;
@@ -7515,7 +7584,15 @@
               }
             }catch(e){}
             // 2) localStorage cache from a prior live scan
-            try{const raw=localStorage.getItem(tierCacheKey);if(raw){const o=JSON.parse(raw);if(o&&o.ts&&(Date.now()-o.ts)<7200000&&o.tiers){if(!loadCancelled)setHolderTiers(o.tiers);return;}}}catch(e){}
+            {
+              // Shape-checked: a cache written by an older build (or by hand) that lacks a tier or
+              // carries a string count is ignored, not rendered as "0 whales". `ok:true` only —
+              // partial / failed scans were never cached, and a cache must not say otherwise.
+              const tierNum=v=>v===null||(typeof v==='number'&&isFinite(v)&&v>=0);
+              const o=lsGet(tierCacheKey,o=>o&&typeof o.ts==='number'&&o.tiers&&o.tiers.ok===true
+                &&['Poseidon','Whale','Shark','Dolphin','SquidAndBelow'].every(k=>tierNum(o.tiers[k])));
+              if(o&&(Date.now()-o.ts)<7200000){if(!loadCancelled)setHolderTiers(o.tiers);return;}
+            }
             // 3) Live scan (slow; caches a complete result for next time)
             fetchHolderTiers(cfg.address,cfg,h,lpPairAddresses,tierAbort.signal).then(result=>{
               if(loadCancelled||(result&&result.cancelled))return;
@@ -12553,11 +12630,16 @@
         /* Legacy handoff: calculators.html / portfolio.html send the user back with
            ?token=X (+ optional localStorage view flag). Convert it to a hash once,
            then the hash rules from here on. */
-        const p=new URLSearchParams(window.location.search).get('token');
+        const qs=new URLSearchParams(window.location.search);
+        const p=qs.get('token');
         if(p==='PTGC'||p==='UFO'){
           let target={view:'dashboard',token:p,tab:'dashboard'};
-          try{const v=localStorage.getItem('ptgc_nav_view');if(v==='affiliates'){localStorage.removeItem('ptgc_nav_view');target={view:'affiliates',token:null,tab:'dashboard'};}}catch(e){}
-          window.history.replaceState({},'',window.location.pathname+hashForRoute(target.view,target.token,target.tab));
+          if(lsTake(LS.HANDOFF_VIEW)==='affiliates')target={view:'affiliates',token:null,tab:'dashboard'};
+          /* replaceState (not a hash assignment) so Back returns to the sibling page, not to the
+             ?token= URL; only the token param is dropped — ?debug=1 and anything else stay. */
+          qs.delete('token');
+          const rest=qs.toString();
+          window.history.replaceState({},'',window.location.pathname+(rest?'?'+rest:'')+hashForRoute(target.view,target.token,target.tab));
           return target;
         }
         return routeFromHash();
@@ -12580,11 +12662,11 @@
         window.location.hash=h;   // fires hashchange → setRoute
       };
       const[disclaimerAccepted,setDisclaimerAccepted]=useState(()=>{
-        try{return localStorage.getItem('ptgc_ufo_disclaimer_accepted')==='true';}catch(e){return false;}
+        try{return localStorage.getItem(LS.DISCLAIMER)===DISCLAIMER_VERSION;}catch(e){return false;}
       });
       
       const handleAcceptDisclaimer=()=>{
-        try{localStorage.setItem('ptgc_ufo_disclaimer_accepted','true');}catch(e){}
+        try{localStorage.setItem(LS.DISCLAIMER,DISCLAIMER_VERSION);}catch(e){}
         setDisclaimerAccepted(true);
       };
       
@@ -12596,7 +12678,7 @@
          for crawlers. */
       const overlay=!disclaimerAccepted?<DisclaimerModal onAccept={handleAcceptDisclaimer}/>:null;
       if(view==='affiliates')return(<>
-        <ErrorBoundary key="affiliates"><AffiliatesPage onBack={()=>{const t=lastToken;if(t){try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}else{navigate('home')}}}/></ErrorBoundary>
+        <ErrorBoundary key="affiliates"><AffiliatesPage onBack={()=>{const t=lastToken;if(t){try{localStorage.setItem(LS.HANDOFF_TOKEN,t)}catch(e){}navigate('dashboard',t,'dashboard')}else{navigate('home')}}}/></ErrorBoundary>
       {overlay}</>);
 
       /* NOTE: Dashboard is deliberately NOT keyed by token. The Socials tab switches token and
@@ -12605,12 +12687,12 @@
       if(view==='dashboard'&&token)return(<>
           <ErrorBoundary key="dashboard"><Dashboard token={token} routeTab={tab}
             onTabRoute={(t)=>navigate('dashboard',token,t)}
-            onBack={()=>{try{localStorage.removeItem('ptgc_last_token')}catch(e){}navigate('home')}}
-            onSwitch={(t)=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,tab)}}
+            onBack={()=>{try{localStorage.removeItem(LS.HANDOFF_TOKEN)}catch(e){}navigate('home')}}
+            onSwitch={(t)=>{try{localStorage.setItem(LS.HANDOFF_TOKEN,t)}catch(e){}navigate('dashboard',t,tab)}}
             onAffiliates={()=>{setLastToken(token);navigate('affiliates')}}/></ErrorBoundary>
       {overlay}</>);
       return(<>
-          <ErrorBoundary key="home"><Home onSelect={t=>{try{localStorage.setItem('ptgc_last_token',t)}catch(e){}navigate('dashboard',t,'dashboard')}}/></ErrorBoundary>
+          <ErrorBoundary key="home"><Home onSelect={t=>{try{localStorage.setItem(LS.HANDOFF_TOKEN,t)}catch(e){}navigate('dashboard',t,'dashboard')}}/></ErrorBoundary>
       {overlay}</>);
     };
     
