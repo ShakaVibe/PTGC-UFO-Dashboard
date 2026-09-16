@@ -380,12 +380,28 @@
       }
       return creatures;
     };
-    // Decode portfolio code
+    /* a10 (2026-09-16): a saved-wallet entry without a valid address used to be persisted and then
+       throw `w.address.toLowerCase()` on every render — a black page until site data was cleared.
+       Every list that reaches state passes through sanitizeWallets: bad entries are dropped, never
+       rendered, never saved. */
+    const isValidAddr=a=>typeof a==='string'&&/^0x[0-9a-fA-F]{40}$/.test(a);
+    const sanitizeWallets=(list)=>{
+      if(!Array.isArray(list))return{wallets:[],dropped:0};
+      const seen=new Set();const wallets=[];let dropped=0;
+      list.forEach(w=>{
+        const address=w&&(typeof w==='object')?(w.address||w.a):null;
+        if(!isValidAddr(address)||seen.has(address.toLowerCase())){dropped++;return;}
+        seen.add(address.toLowerCase());
+        wallets.push({address,name:typeof w.name==='string'?w.name:(typeof w.n==='string'?w.n:''),group:(typeof w.group==='string'&&w.group)||(typeof w.g==='string'&&w.g)||'Default'});
+      });
+      return{wallets,dropped};
+    };
+    // Decode portfolio code → {wallets,dropped} | null (not a GRAY- code / not JSON)
     const decodePortfolio=(code)=>{
       try{
         if(!code.startsWith('GRAY-'))return null;
         const data=JSON.parse(atob(code.slice(5)));
-        return data.map(w=>({address:w.a,name:w.n||'',group:w.g||'Default'}));
+        return sanitizeWallets(data);
       }catch{return null}
     };
     
@@ -403,6 +419,15 @@
         callContract(PTGC_STAKING_ADDR,SEL.lockCount+addr),
       ]);
       
+      /* a11 (2026-09-16): a failed eth_call (rpcFetch gives {result:null}, or '0x' on a revert) used to
+         parse as 0n — balance 0 ("No PTGC holdings"), or reflections = balance + everything ever sent
+         when only totalReceived failed — and the result was cached so it never retried. A read that is
+         not a full 32-byte word is a failure: the whole wallet is marked failed (see fetchWalletData),
+         shows a red dot with a retry, and is not cached as data. Same rule the UFO read already had. */
+      const okWord=h=>!!h&&h!=='0x'&&h.length>=66;
+      if(![ptgcBal,ptgcSend,ptgcRecv,ptgcUserInfo,ptgcPendingStake,ptgcLockCountRes].every(okWord)){
+        throw new Error('PTGC read failed (RPC returned no result)');
+      }
       const balance=toNum(parseWord(ptgcBal));
       const tSend=toNum(parseWord(ptgcSend));
       const tRecv=toNum(parseWord(ptgcRecv));
@@ -564,7 +589,7 @@
 
     const PortfolioPage=({onBack})=>{
       const[wallets,setWallets]=useState(()=>{
-        try{const s=localStorage.getItem(PORTFOLIO_STORAGE_KEY);return s?JSON.parse(s):[];}catch{return[]}
+        try{const s=localStorage.getItem(PORTFOLIO_STORAGE_KEY);return s?sanitizeWallets(JSON.parse(s)).wallets:[];}catch{return[]}
       });
       const[inputAddr,setInputAddr]=useState('');
       const[inputName,setInputName]=useState('');
@@ -639,6 +664,9 @@
           setPortfolioData(prev=>({...prev,[addr]:data}));
         }catch(e){
           console.error('Error fetching portfolio for',address,e);
+          // a11: remember the failure (so the auto-fetch effect does not hammer the RPC) but as a
+          // failure, not as data — the chip shows a red dot + retry and the totals leave it out.
+          setPortfolioData(prev=>({...prev,[addr]:{error:String(e&&e.message||e),at:Date.now()}}));
         }
         setLoadingAddr(null);
       };
@@ -710,7 +738,7 @@
         };
         let ufoRefSum=0,ufoRefAny=false,ufoRefPending=false;
         Object.entries(portfolioData).forEach(([addr,d])=>{
-          if(!d||!isWalletChecked(addr))return;
+          if(!d||d.error||!isWalletChecked(addr))return;   // a failed read contributes nothing, not 0
           result.ptgc.balance+=d.ptgc.balance;
           result.ptgc.reflections+=d.ptgc.reflections;
           result.ptgc.staked+=d.ptgc.staked;
@@ -746,7 +774,9 @@
         setCodeError('');
         const decoded=decodePortfolio(codeInput.trim());
         if(!decoded){setCodeError('Invalid portfolio code');return}
-        setWallets(decoded);
+        if(!decoded.wallets.length){setCodeError(decoded.dropped?'That code holds no valid wallet addresses':'That code is empty');return}
+        if(decoded.dropped)console.warn(`Load Code: ${decoded.dropped} entr${decoded.dropped===1?'y':'ies'} without a valid address skipped`);
+        setWallets(decoded.wallets);
         setShowLoadModal(false);
         setCodeInput('');
         // Clear old data and refetch
@@ -883,13 +913,15 @@
                           {groupWallets.map(w=>{
                             const addr=w.address.toLowerCase();
                             const isLoading=loadingAddr===addr;
-                            const hasData=!!portfolioData[addr];
+                            const failed=!!(portfolioData[addr]&&portfolioData[addr].error);
+                            const hasData=!!portfolioData[addr]&&!failed;
                             const checked=isWalletChecked(addr);
                             return(
-                              <div key={addr} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${!checked?'border-white/5 bg-white/[0.02] opacity-50':hasData?'border-[#D9CA5D]/30 bg-[#D9CA5D]/5':'border-white/10 bg-white/5'} ${isLoading?'animate-pulse-slow':''}`}>
-                                <input type="checkbox" checked={checked} onChange={()=>toggleWallet(addr)} className="w-4 h-4 rounded accent-[#D9CA5D] cursor-pointer"/>
-                                <span className={`w-2 h-2 rounded-full ${hasData?'bg-green-400':isLoading?'bg-yellow-400':'bg-white/30'}`}></span>
+                              <div key={addr} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${!checked?'border-white/5 bg-white/[0.02] opacity-50':hasData?'border-[#D9CA5D]/30 bg-[#D9CA5D]/5':failed?'border-red-400/30 bg-red-400/5':'border-white/10 bg-white/5'} ${isLoading?'animate-pulse-slow':''}`}>
+                                <input type="checkbox" checked={checked} onChange={()=>toggleWallet(addr)} className="w-4 h-4 rounded accent-[#D9CA5D] cursor-pointer" aria-label={`Include ${w.name||truncAddr(w.address)} in totals`}/>
+                                <span className={`w-2 h-2 rounded-full ${hasData?'bg-green-400':isLoading?'bg-yellow-400':failed?'bg-red-400':'bg-white/30'}`}></span>
                                 <span className="text-white/80 font-mono text-sm">{w.name||truncAddr(w.address)}</span>
+                                {failed&&!isLoading&&<button onClick={()=>fetchWalletData(w.address)} className="text-red-300 hover:text-white text-xs px-1.5 py-0.5 rounded border border-red-400/40" aria-label={`Retry ${w.name||truncAddr(w.address)} — the chain read failed`}>read failed · retry</button>}
                                 <button onClick={()=>{setEditingWallet(addr);setEditWalletName(w.name||'')}} className="text-white/30 hover:text-[#D9CA5D] text-sm transition-colors">{'\u270F'}</button>
                                 <button onClick={()=>removeWallet(w.address)} className="text-white/30 hover:text-red-400 text-sm ml-0">{'\u2715'}</button>
                               </div>
@@ -1348,7 +1380,7 @@
                     {wallets.filter(w=>isWalletChecked(w.address)).map(w=>{
                       const addr=w.address.toLowerCase();
                       const d=portfolioData[addr];
-                      if(!d)return null;
+                      if(!d||d.error)return null;
                       return(
                         <div key={addr} className="bg-[#111]/80 border border-white/10 rounded-xl p-5">
                           <div className="flex items-center gap-3 mb-3">
@@ -1545,8 +1577,34 @@
         if(fromToken){try{sessionStorage.setItem('portfolio_from_token',fromToken)}catch{}}
       },[]);
       
-      return <PortfolioPage onBack={goBack}/>;
+      return <PortfolioBoundary><PortfolioPage onBack={goBack}/></PortfolioBoundary>;
     };
+
+    /* a10: a render error used to unmount the whole tree — a black page with nothing to click.
+       The boundary keeps the header and offers the two things that fix it: reload, or clear the saved
+       wallet list (the one piece of state that can poison every later visit). */
+    class PortfolioBoundary extends React.Component{
+      constructor(p){super(p);this.state={error:null};}
+      static getDerivedStateFromError(error){return{error};}
+      componentDidCatch(error,info){console.error('Portfolio render error:',error,info&&info.componentStack);}
+      render(){
+        if(!this.state.error)return this.props.children;
+        const msg=String(this.state.error&&this.state.error.message||this.state.error);
+        return(
+          <div className="min-h-screen flex items-center justify-center p-6">
+            <div role="alert" className="max-w-md w-full text-center bg-[#111]/80 border border-white/10 rounded-2xl p-8">
+              <div className="text-lg text-[#D9CA5D] font-bold mb-2">Something went wrong</div>
+              <p className="text-white/60 text-sm mb-1">The portfolio page hit an error while drawing.</p>
+              <p className="text-white/35 text-xs font-mono break-all mb-6">{msg}</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button onClick={()=>window.location.reload()} className="px-5 py-2 rounded-xl border border-[#D9CA5D]/40 text-[#D9CA5D] font-semibold hover:bg-white/5">Reload</button>
+                <button onClick={()=>{try{localStorage.removeItem(PORTFOLIO_STORAGE_KEY);}catch(e){}window.location.reload();}} className="px-5 py-2 rounded-xl border border-white/15 text-white/70 hover:bg-white/5">Clear saved wallets &amp; reload</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+    }
     
     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
   </script>
