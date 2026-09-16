@@ -4,7 +4,8 @@
   const wrap=document.querySelector('[data-share-wrap]');const W=parseInt(wrap.style.width),H=parseInt(wrap.style.height);
   const origCreate=URL.createObjectURL;let blob=null;URL.createObjectURL=(b)=>{blob=b;return origCreate.call(URL,b);};
   const a0=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return a0.call(this);};
-  const btn=[...document.querySelectorAll('button')].find(b=>/download/i.test(b.textContent)||/download/i.test(b.getAttribute('aria-label')||''));
+  // The card's own button first (aria-label "Download PNG"); the Socials tab also has "Download official logos" buttons earlier in DOM order.
+  const btn=document.querySelector('button[aria-label="Download PNG"]')||[...document.querySelectorAll('button')].find(b=>/download/i.test(b.textContent)||/download/i.test(b.getAttribute('aria-label')||''));
   if(!btn)return 'no download button';
   btn.click();
   for(let i=0;i<60&&!blob;i++)await new Promise(r=>setTimeout(r,250));

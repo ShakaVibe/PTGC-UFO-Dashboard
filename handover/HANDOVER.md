@@ -16,8 +16,8 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-16)
 
-Roadmap: 53 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 8 of the 67
-Audit II items (a1–a4, a13 night; a10, a11, a25 late). **Next: the honest-failure pass a14–a24
+Roadmap: 57 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 12 of the 67
+Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — all 2026-09-16). **Next: the honest-failure pass a14–a24
 (one pattern, ~12 edits) or the pipeline week a28–a34 (start with a29).** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
@@ -52,7 +52,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **8 of 67 done** (2026-09-16): a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90 (lands at the next workflow run), a13 SRI on all four sibling pages, a10 + a11 portfolio (sanitised wallets, error boundary, failed reads not cached), a25 phone Live Feed header. Rest not started |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **8 of 67 done** (2026-09-16): a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90 (lands at the next workflow run), a13 SRI on all four sibling pages, a10 + a11 portfolio (sanitised wallets, error boundary, failed reads not cached), a25 phone Live Feed header, a16 DAO panel dashes (+ fetchDAOData null on a dead RPC), a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. Rest not started |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -133,7 +133,9 @@ Check `git --no-optional-locks status` before starting.
    `.metallic-gold` to `#E8C044` and turns nowrap/truncate off inside `[data-share-wrap]` — so in a
    card, never rely on nowrap to hold a layout, and don't put a bordered pill around text (the box
    lands ~12 px above the text; the DAO Buys card shows its "4.6d ago" as plain text for that
-   reason). Check every card change with `H2C=1` + `probes/share-png-real.js` (harness README).
+   reason). Check every card change with `H2C=1` + `probes/share-png-real.js` (harness README). Sub-micro prices
+   carry an `sr-only` full-decimal span (a48) that `onclone` strips inside `[data-share-wrap]` — keep
+   that line if the export code is ever rewritten.
 6. **`ufo-ptgc-burns.json` schema 2**: `PTGCbyUFO` is now the COMBINED total across both UFO
    contracts; `byContract.v1` / `byContract.v2` split it. The deployed `index.html` reads
    `byContract.v1` as the historical base. Do not deploy the new generator with an older
@@ -227,7 +229,7 @@ Check `git --no-optional-locks status` before starting.
 
 -1. **Audit II, top of the list:** the honest-failure pass a14–a24 (null through, "—" out) or the
    pipeline week a28–a34 (a29 first). Ordered list on the artifact's "Next up".
-   Done 2026-09-16: a1–a4, a13, a10, a11, a25. After the next deploy, eyeball charts.html 24H (PTGC and BTC series
+   Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16, a22, a24, a48. After the next deploy, eyeball charts.html 24H (PTGC and BTC series
    should both start ~24 h back) and run `fetch-coingecko-data` by hand so the corrected "90D" lands.
    Note a38: `handover/` (this file) is public and deployed — move it before adding anything sensitive.
 

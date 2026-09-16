@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, DECK_LOGS=n, REDUCED=1, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, DS_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -54,6 +54,7 @@ const rpcAnswer=(body)=>{
     const m=q.method;let result;
     if(m==='eth_blockNumber')result=hex(HEAD);
     else if(m==='eth_chainId')result='0x171';
+    else if(m==='eth_getBalance')result=hex(125_000_000n*10n**18n);   // 125M PLS — the DAO panel's eth_getBalance anchor read (a16)
     else if(m==='eth_getBlockByNumber'){const n=q.params[0]==='latest'?HEAD:parseInt(q.params[0],16);result={number:hex(n),timestamp:hex(Math.floor(Date.now()/1000)-(HEAD-n)*10)};}
     else if(m==='eth_getLogs'){
       /* DECK_LOGS=n: answer a Swap-topic query with n synthetic PulseX Swap events on the stub pair,
@@ -86,7 +87,8 @@ const dsPair=(base,quote,price,liq,vol)=>({chainId:'pulsechain',dexId:'pulsex',u
   info:{imageUrl:''}});
 const dsAnswer=(url)=>{
   const isUFO=/UFO|0x[0-9a-f]{40}/i.test(url)&&/ufo/i.test(url);
-  const pairs=[dsPair('PTGC','WPLS',0.000142,850000,42000),dsPair('PTGC','PRVX',0.000141,120000,4000),dsPair('PTGC','PLSX',0.000143,90000,2000),dsPair('PTGC','HEX',0.000142,50000,1500)];
+  const P=+process.env.DS_PRICE||0.000142;   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48)
+  const pairs=[dsPair('PTGC','WPLS',P,850000,42000),dsPair('PTGC','PRVX',P*0.993,120000,4000),dsPair('PTGC','PLSX',P*1.007,90000,2000),dsPair('PTGC','HEX',P,50000,1500)];
   return {schemaVersion:'1.0.0',pairs};
 };
 
@@ -112,6 +114,7 @@ const dsAnswer=(url)=>{
     if(/api\.dexscreener\.com/.test(u)&&process.env.DS_DOWN)return r.fulfill({status:503,body:'down'});
     if(/api\.dexscreener\.com/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(dsAnswer(u))});
     if(/dd\.dexscreener\.com|dexscreener\.com/.test(u))return r.fulfill({status:200,contentType:'image/png',body:fs.readFileSync(path.join(REPO,'07_Ufo_transparent.png'))});
+    if(/api\.scan\.pulsechain\.com/.test(u)&&process.env.PS_DOWN)return r.fulfill({status:503,body:'down'});   // PS_DOWN=1: PulseScan returns 503 (holders → null)
     if(/api\.scan\.pulsechain\.com.*counters/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token_holders_count:'4321',transfers_count:'100000'})});
     if(/api\.scan\.pulsechain\.com.*holders/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:[],next_page_params:null})});
     if(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/.*)/.test(u)){const f=u.match(/main\/(data\/[^?]*)/)[1];const p=path.join(REPO,f);if(fs.existsSync(p))return r.fulfill({status:200,contentType:'application/json',body:fs.readFileSync(p)});return r.fulfill({status:404,body:''});}
