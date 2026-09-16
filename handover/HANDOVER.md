@@ -14,15 +14,17 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-15)
+## Current state (end of 2026-09-16)
 
-Roadmap: 43 of 59 items closed (u5 + u6 done 2026-09-14 night). u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 45 of 59 items closed (u11 + u14 done 2026-09-16; u5 + u6 2026-09-14 night). u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
 the faint gold dot top-right of the PTGC dashboard header (see `sessions/2026-09-13.md`).
 2026-09-15: Buy/Sell modal width moved to rem — a viewer with a larger browser font size saw the
 title clipped to "PTG" on a YouTube stream (gotcha 17, `sessions/2026-09-15.md`).
+2026-09-16: **u14** — every localStorage key in the `LS` table (gotcha 18); **u11** — Live Feed rows
+memoised, countdown/count-up in their own components, learned pools named (`sessions/2026-09-16.md`).
 2026-09-14: **DAO Buys went LIVE** — "PTGC Buys" button left of Ledger in the DAO Treasury panel,
 header dot and `DAO_BUYS_LIVE` gate removed; creature lines (`DaoCreatures`), Recent DAO Buys
 ledger, screenshot-only share card, phone header Buy/Sell row (`sessions/2026-09-14.md`).
@@ -41,7 +43,8 @@ Check `git --no-optional-locks status` before starting.
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — u4 (hoisted render-defined components), u13 (chart late-data) | **Done** (2026-09-13 evening) |
 | Phase 3 — u5 (one Value Generated model), u6 (share-card parity) | **Done** (2026-09-14 night; `computeValueGen`, see gotcha 16) |
-| Phase 3 — u11, u14, u3 | Not started. Suggested order: u11/u14, then u3 (decomposition — better after the build) |
+| Phase 3 — u11 (Live Feed render cost), u14 (versioned localStorage) | **Done** (2026-09-16; `DeckRow`/`DeckScanline`/`DeckPods`, `LS` table — gotcha 18) |
+| Phase 3 — u3 (decomposition) | Not started — waits for the build |
 | Phase 4 — product ideas (g1–g6) | Not started |
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
@@ -196,6 +199,19 @@ Check `git --no-optional-locks status` before starting.
    `background-clip:text`, so an overflowing glyph is invisible, not overlapping — a metallic title
    that "loses a letter" is a width problem. Reproduce in the harness with
    `eval=document.documentElement.style.fontSize='20px'` before the click.
+18. **Every localStorage key is in `LS`** (right after `SUPPLY`), versioned. New key → add it there
+   with a `_vN` suffix, read it with `lsGet(key, shapeOk)` so a stale shape is ignored instead of
+   rendered, and when the shape changes bump N and add the old name to `LS_RETIRED` (or a prefix to
+   `LS_RETIRED_PREFIXES`) so `lsSweep()` removes it at boot. **Changing the disclaimer wording →
+   bump `DISCLAIMER_VERSION`** or nobody is re-prompted. The `ptgc_last_token` / `ptgc_nav_tab` /
+   `ptgc_nav_view` names are the handoff contract with calculators/charts/portfolio.html — don't
+   rename them; read them with `lsTake` (read-and-clear). The harness pre-accepts the disclaimer by
+   writing `grays_disclaimer_v1` — keep `run.js` in step if the version moves.
+19. **Live Feed pieces live at module scope** (`DeckRow`, `DeckScanline`, `DeckPods`, right after
+   `DECK_POD_POS`). Rows are `React.memo` and never re-render, which is also why the dispatch
+   animation can light `.deck-a.on` by DOM class — don't put anything that changes per render
+   into a row's props, and don't move state that ticks (clocks, count-ups) back into the deck.
+   `DECK_LOGS=n` gives the harness deck synthetic swaps; `REDUCED=1` tests reduced motion.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -217,8 +233,10 @@ Check `git --no-optional-locks status` before starting.
 2. **Live check of u1 + u9** (30 seconds): on the phone open any ⓘ modal, the page behind must
    not scroll; on desktop, Tab through the header and Escape out of a modal — focus should land
    back on the button that opened it.
-3. **Phase 3 leftovers** — u5/u6 next (see roadmap), then u11/u14. u3 (decomposition)
-   waits for the build.
+3. **Phase 3 leftovers** — only u3 (decomposition) left; it waits for the build. Live check of
+   the 2026-09-16 Live Feed in a real browser: open it on PTGC, watch a lift land, confirm the
+   pod cells light and the "next scan" countdown ticks; on a reduced-motion device the cells
+   should be lit from the start.
 4. **Vite build (Phase 1)** when Shaka says go. Hosting is GitHub Pages (`deploy.yml`), so the
    decision is Pages-from-`dist` vs a `gh-pages` branch. Do b3-style cleanup first; everything
    in Phase 3 gets easier after it.
@@ -243,6 +261,10 @@ Check `git --no-optional-locks status` before starting.
   `hoverfile` harness action) — hidden behind `DAO_BUYS_LIVE`.
 - `sessions/2026-09-15.md` — Swap modal `max-w` px→rem (title clipped to "PTG" on a larger browser
   font), "Market then" vs "Price paid" explainer, pipeline freshness check.
+- `sessions/2026-09-16.md` — u14 (`LS` key table, disclaimer version, tier-cache shape check,
+  `?token=` keeps the query) + u11 (Live Feed: `DeckRow` memo, `DeckScanline` clock + ageing
+  Contacts 24h, `DeckPods` count-up, no blend layer, >6 pods, learned-pool names); harness
+  `DECK_LOGS` / `REDUCED` / `NO_ACCEPT` / `reload`.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).

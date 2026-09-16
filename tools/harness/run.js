@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, DECK_LOGS=n, REDUCED=1, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -55,7 +55,17 @@ const rpcAnswer=(body)=>{
     if(m==='eth_blockNumber')result=hex(HEAD);
     else if(m==='eth_chainId')result='0x171';
     else if(m==='eth_getBlockByNumber'){const n=q.params[0]==='latest'?HEAD:parseInt(q.params[0],16);result={number:hex(n),timestamp:hex(Math.floor(Date.now()/1000)-(HEAD-n)*10)};}
-    else if(m==='eth_getLogs')result=[];
+    else if(m==='eth_getLogs'){
+      /* DECK_LOGS=n: answer a Swap-topic query with n synthetic PulseX Swap events on the stub pair,
+         newest at the head block, so the Live Feed has rows to lift (u11). Everything else stays empty. */
+      const f=q.params&&q.params[0]||{};const topics=f.topics||[];const n=+process.env.DECK_LOGS||0;
+      const swapTopic='0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
+      const asks=(Array.isArray(topics[0])?topics[0]:[topics[0]]).includes(swapTopic);
+      const to=f.toBlock==='latest'?HEAD:parseInt(f.toBlock,16),from=parseInt(f.fromBlock,16);
+      result=[];
+      if(n&&asks)for(let i=0;i<n;i++){const b=HEAD-i*3;if(b<from||b>to)continue;const buy=i%3!==2;const amt=pad((1000n+BigInt(i)*250n)*10n**18n).slice(2);const z=pad(0).slice(2);
+        result.push({address:'0x'+'ab'.repeat(20),topics:[swapTopic,pad(1),pad(2)],data:'0x'+(buy?z+z+z+amt:z+amt+z+z),blockNumber:hex(b),transactionHash:'0x'+(i+1).toString(16).padStart(64,'0'),logIndex:hex(i),removed:false});}
+    }
     else if(m==='eth_call'){
       const d=(q.params[0].data||'').slice(0,10);
       // balanceOf → 5% of a big supply-ish number; totalSupply; getReserves; token0/1; generic
@@ -85,8 +95,9 @@ const dsAnswer=(url)=>{
   const port=server.address().port;
   const browser=await chromium.launch({executablePath:process.env.CHROME||undefined,args:['--no-sandbox','--headless=new'],ignoreDefaultArgs:['--headless=old','--headless']});
   const ctx=await browser.newContext({viewport:{width:+W,height:+H},deviceScaleFactor:1,isMobile:+W<640,hasTouch:+W<640});
-  await ctx.addInitScript(()=>{try{localStorage.setItem('ptgc_ufo_disclaimer_accepted','true');}catch(e){}});
+  if(!process.env.NO_ACCEPT)await ctx.addInitScript(()=>{try{localStorage.setItem('grays_disclaimer_v1','1');}catch(e){}});   // NO_ACCEPT=1: leave the disclaimer un-accepted
   const page=await ctx.newPage();
+  if(process.env.REDUCED)await page.emulateMedia({reducedMotion:'reduce'});   // REDUCED=1: prefers-reduced-motion for the whole run
   const errors=[],warns=[];
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text().slice(0,300));});
   page.on('pageerror',e=>errors.push('PAGEERROR '+String(e).slice(0,300)));
@@ -118,6 +129,7 @@ const dsAnswer=(url)=>{
     const i=a.indexOf('=');const kind=a.slice(0,i),arg=a.slice(i+1);
     if(kind==='click'){const loc=page.locator(arg).first();await loc.scrollIntoViewIfNeeded().catch(()=>{});await loc.click({timeout:5000}).catch(e=>errors.push('CLICKFAIL '+arg+' '+e.message.split('\n')[0]));await page.waitForTimeout(600);}
     if(kind==='wait')await page.waitForTimeout(+arg);
+    if(kind==='reload'){await page.reload({waitUntil:'load'});await page.waitForFunction(()=>document.querySelector('#root')&&document.querySelector('#root').children.length>0,{timeout:30000});await page.waitForTimeout(+arg||2500);}   // reload=<ms>: reload in place (localStorage survives) and wait
     if(kind==='key'){await page.keyboard.press(arg);await page.waitForTimeout(300);}
     if(kind==='scroll'){await page.evaluate(y=>window.scrollTo(0,y),+arg);await page.waitForTimeout(400);}
     if(kind==='scrollnav'){await page.evaluate(()=>{const el=document.querySelector('.no-scrollbar');if(el)el.scrollLeft=9999;});await page.waitForTimeout(400);}
