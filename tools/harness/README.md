@@ -7,7 +7,7 @@ The verification method from the handover, in the repo. Two steps:
 2. **Mount** the page in headless Chromium with the CDN scripts served from the pinned npm
    packages (versions in `package.json` match the `<script>` tags in `index.html`), the Tailwind
    play CDN replaced by a CLI build of the same classes, and the data APIs stubbed: RPC
-   (`eth_*` returns canned values), DexScreener (four PTGC pairs), PulseScan counters/holders,
+   (`eth_*` returns canned values; `eth_getBalance` = 125M PLS so the DAO panel has an anchor read), DexScreener (four PTGC pairs), PulseScan counters/holders,
    `raw.githubusercontent.com/.../data/*.json` (served from the local `data/`), html2canvas. Orbitron and
    Rajdhani are served for real from `@fontsource` (devDependencies), so screenshots show the page's type.
 
@@ -26,6 +26,8 @@ REDUCED=1 DECK_LOGS=8 node run.js "#/ufo" 1280 900 out/deck-rm "click=button:has
 NO_ACCEPT=1 node run.js "#/ptgc" 1280 900 out/disc      # do NOT pre-accept the disclaimer (u14: the modal must show)
 HTML=ledger.html node run.js "" 1280 900 out/ledger     # any sibling page: since 2026-09-16 their CDN tags match index's, so the rewrite applies (data/ served locally)
 DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:has-text('Live Feed'):visible;wait=4000;evalfile=probes/deck-header.js"   # deck header geometry at phone width (a25)
+PS_DOWN=1 node run.js "#/ptgc" 1280 900 out/psdown      # PulseScan returns 503 (holders → null unless the history file has a snapshot)
+DS_PRICE=4.542e-5 node run.js "#/ptgc" 1280 900 out/subprice "evalfile=probes/price-copy.js"   # a sub-micro price → the $0.0₄… notation; the probe reads what a copy yields (a48)
 node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label^='PTGC Buys'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
 H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"

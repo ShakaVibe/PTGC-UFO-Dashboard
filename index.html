@@ -1865,7 +1865,13 @@
     /* RESILIENCE: human age for the "as of" freshness label ("14m ago", "5.5h ago"). */
     const fmtSnapshotAge=ms=>{if(ms==null||!isFinite(ms))return'';const m=ms/60000;if(m<90)return Math.max(1,Math.round(m))+'m ago';if(m>=2880)return(m/1440).toFixed(1).replace(/\.0$/,'')+'d ago';return(m/60).toFixed(1).replace(/\.0$/,'')+'h ago';};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
-    const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}>{f.pre}<sub className="text-[0.6em] opacity-70">{f.z}</sub>{f.d}</span>};
+    /* a48 (2026-09-16): "$0.0₄4542" is $0.00004542, but the zero-count is a <sub>, so screen readers and
+       the clipboard got "$0.044542" — 1,000× off. Every sub-price now renders the full decimal in a
+       visually-hidden (sr-only, still selectable) span and the visual notation aria-hidden + select-none:
+       a screen reader announces and a copy yields "$0.00004542". */
+    const fullPriceText=p=>{const e=Math.abs(parseInt(Number(p).toExponential(4).split('e')[1]));return'$'+Number(p).toFixed(Math.min(20,e+5)).replace(/0+$/,'');};
+    const SubPrice=({f,p,subClass,subStyle})=><><span className="sr-only">{fullPriceText(p)}</span><span aria-hidden="true" className="select-none">{f.pre}<sub className={subClass} style={subStyle}>{f.z}</sub>{f.d}</span></>;
+    const Price=({p,c=''})=>{const f=fmtPrice(p);return typeof f==='string'?<span className={c}>{f}</span>:<span className={c}><SubPrice f={f} p={p} subClass="text-[0.6em] opacity-70"/></span>};
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
     const CORE_LOGOS={WPLS:getLogo(ADDR.WPLS),PLSX:getLogo(ADDR.PLSX),INC:getLogo(ADDR.INC),HEX:getLogo(ADDR.HEX),EHEX:getLogo(ADDR.EHEX),PRVX:getLogo(ADDR.PRVX)};
     const WETH_ADDRESS=ADDR.WETH.toLowerCase();
@@ -2999,6 +3005,9 @@
       try{
         // 1. Get DAO contract PLS balance (eth_getBalance)
         const daoBalanceResult=await rpcFetch({jsonrpc:'2.0',method:'eth_getBalance',params:[daoContract,'latest'],id:1});
+        /* a16 (2026-09-16): rpcFetch resolves {result:null} when every endpoint fails; that used to
+           become BigInt('0x0') and the panel printed "$0 / 0 PLS" as fact. No balance → no DAO data. */
+        if(!daoBalanceResult||daoBalanceResult.result==null){console.warn('DAO data: eth_getBalance returned no result');return null;}
         const daoBalanceWei=BigInt(daoBalanceResult.result||'0x0');
         const daoBalancePLS=Number(daoBalanceWei)/1e18;
         console.log('DAO contract total:',daoBalancePLS,'PLS');
@@ -4081,10 +4090,12 @@
               <span className="hidden sm:inline text-[11px] text-white/40 tracking-[0.08em]">every fee, as it lands on the chain</span>
               <button onClick={close} className="tap order-1 ml-auto sm:order-3 sm:ml-1 text-white/60 hover:text-white text-2xl leading-none" aria-label="Close">{'×'}</button>
               <div className="order-2 basis-full sm:basis-auto sm:ml-auto flex items-center justify-between sm:justify-start gap-2">
-                {/* token toggle: switching loads the other dashboard and re-opens the deck there (see grays_deck_reopen) */}
+                {/* token toggle: switching loads the other dashboard on the SAME Dashboard instance (gotcha 7), so the
+                    deck simply stays open. a22 (2026-09-16): the old sessionStorage 'grays_deck_reopen' handshake was
+                    never consumed (Dashboard never remounts) and made the deck open uninvited on every later mount. */}
                 <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1" role="group" aria-label="Token">
                   {['PTGC','UFO'].map(t=>{const c=TOKENS[t];const on=t===token;const gold=c.color==='gold';return(
-                    <button key={t} onClick={()=>{if(on)return;try{sessionStorage.setItem('grays_deck_reopen','1');}catch(e){}onSwitch&&onSwitch(t);}}
+                    <button key={t} onClick={()=>{if(on)return;onSwitch&&onSwitch(t);}}
                       className={`flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-lg transition-all ${on?'':'opacity-50 hover:opacity-90'}`}
                       style={on?{background:gold?'linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.15))':'linear-gradient(135deg, rgba(124,252,0,0.35), rgba(124,252,0,0.15))',border:`1px solid ${deckHexA(c.colorHex,0.5)}`,boxShadow:`0 0 18px ${deckHexA(c.colorHex,0.25)}, inset 0 1px 0 rgba(255,255,255,0.15)`}:{border:'1px solid transparent'}}>
                       <img src={c.logo} alt="" className="w-6 h-6 sm:w-7 sm:h-7"/>
@@ -4233,8 +4244,10 @@
         const days=chartPeriod==='7D'?7:chartPeriod==='30D'?30:90;
         const cutoff=Date.now()-(days*24*60*60*1000);
         const filtered=snapshots.filter(s=>new Date(s.timestamp).getTime()>=cutoff);
-        // Always include a "now" point
-        const pts=[...filtered,{timestamp:new Date().toISOString(),[token]:holders||0}];
+        // A "now" point only when the live count is known — a null (PulseScan miss) used to be
+        // appended as 0 and drew a cliff to zero at the right edge (a24, 2026-09-16).
+        const nowCount=(holdersByPeriod.current??holders);
+        const pts=(nowCount!=null&&nowCount>0)?[...filtered,{timestamp:new Date().toISOString(),[token]:nowCount}]:filtered;
         if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}
         try{
           const ctx=chartRef.current.getContext('2d');
@@ -4295,11 +4308,11 @@
           });
         }catch(e){console.error('HolderAnalyticsModal chart error:',e);}
         return()=>{if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}};
-      },[open,chartPeriod,token,holders,histTick]);
+      },[open,chartPeriod,token,holders,holdersByPeriod&&holdersByPeriod.current,histTick]);
 
       if(!open)return null;
 
-      const cur=holdersByPeriod.current||holders||0;
+      const cur=holdersByPeriod.current??holders??null;   // a24: null → "—", never 0 (fmt(null) dashes; calcChange guards null)
       const d1Ago=holdersByPeriod.d1Ago;
       const d7Ago=holdersByPeriod.d7Ago;
       const d30Ago=holdersByPeriod.d30Ago;
@@ -4710,7 +4723,7 @@
     
     // Format price with subscript zeros for very small prices
     /* u6: the KPI card's price is the header's formatter (fmtPrice) — see formatPriceTwitter. */
-    const formatSubPrice=(price)=>{const f=fmtPrice(price);return typeof f==='string'?f:<>{f.pre}<sub style={{fontSize:'0.6em',verticalAlign:'baseline'}}>{f.z}</sub>{f.d}</>;};
+    const formatSubPrice=(price)=>{const f=fmtPrice(price);return typeof f==='string'?f:<SubPrice f={f} p={price} subStyle={{fontSize:'0.6em',verticalAlign:'baseline'}}/>;};
     
     // KPI Content component with dual token support
     /* ===================== MODAL SHELL =====================
@@ -4822,6 +4835,9 @@
            visible page never flickers. */
         onclone:(doc)=>{
           doc.querySelectorAll('[data-share-wrap]').forEach(w=>{w.style.transform='none';});
+          /* a48: the sub-price's visually-hidden full text is for screen readers and the clipboard;
+             html2canvas does not honour the sr-only clip reliably, so it never reaches the PNG. */
+          doc.querySelectorAll('[data-share-wrap] .sr-only').forEach(el=>el.remove());
           /* html2canvas 1.4.1 limits, found on the DAO Buys card (2026-09-14):
              - `background-clip:text` is unsupported → every `.metallic-gold` word painted as a solid
                gradient BAR. Swap to flat gold in the clone (the screen keeps the gradient).
@@ -6632,7 +6648,7 @@
     const PriceEl=({p,style={}})=>{   // u6: fmtPrice, the header's formatter, in an inline-styled span
       const f=fmtPrice(p);
       if(typeof f==='string')return<span style={style}>{f}</span>;
-      return<span style={style}>{f.pre}<sub style={{fontSize:'0.65em',verticalAlign:'sub'}}>{f.z}</sub>{f.d}</span>;
+      return<span style={style}><SubPrice f={f} p={p} subStyle={{fontSize:'0.65em',verticalAlign:'sub'}}/></span>;
     };
 
     /* Leagues fonts for the share cards: Orbitron = titles/labels only, Rajdhani = all numbers & data.
@@ -6860,7 +6876,8 @@
       };
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
-      const[showBeam,setShowBeam]=useState(()=>{try{if(sessionStorage.getItem('grays_deck_reopen')==='1'){sessionStorage.removeItem('grays_deck_reopen');return true;}}catch(e){}return false;}); // LIVE FEED: the Abduction Deck overlay, opened from the nav (or re-opened after its own token toggle)
+      const[showBeam,setShowBeam]=useState(false); // LIVE FEED: the Abduction Deck overlay, opened from the nav; survives the deck's own token toggle because this instance is not remounted (a22 removed the sessionStorage flag)
+      useEffect(()=>{try{sessionStorage.removeItem('grays_deck_reopen');}catch(e){}},[]);   // a22: sweep the retired flag from tabs that still carry it
       const[showSwap,setShowSwap]=useState(false);   // BUY / SELL: the switch.win widget modal (SwapModal)
       const[showDaoBuys,setShowDaoBuys]=useState(false);   // DAO Buys chart (DaoBuysModal) — "PTGC Buys" button in the DAO Treasury panel
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
@@ -8716,20 +8733,20 @@
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 min-w-0">
                             <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{1F4B0}'} Available for Proposals</div>
-                            <div className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(daoData?.availableUSD||0)}</div>
-                            <div className="text-white/45 text-xs tabular-nums mt-1 truncate">{fmtAbbr(daoData?.availablePLS||0)} PLS</div>
+                            <div className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{daoData?fmtUSD(daoData.availableUSD||0):'\u2014'}</div>
+                            <div className="text-white/45 text-xs tabular-nums mt-1 truncate">{daoData?`${fmtAbbr(daoData.availablePLS||0)} PLS`:'\u00a0'}</div>
                           </div>
                           <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 min-w-0">
-                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{23F3}'} Pending in Live ({daoData?.pendingCount||0})</div>
-                            <div className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(daoData?.pendingUSD||0)}</div>
-                            <div className="text-white/45 text-xs tabular-nums mt-1 truncate">{fmtAbbr(daoData?.pendingPLS||0)} PLS</div>
+                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{23F3}'} Pending in Live{daoData?` (${daoData.pendingCount||0})`:''}</div>
+                            <div className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{daoData?fmtUSD(daoData.pendingUSD||0):'\u2014'}</div>
+                            <div className="text-white/45 text-xs tabular-nums mt-1 truncate">{daoData?`${fmtAbbr(daoData.pendingPLS||0)} PLS`:'\u00a0'}</div>
                           </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 relative min-w-0">
                             <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{1F3E6}'} Ready to Deploy</div>
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(daoData?.managementValue||0)}</span>
+                              <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{daoData?fmtUSD(daoData.managementValue||0):'\u2014'}</span>
                               <button onClick={()=>setShowMgmtTokens(!showMgmtTokens)} aria-label="Token breakdown" aria-expanded={showMgmtTokens} className="tap -my-2 text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
                             </div>
                             {showMgmtTokens&&daoData?.managementTokens&&(
@@ -8757,7 +8774,7 @@
                           <div className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 relative min-w-0">
                             <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{'\u{1F4CA}'} Total DAO Value</div>
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{fmtUSD(daoData?.totalValue||0)}</span>
+                              <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate`}>{daoData?fmtUSD(daoData.totalValue||0):'\u2014'}</span>
                               <button onClick={()=>setShowTotalBreakdown(!showTotalBreakdown)} aria-label="Total value breakdown" aria-expanded={showTotalBreakdown} className="tap -my-2 text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
                             </div>
                             {showTotalBreakdown&&daoData&&(
