@@ -16,8 +16,9 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-16)
 
-Roadmap: 45 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 0 of the 67
-Audit II items added 2026-09-16 evening. **Start with a1–a4 (wrong numbers, all S), then a13/a10/a11/a25.** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 50 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 5 of the 67
+Audit II items (a1–a4 wrong numbers + a13 sibling-page SRI, done 2026-09-16 night). **Next: a10/a11
+(portfolio blankers), a25 (phone Live Feed ✕), then the honest-failure pass a14–a24.** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -51,7 +52,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **Not started** (added 2026-09-16 evening). Wrong numbers live today: a1 Charts 24H = 48 h, a2 Ledger burns from calldata, a3 "90D" = 200-day, a4 Ledger multi-pool buy |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **5 of 67 done** (2026-09-16 night): a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90 (lands at the next workflow run), a13 SRI on all four sibling pages. Rest not started |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -107,7 +108,8 @@ Check `git --no-optional-locks status` before starting.
    CoinGecko file carries no UFO ATH to override it. Do not "fix" this (roadmap d10 is closed).
 
 1. **SRI hashes.** The `<script>` tags for React, ReactDOM, Babel and Chart.js carry
-   `integrity` hashes. Change a version → regenerate the hash or the page goes blank:
+   `integrity` hashes — on ALL five pages since 2026-09-16 (charts also pins the date-fns adapter and
+   html2canvas). Change a version → regenerate the hash on every page or the page goes blank:
    `openssl dgst -sha384 -binary file.js | openssl base64 -A`. Tailwind's play CDN cannot
    carry one.
 2. **October 6, 2026 = UFO day 90.** Two things used to assume UFO was younger than 90 days
@@ -223,9 +225,10 @@ Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
--1. **Audit II, top of the list (all S):** a1 charts 24H window, a2 + a4 ledger amounts, a3 coingecko
-   d90, a13 SRI on the four sibling pages, a10/a11 portfolio, a25 phone Live Feed ✕. Then the
+-1. **Audit II, top of the list:** a10/a11 portfolio blankers, a25 phone Live Feed ✕ (all S), then the
    honest-failure pass a14–a24 and the pipeline week a28–a34. Ordered list on the artifact's "Next up".
+   Done 2026-09-16 night: a1–a4, a13. After the next deploy, eyeball charts.html 24H (PTGC and BTC series
+   should both start ~24 h back) and run `fetch-coingecko-data` by hand so the corrected "90D" lands.
    Note a38: `handover/` (this file) is public and deployed — move it before adding anything sensitive.
 
 0. **DAO Buys chart (g8) — LIVE 2026-09-14.** Still worth a look after a few hourly
