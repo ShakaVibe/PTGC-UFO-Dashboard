@@ -6,9 +6,9 @@ Update it at the end of every session.
 
 - Live site: https://ptgc-ufo.com (GitHub Pages from `main`, `deploy.yml`)
 - Roadmap + tick-off backlog (Claude artifact, shared state): "Grays Dashboard Roadmap"
-  in Shaka's Claude artifact gallery — 59 items across five phases (u10 dropped 2026-09-09,
-  g7 Buy/Sell via switch.win added + ticked 2026-09-13, g8 DAO Buys chart added + ticked
-  2026-09-13 night — built but hidden, see below).
+  in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
+  (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
+  `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
 - Repo layout: `index.html` is the whole app (React 18 + Babel-standalone + Tailwind play
   CDN, compiled in the browser). `scripts/` + `.github/workflows/` are the hourly data
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
@@ -16,7 +16,8 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-16)
 
-Roadmap: 45 of 59 items closed (u11 + u14 done 2026-09-16; u5 + u6 2026-09-14 night). u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 45 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 0 of the 67
+Audit II items added 2026-09-16 evening. **Start with a1–a4 (wrong numbers, all S), then a13/a10/a11/a25.** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -24,7 +25,8 @@ the faint gold dot top-right of the PTGC dashboard header (see `sessions/2026-09
 2026-09-15: Buy/Sell modal width moved to rem — a viewer with a larger browser font size saw the
 title clipped to "PTG" on a YouTube stream (gotcha 17, `sessions/2026-09-15.md`).
 2026-09-16: **u14** — every localStorage key in the `LS` table (gotcha 18); **u11** — Live Feed rows
-memoised, countdown/count-up in their own components, learned pools named (`sessions/2026-09-16.md`).
+memoised, countdown/count-up in their own components, learned pools named; evening **Audit II** —
+whole-repo deep dive, 67 items on the roadmap, no code changed (`sessions/2026-09-16.md`).
 2026-09-14: **DAO Buys went LIVE** — "PTGC Buys" button left of Ledger in the DAO Treasury panel,
 header dot and `DAO_BUYS_LIVE` gate removed; creature lines (`DaoCreatures`), Recent DAO Buys
 ledger, screenshot-only share card, phone header Buy/Sell row (`sessions/2026-09-14.md`).
@@ -49,6 +51,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **Not started** (added 2026-09-16 evening). Wrong numbers live today: a1 Charts 24H = 48 h, a2 Ledger burns from calldata, a3 "90D" = 200-day, a4 Ledger multi-pool buy |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -220,6 +223,11 @@ Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
+-1. **Audit II, top of the list (all S):** a1 charts 24H window, a2 + a4 ledger amounts, a3 coingecko
+   d90, a13 SRI on the four sibling pages, a10/a11 portfolio, a25 phone Live Feed ✕. Then the
+   honest-failure pass a14–a24 and the pipeline week a28–a34. Ordered list on the artifact's "Next up".
+   Note a38: `handover/` (this file) is public and deployed — move it before adding anything sensitive.
+
 0. **DAO Buys chart (g8) — LIVE 2026-09-14.** Still worth a look after a few hourly
    `fetch-treasury` runs: `data/dao-buys.json` `generatedAt` should keep moving and the buy
    count stay 211+ (the Action step is `continue-on-error`, so a failure only shows in the
@@ -264,7 +272,9 @@ Check `git --no-optional-locks status` before starting.
 - `sessions/2026-09-16.md` — u14 (`LS` key table, disclaimer version, tier-cache shape check,
   `?token=` keeps the query) + u11 (Live Feed: `DeckRow` memo, `DeckScanline` clock + ageing
   Contacts 24h, `DeckPods` count-up, no blend layer, >6 pods, learned-pool names); harness
-  `DECK_LOGS` / `REDUCED` / `NO_ACCEPT` / `reload`.
+  `DECK_LOGS` / `REDUCED` / `NO_ACCEPT` / `reload`. Evening: Audit II method, live-check finds, headlines.
+- `sessions/2026-09-16-audit.md` — the 153 raw Audit II findings (nine sections, evidence + scenario +
+  fix each) behind roadmap a1–a67.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
