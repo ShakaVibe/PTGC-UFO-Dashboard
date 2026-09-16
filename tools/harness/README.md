@@ -24,6 +24,8 @@ SLOW_HISTORY=6000 node run.js "#/ptgc" 1280 900 out/hist  # only data/*history*.
 DECK_LOGS=8 node run.js "#/ptgc" 1440 900 out/deck "click=button:has-text('Live Feed'):visible;wait=9000;shot=deck"   # 8 synthetic Swap events → the Live Feed has rows, lifts, count-ups (u11)
 REDUCED=1 DECK_LOGS=8 node run.js "#/ufo" 1280 900 out/deck-rm "click=button:has-text('Live Feed'):visible;wait=4000"   # prefers-reduced-motion for the run
 NO_ACCEPT=1 node run.js "#/ptgc" 1280 900 out/disc      # do NOT pre-accept the disclaimer (u14: the modal must show)
+HTML=ledger.html node run.js "" 1280 900 out/ledger     # any sibling page: since 2026-09-16 their CDN tags match index's, so the rewrite applies (data/ served locally)
+DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:has-text('Live Feed'):visible;wait=4000;evalfile=probes/deck-header.js"   # deck header geometry at phone width (a25)
 node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label^='PTGC Buys'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
 H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"

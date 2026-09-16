@@ -16,9 +16,9 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-16)
 
-Roadmap: 50 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 5 of the 67
-Audit II items (a1–a4 wrong numbers + a13 sibling-page SRI, done 2026-09-16 night). **Next: a10/a11
-(portfolio blankers), a25 (phone Live Feed ✕), then the honest-failure pass a14–a24.** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 53 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 8 of the 67
+Audit II items (a1–a4, a13 night; a10, a11, a25 late). **Next: the honest-failure pass a14–a24
+(one pattern, ~12 edits) or the pipeline week a28–a34 (start with a29).** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -52,7 +52,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **5 of 67 done** (2026-09-16 night): a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90 (lands at the next workflow run), a13 SRI on all four sibling pages. Rest not started |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **8 of 67 done** (2026-09-16): a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90 (lands at the next workflow run), a13 SRI on all four sibling pages, a10 + a11 portfolio (sanitised wallets, error boundary, failed reads not cached), a25 phone Live Feed header. Rest not started |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -225,9 +225,9 @@ Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
--1. **Audit II, top of the list:** a10/a11 portfolio blankers, a25 phone Live Feed ✕ (all S), then the
-   honest-failure pass a14–a24 and the pipeline week a28–a34. Ordered list on the artifact's "Next up".
-   Done 2026-09-16 night: a1–a4, a13. After the next deploy, eyeball charts.html 24H (PTGC and BTC series
+-1. **Audit II, top of the list:** the honest-failure pass a14–a24 (null through, "—" out) or the
+   pipeline week a28–a34 (a29 first). Ordered list on the artifact's "Next up".
+   Done 2026-09-16: a1–a4, a13, a10, a11, a25. After the next deploy, eyeball charts.html 24H (PTGC and BTC series
    should both start ~24 h back) and run `fetch-coingecko-data` by hand so the corrected "90D" lands.
    Note a38: `handover/` (this file) is public and deployed — move it before adding anything sensitive.
 

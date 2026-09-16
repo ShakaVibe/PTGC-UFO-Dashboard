@@ -4072,10 +4072,15 @@
             }
           `}</style>
           <div className="min-h-full max-w-[1180px] mx-auto px-3 sm:px-5 py-4" onClick={e=>e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-3">
+            {/* a25 (2026-09-16): at 375 px the title + token toggle + window pills + ✕ needed ~430 px, so the
+                ✕ sat off-screen and — the deck being a full-screen modal with no backdrop — a phone could not
+                close it. The row now wraps: title and ✕ on the first line, the controls on their own line
+                below sm; on sm+ it is the single row it was. ✕ is a 32 px tap target. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
               <div className="font-orbitron text-sm sm:text-base font-bold tracking-[0.14em]" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>LIVE FEED</div>
               <span className="hidden sm:inline text-[11px] text-white/40 tracking-[0.08em]">every fee, as it lands on the chain</span>
-              <div className="ml-auto flex items-center gap-2">
+              <button onClick={close} className="tap order-1 ml-auto sm:order-3 sm:ml-1 text-white/60 hover:text-white text-2xl leading-none" aria-label="Close">{'×'}</button>
+              <div className="order-2 basis-full sm:basis-auto sm:ml-auto flex items-center justify-between sm:justify-start gap-2">
                 {/* token toggle: switching loads the other dashboard and re-opens the deck there (see grays_deck_reopen) */}
                 <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1" role="group" aria-label="Token">
                   {['PTGC','UFO'].map(t=>{const c=TOKENS[t];const on=t===token;const gold=c.color==='gold';return(
@@ -4094,7 +4099,6 @@
                       <span className={`font-orbitron font-bold text-[10px] sm:text-[11px] tracking-[0.18em] ${on?(isGold?'metallic-gold':'text-[#7CFC00]'):ok?'text-white/50 hover:text-white':'text-white/20'}`}>{w.toUpperCase()}</span></button>);})}
                 </div>
               </div>
-              <button onClick={close} className="text-white/60 hover:text-white text-2xl leading-none px-2" aria-label="Close">{'×'}</button>
             </div>
 
             <div ref={deckRef} className="relative rounded-2xl overflow-hidden" style={{background:'#0b0d12',border:`1px solid ${deckHexA(ac,0.18)}`,boxShadow:`0 0 60px -24px ${deckHexA(ac,0.45)}`}}>
