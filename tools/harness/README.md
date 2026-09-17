@@ -25,6 +25,9 @@ DECK_LOGS=8 node run.js "#/ptgc" 1440 900 out/deck "click=button:has-text('Live 
 REDUCED=1 DECK_LOGS=8 node run.js "#/ufo" 1280 900 out/deck-rm "click=button:has-text('Live Feed'):visible;wait=4000"   # prefers-reduced-motion for the run
 NO_ACCEPT=1 node run.js "#/ptgc" 1280 900 out/disc      # do NOT pre-accept the disclaimer (u14: the modal must show)
 HTML=ledger.html node run.js "" 1280 900 out/ledger     # any sibling page: since 2026-09-16 their CDN tags match index's, so the rewrite applies (data/ served locally)
+SLOW=9000 SLOW_DATA=1 HTML=ledger.html node run.js "" 1280 900 out/ledger-slow "wait=4000;evalfile=probes/ledger-summary.js"   # a35: SLOW alone delays RPC/DexScreener/PulseScan; SLOW_DATA=1 delays the repo's data/*.json too → the summary must read "—" at 4 s
+HTML=charts.html node run.js "" 1280 900 out/charts "wait=10000;evalfile=probes/charts-status.js"   # a37: charts.html (no #root — the harness no longer waits for one) → status line "Live · 5/5 tokens / data to <time>"
+
 DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:has-text('Live Feed'):visible;wait=4000;evalfile=probes/deck-header.js"   # deck header geometry at phone width (a25)
 PS_DOWN=1 node run.js "#/ptgc" 1280 900 out/psdown      # PulseScan returns 503 (holders → null unless the history file has a snapshot)
 DS_PRICE=4.542e-5 node run.js "#/ptgc" 1280 900 out/subprice "evalfile=probes/price-copy.js"   # a sub-micro price → the $0.0₄… notation; the probe reads what a copy yields (a48)
