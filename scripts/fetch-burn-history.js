@@ -84,27 +84,28 @@ async function rpcCall(method, params, retries = 3) {
   return null;
 }
 
-// Time period boundaries (timestamps)
-const PERIODS = {
-  '2023-h2': { start: new Date('2023-05-01').getTime(), end: new Date('2024-01-01').getTime() },
-  '2024-h1': { start: new Date('2024-01-01').getTime(), end: new Date('2024-07-01').getTime() },
-  '2024-h2': { start: new Date('2024-07-01').getTime(), end: new Date('2025-01-01').getTime() },
-  '2025-h1': { start: new Date('2025-01-01').getTime(), end: new Date('2025-07-01').getTime() },
-  '2025-h2': { start: new Date('2025-07-01').getTime(), end: new Date('2026-01-01').getTime() },
-  '2026': { start: new Date('2026-01-01').getTime(), end: new Date('2030-01-01').getTime() }
-};
-
-/**
- * Get period key for a timestamp
- */
+/* a30 (2026-09-17): the PTGC burn archive is split by HALF-YEAR, derived from the date — no
+   hard-coded list to extend. The old map ended in '2026' = 2026-01-01 → 2030-01-01, which at
+   ~5 MB/month would have crossed GitHub's 100 MB file limit around mid-2027 and turned every
+   hourly push red (and burn-summary stale) with no warning. Everything before 2024 stays in
+   '2023-h2' so the existing file keeps its name. The first run after this change reads the
+   legacy ptgc-burns-2026.json, rewrites it as 2026-h1 + 2026-h2 and deletes it. */
+const LEGACY_PERIOD_FILES = ['ptgc-burns-2026.json'];   // removed once their burns are re-split
 function getPeriodKey(timestamp) {
-  for (const [key, range] of Object.entries(PERIODS)) {
-    if (timestamp >= range.start && timestamp < range.end) {
-      return key;
-    }
-  }
-  return '2026'; // Default to current
+  const d = new Date(timestamp);
+  const y = d.getUTCFullYear();
+  if (y < 2024) return '2023-h2';
+  return `${y}-${d.getUTCMonth() < 6 ? 'h1' : 'h2'}`;
 }
+/* Every period file present in data/ (any key, legacy included), for loading and listing. */
+function listPeriodFiles(dataDir) {
+  return fs.readdirSync(dataDir)
+    .filter(f => /^ptgc-burns-.+\.json$/.test(f))
+    .sort();
+}
+/* {burnCount,totalBurned} per period file as written last time — a period whose burns did not
+   change is not rewritten (six files, ~200 MB, used to be rewritten every hour for a diff in one). */
+const _periodFileStats = {};
 
 /**
  * Fetch + aggregate a token's market data from DexScreener, memoized per run.
@@ -205,9 +206,10 @@ function loadExistingBurns(dataDir, token) {
   console.log(`  Data directory: ${dataDir}`);
   
   if (token === 'PTGC') {
-    // Load all PTGC period files
-    for (const period of Object.keys(PERIODS)) {
-      const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
+    // Load all PTGC period files (a30: whatever is on disk, legacy '2026' included)
+    for (const file of listPeriodFiles(dataDir)) {
+      const period = file.slice('ptgc-burns-'.length, -'.json'.length);
+      const filePath = path.join(dataDir, file);
       console.log(`  Checking: ${filePath}`);
       try {
         if (fs.existsSync(filePath)) {
@@ -217,6 +219,7 @@ function loadExistingBurns(dataDir, token) {
           console.log(`    Read ${fileContent.length} characters`);
           const data = JSON.parse(fileContent);
           console.log(`    Parsed JSON, burns array length: ${data.burns?.length || 0}`);
+          _periodFileStats[period] = { burnCount: data.burnCount, totalBurned: data.totalBurned };
           if (data.burns && data.burns.length > 0) {
             // Use concat instead of spread to avoid stack overflow
             allBurns = allBurns.concat(data.burns);
@@ -297,20 +300,17 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
   console.log(`Fetching ${tokenSymbol} burns via RPC (eth_getLogs)...`);
   console.log(`${'='.repeat(50)}`);
 
-  // Get current block number
+  /* a31 (2026-09-17): a head read that fails is FATAL. This used to `return existingBurns`
+     and let main() recompute the 24H/7D/30D/90D windows against Date.now() and write the
+     summary as fresh — the windows slid forward with no new burns in them, under a green
+     "just updated" label. Throwing leaves every file on disk untouched (main().catch → exit 1). */
   const blockHex = await rpcCall('eth_blockNumber', []);
-  if (!blockHex) {
-    console.log('WARN: Could not get block number — returning existing burns unchanged');
-    return existingBurns;
-  }
+  if (!blockHex) throw new Error(`${tokenSymbol}: could not read the head block (eth_blockNumber failed on every endpoint) — files left untouched`);
   const currentBlock = parseInt(blockHex, 16);
 
   // Get latest block for timestamp calibration (one RPC call, used to estimate all timestamps)
   const latestBlockData = await rpcCall('eth_getBlockByNumber', ['latest', false]);
-  if (!latestBlockData) {
-    console.log('WARN: Could not get latest block data — returning existing burns unchanged');
-    return existingBurns;
-  }
+  if (!latestBlockData) throw new Error(`${tokenSymbol}: could not read the latest block (eth_getBlockByNumber failed) — files left untouched`);
   const latestTs = parseInt(latestBlockData.timestamp, 16) * 1000;
 
   // Estimate timestamp for any block number (~10 sec/block, accurate to within seconds)
@@ -342,16 +342,19 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
   for (let start = fromBlock; start <= currentBlock; start += LOG_CHUNK) {
     const end = Math.min(start + LOG_CHUNK - 1, currentBlock);
 
-    const result = await rpcCall('eth_getLogs', [{
+    const params = [{
       address: tokenAddress,
       fromBlock: '0x' + start.toString(16),
       toBlock:   '0x' + end.toString(16),
       topics: [TRANSFER_SIG, null, BURN_ADDR_TOPIC]
-    }]);
-
-    if (result && result.length > 0) {
-      allLogs.push(...result);
-    }
+    }];
+    let result = await rpcCall('eth_getLogs', params);
+    if (result === null) { await delay(5000); result = await rpcCall('eth_getLogs', params); }   // one more round after a pause
+    /* a31: a chunk that could not be read is FATAL, not "no burns in it". rpcCall returns null
+       after its retries; dropping that chunk wrote burn-summary.json as fresh with a 2,000-block
+       hole in the 24H window. Throw → main().catch → exit 1, every file untouched, next run rescans. */
+    if (result === null) throw new Error(`${tokenSymbol}: eth_getLogs failed for blocks ${start}–${end} after retries — aborting so the files are not written with a hole`);
+    if (result.length > 0) allLogs.push(...result);
 
     chunksDone++;
     if (chunksDone % 50 === 0 || chunksDone === totalChunks) {
@@ -415,16 +418,10 @@ async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns 
  */
 function splitBurnsByPeriod(burns) {
   const byPeriod = {};
-  
-  for (const period of Object.keys(PERIODS)) {
-    byPeriod[period] = [];
-  }
-  
   for (const burn of burns) {
     const period = getPeriodKey(burn.t);
-    byPeriod[period].push(burn);
+    (byPeriod[period] = byPeriod[period] || []).push(burn);
   }
-  
   return byPeriod;
 }
 
@@ -749,6 +746,11 @@ async function main() {
     
     const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
     const periodTotal = burns.reduce((s, b) => s + b.a, 0);
+    const prev = _periodFileStats[period];
+    if (prev && prev.burnCount === burns.length && prev.totalBurned === periodTotal && fs.existsSync(filePath)) {
+      console.log(`  Unchanged: ptgc-burns-${period}.json (${burns.length} burns) — not rewritten`);
+      continue;
+    }
     
     const fileData = {
       period,
@@ -760,6 +762,18 @@ async function main() {
     fs.writeFileSync(filePath, JSON.stringify(fileData));
     const fileSizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(2);
     console.log(`  Written: ${filePath} (${fileSizeMB} MB, ${burns.length} burns)`);
+    if (fileSizeMB > 80) console.warn(`  WARNING: ptgc-burns-${period}.json is ${fileSizeMB} MB — GitHub rejects files over 100 MB; shorten the period in getPeriodKey before it gets there.`);
+  }
+  // a30: a legacy file whose burns were just re-split into half-years is retired (its burns are
+  // all in the new files, so the merge above already carried them; the pipeline's `git add`
+  // pathspec stages the deletion).
+  for (const legacy of LEGACY_PERIOD_FILES) {
+    const legacyPath = path.join(dataDir, legacy);
+    const legacyKey = legacy.slice('ptgc-burns-'.length, -'.json'.length);
+    if (fs.existsSync(legacyPath) && !ptgcBurnsByPeriod[legacyKey]) {
+      fs.unlinkSync(legacyPath);
+      console.log(`  Removed legacy ${legacy} — its burns now live in the half-year files`);
+    }
   }
   
   // ============================================
@@ -809,9 +823,7 @@ async function main() {
       snapshots: ptgcSnapshots,
       changes: ptgcChanges,
       // File references for loading burns
-      burnFiles: Object.keys(PERIODS).map(p => `ptgc-burns-${p}.json`).filter(f => 
-        fs.existsSync(path.join(dataDir, f))
-      )
+      burnFiles: listPeriodFiles(dataDir)
     },
     
     UFO: {
@@ -1007,10 +1019,7 @@ async function main() {
   
   console.log('\n' + '='.repeat(60));
   console.log('FILES WRITTEN:');
-  for (const period of Object.keys(PERIODS)) {
-    const f = path.join(dataDir, `ptgc-burns-${period}.json`);
-    if (fs.existsSync(f)) console.log(`  - ptgc-burns-${period}.json`);
-  }
+  for (const f of listPeriodFiles(dataDir)) console.log(`  - ${f}`);
   console.log('  - ufo-burns.json');
   console.log('  - burn-summary.json');
   console.log('  - holder-history.json');

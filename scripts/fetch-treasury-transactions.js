@@ -26,6 +26,26 @@ const path = require('path');
 // mode where a persistent error (e.g. Moralis 401) retried forever and the job
 // ran for hours until the CI timeout.
 const MAX_RETRIES = 5;
+/* a28 (2026-09-17): PulseScan's txlist / tokentx return AT MOST 250 rows per page whatever
+   `offset` asks for (verified live: offset=10000 → 250 rows, page=2 → the next 250). The old
+   loop asked for 10,000, got 250, saw "fewer than a page" and stopped — so every run fetched
+   only the newest 250 txs and 250 transfers per wallet, and any >250-row gap (a busy day, a
+   two-day workflow outage) was never filled. Now we ask for exactly 250 and walk every page to
+   the end (~22 pages for both wallets today, ~30 s), which also heals old holes. */
+const PAGE_SIZE = 250;
+const MAX_PAGES = 400;      // 100k rows — a runaway guard, not a limit we expect to reach
+
+/* a28: the walk must reach what we already had. If the newest row on disk is not among the
+   fetched rows, the merge below would silently leave a hole between "newest fetched" and
+   "newest on disk" — throw instead (the step goes red, the file on disk is untouched). */
+function assertReachedExisting(fetched, existing, keyOf, what, walletName) {
+  if (!existing.length || !fetched.length) return;
+  const newestExisting = existing.reduce((a, b) => (Number(b.timeStamp) > Number(a.timeStamp) ? b : a));
+  const have = new Set(fetched.map(keyOf));
+  if (!have.has(keyOf(newestExisting))) {
+    throw new Error(`${walletName} ${what}: the PulseScan walk (${fetched.length} rows) never reached the newest row already on disk (${newestExisting.hash}, ts ${newestExisting.timeStamp}) — refusing to write a file with a hole in it.`);
+  }
+}
 
 // DAO Treasury Wallet Addresses
 const WALLET1 = '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1';
@@ -126,7 +146,7 @@ async function fetchWalletTransactions(walletAddress, walletName, existingTxns =
 
   const newTxns = [];
   let page = 1;
-  const pageSize = 10000; // PulseScan allows up to 10k per page
+  const pageSize = PAGE_SIZE; // a28: PulseScan caps every page at 250 — ask for exactly that
   let retries = 0;
 
   while (true) {
@@ -190,11 +210,12 @@ async function fetchWalletTransactions(walletAddress, walletName, existingTxns =
 
     // Got less than a full page → reached the end
     if (data.result.length < pageSize) break;
-    page++;
+    if (++page > MAX_PAGES) { console.warn(`  Stopping at MAX_PAGES=${MAX_PAGES} — wallet has more history than the guard allows; raise it.`); break; }
     await delay(300); // Gentle rate limiting for PulseScan
   }
 
-  console.log(`Fetched ${newTxns.length} transactions from PulseScan for ${walletName}`);
+  console.log(`Fetched ${newTxns.length} transactions from PulseScan for ${walletName} (${page} page${page === 1 ? '' : 's'})`);
+  assertReachedExisting(newTxns, existingTxns, tx => tx.hash, 'txlist', walletName);
   console.log(`Existing transactions: ${existingTxns.length}`);
 
   // Merge: new (authoritative) first, then any existing not re-fetched. Dedupe by hash.
@@ -253,7 +274,7 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
   
   const newTransfers = [];
   let page = 1;
-  const pageSize = 10000; // PulseScan allows up to 10k per page
+  const pageSize = PAGE_SIZE; // a28: PulseScan caps every page at 250 — ask for exactly that
   let retries = 0;
 
   while (true) {
@@ -316,12 +337,12 @@ async function fetchWalletTokenTransfers(walletAddress, walletName, existingTran
     
     // Got less than a full page → we've reached the end
     if (data.result.length < pageSize) break;
-    
-    page++;
+    if (++page > MAX_PAGES) { console.warn(`  Stopping at MAX_PAGES=${MAX_PAGES} — wallet has more history than the guard allows; raise it.`); break; }
     await delay(300); // Gentle rate limiting for PulseScan
   }
   
-  console.log(`Fetched ${newTransfers.length} total token transfers from PulseScan`);
+  console.log(`Fetched ${newTransfers.length} total token transfers from PulseScan (${page} page${page === 1 ? '' : 's'})`);
+  assertReachedExisting(newTransfers, existingTransfers, tx => `${tx.hash}-${tx.contractAddress}-${tx.from}-${tx.to}-${tx.value}`, 'tokentx', walletName);
   console.log(`Existing local entries: ${existingTransfers.length}`);
   
   // Merge: new first (authoritative), then existing entries not in new fetch.
