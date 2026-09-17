@@ -1290,10 +1290,11 @@ async function go() {
         applyTokenData(k, cached.data, cached.limited, days);
         anyStaleShown = true;
         if (!cached.fresh) {
+          _statusFromCache = true;   // a37: the line says "Cached" until this refetch lands
           needFetch.push([k, t]);
         }
       } else {
-        delete t._data; delete t._limited;
+        delete t._data; delete t._limited; delete t._carried;
         needFetch.push([k, t]);
       }
     });
@@ -1408,6 +1409,7 @@ async function go() {
 
     /* ── PHASE 4: Finalize ─────────────────────────────────── */
     if (currentGen === fetchGeneration) {
+      _statusFromCache = false;   // a37: the refetch landed (or nothing needed fetching) — no longer "Cached"
       updateStatusLine(); updatePeriod(); renderChart(); renderSummary();
       saveCache();
     }
@@ -1429,6 +1431,13 @@ async function go() {
   }
 }
 
+/* a37 (2026-09-17): the status line describes the DATA, not the clock. "Live" only when the
+   newest plotted point is under 2 h old; otherwise an amber "as of <newest point>". "Cached"
+   while the chart is showing sessionStorage data that is still being refetched, and a token
+   whose static daily series the builder carried forward from a previous run is named. The
+   right-hand time is the newest point's time, not the moment the line was rendered. */
+let _statusFromCache = false;
+const STATUS_STALE_MS = 2 * 60 * 60 * 1000;
 function updateStatusLine() {
   const ok = Object.entries(TOKENS).filter(([k, t]) => t.on && t._data && t._data.length >= 2).length;
   const total = Object.entries(TOKENS).filter(([k, t]) => t.on).length;
@@ -1439,15 +1448,24 @@ function updateStatusLine() {
   }
   const still = Object.entries(TOKENS).filter(([k, t]) => t.on && (!t._data || t._data.length < 2)).map(([k]) => k);
   const limited = Object.entries(TOKENS).filter(([k, t]) => t.on && t._limited).map(([k]) => k);
+  const carried = Object.entries(TOKENS).filter(([k, t]) => t.on && t._carried && t._data && t._data.length >= 2).map(([k]) => k);
   if (ok > 0) {
-    let msg = `<span class="dot live"></span>Live \u00B7 ${ok}/${total} tokens`;
+    let newest = 0;
+    Object.values(TOKENS).forEach(t => { if (t.on && t._data && t._data.length >= 2) { const last = t._data[t._data.length - 1]; const ts = Array.isArray(last) ? last[0] : (last && (last.ts || last.t || last.x)); if (ts > newest) newest = ts; } });
+    const ageMs = newest ? Date.now() - newest : Infinity;
+    const asOf = newest ? new Date(newest).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '?';
+    let msg;
+    if (ageMs <= STATUS_STALE_MS) msg = `<span class="dot live"></span>${_statusFromCache ? 'Cached' : 'Live'} \u00B7 ${ok}/${total} tokens`;
+    else msg = `<span class="dot" style="background:#eab308"></span><span style="color:#eab308">${_statusFromCache ? 'Cached \u00B7 ' : ''}as of ${asOf}</span> \u00B7 ${ok}/${total} tokens`;
     if (still.length) msg += ` \u00B7 <span style="color:#ef4444">${still.join(', ')} unavailable</span>`;
     if (limited.length) msg += ` \u00B7 <span style="color:#eab308">${limited.join(', ')} limited data</span>`;
+    if (carried.length) msg += ` \u00B7 <span style="color:#eab308">${carried.join(', ')} carried forward (builder could not refresh)</span>`;
     setStatus(msg);
+    document.getElementById('statusTime').textContent = newest ? `data to ${new Date(newest).toLocaleTimeString()}` : '';
   } else {
     setStatus('<span class="dot err"></span>Network error \u2014 try Refresh');
+    document.getElementById('statusTime').textContent = '';
   }
-  document.getElementById('statusTime').textContent = new Date().toLocaleTimeString();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1713,6 +1731,9 @@ async function fetchMoralisUnified(tokenConfig, tier, sym, signal) {
         const cleaned = cleanData(series, gtParamsForTier('daily').daysBack + 1);
         if (cleaned && cleaned.length >= 2) {
           console.log(`Static ${sym} [daily]: ${cleaned.length} candles`);
+          // a37: the builder keeps a previous series when its source fails and marks it; say so.
+          const tk = Object.entries(TOKENS).find(([k, t]) => t.sym === sym || k === sym);
+          if (tk) tk[1]._carried = !!(json && json.tokens && json.tokens[sym] && json.tokens[sym].carriedForward);
           return cleaned;
         }
       }

@@ -4,7 +4,9 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-- Live site: https://ptgc-ufo.com (GitHub Pages from `main`, `deploy.yml`)
+- Live site: https://ptgc-ufo.com (GitHub Pages from `main`, `deploy.yml` — since 2026-09-17 it
+  publishes an allow-listed `_site/`, not the checkout: `handover/`, `tools/`, `scripts/` and the
+  burn archive are on GitHub but not on the site, a38)
 - Roadmap + tick-off backlog (Claude artifact, shared state): "Grays Dashboard Roadmap"
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
@@ -57,7 +59,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **27 of 67 done.** 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json). 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a5–a9 calculators, a12, a26, a27, a35–a47, a49–a67 |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **30 of 67 done.** 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a5–a9 calculators, a12, a26, a27, a36, a39–a47, a49–a67 |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -263,8 +265,9 @@ Check `git --no-optional-locks status` before starting.
    thresholds instead (end of `sessions/2026-09-17.md`). Also check that commit's file list once:
    `ptgc-burns-2026.json` gone, `2026-h1` + `2026-h2` present (a30 migration), and at the first 6-h
    ufo-ptgc-burns step `ufo-ptgc-burns-cache.json` appears next to a ~300 KB `ufo-ptgc-burns.json`
-   (a32). Then a38 (move handover/ out of the deploy), a35/a36/a37 (Ledger + Charts), then the
-   calculators a5–a9. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
+   (a32). Then the calculators a5–a9 (a5 PLS fallback, a6 RPC pool + null burn, a7 token-switch
+   race, a8 Rewards save effects, a9 inputs across a switch), then a36 (slim treasury JSON for the
+   Ledger) and a26/a27. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
    a22, a24, a48; 2026-09-17: a14, a15, a17–a21, a23 (honest-failure pass — after deploy, a
    30-second live look: PTGC header change line, UFO Value Generated headline (should be a number,
    not "—" — if it dashes, a partner price lookup is failing on the live site, see the note in
@@ -329,7 +332,9 @@ Check `git --no-optional-locks status` before starting.
   (fatal log chunks, verified with a mock RPC), **a30** (half-year burn files, 2026 migration,
   unchanged files not rewritten), **a34** (Ledger data from raw GitHub), **a33** (token-allocation
   builder: null on failure, previous entry kept, staking contract under PTGC), **a32** (served
-  ufo-ptgc-burns.json slimmed to summaries + 91-day v1 rows; caches in their own file).
+  ufo-ptgc-burns.json slimmed to summaries + 91-day v1 rows; caches in their own file), **a38**
+  (Pages artifact = `_site/` allow-list), **a35** (Ledger summary "—" while loading), **a37**
+  (Charts status = data age, "Cached", carried-forward); harness `SLOW_DATA`, charts.html runnable.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).

@@ -1051,6 +1051,10 @@
       }, [transactions, tokenTxns, selectedMonth]);
       
       // Calculate summary stats
+      /* a35: "unknown" while loading or after an error — the summary is computed from an empty
+         processedTxns in both states and would otherwise read "0 total transactions / 0 buys". */
+      const unknown = loading || !!error;
+      const sv = v => (unknown ? '\u2014' : v);
       const summary = useMemo(() => {
         const stats = {
           total: processedTxns.length,
@@ -1159,14 +1163,16 @@
               ))}
             </div>
             
-            {/* Summary Box */}
-            <div className="bg-gradient-to-r from-blue-500/10 via-blue-600/5 to-blue-500/10 border border-blue-500/30 rounded-2xl p-5 mb-4">
+            {/* Summary Box. a35 (2026-09-17): while the files load — and after a failed load — the
+                counts are unknown, not 0: every figure prints "—" until processedTxns is real. The box
+                keeps its size so nothing jumps when the data lands. */}
+            <div className="bg-gradient-to-r from-blue-500/10 via-blue-600/5 to-blue-500/10 border border-blue-500/30 rounded-2xl p-5 mb-4" aria-busy={loading ? 'true' : undefined}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-[#D9CA5D]">
                   {availableMonths.find(m => m.value === selectedMonth)?.label} Summary
                 </h2>
                 <div className="text-blue-300/60 text-sm">
-                  <span className="text-blue-300 font-bold">{summary.total}</span> total transactions
+                  <span className="text-blue-300 font-bold">{sv(summary.total)}</span> total transactions
                 </div>
               </div>
               <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
@@ -1179,9 +1185,9 @@
                   }`}
                 >
                   <div className="text-2xl mb-1">💰</div>
-                  <div className="text-2xl font-bold text-[#D9CA5D]">{summary.ptgcBuys.count}</div>
+                  <div className="text-2xl font-bold text-[#D9CA5D]">{sv(summary.ptgcBuys.count)}</div>
                   <div className="text-[#D9CA5D]/50 text-sm uppercase font-semibold">PTGC Buys</div>
-                  {summary.ptgcBuys.ptgcTotal > 0 && (
+                  {!unknown && summary.ptgcBuys.ptgcTotal > 0 && (
                     <div className="text-[#D9CA5D]/70 text-sm mt-1 font-bold">{fmtAbbr(summary.ptgcBuys.ptgcTotal)}</div>
                   )}
                 </div>
@@ -1194,9 +1200,9 @@
                   }`}
                 >
                   <div className="text-2xl mb-1">🔥</div>
-                  <div className="text-2xl font-bold text-orange-400">{summary.burns.count}</div>
+                  <div className="text-2xl font-bold text-orange-400">{sv(summary.burns.count)}</div>
                   <div className="text-orange-400/50 text-sm uppercase font-semibold">Burns</div>
-                  {summary.burns.ptgcTotal > 0 && (
+                  {!unknown && summary.burns.ptgcTotal > 0 && (
                     <div className="text-orange-400/70 text-sm mt-1 font-bold">{fmtAbbr(summary.burns.ptgcTotal)}</div>
                   )}
                 </div>
@@ -1209,7 +1215,7 @@
                   }`}
                 >
                   <div className="text-2xl mb-1">🔄</div>
-                  <div className="text-2xl font-bold text-cyan-300">{summary.swaps.count}</div>
+                  <div className="text-2xl font-bold text-cyan-300">{sv(summary.swaps.count)}</div>
                   <div className="text-cyan-300/50 text-sm uppercase font-semibold">Swaps</div>
                 </div>
                 <div 
@@ -1221,7 +1227,7 @@
                   }`}
                 >
                   <div className="text-2xl mb-1">💧</div>
-                  <div className="text-2xl font-bold text-green-300">{summary.lpAdds.count}</div>
+                  <div className="text-2xl font-bold text-green-300">{sv(summary.lpAdds.count)}</div>
                   <div className="text-green-300/50 text-sm uppercase font-semibold">LP Adds</div>
                 </div>
                 <div 
@@ -1233,7 +1239,7 @@
                   }`}
                 >
                   <div className="text-2xl mb-1">💧</div>
-                  <div className="text-2xl font-bold text-purple-300">{summary.lpRemoves.count}</div>
+                  <div className="text-2xl font-bold text-purple-300">{sv(summary.lpRemoves.count)}</div>
                   <div className="text-purple-300/50 text-sm uppercase font-semibold">LP Removes</div>
                 </div>
                 <div 
@@ -1245,7 +1251,7 @@
                   }`}
                 >
                   <div className="text-2xl mb-1">📤</div>
-                  <div className="text-2xl font-bold text-sky-300">{summary.transfers.count}</div>
+                  <div className="text-2xl font-bold text-sky-300">{sv(summary.transfers.count)}</div>
                   <div className="text-sky-300/50 text-sm uppercase font-semibold">Transfers</div>
                 </div>
               </div>

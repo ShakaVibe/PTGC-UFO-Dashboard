@@ -44,10 +44,24 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # a38 (2026-09-17): publish the SITE, not the checkout. Uploading '.' put handover/ (the
+      # working notes, including the account-hardening ones), tools/, scripts/ and 200+ MB of
+      # burn archive on ptgc-ufo.com. Only what a browser asks for goes into _site/. Every page
+      # reads data/*.json from raw.githubusercontent.com, so data/ is shipped only as a courtesy
+      # for anyone linking ptgc-ufo.com/data/… — minus the burn archive and the generator cache.
+      - name: Assemble site
+        run: |
+          set -e
+          rm -rf _site && mkdir -p _site/data
+          cp *.html *.png robots.txt sitemap.xml _site/
+          cp -r logos _site/
+          find data -maxdepth 1 -name '*.json' ! -name 'ptgc-burns-*.json' ! -name 'ufo-ptgc-burns-cache.json' -exec cp {} _site/data/ \;
+          echo "site files:"; find _site -type f | wc -l; du -sh _site
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
       - name: Deploy to GitHub Pages
         id: deployment

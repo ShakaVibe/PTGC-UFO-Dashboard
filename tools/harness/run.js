@@ -108,6 +108,7 @@ const dsAnswer=(url)=>{
   await page.route('**/*',async r=>{
     const u=r.request().url();
     if(slow&&/rpc\.pulsechain|g4mm4|publicnode|api\.dexscreener\.com|api\.scan\.pulsechain/.test(u))await sleep(slow);
+    if(slow&&process.env.SLOW_DATA&&/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/data\//.test(u))await sleep(slow);   // SLOW_DATA=1: the repo's data/*.json wait too (a35: sibling pages that only read those)
     if(slowHist&&/data\/[a-z-]*history[a-z-]*\.json/.test(u))await sleep(slowHist);   // SLOW_HISTORY=ms: delay the data/*history*.json files only (u13)
     if(u.startsWith(`http://localhost:${port}`)||u.startsWith(`http://127.0.0.1:${port}`))return r.continue();
     if(/rpc\.pulsechain|g4mm4|publicnode/.test(u)){rpcCount.n++;if(process.env.RPC_DOWN)return r.fulfill({status:503,body:'down'});let body={};try{body=JSON.parse(r.request().postData()||'{}');}catch(e){}return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(rpcAnswer(body))});}
@@ -126,7 +127,7 @@ const dsAnswer=(url)=>{
   const t0=Date.now();
   await page.goto(`http://localhost:${port}/${route}`,{waitUntil:'load'});
   // wait for React to mount + dashboard to leave the spinner
-  await page.waitForFunction(()=>document.querySelector('#root')&&document.querySelector('#root').children.length>0,{timeout:30000});
+  await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?r.children.length>0:true;},{timeout:30000});   // charts.html has no #root (plain JS page) — don't wait for one
   await page.waitForTimeout(2500);
   for(const a of actions.split(';').filter(Boolean)){
     const i=a.indexOf('=');const kind=a.slice(0,i),arg=a.slice(i+1);
