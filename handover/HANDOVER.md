@@ -14,11 +14,12 @@ Update it at the end of every session.
   pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-16)
+## Current state (end of 2026-09-17)
 
-Roadmap: 57 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 12 of the 67
-Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — all 2026-09-16). **Next: the honest-failure pass a14–a24
-(one pattern, ~12 edits) or the pipeline week a28–a34 (start with a29).** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 65 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 20 of the 67
+Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; **a14, a15, a17, a18,
+a19, a20, a21, a23 — 2026-09-17, the honest-failure pass, `sessions/2026-09-17.md`**). **Next: the
+pipeline week a28–a34 (start with a29).** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -52,7 +53,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **8 of 67 done** (2026-09-16): a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90 (lands at the next workflow run), a13 SRI on all four sibling pages, a10 + a11 portfolio (sanitised wallets, error boundary, failed reads not cached), a25 phone Live Feed header, a16 DAO panel dashes (+ fetchDAOData null on a dead RPC), a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. Rest not started |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **20 of 67 done.** 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a5–a9 calculators, a12, a26, a28–a47, a49–a67 |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -214,6 +215,17 @@ Check `git --no-optional-locks status` before starting.
    `ptgc_nav_view` names are the handoff contract with calculators/charts/portfolio.html — don't
    rename them; read them with `lsTake` (read-and-clear). The harness pre-accepts the disclaimer by
    writing `grays_disclaimer_v1` — keep `run.js` in step if the version moves.
+20. **Honest failure = null through, "—" out** (the a14–a24 pass, 2026-09-17). A read that failed or
+   has not landed is `null` in state and in every helper's return — never 0, never `{total:0}`.
+   `fmt` / `fmtUSD` / `fmtAbbr` print null as "—"; before multiplying by a price check `price>0`
+   and print "—" otherwise. `fetchDex` marks an outage with `_fromChain:true` and null
+   `vol`/`buys`/`sells`/`change`; `fetchStakingData` / `fetchBurn` / `fetchDAOData` return null.
+   Value Generated: `computeValueGenBuckets` gives `byKey[k]=null` + `total:null` + `missing:[…]`
+   when a price is absent — don't "fix" a null total by summing the known buckets. Cards whose
+   numbers come from a second fetch use `CardLoadState` (loading / error + Retry, inside the card)
+   and a loader function with an error flag, never a bare effect. Async work started for one token
+   checks `tokenRef.current` before every setter (`Dashboard` is not remounted — gotcha 7).
+   Test with `RPC_DOWN=1`, `DS_DOWN=1`, and `evalfile=probes/fetch-fail-all.js` after load.
 19. **Live Feed pieces live at module scope** (`DeckRow`, `DeckScanline`, `DeckPods`, right after
    `DECK_POD_POS`). Rows are `React.memo` and never re-render, which is also why the dispatch
    animation can light `.deck-a.on` by DOM class — don't put anything that changes per render
@@ -227,10 +239,14 @@ Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
--1. **Audit II, top of the list:** the honest-failure pass a14–a24 (null through, "—" out) or the
-   pipeline week a28–a34 (a29 first). Ordered list on the artifact's "Next up".
-   Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16, a22, a24, a48. After the next deploy, eyeball charts.html 24H (PTGC and BTC series
-   should both start ~24 h back) and run `fetch-coingecko-data` by hand so the corrected "90D" lands.
+-1. **Audit II, top of the list:** the pipeline week a28–a34 (a29 first), then the calculators
+   a5–a9. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
+   a22, a24, a48; 2026-09-17: a14, a15, a17–a21, a23 (honest-failure pass — after deploy, a
+   30-second live look: PTGC header change line, UFO Value Generated headline (should be a number,
+   not "—" — if it dashes, a partner price lookup is failing on the live site, see the note in
+   `sessions/2026-09-17.md`), and the Live Feed on UFO still seeds its pods). If the 09-16 deploy
+   has not been eyeballed: charts.html 24H (PTGC and BTC series should both start ~24 h back) and
+   run `fetch-coingecko-data` by hand so the corrected "90D" lands.
    Note a38: `handover/` (this file) is public and deployed — move it before adding anything sensitive.
 
 0. **DAO Buys chart (g8) — LIVE 2026-09-14.** Still worth a look after a few hourly
@@ -280,6 +296,10 @@ Check `git --no-optional-locks status` before starting.
   `DECK_LOGS` / `REDUCED` / `NO_ACCEPT` / `reload`. Evening: Audit II method, live-check finds, headlines.
 - `sessions/2026-09-16-audit.md` — the 153 raw Audit II findings (nine sections, evidence + scenario +
   fix each) behind roadmap a1–a67.
+- `sessions/2026-09-17.md` — Audit II honest-failure pass (a14, a15, a17, a18, a19, a20, a21, a23):
+  null through / "—" out across fetchDex, allocation, PTGC-burned-by-UFO, five share cards, KPI
+  compare, quickRefresh token guard, partner prices in the Value Generated model, deck windows;
+  harness `probes/fetch-fail*.js`.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
