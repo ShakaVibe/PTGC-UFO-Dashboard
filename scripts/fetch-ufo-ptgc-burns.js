@@ -128,13 +128,19 @@ async function fetchUFOBurns(contract, head, existingBurns = []) {
 
   for (let start = fromBlock; start <= currentBlock; start += LOG_CHUNK) {
     const end = Math.min(start + LOG_CHUNK - 1, currentBlock);
-    const result = await rpcCall('eth_getLogs', [{
+    const params = [{
       address: contract.address,
       fromBlock: '0x' + start.toString(16),
       toBlock:   '0x' + end.toString(16),
       topics: [TRANSFER_SIG, null, BURN_ADDR_TOPIC]
-    }]);
-    if (result && result.length > 0) allLogs.push(...result);
+    }];
+    let result = await rpcCall('eth_getLogs', params);
+    if (result === null) { await delay(5000); result = await rpcCall('eth_getLogs', params); }   // one more round after a pause
+    /* a31: a chunk that could not be read is FATAL. The next run starts ~1000 blocks before the
+       newest STORED burn, so a dropped chunk older than that was never rescanned and permanently
+       lowered byContract.v1 and the dated rows behind the "PTGC burned by UFO" windows. */
+    if (result === null) throw new Error(`${contract.key}: eth_getLogs failed for blocks ${start}–${end} after retries — aborting so the file is not written with a hole`);
+    if (result.length > 0) allLogs.push(...result);
     chunksDone++;
     if (chunksDone % 100 === 0 || chunksDone === totalChunks) {
       console.log(`  ${chunksDone}/${totalChunks} chunks | ${allLogs.length} new ${contract.key} burn logs`);

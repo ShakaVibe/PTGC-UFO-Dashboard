@@ -139,8 +139,13 @@
       return { recipient: '0x' + m[1], amount: BigInt('0x' + m[2]) };
     };
     
-    // Data file paths
-    const DATA_BASE_URL = 'data/';
+    /* a34 (2026-09-17): read data/ from the repo's main branch like every other page. GitHub
+       Pages (relative 'data/') is only redeployed on a human push or the 06:00 rebuild, so the
+       Ledger was up to 24 h behind the hourly treasury files while its footer printed the stale
+       file's own lastUpdated. The cache-buster keeps raw.githubusercontent's CDN from serving an
+       hour-old copy. Local harness runs rewrite this host to the local data/ (tools/harness/run.js). */
+    const DATA_BASE_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
+    const DATA_BUST = '?t=' + Date.now();
     
     const DAOLedger = () => {
       const [transactions, setTransactions] = useState([]);
@@ -190,11 +195,11 @@
             
             // Try to load from JSON data files
             const [w1TxnRes, w2TxnRes, w1TokenRes, w2TokenRes, summaryRes] = await Promise.all([
-              fetch(`${DATA_BASE_URL}treasury-wallet1-txns.json`),
-              fetch(`${DATA_BASE_URL}treasury-wallet2-txns.json`),
-              fetch(`${DATA_BASE_URL}treasury-wallet1-tokens.json`),
-              fetch(`${DATA_BASE_URL}treasury-wallet2-tokens.json`),
-              fetch(`${DATA_BASE_URL}treasury-summary.json`)
+              fetch(`${DATA_BASE_URL}treasury-wallet1-txns.json${DATA_BUST}`),
+              fetch(`${DATA_BASE_URL}treasury-wallet2-txns.json${DATA_BUST}`),
+              fetch(`${DATA_BASE_URL}treasury-wallet1-tokens.json${DATA_BUST}`),
+              fetch(`${DATA_BASE_URL}treasury-wallet2-tokens.json${DATA_BUST}`),
+              fetch(`${DATA_BASE_URL}treasury-summary.json${DATA_BUST}`)
             ]);
             
             // Check if any failed
