@@ -10,16 +10,18 @@ Update it at the end of every session.
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
 - Repo layout: `index.html` is the whole app (React 18 + Babel-standalone + Tailwind play
-  CDN, compiled in the browser). `scripts/` + `.github/workflows/` are the hourly data
-  pipeline that writes `data/*.json`. `calculators.html`, `charts.html`, `portfolio.html`,
+  CDN, compiled in the browser). `scripts/` + `.github/workflows/data-pipeline.yml` are the
+  hourly data pipeline that writes `data/*.json` (ONE workflow since 2026-09-17, a29; `deploy.yml`
+  is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
 ## Current state (end of 2026-09-17)
 
 Roadmap: 65 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 20 of the 67
 Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; **a14, a15, a17, a18,
-a19, a20, a21, a23 — 2026-09-17, the honest-failure pass, `sessions/2026-09-17.md`**). **Next: the
-pipeline week a28–a34 (start with a29).** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+a19, a20, a21, a23 — 2026-09-17, the honest-failure pass; **a29** the same evening — nine
+scheduled workflows collapsed into `data-pipeline.yml`, `sessions/2026-09-17.md`**). **Next: run
+the pipeline once by hand, measure its cadence the next day, then a28 / a31 / a30.** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -71,20 +73,22 @@ Check `git --no-optional-locks status` before starting.
    commit, it is the folder sync re-writing Claude's edits a beat late — wait a moment,
    `git status`, then `git rebase --continue`. When writing a file back a second time in one session,
    stage it from a NEW path under outputs/ — re-using the first path re-sent the first snapshot.)
-4. If a pipeline script changed, run its workflow once by hand (Actions → Run workflow).
+4. If a pipeline script changed, run it once by hand: Actions → "Data Pipeline (hourly)" → Run
+   workflow → `only=<step>` (step names are in the workflow's `only` description; `force=true`
+   ignores the file-age gates).
 
 ## Sources of truth for numbers
 
 - **Prices / liquidity / volume**: DexScreener, with on-chain reserves as fallback.
 - **Burn totals**: `balanceOf(0x369)` on chain.
-- **PTGC burn windows (24H/7D/30D/90D)**: `data/burn-summary.json` (hourly, `update-burn-history.yml`).
+- **PTGC burn windows (24H/7D/30D/90D)**: `data/burn-summary.json` (hourly, the burn-history step of `data-pipeline.yml`).
   Shown with an amber "as of" label after 6 h, as "—" after 7 days.
 - **UFO burn windows**: `data/value-generated.json` → `burnPeriods.UFO` when <3 h old, otherwise a
   live chain scan. `burn-summary.json`'s UFO section still describes the OLD contract
   (`fetch-burn-history.js` line 31) — never use it for UFO.
-- **UFO Value Generated**: `data/value-generated.json` (hourly, `build-value-generated.yml`); the
+- **UFO Value Generated**: `data/value-generated.json` (hourly, the value-generated step of `data-pipeline.yml`); the
   browser falls back to a live scan when the file is >3 h old.
-- **DAO Buys (PTGC)**: `data/dao-buys.json` (hourly, second step of `fetch-treasury.yml`,
+- **DAO Buys (PTGC)**: `data/dao-buys.json` (hourly, the dao-buys step of `data-pipeline.yml`, right after treasury;
   generator `scripts/build-dao-buys.mjs`, schema 2). Buys = wallet-sent, PLS-paid txs that
   delivered PTGC to one of the TWO DAO wallets (`WALLETS` in the script = `TOKENS.PTGC.daoTreasury`
   0xeeac…31e1 and `ADDR.DAO_WALLET2` 0x4407…6A34 — the second bought Oct 2023 → May 2025 and was
@@ -215,6 +219,14 @@ Check `git --no-optional-locks status` before starting.
    `ptgc_nav_view` names are the handoff contract with calculators/charts/portfolio.html — don't
    rename them; read them with `lsTake` (read-and-clear). The harness pre-accepts the disclaimer by
    writing `grays_disclaimer_v1` — keep `run.js` in step if the version moves.
+21. **The pipeline is ONE workflow** (`data-pipeline.yml`, a29, 2026-09-17). Nine crons asking for
+   ~190 runs/day made GitHub delay every schedule event 4–5 h (Actions log: each "hourly" job ran
+   five times a day, every run green). Don't add a new scheduled workflow — add a step to the
+   pipeline, in data order, `continue-on-error: true`, its `id` in the "Report step failures"
+   list, and its output file in the commit step's `git add` list. A step that should run less
+   than hourly gets a `pipeline-gate.mjs` line (age of its file, not the clock). `data/*.json` is
+   committed once per run as "data: hourly pipeline …"; expect ~24 a day — if it drops to ~5 again,
+   GitHub is throttling even one workflow and the site's stale thresholds should move instead.
 20. **Honest failure = null through, "—" out** (the a14–a24 pass, 2026-09-17). A read that failed or
    has not landed is `null` in state and in every helper's return — never 0, never `{total:0}`.
    `fmt` / `fmtUSD` / `fmtAbbr` print null as "—"; before multiplying by a price check `price>0`
@@ -239,8 +251,12 @@ Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
--1. **Audit II, top of the list:** the pipeline week a28–a34 (a29 first), then the calculators
-   a5–a9. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
+-1. **Audit II, top of the list:** a29 landed 2026-09-17 evening but has NOT run on GitHub yet —
+   after the push: Actions → "Data Pipeline (hourly)" → Run workflow with `force=true`, watch it
+   go green (~20 min), then a day later count `git log | grep "hourly pipeline"` (want ~24/day;
+   details at the end of `sessions/2026-09-17.md`). Then the rest of the pipeline week — a28
+   (PulseScan paging), a31 (failed chunk = fatal), a30 (split the 2026 burn file), a33, a34, a32 —
+   then the calculators a5–a9. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
    a22, a24, a48; 2026-09-17: a14, a15, a17–a21, a23 (honest-failure pass — after deploy, a
    30-second live look: PTGC header change line, UFO Value Generated headline (should be a number,
    not "—" — if it dashes, a partner price lookup is failing on the live site, see the note in
@@ -299,7 +315,8 @@ Check `git --no-optional-locks status` before starting.
 - `sessions/2026-09-17.md` — Audit II honest-failure pass (a14, a15, a17, a18, a19, a20, a21, a23):
   null through / "—" out across fetchDex, allocation, PTGC-burned-by-UFO, five share cards, KPI
   compare, quickRefresh token guard, partner prices in the Value Generated model, deck windows;
-  harness `probes/fetch-fail*.js`.
+  harness `probes/fetch-fail*.js`. Evening: **a29** — Actions-API diagnosis (runs not created, not
+  failing), `data-pipeline.yml` replaces nine workflows, `pipeline-gate.mjs`, `lv-snapshot.js`.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).

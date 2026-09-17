@@ -1,0 +1,202 @@
+name: Data Pipeline (hourly)
+
+# ONE scheduled workflow for every data file the site reads (roadmap a29, 2026-09-17).
+#
+# Why: this repo used to ask GitHub for ~190 scheduled runs a day across nine workflows, and
+# GitHub answered by delaying every schedule event by 4–5 hours — the Actions log for Sep 15–17
+# shows each "hourly" job actually running about five times a day, and the "every 6 h" jobs
+# firing at 04:29 / 11:18 / 16:38. Every run that DID start succeeded; the runs were simply not
+# being created. One hourly workflow asks for 24 runs a day instead.
+#
+# How it works:
+#   * Every step runs in the order its data needs (charts before coingecko, treasury before
+#     dao-buys). Steps that used to run every 2 h / 6 h are gated on the AGE OF THEIR FILE
+#     (scripts/pipeline-gate.mjs) rather than the clock, so a delayed run never skips a window.
+#   * Every step is continue-on-error: a source that is down must not stop the others from
+#     landing. The last step then FAILS the run if anything failed, so the workflow still goes
+#     red — read the step log to see which source it was.
+#   * One commit per run, adding only the files these scripts own.
+#   * "Run workflow" (workflow_dispatch) takes `only=` to run a subset by hand after editing a
+#     script (the handover's step 4), and `force=true` to ignore the age gates.
+#
+# Retired by this file (their schedules were the problem): build-charts-data, build-token-
+# allocation, build-value-generated, fetch-coingecko-data, fetch-treasury, fetch-ufo-ptgc-burns,
+# lv-snapshot, update-burn-history. update-metrics.yml is retired too: data/metrics-history.json
+# is read by nothing on the site and the script targets the retired UFO contract (a65).
+# deploy.yml is untouched — data commits use GITHUB_TOKEN and never trigger it.
+
+on:
+  schedule:
+    - cron: '7 * * * *'   # hourly at :07 — off the top-of-hour rush
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Run only these steps, comma-separated: charts, coingecko, value-generated, burn-history, treasury, dao-buys, ufo-ptgc-burns, token-allocation, lv-snapshot. Empty = the normal hourly set.'
+        required: false
+        default: ''
+      force:
+        description: 'Ignore the file-age gates (run the 2 h / 6 h steps now)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-pipeline
+  cancel-in-progress: false   # a slow run finishes; the next hour waits behind it
+
+jobs:
+  data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50       # the nine steps take ~20 min together on a normal hour
+    env:
+      ONLY:  ${{ github.event.inputs.only }}
+      FORCE: ${{ github.event.inputs.force }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ---------- gates (file age, not clock — see the header) ----------
+      - name: Gate — charts (every 2 h)
+        id: g_charts
+        run: node scripts/pipeline-gate.mjs charts data/charts-data.json 2
+      - name: Gate — ufo-ptgc-burns (every 6 h)
+        id: g_ufo_ptgc
+        run: node scripts/pipeline-gate.mjs ufo-ptgc-burns data/ufo-ptgc-burns.json 6
+      - name: Gate — token-allocation (every 6 h)
+        id: g_alloc
+        run: node scripts/pipeline-gate.mjs token-allocation data/token-allocation.json 6
+      - name: Gate — lv-snapshot (every 6 h)
+        id: g_lv
+        run: node scripts/pipeline-gate.mjs lv-snapshot data/lv-snapshots.json 6
+      - name: Gate — hourly steps (only `only=` can switch these off)
+        id: g_hourly
+        run: |
+          for s in coingecko value-generated burn-history treasury dao-buys; do
+            if [ -z "$ONLY" ] || echo ",$ONLY," | tr -d ' ' | grep -q ",$s,"; then v=true; else v=false; fi
+            echo "[gate] $s: run=$v"
+            echo "${s//-/_}=$v" >> "$GITHUB_OUTPUT"
+          done
+
+      # ---------- steps, in data order; each continue-on-error so one dead source ----------
+      # ---------- never blocks the rest from landing (the last step reports)      ----------
+      - name: charts-data.json (CoinGecko OHLCV, daily candles)
+        id: charts
+        if: steps.g_charts.outputs.run == 'true'
+        continue-on-error: true
+        run: node scripts/build-charts-data.js
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+
+      - name: coingecko-data.json + liquidity/transaction/tokensinlp history (reads charts-data for d90)
+        id: coingecko
+        if: steps.g_hourly.outputs.coingecko == 'true'
+        continue-on-error: true
+        run: node scripts/fetch-coingecko-data.js
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+
+      - name: value-generated.json (UFO delivered value + PTGC-burned-by-UFO snapshot)
+        id: value_generated
+        if: steps.g_hourly.outputs.value_generated == 'true'
+        continue-on-error: true
+        run: node scripts/build-value-generated.mjs
+        env:
+          OUT_PATH: data/value-generated.json
+
+      - name: burn-summary.json, ptgc-burns-*.json, ufo-burns.json, holder-history.json
+        id: burn_history
+        if: steps.g_hourly.outputs.burn_history == 'true'
+        continue-on-error: true
+        run: node scripts/fetch-burn-history.js
+
+      - name: treasury-wallet*.json + treasury-summary.json (PulseScan)
+        id: treasury
+        if: steps.g_hourly.outputs.treasury == 'true'
+        continue-on-error: true
+        run: node scripts/fetch-treasury-transactions.js
+
+      - name: dao-buys.json (from the treasury files, priced on-chain)
+        id: dao_buys
+        if: steps.g_hourly.outputs.dao_buys == 'true'
+        continue-on-error: true
+        run: node scripts/build-dao-buys.mjs
+
+      - name: ufo-ptgc-burns.json (every 6 h)
+        id: ufo_ptgc
+        if: steps.g_ufo_ptgc.outputs.run == 'true'
+        continue-on-error: true
+        run: node scripts/fetch-ufo-ptgc-burns.js
+
+      - name: token-allocation.json (every 6 h)
+        id: alloc
+        if: steps.g_alloc.outputs.run == 'true'
+        continue-on-error: true
+        run: node scripts/build-token-allocation.mjs
+
+      - name: lv-snapshots.json + lv-latest.json (every 6 h)
+        id: lv
+        if: steps.g_lv.outputs.run == 'true'
+        continue-on-error: true
+        run: node scripts/lv-snapshot.js
+
+      # ---------- one commit, only the files the steps above own ----------
+      - name: Commit if changed (rebase + retry)
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- \
+            data/charts-data.json \
+            data/coingecko-data.json data/liquidity-history.json data/transaction-history.json data/tokensinlp-history.json \
+            data/value-generated.json \
+            data/burn-summary.json data/ufo-burns.json data/holder-history.json 'data/ptgc-burns-*.json' \
+            data/treasury-summary.json data/treasury-wallet1-txns.json data/treasury-wallet1-tokens.json \
+            data/treasury-wallet2-txns.json data/treasury-wallet2-tokens.json \
+            data/dao-buys.json \
+            data/ufo-ptgc-burns.json \
+            data/token-allocation.json \
+            data/lv-snapshots.json data/lv-latest.json
+          if git diff --staged --quiet; then
+            echo "No changes — nothing to commit."
+            exit 0
+          fi
+          git commit -m "data: hourly pipeline $(date -u '+%Y-%m-%d %H:%M UTC') [skip ci]"
+          # The remote can still move under us (Shaka's pushes), so rebase our one data commit
+          # onto whatever landed and push; retry with jitter. '-X theirs' keeps THIS run's
+          # freshly generated files if a data path ever conflicts — nothing else writes them.
+          for i in 1 2 3 4 5; do
+            git rebase --abort 2>/dev/null || true
+            git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" \
+              && git push origin "${GITHUB_REF_NAME}" \
+              && { echo "pushed on attempt $i"; exit 0; }
+            echo "push attempt $i failed; retrying…"
+            sleep $((RANDOM % 8 + 2))
+          done
+          echo "ERROR: could not push after 5 attempts"
+          exit 1
+
+      # ---------- go red if any source failed, AFTER the good files have landed ----------
+      - name: Report step failures
+        if: always()
+        run: |
+          failed=""
+          for s in charts:${{ steps.charts.outcome }} coingecko:${{ steps.coingecko.outcome }} \
+                   value-generated:${{ steps.value_generated.outcome }} burn-history:${{ steps.burn_history.outcome }} \
+                   treasury:${{ steps.treasury.outcome }} dao-buys:${{ steps.dao_buys.outcome }} \
+                   ufo-ptgc-burns:${{ steps.ufo_ptgc.outcome }} token-allocation:${{ steps.alloc.outcome }} \
+                   lv-snapshot:${{ steps.lv.outcome }}; do
+            echo "  $s"
+            case "$s" in *:failure) failed="$failed ${s%%:*}";; esac
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Steps failed:$failed — their files were NOT refreshed this run (the others were committed)."
+            exit 1
+          fi
+          echo "All steps that ran succeeded."
