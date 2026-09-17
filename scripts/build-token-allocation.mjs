@@ -4,7 +4,17 @@
 // Dolphin/Squid) + allocation (burned/inLP/staked/held). The dashboard reads this file so the
 // Token Allocation "Leagues" render instantly, with no live PulseScan scan per visitor.
 //
-// Run by .github/workflows/build-token-allocation.yml every 6h. Node 20+ (global fetch).
+// Run by the token-allocation step of .github/workflows/data-pipeline.yml every 6 h (file age).
+// Node 20+ (global fetch).
+//
+// a33 (2026-09-17): a read that fails is UNKNOWN, never 0 — rpc() returns null, balanceOf /
+// getPair / holderCount throw or return null, and a token whose reads did not all succeed keeps
+// its previous tiers AND allocation from the file (with `updatedAt` left at the old stamp).
+// Before: rpc() answered '0x0' after four failures, so a dead RPC produced burned 0 / inLP 0, a
+// getPair miss left the PTGC/WPLS pool out of the exclusion list (its balance then counted as a
+// Whale), and a PulseScan /counters miss published "SquidAndBelow: 0" as an exact count. The
+// staking contract (0xC71f…) is PTGC's — it was listed under UFO, which counted it as a Shark
+// for UFO and reported PTGC staked 0%.
 //
 // ⚠ THE ONE THING THAT WILL BREAK IF YOU TOUCH IT: PulseScan returns each holder's `value`
 // (balance in wei) as a STRING, but the pagination cursor `next_page_params.value` as a raw
@@ -35,9 +45,9 @@ const CORES = [
 ];
 
 const TOKENS = {
-  PTGC: { address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', supply: 333333333333n, staking: null },
-  UFO:  { address: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6', supply: 999999999051n,
-          staking: '0xC71f597a2AC39E47F07102E849d18489C96f39EF' },
+  PTGC: { address: '0x94534EeEe131840b1c0F61847c572228bdfDDE93', supply: 333333333333n,
+          staking: '0xC71f597a2AC39E47F07102E849d18489C96f39EF' },   // = TOKENS.PTGC.stakingContract in index.html (a33: was under UFO)
+  UFO:  { address: '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6', supply: 999999999051n, staking: null },
 };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -49,24 +59,26 @@ async function rpc(to, data) {
     try {
       const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
-      if (j && j.result) return j.result;
+      if (j && typeof j.result === 'string' && j.result.startsWith('0x')) return j.result;
     } catch {}
     await sleep(500 * (a + 1));
   }
-  return '0x0';
+  return null;   // a33: unknown — callers throw, never read this as 0
 }
 
+class ReadFailed extends Error {}
+
 async function balanceOf(token, holder) {
-  try { return BigInt(await rpc(token, '0x70a08231' + pad(holder)) || '0x0'); } catch { return 0n; }
+  const r = await rpc(token, '0x70a08231' + pad(holder));
+  if (r == null) throw new ReadFailed(`balanceOf(${holder}) on ${token} failed`);
+  return BigInt(r === '0x' ? '0x0' : r);
 }
 
 async function getPair(a, b) {
   const r = await rpc(FACTORY, '0xe6a43905' + pad(a) + pad(b)); // getPair(address,address)
-  if (r && r.length >= 66) {
-    const p = '0x' + r.slice(-40);
-    return p === '0x' + '0'.repeat(40) ? null : p.toLowerCase();
-  }
-  return null;
+  if (r == null || r.length < 66) throw new ReadFailed(`getPair(${a}, ${b}) failed`);   // a33: a miss must not silently drop a pool from the exclusion list
+  const p = '0x' + r.slice(-40);
+  return p === '0x' + '0'.repeat(40) ? null : p.toLowerCase();
 }
 
 async function getJson(url, tries = 6) {
@@ -83,7 +95,8 @@ async function getJson(url, tries = 6) {
 
 async function holderCount(address) {
   const j = await getJson(`${SCAN}/tokens/${address}/counters`);
-  return (j && parseInt(j.token_holders_count)) || 0;
+  const n = j && parseInt(j.token_holders_count);
+  return Number.isFinite(n) && n > 0 ? n : null;   // a33: null = unknown, never 0
 }
 
 // Page all holders, classify by % of supply, stop once we drop below Dolphin (list is desc).
@@ -139,10 +152,12 @@ async function buildToken(sym, cfg) {
   const total = await holderCount(cfg.address);
   const { counts, counted, complete } = await scanTiers(cfg.address, cfg.supply, exclude);
   const excludedCount = pools.size + (cfg.staking ? 1 : 0);
-  const squid = Math.max(0, total - counted - excludedCount);
+  // a33: no holder count → SquidAndBelow is unknown (null; the dashboard prints "—"), and the
+  // caller keeps the previous file's tiers instead when it has them.
+  const squid = total == null ? null : Math.max(0, total - counted - excludedCount);
 
   return {
-    complete,
+    complete: complete && total != null,
     tiers: complete ? { ...counts, SquidAndBelow: squid } : null,
     allocation: {
       burned: { amount: toTok(burned), pct: pct(burned) },
@@ -158,20 +173,44 @@ async function main() {
   let prev = {};
   try { prev = JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch {}
 
-  const out = { lastUpdated: new Date().toISOString(), tokens: {} };
+  const now = new Date().toISOString();
+  const out = { lastUpdated: prev.lastUpdated || now, tokens: {} };
+  let refreshed = 0, failed = 0;
   for (const [sym, cfg] of Object.entries(TOKENS)) {
-    const r = await buildToken(sym, cfg);
+    const old = prev.tokens?.[sym] || {};
+    let r;
+    try { r = await buildToken(sym, cfg); }
+    catch (e) {
+      // a33: an RPC / explorer read failed → this token keeps its previous entry, stamp and all.
+      failed++;
+      console.error(`${sym}: read failed — keeping the previous entry (${old.updatedAt || 'none'}): ${e.message}`);
+      out.tokens[sym] = { ...old, tiers: old.tiers ?? null, allocation: old.allocation ?? null, updatedAt: old.updatedAt ?? null };
+      continue;
+    }
+    const tiersOk = r.complete && r.tiers;
     out.tokens[sym] = {
-      tiers: r.tiers || (prev.tokens?.[sym]?.tiers ?? null),
+      tiers: tiersOk ? r.tiers : (old.tiers ?? (r.tiers || null)),   // an incomplete scan keeps the previous exact tiers; a squid-less scan only if there is nothing older
       allocation: r.allocation,
+      updatedAt: now,
+      tiersUpdatedAt: tiersOk ? now : (old.tiersUpdatedAt ?? old.updatedAt ?? null),
     };
-    console.log(`${sym}: tiers ${r.complete ? 'exact' : 'incomplete (kept previous)'}`, out.tokens[sym].tiers,
+    refreshed++;
+    console.log(`${sym}: tiers ${tiersOk ? 'exact' : 'incomplete (kept previous)'}`, out.tokens[sym].tiers,
                 '| alloc', Object.fromEntries(Object.entries(out.tokens[sym].allocation).map(([k, v]) => [k, v.pct + '%'])));
   }
+  // lastUpdated drives the pipeline's 6-h age gate: only advance it when BOTH tokens refreshed, so a
+  // half-failed run is retried next hour rather than in six (the good token is re-scanned too — cheap).
+  if (refreshed && !failed) out.lastUpdated = now;
 
+  if (!refreshed) {
+    // Nothing new to say — leave the file exactly as it was (the pipeline's age gate will retry next hour).
+    console.error('Both tokens failed — file left untouched');
+    process.exit(1);
+  }
   fs.mkdirSync('data', { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(out, null, 2));
-  console.log('wrote', OUT);
+  console.log('wrote', OUT, failed ? `(${failed} token kept from the previous run)` : '');
+  if (failed) process.exit(1);   // the pipeline's report step goes red; the good token still landed
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
