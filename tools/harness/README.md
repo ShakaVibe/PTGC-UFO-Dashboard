@@ -29,6 +29,7 @@ DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:ha
 PS_DOWN=1 node run.js "#/ptgc" 1280 900 out/psdown      # PulseScan returns 503 (holders → null unless the history file has a snapshot)
 DS_PRICE=4.542e-5 node run.js "#/ptgc" 1280 900 out/subprice "evalfile=probes/price-copy.js"   # a sub-micro price → the $0.0₄… notation; the probe reads what a copy yields (a48)
 node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label^='PTGC Buys'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
+node run.js "#/ptgc" 1440 900 out/cards "wait=3000;click=button:has-text('Socials'):visible;wait=1000;evalfile=probes/fetch-fail-all.js;click=button:has-text('Combined Burn Stats');wait=4000;shot=burnerr"   # a18: after the page is up, DexScreener + affiliate API + RPC POSTs reject → every second-fetch card must show "Couldn't load … — Retry", never $0 (fetch-fail.js keeps RPC alive)
 HTML=index.orig.html node run.js "#/ptgc" 375 812 out/before   # compare against another copy
 H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys'];wait=3000;click=button[aria-label='Share the DAO Buys chart as an image'];wait=2500;evalfile=probes/share-png-real.js;wait=500;shot=png"
 ```
