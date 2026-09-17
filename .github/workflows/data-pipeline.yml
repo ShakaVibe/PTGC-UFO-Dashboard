@@ -152,17 +152,25 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- \
+          # Only the files the steps above own. A path is included when it exists on disk OR is
+          # tracked (so a deletion is staged too); a file that a gated step has not created yet
+          # is skipped instead of failing `git add` with "pathspec did not match".
+          add=""
+          for f in \
             data/charts-data.json \
             data/coingecko-data.json data/liquidity-history.json data/transaction-history.json data/tokensinlp-history.json \
             data/value-generated.json \
-            data/burn-summary.json data/ufo-burns.json data/holder-history.json 'data/ptgc-burns-*.json' \
+            data/burn-summary.json data/ufo-burns.json data/holder-history.json \
             data/treasury-summary.json data/treasury-wallet1-txns.json data/treasury-wallet1-tokens.json \
             data/treasury-wallet2-txns.json data/treasury-wallet2-tokens.json \
             data/dao-buys.json \
-            data/ufo-ptgc-burns.json \
+            data/ufo-ptgc-burns.json data/ufo-ptgc-burns-cache.json \
             data/token-allocation.json \
-            data/lv-snapshots.json data/lv-latest.json
+            data/lv-snapshots.json data/lv-latest.json; do
+            if [ -e "$f" ] || git ls-files --error-unmatch "$f" >/dev/null 2>&1; then add="$add $f"; fi
+          done
+          # shellcheck disable=SC2086
+          git add -A -- $add 'data/ptgc-burns-*.json'   # the quoted glob is matched by git, so a removed period file is staged as a deletion
           if git diff --staged --quiet; then
             echo "No changes — nothing to commit."
             exit 0

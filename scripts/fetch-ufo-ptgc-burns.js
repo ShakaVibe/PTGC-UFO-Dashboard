@@ -285,15 +285,22 @@ async function main() {
 
   const dataDir    = path.join(__dirname, '..', 'data');
   const outputPath = path.join(dataDir, 'ufo-ptgc-burns.json');
+  /* a32 (2026-09-17): the generator's caches (every UFO burn, every PTGC-by-UFO row, the
+     no-PTGC tx list — 2.4 MB of the old 3.1 MB file) now live in their own file that nothing
+     serves. The dashboard file keeps the summaries plus `rows`: the v1 rows inside the last
+     91 days, which is all index.html reads (the 7D/30D/90D "PTGC burned by UFO" windows). */
+  const cachePath  = path.join(dataDir, 'ufo-ptgc-burns-cache.json');
 
   // Load existing cached data for incremental mode. Rows without `c` predate the
-  // multi-contract format and are v1 rows.
+  // multi-contract format and are v1 rows. The cache file wins; a pre-a32 checkout still
+  // carries the caches inside the served file, so fall back to those once.
   let existingUFOBurns  = [];
   let existingPTGCByUFO = [];
   let existingNoPtgc    = [];
   try {
-    if (fs.existsSync(outputPath)) {
-      const existing    = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+    const src = fs.existsSync(cachePath) ? cachePath : (fs.existsSync(outputPath) ? outputPath : null);
+    if (src) {
+      const existing    = JSON.parse(fs.readFileSync(src, 'utf8'));
       const tag = rows => (rows || []).map(r => (r.c ? r : { ...r, c: 'v1' }));
       existingUFOBurns  = tag(existing._ufoBurnsCache);
       existingPTGCByUFO = tag(existing._ptgcByUFOCache);
@@ -348,14 +355,24 @@ async function main() {
 
     byContract,
 
-    // Internal caches — used for incremental runs, not for dashboard consumption
+    /* a32: the dated rows the dashboard buckets into its 7D/30D/90D windows — retired-contract
+       (v1) rows only, inside the last 91 days, {t,a,tx,c}. The live contract is measured on chain. */
+    rows: ptgcByUFOBurns
+      .filter(r => (r.c || 'v1') === 'v1' && r.t >= Date.now() - 91 * 86400000)
+      .map(r => ({ t: r.t, a: r.a, tx: r.tx, c: 'v1' })),
+  };
+  const cache = {
+    lastUpdated: output.lastUpdated,
+    note: 'Generator-only caches for fetch-ufo-ptgc-burns.js (incremental runs). Nothing on the site reads this file.',
     _ufoBurnsCache:  ufoBurns,
     _ptgcByUFOCache: ptgcByUFOBurns,
     _noPtgcTxCache:  noPtgc
   };
 
-  fs.writeFileSync(outputPath, JSON.stringify(output, null, 2));
-  console.log(`\nWritten: ${outputPath}`);
+  fs.writeFileSync(outputPath, JSON.stringify(output));
+  fs.writeFileSync(cachePath,  JSON.stringify(cache));
+  const kb = p => (fs.statSync(p).size / 1024).toFixed(0);
+  console.log(`\nWritten: ${outputPath} (${kb(outputPath)} KB, ${output.rows.length} dated v1 rows) + ${cachePath} (${kb(cachePath)} KB, generator only)`);
 
   console.log('\n' + '='.repeat(60));
   console.log('SUMMARY');
