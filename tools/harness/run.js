@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, DS_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -85,10 +85,12 @@ const dsPair=(base,quote,price,liq,vol)=>({chainId:'pulsechain',dexId:'pulsex',u
   priceNative:'0.5',priceUsd:String(price),txns:{h24:{buys:120,sells:80},h6:{buys:30,sells:20},h1:{buys:5,sells:3},m5:{buys:1,sells:0}},
   volume:{h24:vol,h6:vol/4,h1:vol/24,m5:vol/288},priceChange:{h24:3.21,h6:1,h1:0.2,m5:0},liquidity:{usd:liq,base:1e9,quote:1e9},fdv:price*3e11,marketCap:price*3e11,pairCreatedAt:Date.now()-1062*86400000,
   info:{imageUrl:''}});
+const UFO_ADDR=/49eD499433Bee42DD34C169470feF2C8f9fAe6e6|E221e6fC30e5787F0d551f980B4da1055D832A03/i;   // TOKENS.UFO.address | TOKENS.UFO.mainPair
 const dsAnswer=(url)=>{
-  const isUFO=/UFO|0x[0-9a-f]{40}/i.test(url)&&/ufo/i.test(url);
-  const P=+process.env.DS_PRICE||0.000142;   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48)
-  const pairs=[dsPair('PTGC','WPLS',P,850000,42000),dsPair('PTGC','PRVX',P*0.993,120000,4000),dsPair('PTGC','PLSX',P*1.007,90000,2000),dsPair('PTGC','HEX',P,50000,1500)];
+  const isUFO=UFO_ADDR.test(url);   // the UFO token or its main pair in the URL
+  const P=isUFO&&process.env.DS_UFO_PRICE?+process.env.DS_UFO_PRICE:(+process.env.DS_PRICE||0.000142);   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48); DS_UFO_PRICE=n: a DIFFERENT price for UFO calls, so a token-switch race is visible (a7)
+  const B=isUFO&&process.env.DS_UFO_PRICE?'UFO':'PTGC';
+  const pairs=[dsPair(B,'WPLS',P,850000,42000),dsPair(B,'PRVX',P*0.993,120000,4000),dsPair(B,'PLSX',P*1.007,90000,2000),dsPair(B,'HEX',P,50000,1500)];
   return {schemaVersion:'1.0.0',pairs};
 };
 
@@ -104,10 +106,11 @@ const dsAnswer=(url)=>{
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text().slice(0,300));});
   page.on('pageerror',e=>errors.push('PAGEERROR '+String(e).slice(0,300)));
   const rpcCount={n:0};
-  const slow=+process.env.SLOW||0,slowHist=+process.env.SLOW_HISTORY||0;const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const slow=+process.env.SLOW||0,slowHist=+process.env.SLOW_HISTORY||0,slowUfo=+process.env.SLOW_UFO||0;const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   await page.route('**/*',async r=>{
     const u=r.request().url();
     if(slow&&/rpc\.pulsechain|g4mm4|publicnode|api\.dexscreener\.com|api\.scan\.pulsechain/.test(u))await sleep(slow);
+    if(slowUfo&&UFO_ADDR.test(u))await sleep(slowUfo);   // SLOW_UFO=ms: only the UFO token's DexScreener calls wait → the UFO load always lands AFTER a PTGC load started later (a7)
     if(slow&&process.env.SLOW_DATA&&/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/data\//.test(u))await sleep(slow);   // SLOW_DATA=1: the repo's data/*.json wait too (a35: sibling pages that only read those)
     if(slowHist&&/data\/[a-z-]*history[a-z-]*\.json/.test(u))await sleep(slowHist);   // SLOW_HISTORY=ms: delay the data/*history*.json files only (u13)
     if(u.startsWith(`http://localhost:${port}`)||u.startsWith(`http://127.0.0.1:${port}`))return r.continue();

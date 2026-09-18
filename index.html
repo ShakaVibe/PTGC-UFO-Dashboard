@@ -2474,7 +2474,7 @@
        scripts/build-value-generated.mjs. If missing/stale, the dashboard falls back to the
        live on-chain scan, so this is safe to ship in any order. */
     const VALUE_GEN_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/value-generated.json';
-    const VALUE_GEN_STALE_MS=3*60*60*1000; // 3 missed hourly builds -> fall back to live
+    const VALUE_GEN_STALE_MS=6*60*60*1000; // measured 2026-09-18: GitHub runs the hourly pipeline ~5x/day (gaps up to 5 h), so 6 h = one missed run -> fall back to live
     /* RESILIENCE (Aug 27 incident): a stale snapshot used to be discarded entirely, so a
        stalled builder meant every visitor stared at dashes for the multi-minute live scan.
        Now a stale-but-valid file is SHOWN immediately as interim data (with an "as of" label)
@@ -2556,7 +2556,7 @@
        stalled Action froze PTGC's 24H/7D/30D/90D burn boxes at the last run's values with no
        label — indefinitely. Now: older than BURN_HISTORY_STALE_MS shows an amber "as of" label
        on the boxes; older than BURN_HISTORY_MAX_AGE_MS is treated as unknown ("—"). */
-    const BURN_HISTORY_STALE_MS=6*60*60*1000;     // the Action normally runs several times a day
+    const BURN_HISTORY_STALE_MS=8*60*60*1000;     // the pipeline lands ~5x/day (gaps up to 5 h, measured 2026-09-18) — amber only past a missed run
     const BURN_HISTORY_MAX_AGE_MS=7*24*60*60*1000; // a week-old window is not "the last 24 hours"
     const burnHistoryAgeMs=()=>{const t=burnHistoryCache&&burnHistoryCache.lastUpdated?Date.parse(burnHistoryCache.lastUpdated):NaN;return isFinite(t)?Math.max(0,Date.now()-t):null;};
     const fetchBurnHistory=async()=>{

@@ -17,15 +17,16 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-17)
+## Current state (end of 2026-09-18)
 
-Roadmap: 65 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 20 of the 67
-Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; **a14, a15, a17, a18,
-a19, a20, a21, a23 — 2026-09-17, the honest-failure pass; **a29** the same evening — nine
-scheduled workflows collapsed into `data-pipeline.yml` — first run green 14:40 UTC; night: **a28**
-PulseScan paging, **a31** fatal log chunks, **a30** half-year burn files, **a34** Ledger reads raw
-GitHub — `sessions/2026-09-17.md`**). **Next: measure the pipeline cadence on Sep 18, then a33 / a32,
-then the calculators a5–a9.** u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
+Roadmap: 80 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 35 of the 67
+Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; a14, a15, a17, a18,
+a19, a20, a21, a23 — 2026-09-17, the honest-failure pass; a29, a28, a31, a30, a34, a33, a32, a38,
+a35, a37 — 2026-09-17 evening/night, the pipeline week; **a5, a6, a7, a8, a9 — 2026-09-18, the
+calculators — `sessions/2026-09-18.md`**). **2026-09-18 cadence check: GitHub runs the one hourly
+workflow ~5×/day (gaps up to 5 h, all green) — stale thresholds raised instead (value-generated 6 h,
+burn-summary amber 8 h). Next: a36 (slim treasury JSON for the Ledger), a26/a27, a12 (portfolio).**
+u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
@@ -59,7 +60,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **30 of 67 done.** 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a5–a9 calculators, a12, a26, a27, a36, a39–a47, a49–a67 |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **35 of 67 done.** **2026-09-18, calculators.html:** a6 RPC pool + `fetchBurn` null (circ. supply / every MCap "—", Rewards share never bag/1), a5 PLS price null + `dsOnePair` (no $0.00005 placeholder), a8 Rewards inputs saved on typing + per-token bags (no cross-token leak), a9 calculators stay mounted across a Switch (inputs kept, amber banner, `LiveBadge`), a7 token-switch race cancelled. 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a12, a26, a27, a36, a39–a47, a49–a67 |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -85,17 +86,20 @@ Check `git --no-optional-locks status` before starting.
 
 - **Prices / liquidity / volume**: DexScreener, with on-chain reserves as fallback.
 - **Burn totals**: `balanceOf(0x369)` on chain.
+- **Pipeline cadence (measured 2026-09-18)**: GitHub delivers the hourly cron ~5×/day (gaps 2–5 h), every run
+  green. The site's thresholds assume that: value-generated live-scan fallback after 6 h, burn-summary amber
+  after 8 h. Expect ~5 "data: hourly pipeline" commits a day, not 24.
 - **PTGC burn windows (24H/7D/30D/90D)**: `data/burn-summary.json` (hourly, the burn-history step of `data-pipeline.yml`).
   The burn archive behind it is `data/ptgc-burns-<year>-h1|h2.json`, half-years derived from the date (a30) —
   never add a period to a list; a file past 80 MB logs a warning, GitHub refuses 100 MB.
-  Shown with an amber "as of" label after 6 h, as "—" after 7 days.
-- **UFO burn windows**: `data/value-generated.json` → `burnPeriods.UFO` when <3 h old, otherwise a
+  Shown with an amber "as of" label after 8 h, as "—" after 7 days.
+- **UFO burn windows**: `data/value-generated.json` → `burnPeriods.UFO` when <6 h old, otherwise a
   live chain scan. `burn-summary.json`'s UFO section still describes the OLD contract
   (`fetch-burn-history.js` line 31) — never use it for UFO.
 - **ufo-ptgc-burns.json** (a32): summaries + `byContract` + `rows` (v1 rows, last 91 days) — ~300 KB.
   The generator's full caches are `ufo-ptgc-burns-cache.json`; nothing on the site reads that.
 - **UFO Value Generated**: `data/value-generated.json` (hourly, the value-generated step of `data-pipeline.yml`); the
-  browser falls back to a live scan when the file is >3 h old.
+  browser falls back to a live scan when the file is >6 h old.
 - **DAO Buys (PTGC)**: `data/dao-buys.json` (hourly, the dao-buys step of `data-pipeline.yml`, right after treasury;
   generator `scripts/build-dao-buys.mjs`, schema 2). Buys = wallet-sent, PLS-paid txs that
   delivered PTGC to one of the TWO DAO wallets (`WALLETS` in the script = `TOKENS.PTGC.daoTreasury`
@@ -233,8 +237,10 @@ Check `git --no-optional-locks status` before starting.
    pipeline, in data order, `continue-on-error: true`, its `id` in the "Report step failures"
    list, and its output file in the commit step's `git add` list. A step that should run less
    than hourly gets a `pipeline-gate.mjs` line (age of its file, not the clock). `data/*.json` is
-   committed once per run as "data: hourly pipeline …"; expect ~24 a day — if it drops to ~5 again,
-   GitHub is throttling even one workflow and the site's stale thresholds should move instead.
+   committed once per run as "data: hourly pipeline …". Measured 2026-09-18: GitHub delivers ~5 a
+   day even for one workflow (gaps 2–5 h, all green) — the stale thresholds were moved to match
+   (`VALUE_GEN_STALE_MS` 6 h, `BURN_HISTORY_STALE_MS` 8 h). The only way to real hourly runs is an
+   outside cron hitting `workflow_dispatch` with a token (`sessions/2026-09-18.md`).
 20. **Honest failure = null through, "—" out** (the a14–a24 pass, 2026-09-17). A read that failed or
    has not landed is `null` in state and in every helper's return — never 0, never `{total:0}`.
    `fmt` / `fmtUSD` / `fmtAbbr` print null as "—"; before multiplying by a price check `price>0`
@@ -251,6 +257,16 @@ Check `git --no-optional-locks status` before starting.
    animation can light `.deck-a.on` by DOM class — don't put anything that changes per render
    into a row's props, and don't move state that ticks (clocks, count-ups) back into the deck.
    `DECK_LOGS=n` gives the harness deck synthetic swaps; `REDUCED=1` tests reduced motion.
+22. **calculators.html follows the same honest-failure rules as index.html** (a5–a9, 2026-09-18):
+   `rpcFetch` is the three-endpoint pool, `rpcWord(r)` turns an `eth_call` into a hex word or null,
+   `fetchBurn` / `fetchPLS` return `null`, `dsJson` + `dsOnePair` are the DexScreener readers (the
+   `/pairs/` endpoint answers `pairs[]`, never read `.pair` directly). `burn===null` → `circulatingSupply`
+   null → every MCap "—" and Rewards / Fresh Capital shares 0 — never `:1` or `||0` on a supply. The
+   page stays mounted across a token Switch (`loadedOnce`; the full-screen gate is first-load only), so
+   the token effect's `cancelled` flag must guard every setter you add to `load()`. Per-token inputs:
+   save effects keyed on the value ONLY, load effect resets unsaved fields to '' — a `[value, token]`
+   dep re-introduces the cross-token leak. Harness: `HTML=calculators.html` + `probes/calc-*.js`,
+   `DS_UFO_PRICE` / `SLOW_UFO` for the race.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -259,15 +275,15 @@ Check `git --no-optional-locks status` before starting.
 
 ## Next up (in order)
 
--1. **Audit II, top of the list:** the pipeline ran green by hand on 2026-09-17 (14:40 UTC). On
-   Sep 18 count `git log --format="%ad %s" --date=format:"%m-%d %H:%M" | grep "hourly pipeline"`
-   — want ~24/day at :10–:30; ~5 means GitHub throttles even one workflow → raise the site's stale
-   thresholds instead (end of `sessions/2026-09-17.md`). Also check that commit's file list once:
-   `ptgc-burns-2026.json` gone, `2026-h1` + `2026-h2` present (a30 migration), and at the first 6-h
-   ufo-ptgc-burns step `ufo-ptgc-burns-cache.json` appears next to a ~300 KB `ufo-ptgc-burns.json`
-   (a32). Then the calculators a5–a9 (a5 PLS fallback, a6 RPC pool + null burn, a7 token-switch
-   race, a8 Rewards save effects, a9 inputs across a switch), then a36 (slim treasury JSON for the
-   Ledger) and a26/a27. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
+-1. **Audit II, top of the list:** cadence measured and thresholds moved 2026-09-18 (done — ~5
+   runs/day is the new normal; a30/a32 migrations verified in the first scheduled run). Calculators
+   a5–a9 done the same day. **After the deploy, a 30-second live look at calculators.html:** header PLS
+   ratio is a number (not "—" — if it dashes, the WPLS/DAI pair call is failing live), tap Switch and
+   watch the amber "Loading UFO data… your inputs are kept" line instead of the full-screen gate, and
+   on Rewards type a bag, reload, and see it come back. Next: a36 (slim treasury JSON for the Ledger),
+   a26/a27 + a12 (portfolio.html: single RPC endpoint and `.pair` reads — port `rpcFetch` / `dsJson`
+   from calculators.html), then a39+. Optional: `charts.html` `STATUS_STALE_MS` 2 h → 6 h if the
+   permanent amber "as of" on the Charts page grates. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
    a22, a24, a48; 2026-09-17: a14, a15, a17–a21, a23 (honest-failure pass — after deploy, a
    30-second live look: PTGC header change line, UFO Value Generated headline (should be a number,
    not "—" — if it dashes, a partner price lookup is failing on the live site, see the note in
@@ -335,6 +351,11 @@ Check `git --no-optional-locks status` before starting.
   ufo-ptgc-burns.json slimmed to summaries + 91-day v1 rows; caches in their own file), **a38**
   (Pages artifact = `_site/` allow-list), **a35** (Ledger summary "—" while loading), **a37**
   (Charts status = data age, "Cached", carried-forward); harness `SLOW_DATA`, charts.html runnable.
+- `sessions/2026-09-18.md` — pipeline cadence measured (GitHub throttles even one workflow to ~5
+  runs/day; thresholds 6 h / 8 h; a30/a32 migrations verified). Audit II calculators **a5–a9**: RPC
+  pool + null burn, PLS null + `dsOnePair`, Rewards save effects + per-token bags, calculators stay
+  mounted across a Switch (`LiveBadge`, banner), token-switch race cancelled; harness `DS_UFO_PRICE`
+  / `SLOW_UFO`, `probes/calc-header|type|sanity.js`.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
