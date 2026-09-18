@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -48,7 +48,7 @@ const server=http.createServer((req,res)=>{
 // ---- stubs
 const hex=n=>'0x'+BigInt(n).toString(16);
 const pad=(n)=>'0x'+BigInt(n).toString(16).padStart(64,'0');
-const HEAD=24_000_000;
+const HEAD=+process.env.HEAD_BLOCK||24_000_000;   // HEAD_BLOCK=n: raise the stub chain head (e.g. 27100000 so portfolio's UFO log scan, which starts at the launch block 26989200, has a window to walk — a12)
 const rpcAnswer=(body)=>{
   const one=(q)=>{
     const m=q.method;let result;
@@ -56,6 +56,7 @@ const rpcAnswer=(body)=>{
     else if(m==='eth_chainId')result='0x171';
     else if(m==='eth_getBalance')result=hex(125_000_000n*10n**18n);   // 125M PLS — the DAO panel's eth_getBalance anchor read (a16)
     else if(m==='eth_getBlockByNumber'){const n=q.params[0]==='latest'?HEAD:parseInt(q.params[0],16);result={number:hex(n),timestamp:hex(Math.floor(Date.now()/1000)-(HEAD-n)*10)};}
+    else if(m==='eth_getLogs'&&process.env.LOGS_DOWN){return {jsonrpc:'2.0',id:q.id,error:{code:-32000,message:'query timeout exceeded'}};}   // LOGS_DOWN=1: every eth_getLogs is a JSON-RPC error (calls still work) — portfolio's reflections scan must end "unavailable", never 0 (a12)
     else if(m==='eth_getLogs'){
       /* DECK_LOGS=n: answer a Swap-topic query with n synthetic PulseX Swap events on the stub pair,
          newest at the head block, so the Live Feed has rows to lift (u11). Everything else stays empty. */

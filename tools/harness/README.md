@@ -27,6 +27,9 @@ NO_ACCEPT=1 node run.js "#/ptgc" 1280 900 out/disc      # do NOT pre-accept the 
 HTML=ledger.html node run.js "" 1280 900 out/ledger     # any sibling page: since 2026-09-16 their CDN tags match index's, so the rewrite applies (data/ served locally)
 SLOW=9000 SLOW_DATA=1 HTML=ledger.html node run.js "" 1280 900 out/ledger-slow "wait=4000;evalfile=probes/ledger-summary.js"   # a35: SLOW alone delays RPC/DexScreener/PulseScan; SLOW_DATA=1 delays the repo's data/*.json too → the summary must read "—" at 4 s
 HTML=ledger.html node run.js "" 1280 900 out/ledger-rows "wait=6000;evalfile=probes/ledger-rows.js"   # a36: which treasury files the page fetched (want ONLY treasury-recent.json) + every month's summary and rows; run once more with data/treasury-recent.json moved away and diff the two — the rows must be identical (only the footer time differs). `node scripts/fetch-treasury-transactions.js --recent-only` rebuilds the slim file from the full ones
+W='[{"address":"0x1111111111111111111111111111111111111111","name":"A","group":"Default"},{"address":"0x2222222222222222222222222222222222222222","name":"B","group":"Default"}]'
+HEAD_BLOCK=27100000 SLOW=2000 HTML=portfolio.html node run.js "" 1280 900 out/pf "wait=1500;eval=localStorage.setItem('ptgc_ufo_portfolio',JSON.stringify($W));reload=1000;evalfile=probes/portfolio-state.js;wait=4000;evalfile=probes/portfolio-state.js;wait=12000;evalfile=probes/portfolio-state.js"   # a12: seed two wallets, raise the stub head past UFO's launch block so the reflections scan has a window; chips yellow → green, the UFO lifetime bar reads "scanning the chain…" while the ONE-AT-A-TIME queue drains, then the number
+HEAD_BLOCK=27100000 LOGS_DOWN=1 HTML=portfolio.html node run.js "" 1280 900 out/pf-fail "wait=1500;eval=localStorage.setItem('ptgc_ufo_portfolio',JSON.stringify($W));reload=12000;evalfile=probes/portfolio-state.js;click=button[aria-label^='Retry the UFO reflections'];wait=8000;evalfile=probes/portfolio-state.js"   # a12: eth_getLogs answers a JSON-RPC error → tile "unavailable" + Retry, bar "unavailable — the chain read failed for 2 wallets"; never a 0
 HTML=charts.html node run.js "" 1280 900 out/charts "wait=10000;evalfile=probes/charts-status.js"   # a37: charts.html (no #root — the harness no longer waits for one) → status line "Live · 5/5 tokens / data to <time>"
 HTML=calculators.html node run.js "" 1280 900 out/calc "wait=3000;click=button:has-text('Rewards'):visible;wait=1500;evalfile=probes/calc-sanity.js"   # calculators.html; the probe lists any NaN / Infinity / undefined on the page (a5–a9 — run it with RPC_DOWN=1 and DS_DOWN=1 too: "MCap: —", "Circ. Supply: —", never 333B)
 DS_UFO_PRICE=0.00005 SLOW_UFO=2500 HTML=calculators.html node run.js "" 1280 900 out/race "wait=3000;click=button:has-text('Switch'):visible;wait=300;click=button:has-text('Switch'):visible;wait=9000;evalfile=probes/calc-header.js"   # a7: two quick Switch taps — the header must say PTGC with PTGC's $0.000142, not UFO's price (DS_UFO_PRICE gives UFO calls their own price; SLOW_UFO makes the UFO load land last)
@@ -46,6 +49,11 @@ H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys
 button, intercepts the blob and puts the PNG on the page at 1× so `shot=` shows exactly what the
 user would download. Run it for any share-card change — html2canvas ≠ the browser (gotcha 5).
 
+`HEAD_BLOCK=n` raises the stub chain head (default 24,000,000 — below UFO's launch block, so portfolio's
+log scan is a no-op unless you raise it); `LOGS_DOWN=1` makes every `eth_getLogs` a JSON-RPC error while
+`eth_call` keeps working (a12). To test the ErrorBoundary (a26) make a copy of index.html with a
+`throw` at the top of `Dashboard` gated on `window.__boom===token`, run it with `HTML=`, set `__boom`
+with `eval=`, click a tab, then `eval=location.hash='#/ptgc'` — `probes/eb-state.js` reports the card.
 `SLOW_UFO=ms` delays only the UFO token's DexScreener calls and `DS_UFO_PRICE=n` gives them a
 different price (base symbol UFO) — together they make a token-switch race visible (a7).
 

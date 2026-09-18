@@ -12811,6 +12811,13 @@
       constructor(p){super(p);this.state={error:null};}
       static getDerivedStateFromError(error){return{error};}
       componentDidCatch(error,info){console.error('Render error:',error,info&&info.componentStack);}
+      /* a26 (2026-09-18): the boundary is keyed by VIEW only (keying by token would remount Dashboard —
+         gotcha 7), so an error caught on #/ufo used to follow the visitor to #/ptgc: nothing cleared
+         state.error except the Home button. `resetKey` (token|tab from the route) clears it whenever
+         the route moves on, so browser Back / a header link lands on a live page again. */
+      componentDidUpdate(prevProps){
+        if(this.state.error&&prevProps.resetKey!==this.props.resetKey)this.setState({error:null});
+      }
       render(){
         if(!this.state.error)return this.props.children;
         const msg=String(this.state.error&&this.state.error.message||this.state.error);
@@ -12821,7 +12828,8 @@
               <p className="text-white/60 text-sm mb-1">This part of the dashboard hit an error while drawing.</p>
               <p className="text-white/35 text-xs font-mono break-all mb-6">{msg}</p>
               <div className="flex justify-center gap-3">
-                <button onClick={()=>window.location.reload()} className="px-5 py-2 rounded-xl border border-[#D4AF37]/40 text-[#F0DC78] font-semibold hover:bg-white/5">Reload</button>
+                <button onClick={()=>this.setState({error:null})} className="px-5 py-2 rounded-xl border border-[#D4AF37]/40 text-[#F0DC78] font-semibold hover:bg-white/5">Try again</button>
+                <button onClick={()=>window.location.reload()} className="px-5 py-2 rounded-xl border border-white/15 text-white/70 hover:bg-white/5">Reload</button>
                 <button onClick={()=>{window.location.hash='#/';this.setState({error:null});}} className="px-5 py-2 rounded-xl border border-white/15 text-white/70 hover:bg-white/5">Home</button>
               </div>
             </div>
@@ -12894,7 +12902,7 @@
          then opens a share modal on the SAME instance (onSwitch + setTimeout), so a remount
          would drop that modal. The token-switch race is handled inside load() instead. */
       if(view==='dashboard'&&token)return(<>
-          <ErrorBoundary key="dashboard"><Dashboard token={token} routeTab={tab}
+          <ErrorBoundary key="dashboard" resetKey={`${token}|${tab}`}><Dashboard token={token} routeTab={tab}
             onTabRoute={(t)=>navigate('dashboard',token,t)}
             onBack={()=>{try{localStorage.removeItem(LS.HANDOFF_TOKEN)}catch(e){}navigate('home')}}
             onSwitch={(t)=>{try{localStorage.setItem(LS.HANDOFF_TOKEN,t)}catch(e){}navigate('dashboard',t,tab)}}

@@ -37,31 +37,49 @@
     };
     
     // ===== RPC & Helpers =====
-    const RPC='https://rpc.pulsechain.com';
-    // Transport-level retry. A single dropped connection, DNS blip or truncated JSON body used to bubble
-    // all the way up as {result:null}, which the reflections path (correctly) treats as "unavailable" and
-    // renders as "—". Those blips are common enough on public RPCs to be worth absorbing here rather than
-    // showing the user a dash. Only transport failures are retried — a well-formed JSON-RPC error reply is
-    // returned as-is, since callers inspect .error and some of them bisect in response to it.
+    /* RPC ENDPOINT POOL (a12, 2026-09-18) — index.html's three PulseChain endpoints with the same rules:
+       a transport failure (network, timeout, non-2xx, non-JSON) rotates to the next endpoint, a
+       well-formed JSON-RPC error reply is returned as-is (the log scan bisects on those), the chosen
+       endpoint is sticky for 2 min then drifts back to the primary. All three down → {result:null},
+       which the reflections path treats as "unavailable" — never a fake 0. */
+    const RPC_ENDPOINTS=[
+      'https://rpc.pulsechain.com',
+      'https://rpc-pulsechain.g4mm4.io',
+      'https://pulsechain-rpc.publicnode.com'
+    ];
+    const RPC=RPC_ENDPOINTS[0];
     const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-    const rpcFetch=async(body,timeout=8000,attempts=3)=>{
-      let lastErr='';
-      for(let i=0;i<attempts;i++){
+    let _rpcIdx=0,_rpcSince=0;
+    const RPC_STICKY_MS=120000;
+    const _rpcOnce=async(url,body,timeout)=>{
+      const controller=new AbortController();
+      const timeoutId=setTimeout(()=>controller.abort(),timeout);
+      try{
+        const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+        if(!res.ok)throw new Error('HTTP '+res.status);
+        const txt=await res.text();
+        let j;
+        try{j=JSON.parse(txt);}catch{throw new Error('non-JSON response');}
+        if(!j||typeof j!=='object')throw new Error('bad payload');
+        return j;
+      }finally{clearTimeout(timeoutId);}
+    };
+    const rpcFetch=async(body,timeout=8000)=>{
+      if(_rpcIdx!==0&&Date.now()-_rpcSince>RPC_STICKY_MS){_rpcIdx=0;}
+      const n=RPC_ENDPOINTS.length;
+      let lastErr=null;
+      for(let i=0;i<n;i++){
+        const idx=(_rpcIdx+i)%n;
         try{
-          const controller=new AbortController();
-          const timeoutId=setTimeout(()=>controller.abort(),timeout);
-          const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-          clearTimeout(timeoutId);
-          return await res.json();
-        }catch(e){
-          lastErr=e.message;
-          if(i<attempts-1)await sleep(300*Math.pow(2,i));  // 300ms, 600ms
-        }
+          const j=await _rpcOnce(RPC_ENDPOINTS[idx],body,timeout);
+          if(idx!==_rpcIdx){_rpcIdx=idx;_rpcSince=Date.now();console.warn('RPC failover → '+RPC_ENDPOINTS[idx]);}
+          return j;
+        }catch(e){lastErr=e;console.warn('RPC '+RPC_ENDPOINTS[idx]+' failed: '+e.message);}
       }
-      console.error('RPC error after '+attempts+' attempts:',lastErr);
+      console.error('RPC error (all '+n+' endpoints failed):',lastErr&&lastErr.message);
       return{result:null};
     };
-    
+
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
     const fmtComma=(n,dec=2)=>n==null||isNaN(n)?'\u2014':Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
@@ -480,9 +498,10 @@
       const ufoOk=(ufoBal&&ufoBal!=='0x'&&ufoBal.length>=66);
       const ufoBalanceWei=ufoOk?parseWord(ufoBal):null;
       const ufoBalance=ufoOk?toNum(ufoBalanceWei):null;
-      // Reconstruct reflections earned from this wallet's full Transfer-log history, in exact wei.
-      // null on any read failure — never a fake 0.
-      const ufoReflections=await computeUfoReflectionsWei(address,ufoBalanceWei);
+      /* a12: the Transfer-log reconstruction no longer runs here. It is queued by fetchWalletData and runs
+         ONE wallet at a time (reflQueue below), so five saved wallets no longer fire ten concurrent
+         eth_getLogs pipelines at a public RPC. Until it lands, reflections is `undefined` = pending;
+         the queue writes a number, or `null` + reflError when the chain read failed. */
       
       return{
         ptgc:{
@@ -500,11 +519,42 @@
         },
         ufo:{
           balance:ufoBalance,
-          reflections:ufoReflections,
+          balanceWei:ufoBalanceWei==null?null:ufoBalanceWei.toString(),   // for the reflections queue (exact)
+          reflections:undefined,    // pending — see reflQueue
+          reflError:null,
         }
       };
     };
-    
+
+    /* ===== a12: reflections queue — one wallet's Transfer-log scan at a time =====
+       Each job carries the wallet's `gen` (bumped every time its data is (re)loaded); the result is
+       written only if the wallet still has that gen, so a Refresh or a removed wallet can't be
+       overwritten by a scan that started earlier. */
+    const reflQueue=[];
+    let reflBusy=false;
+    const reflRunning={addr:null};
+    const runReflQueue=async()=>{
+      if(reflBusy)return;
+      reflBusy=true;
+      try{
+        while(reflQueue.length){
+          const job=reflQueue.shift();
+          reflRunning.addr=job.addr;
+          if(job.start)job.start();
+          let value=null,error=null;
+          try{
+            lastLogError='';
+            value=await computeUfoReflectionsWei(job.address,job.balanceWei==null?null:BigInt(job.balanceWei));
+            if(value===null)error=lastLogError||'chain read failed';
+          }catch(e){value=null;error=String(e&&e.message||e);}
+          reflRunning.addr=null;
+          job.done(value,error);
+        }
+      }finally{reflBusy=false;}
+    };
+    const enqueueReflScan=(job)=>{reflQueue.push(job);runReflQueue();};
+    const dropReflScans=(addr)=>{for(let i=reflQueue.length-1;i>=0;i--)if(addr==null||reflQueue[i].addr===addr)reflQueue.splice(i,1);};
+
     // ===== Portfolio Leagues Modal =====
     const PortfolioLeaguesModal=({token,price,close})=>{
       const isPTGC=token==='PTGC';
@@ -596,7 +646,9 @@
       const[inputGroup,setInputGroup]=useState('Default');
       const[portfolioData,setPortfolioData]=useState({});
       const[loading,setLoading]=useState(false);
-      const[loadingAddr,setLoadingAddr]=useState(null);
+      const[loadingAddrs,setLoadingAddrs]=useState({});   // a12: several wallets load at once — a set, not one address
+      const genRef=React.useRef({});                          // a12: per-wallet load generation (see reflQueue)
+      const[scanningAddr,setScanningAddr]=useState(null);     // a12: the wallet whose reflections scan is running now
       const[prices,setPrices]=useState({ptgc:null,ufo:null,pls:null});
       const[codeInput,setCodeInput]=useState('');
       const[showCodeModal,setShowCodeModal]=useState(false);
@@ -658,19 +710,42 @@
       
       const fetchWalletData=async(address)=>{
         const addr=address.toLowerCase();
-        setLoadingAddr(addr);
+        const gen=(genRef.current[addr]||0)+1;genRef.current[addr]=gen;
+        dropReflScans(addr);
+        setLoadingAddrs(prev=>({...prev,[addr]:true}));
         try{
           const data=await fetchPortfolioData(address);
+          if(genRef.current[addr]!==gen)return;   // a newer load / refresh / remove won
+          data.gen=gen;
           setPortfolioData(prev=>({...prev,[addr]:data}));
+          queueReflScan(address,addr,gen,data.ufo.balanceWei);
         }catch(e){
           console.error('Error fetching portfolio for',address,e);
           // a11: remember the failure (so the auto-fetch effect does not hammer the RPC) but as a
           // failure, not as data — the chip shows a red dot + retry and the totals leave it out.
-          setPortfolioData(prev=>({...prev,[addr]:{error:String(e&&e.message||e),at:Date.now()}}));
+          if(genRef.current[addr]===gen)setPortfolioData(prev=>({...prev,[addr]:{error:String(e&&e.message||e),at:Date.now()}}));
+        }finally{
+          setLoadingAddrs(prev=>{const n={...prev};delete n[addr];return n;});
         }
-        setLoadingAddr(null);
       };
-      
+      /* a12: queue the wallet's reflections scan; the result lands only if the wallet's gen is unchanged. */
+      const queueReflScan=(address,addr,gen,balanceWei)=>{
+        setPortfolioData(prev=>prev[addr]&&!prev[addr].error&&prev[addr].gen===gen?{...prev,[addr]:{...prev[addr],ufo:{...prev[addr].ufo,reflections:undefined,reflError:null}}}:prev);
+        enqueueReflScan({address,addr,balanceWei,start:()=>setScanningAddr(addr),done:(value,error)=>{
+          setScanningAddr(null);
+          if(genRef.current[addr]!==gen)return;
+          setPortfolioData(prev=>prev[addr]&&!prev[addr].error&&prev[addr].gen===gen?{...prev,[addr]:{...prev[addr],ufo:{...prev[addr].ufo,reflections:value,reflError:error}}}:prev);
+        }});
+      };
+      /* Retry only the reflections scans that failed (the balances are fine) — the "unavailable — Retry" button. */
+      const retryFailedReflScans=()=>{
+        Object.entries(portfolioData).forEach(([addr,d])=>{
+          if(!d||d.error||!(d.ufo&&d.ufo.reflections===null))return;
+          const w=wallets.find(x=>x.address.toLowerCase()===addr);if(!w)return;
+          queueReflScan(w.address,addr,d.gen,d.ufo.balanceWei);
+        });
+      };
+
       const addWallet=()=>{
         const addr=inputAddr.trim();
         if(!addr||!/^0x[0-9a-fA-F]{40}$/.test(addr))return;
@@ -709,6 +784,8 @@
       };
       
       const removeWallet=(addr)=>{
+        genRef.current[addr.toLowerCase()]=(genRef.current[addr.toLowerCase()]||0)+1;   // a12: orphan any in-flight load / scan
+        dropReflScans(addr.toLowerCase());
         setWallets(prev=>prev.filter(w=>w.address.toLowerCase()!==addr.toLowerCase()));
         setPortfolioData(prev=>{const n={...prev};delete n[addr.toLowerCase()];return n;});
       };
@@ -734,9 +811,9 @@
       const agg=useMemo(()=>{
         const result={
           ptgc:{balance:0,reflections:0,staked:0,stakedOnly:0,locked:0,pendingStake:0,pendingLocks:0,totalPending:0,claimed:0,lockClaimed:0,lifetimeEarned:0,walletFree:0,totalHolding:0,locks:[]},
-          ufo:{balance:0,reflections:null} // reflections deferred to the Transfer-log reconstruction
+          ufo:{balance:0,reflections:null,reflState:'ok',reflPending:0,reflFailed:0,reflDone:0} // reflState: ok | pending | failed | none (a12)
         };
-        let ufoRefSum=0,ufoRefAny=false,ufoRefPending=false;
+        let ufoRefSum=0,ufoRefAny=false,ufoRefPending=0,ufoRefFailed=0;
         Object.entries(portfolioData).forEach(([addr,d])=>{
           if(!d||d.error||!isWalletChecked(addr))return;   // a failed read contributes nothing, not 0
           result.ptgc.balance+=d.ptgc.balance;
@@ -754,12 +831,19 @@
           result.ptgc.totalHolding+=d.ptgc.totalHolding;
           result.ptgc.locks=[...result.ptgc.locks,...d.ptgc.locks];
           result.ufo.balance+=(d.ufo.balance||0); // a failed wallet read is null -> contributes 0 to the sum, not NaN
-          // Reflections aggregate: sum the wallets that have resolved; if some are still pending/failed (null)
-          // and none have resolved yet, keep the total null ("calculating soon") rather than a misleading 0.
-          if(d.ufo.reflections==null)ufoRefPending=true;
+          /* a12: reflections — `undefined` = scan queued / running, `null` = the chain read failed
+             (reflError says why), number = done. The TOTAL is only a number when every checked wallet
+             has resolved: a sum over three of five wallets is not the portfolio's reflections. */
+          if(d.ufo.reflections===undefined)ufoRefPending++;
+          else if(d.ufo.reflections===null)ufoRefFailed++;
           else{ufoRefSum+=d.ufo.reflections;ufoRefAny=true;}
         });
-        result.ufo.reflections=ufoRefAny?ufoRefSum:(ufoRefPending?null:0);
+        result.ufo.reflPending=ufoRefPending;result.ufo.reflFailed=ufoRefFailed;
+        result.ufo.reflDone=ufoRefAny?1:0;
+        if(ufoRefPending)result.ufo.reflState='pending';
+        else if(ufoRefFailed)result.ufo.reflState='failed';
+        else result.ufo.reflState='ok';
+        result.ufo.reflections=result.ufo.reflState==='ok'?ufoRefSum:null;
         return result;
       },[portfolioData,checkedWallets]);
       
@@ -788,13 +872,14 @@
       };
       
       const refreshAll=()=>{
+        dropReflScans(null);   // a12: the queued scans belong to the data we are about to throw away
         setPortfolioData({});
         wallets.forEach(w=>fetchWalletData(w.address));
       };
       
       const truncAddr=a=>a?a.slice(0,6)+'...'+a.slice(-4):'';
       const dataLoaded=Object.keys(portfolioData).length>0;
-      const anyLoading=loadingAddr!==null;
+      const anyLoading=Object.keys(loadingAddrs).length>0;
       
       // PTGC Donut data (non-overlapping segments)
       const ptgcDonut=[
@@ -912,7 +997,7 @@
                         <div className="flex flex-wrap gap-2">
                           {groupWallets.map(w=>{
                             const addr=w.address.toLowerCase();
-                            const isLoading=loadingAddr===addr;
+                            const isLoading=!!loadingAddrs[addr];
                             const failed=!!(portfolioData[addr]&&portfolioData[addr].error);
                             const hasData=!!portfolioData[addr]&&!failed;
                             const checked=isWalletChecked(addr);
@@ -1271,8 +1356,10 @@
                       <div></div>
                       <div className="bg-[#7CFC00]/10 border border-[#7CFC00]/20 rounded-lg p-3 text-center">
                         <div className="text-[#7CFC00]/70 text-base uppercase mb-1">Reflections</div>
-                        {agg.ufo.reflections==null?(
-                          <div className="text-white/40 text-sm italic py-2">calculating<br/>soon</div>
+                        {agg.ufo.reflState==='pending'?(
+                          <div className="text-white/40 text-sm italic py-2" role="status">scanning<br/>{agg.ufo.reflPending} wallet{agg.ufo.reflPending>1?'s':''}{'\u2026'}</div>
+                        ):agg.ufo.reflState==='failed'?(
+                          <div className="py-1"><div className="text-amber-300/80 text-sm">unavailable</div><button onClick={retryFailedReflScans} className="mt-1 text-xs px-2 py-0.5 rounded border border-amber-300/40 text-amber-200 hover:text-white" aria-label="Retry the UFO reflections scan for the wallets that failed">Retry</button></div>
                         ):(
                           <>
                             <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.reflections)}</div>
@@ -1287,8 +1374,10 @@
                         matches PTGC's bar and the league/donut below stay aligned. */}
                     <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
                       <div className="text-white/50 text-base uppercase font-bold">Total Lifetime Earned</div>
-                      {agg.ufo.reflections==null?(
-                        <span className="text-white/40 text-base italic">calculating soon</span>
+                      {agg.ufo.reflState==='pending'?(
+                        <span className="text-white/40 text-base italic">scanning the chain{'\u2026'}</span>
+                      ):agg.ufo.reflState==='failed'?(
+                        <span className="text-amber-300/80 text-base">unavailable {'\u2014'} the chain read failed for {agg.ufo.reflFailed} wallet{agg.ufo.reflFailed>1?'s':''}</span>
                       ):(
                         <div className="flex items-center gap-3">
                           <span className="text-white font-bold text-2xl">{fmtComma(Math.floor(agg.ufo.reflections))} <span className="text-white/40 text-lg font-normal">UFO</span></span>
@@ -1408,8 +1497,10 @@
                             </div>
                             <div className="bg-black/30 rounded-lg p-3">
                               <div className="text-[#7CFC00]/60 text-base">UFO Reflections</div>
-                              {d.ufo.reflections==null?(
-                                <div className="text-white/30 text-sm italic mt-1">soon</div>
+                              {d.ufo.reflections===undefined?(
+                                <div className="text-white/30 text-sm italic mt-1">{scanningAddr===addr?'scanning\u2026':'queued'}</div>
+                              ):d.ufo.reflections===null?(
+                                <div className="text-amber-300/70 text-sm mt-1" title={d.ufo.reflError||''}>unavailable</div>
                               ):(
                                 <>
                                   <div className="text-[#7CFC00] font-bold text-xl">{fmtAbbr(d.ufo.reflections)}</div>

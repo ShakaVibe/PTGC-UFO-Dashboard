@@ -19,13 +19,13 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-18)
 
-Roadmap: 81 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 36 of the 67
+Roadmap: 83 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 38 of the 67
 Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; a14, a15, a17, a18,
 a19, a20, a21, a23 — 2026-09-17, the honest-failure pass; a29, a28, a31, a30, a34, a33, a32, a38,
 a35, a37 — 2026-09-17 evening/night, the pipeline week; **a5, a6, a7, a8, a9 — 2026-09-18, the
-calculators; a36 the same evening — `sessions/2026-09-18.md`**). **2026-09-18 cadence check: GitHub runs the one hourly
+calculators; a36 the same evening; a12 + a26 at night — `sessions/2026-09-18.md`**). **2026-09-18 cadence check: GitHub runs the one hourly
 workflow ~5×/day (gaps up to 5 h, all green) — stale thresholds raised instead (value-generated 6 h,
-burn-summary amber 8 h). Next: a26/a27, a12 (portfolio.html).**
+burn-summary amber 8 h). Next: a27 is Shaka's call (0 partial entries live), then a39+.**
 u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
@@ -60,7 +60,7 @@ Check `git --no-optional-locks status` before starting.
 | Phase 4 — g7 Buy/Sell via switch.win | **Done, live** (2026-09-13; three commits, ticked on the artifact) |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **36 of 67 done.** **2026-09-18 evening: a36** Ledger reads `data/treasury-recent.json` (859 KB, both wallets, 8 whole months, ledger fields only) with the four full files as fallback. **2026-09-18, calculators.html:** a6 RPC pool + `fetchBurn` null (circ. supply / every MCap "—", Rewards share never bag/1), a5 PLS price null + `dsOnePair` (no $0.00005 placeholder), a8 Rewards inputs saved on typing + per-token bags (no cross-token leak), a9 calculators stay mounted across a Switch (inputs kept, amber banner, `LiveBadge`), a7 token-switch race cancelled. 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a12, a26, a27, a39–a47, a49–a67 |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **38 of 67 done.** **2026-09-18 night: a12** portfolio reflections scanned one wallet at a time on the RPC pool, pending / failed states, total only when every wallet resolved; **a26** ErrorBoundary `resetKey` + Try again. **2026-09-18 evening: a36** Ledger reads `data/treasury-recent.json` (859 KB, both wallets, 8 whole months, ledger fields only) with the four full files as fallback. **2026-09-18, calculators.html:** a6 RPC pool + `fetchBurn` null (circ. supply / every MCap "—", Rewards share never bag/1), a5 PLS price null + `dsOnePair` (no $0.00005 placeholder), a8 Rewards inputs saved on typing + per-token bags (no cross-token leak), a9 calculators stay mounted across a Switch (inputs kept, amber banner, `LiveBadge`), a7 token-switch race cancelled. 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a27 (Shaka's call — see 09-18 note), a39–a47, a49–a67 |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -272,6 +272,11 @@ Check `git --no-optional-locks status` before starting.
    save effects keyed on the value ONLY, load effect resets unsaved fields to '' — a `[value, token]`
    dep re-introduces the cross-token leak. Harness: `HTML=calculators.html` + `probes/calc-*.js`,
    `DS_UFO_PRICE` / `SLOW_UFO` for the race.
+23. **portfolio.html reflections are a queue** (a12): `fetchPortfolioData` never scans; `fetchWalletData`
+   queues the wallet on `reflQueue` (one scan at a time) with its `gen`. `ufo.reflections`: `undefined`
+   pending, `null` failed (+`reflError`), number done — keep those three apart; the aggregate shows a total
+   only when every checked wallet resolved. Anything that reloads or removes a wallet bumps `genRef` and
+   calls `dropReflScans`. Harness needs `HEAD_BLOCK=27100000` for the scan to do anything.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -285,9 +290,11 @@ Check `git --no-optional-locks status` before starting.
    a5–a9 done the same day. **After the deploy, a 30-second live look at calculators.html:** header PLS
    ratio is a number (not "—" — if it dashes, the WPLS/DAI pair call is failing live), tap Switch and
    watch the amber "Loading UFO data… your inputs are kept" line instead of the full-screen gate, and
-   on Rewards type a bag, reload, and see it come back. a36 done the same evening (Ledger → `treasury-recent.json`). Next:
-   a26/a27 + a12 (portfolio.html: single RPC endpoint and `.pair` reads — port `rpcFetch` / `dsJson`
-   from calculators.html), then a39+. Optional: `charts.html` `STATUS_STALE_MS` 2 h → 6 h if the
+   on Rewards type a bag, reload, and see it come back. a36 done the same evening (Ledger → `treasury-recent.json`); a12 + a26 at night. **After the
+   deploy:** portfolio.html with your saved wallets — chips go yellow together, the UFO lifetime bar says
+   "scanning the chain…" then a number (or "unavailable — Retry", never 0). Next: a27 only if Shaka wants
+   per-buy paid/pending (0 partial entries live — see the 09-18 note), otherwise a39+ (a11y / mobile /
+   cleanup) in any order. Optional: `charts.html` `STATUS_STALE_MS` 2 h → 6 h if the
    permanent amber "as of" on the Charts page grates. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
    a22, a24, a48; 2026-09-17: a14, a15, a17–a21, a23 (honest-failure pass — after deploy, a
    30-second live look: PTGC header change line, UFO Value Generated headline (should be a number,
@@ -362,8 +369,11 @@ Check `git --no-optional-locks status` before starting.
   mounted across a Switch (`LiveBadge`, banner), token-switch race cancelled; harness `DS_UFO_PRICE`
   / `SLOW_UFO`, `probes/calc-header|type|sanity.js`. Evening: **a36** — `treasury-recent.json` (859 KB
   vs 3.7 MB), Ledger reads it first with the full files as fallback; `probes/ledger-rows.js` proved the
-  seven months identical. Note: `.github/workflows/*` is protected from the bridge's file writer — edit
-  those in place from the shell.
+  seven months identical. Night: **a12** (portfolio: RPC pool, one-at-a-time reflections queue with
+  `gen` guards, pending / failed / Retry, total only when complete; harness `HEAD_BLOCK`, `LOGS_DOWN`,
+  `probes/portfolio-state.js`), **a26** (ErrorBoundary `resetKey` + Try again; `probes/eb-state.js`),
+  a27 read against the live API and left open. Note: `.github/workflows/*` is protected from the
+  bridge's file writer — edit those in place from the shell.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
