@@ -191,7 +191,31 @@
           setError(null);
           
           try {
-            console.log('Loading treasury data from pre-fetched files...');
+            /* a36 (2026-09-18): one slim file first. treasury-recent.json is both wallets, the last
+               8 months, only the fields this page reads — ~0.9 MB instead of ~3.7 MB for three
+               years of rows the 7-month picker can never show. It is trusted only when its window
+               covers the oldest month the picker offers; otherwise (missing, old shape, or a
+               shorter window) the four full files below are the fallback, then the API. */
+            const oldestPicker = new Date(new Date().getFullYear(), new Date().getMonth() - 6, 1).getTime() / 1000;
+            let recent = null;
+            try {
+              const r = await fetch(`${DATA_BASE_URL}treasury-recent.json${DATA_BUST}`);
+              if (r.ok) {
+                const j = await r.json();
+                if (j && j.schema === 1 && Array.isArray(j.transactions) && Array.isArray(j.transfers) && Number(j.since) <= oldestPicker) recent = j;
+                else console.warn('treasury-recent.json unusable (schema/window) — using the full files', j && { schema: j.schema, since: j.sinceIso });
+              } else console.warn('treasury-recent.json ' + r.status + ' — using the full files');
+            } catch (e) { console.warn('treasury-recent.json failed — using the full files:', e.message); }
+            if (recent) {
+              console.log(`Loaded ${recent.transactions.length} txns, ${recent.transfers.length} transfers from treasury-recent.json (since ${recent.sinceIso})`);
+              setTransactions(recent.transactions);
+              setTokenTxns(recent.transfers);
+              setDataSource('Pre-fetched (PulseScan)');
+              setLastUpdated(recent.lastUpdated);
+              return;
+            }
+            
+            console.log('Loading treasury data from the full pre-fetched files...');
             
             // Try to load from JSON data files
             const [w1TxnRes, w2TxnRes, w1TokenRes, w2TokenRes, summaryRes] = await Promise.all([

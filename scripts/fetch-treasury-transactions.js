@@ -15,6 +15,11 @@
  * - treasury-wallet2-txns.json (all txns for wallet 2)
  * - treasury-wallet1-tokens.json (all token transfers for wallet 1)
  * - treasury-wallet2-tokens.json (all token transfers for wallet 2)
+ * - treasury-recent.json (a36: both wallets, last RECENT_MONTHS months, only the fields
+ *   ledger.html reads — the Ledger loads this one file (~0.9 MB) instead of the four above (~3.7 MB
+ *   for three years of rows it can never show; its month picker reaches back 7 months).
+ *   `node fetch-treasury-transactions.js --recent-only` rebuilds it from the files on disk without
+ *   touching PulseScan.)
  */
 
 const fs = require('fs');
@@ -460,6 +465,55 @@ async function fetchNativeBalance(walletAddress, walletName) {
 /**
  * Main function
  */
+/* ===================== a36: the slim file the Ledger reads =====================
+ * ledger.html shows at most the current month and the six before it, and reads these fields:
+ *   transactions — hash, from, to, value, timeStamp, input (full: the multicall output-token
+ *                  scan walks the whole calldata for 32-byte-aligned token addresses),
+ *                  isError, txreceipt_status, gasUsed, gasPrice, method_label
+ *   transfers    — hash, from, to, contractAddress, value, timeStamp, tokenSymbol, tokenName,
+ *                  tokenDecimal
+ * Everything else (internal_transactions, gas, block numbers, spam/verified flags) and every row
+ * older than RECENT_MONTHS is left in the four full files, which stay the source of truth (and the
+ * Ledger's fallback). Rows are newest-first; `since` is the cut the Ledger checks before trusting
+ * the file for a month. Add a field here the moment ledger.html starts reading it. */
+const RECENT_MONTHS = 8;
+const RECENT_TX_FIELDS = ['hash', 'from', 'to', 'value', 'timeStamp', 'input', 'isError', 'txreceipt_status', 'gasUsed', 'gasPrice', 'method_label'];
+const RECENT_TRANSFER_FIELDS = ['hash', 'from', 'to', 'contractAddress', 'value', 'timeStamp', 'tokenSymbol', 'tokenName', 'tokenDecimal'];
+const pickFields = (row, fields) => {
+  const out = {};
+  for (const k of fields) if (row[k] !== undefined && row[k] !== null && row[k] !== '') out[k] = row[k];
+  return out;
+};
+function buildRecent({ wallet1Txns, wallet2Txns, wallet1Tokens, wallet2Tokens, now = new Date() }) {
+  // First day of the month RECENT_MONTHS-1 months ago, UTC — whole months, so a month the picker
+  // offers is either fully inside the window or not at all.
+  const sinceDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (RECENT_MONTHS - 1), 1));
+  const since = Math.floor(sinceDate.getTime() / 1000);
+  const inWindow = r => Number(r.timeStamp) >= since;
+  const byTimeDesc = (a, b) => Number(b.timeStamp) - Number(a.timeStamp);
+  const transactions = [...wallet1Txns, ...wallet2Txns].filter(inWindow).map(r => pickFields(r, RECENT_TX_FIELDS)).sort(byTimeDesc);
+  const transfers = [...wallet1Tokens, ...wallet2Tokens].filter(inWindow).map(r => pickFields(r, RECENT_TRANSFER_FIELDS)).sort(byTimeDesc);
+  return {
+    schema: 1,
+    lastUpdated: now.toISOString(),
+    months: RECENT_MONTHS,
+    since,                                   // unix seconds; rows at or after this are complete
+    sinceIso: sinceDate.toISOString(),
+    wallets: [WALLET1, WALLET2],
+    counts: { transactions: transactions.length, transfers: transfers.length,
+              full: { transactions: wallet1Txns.length + wallet2Txns.length, transfers: wallet1Tokens.length + wallet2Tokens.length } },
+    transactions,
+    transfers
+  };
+}
+function writeRecent(dataDir, parts) {
+  const recent = buildRecent(parts);
+  const recentPath = path.join(dataDir, 'treasury-recent.json');
+  fs.writeFileSync(recentPath, JSON.stringify(recent));
+  console.log(`  Written: ${recentPath} (${(fs.statSync(recentPath).size / 1024).toFixed(0)} KB — ${recent.counts.transactions} txns + ${recent.counts.transfers} transfers since ${recent.sinceIso.slice(0, 10)})`);
+  return recent;
+}
+
 async function main() {
   console.log('\n' + '='.repeat(60));
   console.log('TREASURY TRANSACTION FETCHER - PULSESCAN VERSION');
@@ -581,6 +635,9 @@ async function main() {
   }));
   console.log(`  Written: ${w2TokenPath} (${(fs.statSync(w2TokenPath).size / 1024 / 1024).toFixed(2)} MB)`);
   
+  // a36: the slim file the Ledger reads first
+  writeRecent(dataDir, { wallet1Txns, wallet2Txns, wallet1Tokens, wallet2Tokens });
+  
   // ============================================
   // WRITE SUMMARY FILE
   // ============================================
@@ -664,12 +721,26 @@ async function main() {
   console.log('  - treasury-wallet2-txns.json');
   console.log('  - treasury-wallet1-tokens.json');
   console.log('  - treasury-wallet2-tokens.json');
+  console.log('  - treasury-recent.json');
   console.log('  - treasury-summary.json');
   console.log('Completed:', new Date().toISOString());
   console.log('='.repeat(60));
 }
 
-main().catch(err => {
-  console.error('FATAL ERROR:', err);
-  process.exit(1);
-});
+/* `--recent-only`: rebuild treasury-recent.json from the four files on disk, no network. Used by
+   the harness and useful right after a schema change — the hourly step rewrites it anyway. */
+if (process.argv.includes('--recent-only')) {
+  const dataDir = path.join(__dirname, '..', 'data');
+  const read = f => JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8'));
+  writeRecent(dataDir, {
+    wallet1Txns: read('treasury-wallet1-txns.json').transactions || [],
+    wallet2Txns: read('treasury-wallet2-txns.json').transactions || [],
+    wallet1Tokens: read('treasury-wallet1-tokens.json').transfers || [],
+    wallet2Tokens: read('treasury-wallet2-tokens.json').transfers || []
+  });
+} else {
+  main().catch(err => {
+    console.error('FATAL ERROR:', err);
+    process.exit(1);
+  });
+}
