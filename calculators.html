@@ -142,23 +142,76 @@
     };
     const BURN_ADDRESS='0x0000000000000000000000000000000000000369';
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
-    const RPC='https://rpc.pulsechain.com';
     const MIN_LIQ=1000;
-    
-    // Simple RPC fetch with timeout
-    const rpcFetch=async(body,timeout=8000)=>{
+
+    /* RPC ENDPOINT POOL (a6, 2026-09-18) — the same three PulseChain endpoints and failover
+       rules as index.html: transport failures (network, timeout, non-2xx, non-JSON) rotate to
+       the next endpoint; a well-formed JSON-RPC error object is returned as-is. The chosen
+       endpoint is sticky for 2 min, then drifts back to the primary. All endpoints down →
+       {result:null}, and every caller treats that as UNKNOWN (null), never as zero. */
+    const RPC_ENDPOINTS=[
+      'https://rpc.pulsechain.com',
+      'https://rpc-pulsechain.g4mm4.io',
+      'https://pulsechain-rpc.publicnode.com'
+    ];
+    const RPC=RPC_ENDPOINTS[0];
+    let _rpcIdx=0,_rpcSince=0;
+    const RPC_STICKY_MS=120000;
+    const _rpcOnce=async(url,body,timeout)=>{
+      const controller=new AbortController();
+      const timeoutId=setTimeout(()=>controller.abort(),timeout);
       try{
-        const controller=new AbortController();
-        const timeoutId=setTimeout(()=>controller.abort(),timeout);
-        const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-        clearTimeout(timeoutId);
-        return await res.json();
-      }catch(e){
-        console.error('RPC error:',e.message);
-        return{result:null};
-      }
+        const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+        if(!res.ok)throw new Error('HTTP '+res.status);
+        const txt=await res.text();
+        let j;
+        try{j=JSON.parse(txt);}catch{throw new Error('non-JSON response');}
+        if(!j||typeof j!=='object')throw new Error('bad payload');
+        return j;
+      }finally{clearTimeout(timeoutId);}
     };
-    
+    const rpcFetch=async(body,timeout=8000)=>{
+      if(_rpcIdx!==0&&Date.now()-_rpcSince>RPC_STICKY_MS){_rpcIdx=0;}
+      const n=RPC_ENDPOINTS.length;
+      let lastErr=null;
+      for(let i=0;i<n;i++){
+        const idx=(_rpcIdx+i)%n;
+        try{
+          const j=await _rpcOnce(RPC_ENDPOINTS[idx],body,timeout);
+          if(idx!==_rpcIdx){_rpcIdx=idx;_rpcSince=Date.now();console.warn('RPC failover → '+RPC_ENDPOINTS[idx]);}
+          return j;
+        }catch(e){lastErr=e;console.warn('RPC '+RPC_ENDPOINTS[idx]+' failed: '+e.message);}
+      }
+      console.error('RPC error (all '+n+' endpoints failed):',lastErr&&lastErr.message);
+      return{result:null};
+    };
+    /* A hex word from eth_call, or null when the read did not happen ({result:null} from the pool,
+       a JSON-RPC error, or an empty '0x' from a reverted call). Never coerce a failed read to 0. */
+    const rpcWord=r=>(r&&typeof r.result==='string'&&/^0x[0-9a-fA-F]{2,}$/.test(r.result))?r.result:null;
+    /* DexScreener, honest (a5): null on any failure — non-2xx, non-JSON, network, 429 (one retry).
+       dsOnePair accepts BOTH the legacy {pair:{…}} shape and the current {pairs:[…]} shape the
+       /pairs/ endpoint answers with today (index.html has the same helper). */
+    const dsJson=async(url,timeout=8000)=>{
+      for(let a=0;a<2;a++){
+        try{
+          const c=new AbortController();const t=setTimeout(()=>c.abort(),timeout);
+          let res;try{res=await fetch(url,{signal:c.signal});}finally{clearTimeout(t);}
+          if(res.status===429||res.status>=500){if(a===0){await new Promise(r=>setTimeout(r,800));continue;}return null;}
+          if(!res.ok){console.warn('DexScreener '+res.status+' on '+url);return null;}
+          const txt=await res.text();
+          try{return JSON.parse(txt);}catch{console.warn('DexScreener sent non-JSON from '+url);return null;}
+        }catch(e){console.warn('DexScreener unreachable: '+url,e.message);if(a===0)continue;return null;}
+      }
+      return null;
+    };
+    const dsOnePair=d=>{
+      if(!d)return null;
+      if(d.pair)return d.pair;
+      if(Array.isArray(d.pairs)&&d.pairs.length)return d.pairs.find(p=>parseFloat(p.priceUsd)>0)||d.pairs[0];
+      if(Array.isArray(d)&&d.length)return d.find(p=>parseFloat(p.priceUsd)>0)||d[0];
+      return null;
+    };
+
     const HOLDER_TIERS_DISPLAY=[
       {n:'Poseidon',e:'\u{1F531}',p:10},
       {n:'Whale',e:'\u{1F40B}',p:1},
@@ -192,11 +245,9 @@
       try{
         let mp=null;
         if(mainPair){
-          const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`);
-          const d=await r.json();
-          if(d.pair)mp=d.pair;
+          mp=dsOnePair(await dsJson(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${mainPair}`)); // a5: pairs[] shape + null on failure — the token endpoints below still run
         }
-        
+
         // Fetch from both endpoints to ensure we get all pairs
         const [tokensRes, pairsRes] = await Promise.all([
           fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`),
@@ -313,8 +364,23 @@
         return null;
       }
     };
-    const fetchBurn=async(addr,dec)=>{try{const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});const burned=Number(BigInt(bRes.result||'0x0'))/Math.pow(10,dec);const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});const supply=Number(BigInt(sRes.result||'0x0'))/Math.pow(10,dec);return{total:burned,pct:supply>0?(burned/supply)*100:0,supply}}catch(e){console.error('fetchBurn error:',e);return{total:0,pct:0,supply:0}}};
-    const fetchPLS=async()=>{try{const r=await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae');return parseFloat((await r.json()).pair?.priceUsd)||0.00005}catch{return 0.00005}};
+    /* a6: {total,pct,supply} or NULL. A burn that could not be read is unknown — the callers print
+       "—" and skip every market cap / supply share that would be built on it. Before this, an RPC
+       throttle returned {total:0}, so circulating supply silently became the unburned 333B. */
+    const fetchBurn=async(addr,dec)=>{
+      try{
+        const bRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1});
+        const bw=rpcWord(bRes);if(bw==null)return null;
+        const burned=Number(BigInt(bw))/Math.pow(10,dec);
+        const sRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2});
+        const sw=rpcWord(sRes);if(sw==null)return null;
+        const supply=Number(BigInt(sw))/Math.pow(10,dec);
+        return{total:burned,pct:supply>0?(burned/supply)*100:0,supply};
+      }catch(e){console.error('fetchBurn error:',e);return null;}
+    };
+    /* a5: PLS/USD from the WPLS/DAI pair, or NULL. No placeholder constant — a fake $0.00005 used to
+       drive the header PLS ratio, the X Multiplier's WPLS row and Moon Math with no sign it was made up. */
+    const fetchPLS=async()=>{const p=parseFloat(dsOnePair(await dsJson('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xe56043671df55de5cdf8459710433c10324de0ae'))?.priceUsd);return p>0?p:null;};
 
     // ===== CoinGecko Pre-fetched Data (from GitHub) =====
     const COINGECKO_DATA_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/coingecko-data.json';
@@ -2246,7 +2312,15 @@
       );
     };
 
-    const CalculatorsTab=({token,cfg,data,burn,pls,theme,stakingData,volumeByPeriod,totalUFOShareRate,stakingPairs,onBack,onSwitchToken})=>{
+    /* Status pill for the "Current Market Prices" boxes (a9): the tab stays mounted across a token
+       switch, so it needs to say when the numbers are on their way or did not arrive. */
+    const LiveBadge=({loading,data,size='text-sm'})=>loading
+      ?<div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-300 animate-pulse"></div><span className={`text-amber-300/80 ${size} font-bold uppercase`}>Loading</span></div>
+      :!data
+      ?<div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-400"></div><span className={`text-red-300/80 ${size} font-bold uppercase`}>Unavailable</span></div>
+      :<div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div><span className={`text-green-400/70 ${size} font-bold uppercase`}>Live</span></div>;
+
+    const CalculatorsTab=({token,cfg,data,burn,pls,loading,theme,stakingData,volumeByPeriod,totalUFOShareRate,stakingPairs,onBack,onSwitchToken})=>{
       /* Default tab: last calculator the visitor used (localStorage), falling back to
          the New Capital Simulator for first-timers. Landing on an OPEN calculator beats
          an empty page; remembering the last one makes it feel personal. Only live tabs
@@ -2264,7 +2338,10 @@
       const isGold=cfg.color==='gold';
       const price=data?.price||0;
       const totalSupply=cfg.totalSupply;
-      const circulatingSupply=totalSupply-(burn?.total||0);
+      /* a6: null when the burn could not be read. Every market cap and supply share below checks
+         for it and prints "—" — never the unburned total supply. */
+      const circulatingSupply=burn?totalSupply-burn.total:null;
+      const supplyUnknown=circulatingSupply==null;
       const mcap=data?.mcap||0;
       /* MIGRATION (per site owner): UFO's ATH carries over from the OLD token — the
          migration is treated as one continuous asset, so the pre-migration high remains
@@ -2298,24 +2375,35 @@
       const inputsTokenRef=React.useRef(null);
       useEffect(()=>{ // load this token's remembered inputs (runs on mount + every switch)
         try{
-          const b=localStorage.getItem(lsKey('xmult_bag'));if(b!==null)setTokenAmount(b);
+          const b=localStorage.getItem(lsKey('xmult_bag'));setTokenAmount(b!==null?b:'');   // per token: nothing saved → empty, not the other token's bag (a8)
           const p=localStorage.getItem(lsKey('xmult_pair'));if(p&&['WPLS','PLSX','INC','HEX','EHEX','PRVX','WETH'].includes(p)){setSelectedPairSymbol(p);setTargetPairedPrice('');}
-          const rb=localStorage.getItem(lsKey('rwd_bag'));if(rb!==null)setRwdTokenAmount(rb);
-          const rs=localStorage.getItem(lsKey('rwd_staked'));if(rs!==null)setRwdStakedAmount(rs);
+          const rb=localStorage.getItem(lsKey('rwd_bag'));setRwdTokenAmount(rb!==null?rb:'');
+          const rs=localStorage.getItem(lsKey('rwd_staked'));setRwdStakedAmount(rs!==null?rs:'');
         }catch(e){}
         inputsTokenRef.current=token;
       },[token]);
       const lsSave=(k,v)=>{if(inputsTokenRef.current!==token)return;try{localStorage.setItem(lsKey(k),v)}catch(e){}};
-      useEffect(()=>{lsSave('xmult_bag',tokenAmount)},[tokenAmount,token]);
-      useEffect(()=>{lsSave('xmult_pair',selectedPairSymbol)},[selectedPairSymbol,token]);
-      useEffect(()=>{lsSave('rwd_bag',rwdTokenAmount)},[rwdTokenAmount,token]);
-      useEffect(()=>{lsSave('rwd_staked',rwdStakedAmount)},[rwdStakedAmount,token]);
-      const[portfolioLoading,setPortfolioLoading]=useState(false);
-      
-      // Rewards Calculator state
+      useEffect(()=>{lsSave('xmult_bag',tokenAmount)},[tokenAmount]);          // value only — see the a8 note below
+      useEffect(()=>{lsSave('xmult_pair',selectedPairSymbol)},[selectedPairSymbol]);
+      /* a8 (2026-09-18): these two used to be declared BELOW their save effects. Babel compiles the
+         destructuring to `var`, so the deps array was evaluated as [undefined, token] on every
+         render — the effect never re-ran on typing (the bag was wiped to '' at mount and never
+         saved again) and on a token switch it wrote the OLD token's bag under the new token's key.
+         State first, effects after — same order as the X Multiplier pair above.
+         Second half: the deps are the VALUE only. Every save effect used to re-run on the token
+         change itself, in the same commit as the load effect above (which had already moved
+         inputsTokenRef to the new token), so the OLD token's bag was written under the NEW
+         token's key whenever the new token had nothing saved — the X Multiplier pair leaked the
+         same way. Now a switch loads the new token's values (re-render → value changed → saved
+         under the right key) and a token with nothing saved starts empty. */
       const[rwdTokenAmount,setRwdTokenAmount]=useState('');
       const[rwdStakedAmount,setRwdStakedAmount]=useState('');
-      const[rwdLpShareRate,setRwdLpShareRate]=useState(''); // UFO tokens in LP (share rate)
+      useEffect(()=>{lsSave('rwd_bag',rwdTokenAmount)},[rwdTokenAmount]);
+      useEffect(()=>{lsSave('rwd_staked',rwdStakedAmount)},[rwdStakedAmount]);
+      const[portfolioLoading,setPortfolioLoading]=useState(false);
+
+      // Rewards Calculator state (rwdTokenAmount / rwdStakedAmount are declared above the save effects — a8)
+const[rwdLpShareRate,setRwdLpShareRate]=useState(''); // UFO tokens in LP (share rate)
       const[rwdLpLoading,setRwdLpLoading]=useState(false);
       const[showShareRateInfo,setShowShareRateInfo]=useState(false);
       const[rwdVolume,setRwdVolume]=useState('');
@@ -2334,7 +2422,7 @@
       const[moonBagLoading,setMoonBagLoading]=useState(false);
       const[moonToken,setMoonToken]=useState(token);
       const[moonOtherPairs,setMoonOtherPairs]=useState(null);
-      const[moonOtherBurn,setMoonOtherBurn]=useState(0); // MIGRATION AUDIT: burn of the non-parent token, fetched on toggle
+      const[moonOtherBurn,setMoonOtherBurn]=useState(null); // MIGRATION AUDIT: burn of the non-parent token, fetched on toggle; null = not read (a6)
       const[moonDirectAmount,setMoonDirectAmount]=useState('');
       const[moonCrossWeights,setMoonCrossWeights]=useState({}); // {coreSymbol: {otherCoreSymbol: weight}}
       const[moonXInputs,setMoonXInputs]=useState({}); // {pairAddress: string} — user-typed X targets per core row
@@ -2377,7 +2465,7 @@
       
       // Fresh Capital - other token data (need both PTGC + UFO for comparison)
       const[freshOtherData,setFreshOtherData]=useState(null);
-      const[freshOtherBurn,setFreshOtherBurn]=useState({total:0,pct:0,supply:0});
+      const[freshOtherBurn,setFreshOtherBurn]=useState(null); // null = not read yet / failed (a6)
       const[freshOtherStaking,setFreshOtherStaking]=useState(null);
       const[freshOtherShareRate,setFreshOtherShareRate]=useState(0);
       const[freshOtherVolume,setFreshOtherVolume]=useState(null);
@@ -2391,9 +2479,8 @@
         if(calcTab!=='rewards'||token!=='UFO'||rwdPtgcPrice>0)return;
         (async()=>{
           try{
-            const r=await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`);
-            const p=parseFloat((await r.json()).pair?.priceUsd)||0;
-            if(p>0)setRwdPtgcPrice(p);
+            const p=parseFloat(dsOnePair(await dsJson(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`))?.priceUsd)||0;
+if(p>0)setRwdPtgcPrice(p);
           }catch(e){/* box just omits the token count */}
         })();
       },[calcTab,token]);
@@ -2607,8 +2694,8 @@
       const finalPrice=basePrice*xNum;
       const basePotential=price>0?basePrice/price:0;
       const finalPotential=price>0?finalPrice/price:0;
-      const baseMcap=basePrice*circulatingSupply;
-      const finalMcap=finalPrice*circulatingSupply;
+      const baseMcap=supplyUnknown?null:basePrice*circulatingSupply;
+      const finalMcap=supplyUnknown?null:finalPrice*circulatingSupply;
       const pairedXNeeded=pairedCurrentPrice>0?targetPaired/pairedCurrentPrice:0;
       const bagAmount=parseFloat(tokenAmount)||0;
       const bagCurrentValue=bagAmount*price;
@@ -2639,13 +2726,13 @@
       
       // Fetch other token pairs from DexScreener when moonToken differs from parent
       useEffect(()=>{
-        if(moonToken===token){setMoonOtherPairs(null);setMoonOtherBurn(0);return;}
+        if(moonToken===token){setMoonOtherPairs(null);setMoonOtherBurn(null);return;}
         const otherCfg=TOKENS[moonToken];
         if(!otherCfg)return;
         fetchDex(otherCfg.address,otherCfg.mainPair).then(d=>{
           setMoonOtherPairs(d?.pairs||[]);
         }).catch(()=>setMoonOtherPairs([]));
-        fetchBurn(otherCfg.address,otherCfg.decimals).then(b=>setMoonOtherBurn(b?.total||0)).catch(()=>setMoonOtherBurn(0));
+        fetchBurn(otherCfg.address,otherCfg.decimals).then(b=>setMoonOtherBurn(b?b.total:null)).catch(()=>setMoonOtherBurn(null));
       },[moonToken,token]);
       
       const moonPairs=useMemo(()=>{
@@ -2824,7 +2911,7 @@
         // Use market price (not pool-specific price) as base — pool-weight dampening already accounts for partial exposure
         const basePrice=marketPrice||ptgcPoolPrice;
         const newPriceUSD=basePrice*tokenXmult;
-        const newMcap=newPriceUSD*(circSupply||circulatingSupply);
+        const _cs=circSupply||circulatingSupply;const newMcap=_cs>0?newPriceUSD*_cs:null;
         return{newCorePrice,oldCorePrice:corePriceUSD,coreXmult,tokenXmult,newPriceUSD,xMult:tokenXmult,newMcap,coreTotalLiqUSD,poolWeight};
       };
       
@@ -2841,7 +2928,7 @@
         const newReserveToken=reserveToken-tokenOut;
         const newPrice=newReserveUSD/newReserveToken;
         const xMult=newPrice/currentPrice;
-        const newMcap=newPrice*(circSupply||0);
+        const newMcap=circSupply>0?newPrice*circSupply:null;
         return{newPriceUSD:newPrice,xMult,newMcap,totalTokenLiqUSD,isDirect:true};
       };
       const displayMoonBag=moonBagAmount?(parseFloat(moonBagAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):'';
@@ -2984,10 +3071,7 @@
               <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
                 <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
                   <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Current Market Prices</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-green-400/70 text-sm font-bold uppercase">Live</span>
-                  </div>
+                  <LiveBadge loading={loading} data={data}/>
                 </div>
                 <div className="px-6 py-3">
                   <div className="grid grid-cols-3 gap-4">
@@ -3272,8 +3356,8 @@
             // Moon Math uses moonToken which can differ from parent token
             const mCfg=TOKENS[moonToken]||cfg;
             const mTotalSupply=mCfg.totalSupply;
-            const mBurnTotal=moonToken===token?(burn?.total||0):moonOtherBurn;
-            const mCirc=mTotalSupply-mBurnTotal;
+            const mBurnTotal=moonToken===token?(burn?burn.total:null):moonOtherBurn;
+            const mCirc=mBurnTotal==null?null:mTotalSupply-mBurnTotal; // null = burn unknown → every MCap below prints "—" (a6)
             let mPrice=moonToken===token?price:0;
             if(mPrice<=0&&pls>0){
               const wplsPair=moonPairs.find(p=>p.coreSymbol==='WPLS');
@@ -3359,7 +3443,7 @@
               const tokenXmult=Math.pow(poolWeight*Math.sqrt(coreXmult)+(1-poolWeight),2);
               const newPriceUSD=mPrice*tokenXmult;
               const newCorePrice=(coreInitPrices[sym]||row.corePriceUSD)*coreXmult;
-              const newMcap=newPriceUSD*mCirc;
+              const newMcap=mCirc>0?newPriceUSD*mCirc:null;
               moonResultsList[i].impact={
                 newCorePrice,oldCorePrice:coreInitPrices[sym]||row.corePriceUSD,
                 coreXmult,tokenXmult,newPriceUSD,xMult:tokenXmult,newMcap,
@@ -3399,7 +3483,7 @@
             
             const moonCombinedX=indirectXmult;
             const moonWeightedPrice=mPrice*moonCombinedX;
-            const moonCombinedMcap=moonWeightedPrice*mCirc;
+            const moonCombinedMcap=mCirc>0?moonWeightedPrice*mCirc:null;
             const moonHasResults=moonTotalInjected>0;
             const moonBagCurrent=moonBag*mPrice;
             const moonBagNew=moonBag*moonWeightedPrice;
@@ -3409,7 +3493,7 @@
             const mAthPrice=moonToken==='UFO'
               ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache)
               :(coingeckoDataCache?.[moonToken]?.ath||ATH_PRICES[moonToken]||0);
-            const mMcap=mPrice*mCirc;
+            const mMcap=mCirc>0?mPrice*mCirc:null;
             
             return(
             <div className="space-y-6">
@@ -3440,10 +3524,7 @@
               <div className={`bg-[#111]/80 border ${moonThemeBorder} rounded-2xl overflow-hidden`}>
                 <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
                   <span className="text-white/60 text-xs font-bold uppercase tracking-widest">Current Market Prices</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-green-400/70 text-xs font-bold uppercase">Live</span>
-                  </div>
+                  <LiveBadge loading={loading} data={data} size="text-xs"/>
                 </div>
                 <div className="px-6 py-3">
                   <div className="grid grid-cols-3 gap-4">
@@ -3917,14 +3998,14 @@
             const autoLpPct=lpBuckets.reduce((s,t)=>s+t.pct,0)/100;
             
             // Supply & staking pool
-            const circSupply=circulatingSupply>0?circulatingSupply:1;
+            const circSupply=circulatingSupply>0?circulatingSupply:null; // a6: was `:1` — an unread burn made the user's share bag/1
             const totalStakedPool=isPTGC?((stakingData?.staked||0)+(stakingData?.locked||0)):0;
             const totalUFOInLP=data?.tokensInLP||0; // current UFO tokens in LP pools (for reflection exclusion)
-            
+
             // User share
             // For UFO reflections: tokens in LP do NOT earn holder reflections, so exclude them from denominator
-            const eligibleSupply=isPTGC?circSupply:Math.max(circSupply-totalUFOInLP,1);
-            const userShareOfSupply=rwdBag>0?rwdBag/eligibleSupply:0;
+            const eligibleSupply=circSupply==null?null:(isPTGC?circSupply:Math.max(circSupply-totalUFOInLP,1));
+            const userShareOfSupply=rwdBag>0&&eligibleSupply>0?rwdBag/eligibleSupply:0;
             const userShareOfStaked=(isPTGC&&rwdStaked>0&&totalStakedPool>0)?rwdStaked/totalStakedPool:0;
             
             // Daily rewards
@@ -3965,7 +4046,7 @@
             const totalPositionValue=bagValue+(isPTGC?(rwdStaked*price):0);
             const apy=totalPositionValue>0?(yearlyTotalUSD/totalPositionValue)*100:0;
             
-            const hasResults=(rwdBag>0||(isPTGC&&rwdStaked>0))&&dailyVolUSD>0;
+            const hasResults=(rwdBag>0||(isPTGC&&rwdStaked>0))&&dailyVolUSD>0&&!supplyUnknown; // no supply → no share → no results (a6)
             
             return(
             <div className="space-y-6">
@@ -3991,10 +4072,7 @@
               <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
                 <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
                   <span className="text-white/60 text-sm font-bold uppercase tracking-widest">Current Market Prices</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-green-400/70 text-sm font-bold uppercase">Live</span>
-                  </div>
+                  <LiveBadge loading={loading} data={data}/>
                 </div>
                 <div className="px-6 py-3">
                   <div className="grid grid-cols-3 gap-4">
@@ -4114,7 +4192,7 @@
                   
                   {/* Live Stats Bar */}
                   <div className="flex flex-wrap gap-4 px-2 py-2">
-                    <div className="text-white/25 text-sm">Circ. Supply: <span className="text-white/50 font-semibold">{fmtAbbr(circulatingSupply)}</span></div>
+                    <div className="text-white/25 text-sm">Circ. Supply: <span className="text-white/50 font-semibold">{fmtAbbr(circulatingSupply)}</span>{supplyUnknown&&!loading&&<span className="text-amber-300/70 ml-2">burn could not be read from the chain; rewards need it. Reload to retry.</span>}</div>
                     {isPTGC&&<div className="text-white/25 text-sm">Total Staked: <span className="text-white/50 font-semibold">{totalStakedPool>0?fmtAbbr(totalStakedPool):'\u2014'}</span></div>}
                     {!isPTGC&&<div className="text-white/25 text-sm">Eligible for Reflections: <span className="text-white/50 font-semibold">{fmtAbbr(eligibleSupply)}</span></div>}
                     <div className="text-white/25 text-sm">Fee: <span className="text-white/50 font-semibold">{(cfg.feeRate*100)}%</span> ({cfg.feeBreakdown.map(t=>`${t.name} ${t.pct}%`).join(' \u00B7 ')})</div>
@@ -4288,10 +4366,10 @@
             
             const ptgcPrice=ptgcData?.price||0;
             const ufoPrice=ufoData?.price||0;
-            const ptgcCirc=ptgcCfg.totalSupply-(ptgcBurnData?.total||0);
-            const ufoCirc=ufoCfg.totalSupply-(ufoBurnData?.total||0);
+            const ptgcCirc=ptgcBurnData?ptgcCfg.totalSupply-ptgcBurnData.total:null; // a6: null while unread → no share, no creatures
+            const ufoCirc=ufoBurnData?ufoCfg.totalSupply-ufoBurnData.total:null;
             const ufoTokensInLP=ufoData?.tokensInLP||0;
-            const ufoEligibleSupply=Math.max(ufoCirc-ufoTokensInLP,1);
+            const ufoEligibleSupply=ufoCirc==null?null:Math.max(ufoCirc-ufoTokensInLP,1);
             const ptgcTotalStaked=(ptgcStaking?.staked||0)+(ptgcStaking?.locked||0);
 
             // ── UFO LP: new per-pair AUTO-LIQUIDITY model ───────────────────────────────
@@ -4379,7 +4457,7 @@
               const holdTokens=!isPTGC&&strategy==='lp'?tokens-lpTokens:tokens;
               
               const eligSup=isPTGC?circSupply:eligibleSupply;
-              const userShareHold=holdTokens>0?holdTokens/eligSup:0;
+              const userShareHold=holdTokens>0&&eligSup>0?holdTokens/eligSup:0; // eligSup null (burn unread) → 0, not Infinity (a6)
               const dailyHolderTokens=dailyVolTokens*holderPct*userShareHold;
               const dailyHolderUSD=dailyHolderTokens*tokenPrice;
               
@@ -4580,10 +4658,7 @@
               <div className="rounded-2xl overflow-hidden" style={{border:'3px solid rgba(255,255,255,0.15)',boxShadow:'0 0 30px rgba(255,255,255,0.05)',background:'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(17,17,17,0.95) 40%)'}}>
                 <div className="px-6 py-2.5 border-b border-white/[0.06] flex items-center justify-between">
                   <span className="text-white/60 text-sm font-bold uppercase tracking-widest">New Capital Simulator</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                    <span className="text-green-400/70 text-sm font-bold uppercase">Live</span>
-                  </div>
+                  <LiveBadge loading={loading} data={data}/>
                 </div>
                 <div className="p-4 pb-3">
                   {/* USD Input + Mode — single row */}
@@ -4879,13 +4954,14 @@
       const theme={text:isGold?'text-[#D4AF37]':'text-[#7CFC00]',border:isGold?'border-[#D4AF37]/30':'border-[#7CFC00]/30',bg:isGold?'bg-[#D4AF37]':'bg-[#7CFC00]',card:'bg-[#111]/80'};
       
       const[data,setData]=useState(null);
-      const[burn,setBurn]=useState({total:0,pct:0,supply:0});
-      const[pls,setPls]=useState(0.00005);
+      const[burn,setBurn]=useState(null);   // null = not read (a6)
+      const[pls,setPls]=useState(null);     // null = unknown; the header ratio and WPLS rows print "—" (a5)
       const[stakingData,setStakingData]=useState({totalInContract:0,staked:0,stakedPct:0,locked:0,lockedPct:0});
       const[volumeByPeriod,setVolumeByPeriod]=useState({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
       const[totalUFOShareRate,setTotalUFOShareRate]=useState(0); // total UFO share rate from staking contract
       const[stakingPairs,setStakingPairs]=useState([]); // pair addresses from staking contract
       const[loading,setLoading]=useState(true);
+      const[loadedOnce,setLoadedOnce]=useState(false); // a9: the full-screen gate is for the FIRST load only; a token switch keeps the calculators mounted
       const[copied,setCopied]=useState(false);
       const[revealed,setRevealed]=useState(false); // CALCULATORS-MAINTENANCE: flipped by the secret dot
       const gated=CALCULATORS_MAINTENANCE&&!revealed; // CALCULATORS-MAINTENANCE
@@ -4893,28 +4969,36 @@
       useEffect(()=>{
         if(gated)return; // CALCULATORS-MAINTENANCE: don't fetch anything while hidden
         setData(null);
-        setBurn({total:0,pct:0,supply:0});
+        setBurn(null);
         setLoading(true);
         setStakingData({totalInContract:0,staked:0,stakedPct:0,locked:0,lockedPct:0});
         setVolumeByPeriod({vol24h:0,vol7d:0,vol30d:0,vol90d:0});
-        
+        setTotalUFOShareRate(0);setStakingPairs([]);
+
+        /* a7: two quick Switch taps used to leave two load()s in flight, and the slower one (UFO,
+           with its chain reads) landed its data under the other token. Every setter below is
+           gated on this flag; the cleanup flips it when the token changes. */
+        let cancelled=false;
         const load=async()=>{
           await fetchCoingeckoData();
+          if(cancelled)return;
           const[d,b,p]=await Promise.all([
             fetchDex(cfg.address,cfg.mainPair),
             fetchBurn(cfg.address,cfg.decimals),
             fetchPLS()
           ]);
-          setData(d);setBurn(b);setPls(p);setLoading(false);
-          
+          if(cancelled)return;
+          setData(d);setBurn(b);if(p!=null)setPls(p);setLoading(false);setLoadedOnce(true);   // a5: a failed PLS read keeps the last good value (or stays null); never a placeholder
+
           if(cfg.stakingContract){
-            fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(s=>setStakingData(s));
+            fetchStakingData(cfg.stakingContract,cfg.address,cfg.decimals,cfg.totalSupply).then(s=>{if(!cancelled)setStakingData(s);});
           }
-          
+
           // Fetch total UFO share rate from LP staking contract
           if(token==='UFO'){
             try{
               const ufoStakedRes=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:UFO_LP_STAKING,data:'0x46c003ac'},'latest'],id:50});
+              if(cancelled)return;
               if(ufoStakedRes.result&&ufoStakedRes.result!=='0x'){
                 const totalShares=Number(BigInt(ufoStakedRes.result))/Math.pow(10,18);
                 console.log('UFO total share rate:',totalShares.toLocaleString());
@@ -4932,6 +5016,7 @@
                   }
                 }catch(e){break}
               }
+              if(cancelled)return;
               console.log('Staking pairs found:',pairAddrs.length,pairAddrs);
               setStakingPairs(pairAddrs);
             }catch(e){console.error('UFOStaked fetch error:',e)}
@@ -4940,6 +5025,7 @@
           if(token==='UFO'){
             /* MIGRATION: actuals only — the coingecko file tracks the old contract. */
             const v=await fetchUfoVolumeByPeriod(d?.vol||0);
+            if(cancelled)return;
             setVolumeByPeriod(v||{vol24h:d?.vol||0,vol7d:null,vol30d:null,vol90d:null});
           } else if(coingeckoDataCache&&coingeckoDataCache[token]){
             const v24=d?.vol||0;
@@ -4954,7 +5040,8 @@
             setVolumeByPeriod({vol24h:d?.vol||0,vol7d:null,vol30d:null,vol90d:null});
           }
         };
-        load();
+        load().catch(e=>{console.error('calculators load failed:',e);if(!cancelled){setLoading(false);setLoadedOnce(true);}});
+        return()=>{cancelled=true;};
       },[token,gated]);
       
       const goBack=()=>{
@@ -5002,7 +5089,7 @@
         return <CalcMaintenance onReveal={()=>setRevealed(true)}/>;
       }
       
-      if(loading){
+      if(loading&&!loadedOnce){ // a9: first load only — a token switch keeps the page and every typed input
         return(
           <div className="min-h-screen flex items-center justify-center">
             <div className="text-center">
@@ -5048,8 +5135,8 @@
                 {/* Price + change (stacked) */}
                 <div className="shrink-0">
                   <Price p={data?.price} c={`font-bold leading-none tabular-nums text-2xl sm:text-3xl lg:text-4xl ${isGold?'metallic-gold':theme.text}`}/>
-                  <div className={`mt-2 text-xs sm:text-sm lg:text-base font-bold tabular-nums ${priceUp?'text-emerald-400':'text-rose-400'}`}>
-                    {priceUp?'\u2191':'\u2193'} {Math.abs(data?.change||0).toFixed(2)}%
+                  <div className={`mt-2 text-xs sm:text-sm lg:text-base font-bold tabular-nums ${data?.change==null?'text-white/30':priceUp?'text-emerald-400':'text-rose-400'}`}>
+                    {data?.change==null?'\u2014':`${priceUp?'\u2191':'\u2193'} ${Math.abs(data.change).toFixed(2)}%`}
                   </div>
                 </div>
 
@@ -5139,7 +5226,8 @@
 
             </div>
           </header>
-          <CalculatorsTab token={token} cfg={cfg} data={data} burn={burn} pls={pls} theme={theme} stakingData={stakingData} volumeByPeriod={volumeByPeriod} totalUFOShareRate={totalUFOShareRate} stakingPairs={stakingPairs} onBack={goBack} onSwitchToken={switchToken}/>
+          {loading&&<div role="status" aria-live="polite" className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 flex items-center gap-2 text-xs text-amber-300/80"><div className="w-2 h-2 rounded-full bg-amber-300 animate-pulse"></div>Loading {cfg.name} data{'\u2026'} your inputs are kept.</div>}
+          <CalculatorsTab token={token} cfg={cfg} data={data} burn={burn} pls={pls} loading={loading} theme={theme} stakingData={stakingData} volumeByPeriod={volumeByPeriod} totalUFOShareRate={totalUFOShareRate} stakingPairs={stakingPairs} onBack={goBack} onSwitchToken={switchToken}/>
         </div>
       );
     };

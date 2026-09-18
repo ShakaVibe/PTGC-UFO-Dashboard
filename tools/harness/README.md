@@ -27,6 +27,9 @@ NO_ACCEPT=1 node run.js "#/ptgc" 1280 900 out/disc      # do NOT pre-accept the 
 HTML=ledger.html node run.js "" 1280 900 out/ledger     # any sibling page: since 2026-09-16 their CDN tags match index's, so the rewrite applies (data/ served locally)
 SLOW=9000 SLOW_DATA=1 HTML=ledger.html node run.js "" 1280 900 out/ledger-slow "wait=4000;evalfile=probes/ledger-summary.js"   # a35: SLOW alone delays RPC/DexScreener/PulseScan; SLOW_DATA=1 delays the repo's data/*.json too → the summary must read "—" at 4 s
 HTML=charts.html node run.js "" 1280 900 out/charts "wait=10000;evalfile=probes/charts-status.js"   # a37: charts.html (no #root — the harness no longer waits for one) → status line "Live · 5/5 tokens / data to <time>"
+HTML=calculators.html node run.js "" 1280 900 out/calc "wait=3000;click=button:has-text('Rewards'):visible;wait=1500;evalfile=probes/calc-sanity.js"   # calculators.html; the probe lists any NaN / Infinity / undefined on the page (a5–a9 — run it with RPC_DOWN=1 and DS_DOWN=1 too: "MCap: —", "Circ. Supply: —", never 333B)
+DS_UFO_PRICE=0.00005 SLOW_UFO=2500 HTML=calculators.html node run.js "" 1280 900 out/race "wait=3000;click=button:has-text('Switch'):visible;wait=300;click=button:has-text('Switch'):visible;wait=9000;evalfile=probes/calc-header.js"   # a7: two quick Switch taps — the header must say PTGC with PTGC's $0.000142, not UFO's price (DS_UFO_PRICE gives UFO calls their own price; SLOW_UFO makes the UFO load land last)
+HTML=calculators.html node run.js "" 1280 900 out/keep "wait=3000;click=button:has-text('Rewards'):visible;wait=800;evalfile=probes/calc-type.js;wait=600;reload=4000;evalfile=probes/calc-header.js;click=button:has-text('Switch'):visible;wait=6000;evalfile=probes/calc-header.js"   # a8/a9: the typed holding survives a reload (saved on typing), a switch keeps the page mounted (amber "Loading UFO data… your inputs are kept" banner) and the bag is per token (UFO starts empty, PTGC's is still in localStorage). probes/calc-type.js types into `window.__typeSel` (default: the Rewards holding box) — set it with `eval=window.__typeSel='input[type=number][step=any]'` for the X-factor box
 
 DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:has-text('Live Feed'):visible;wait=4000;evalfile=probes/deck-header.js"   # deck header geometry at phone width (a25)
 PS_DOWN=1 node run.js "#/ptgc" 1280 900 out/psdown      # PulseScan returns 503 (holders → null unless the history file has a snapshot)
@@ -41,6 +44,9 @@ H2C=1 node run.js "#/ptgc" 1400 900 out/png "click=button[aria-label^='PTGC Buys
 `window.html2canvas=null` stub, and `probes/share-png-real.js` presses the card's own Download
 button, intercepts the blob and puts the PNG on the page at 1× so `shot=` shows exactly what the
 user would download. Run it for any share-card change — html2canvas ≠ the browser (gotcha 5).
+
+`SLOW_UFO=ms` delays only the UFO token's DexScreener calls and `DS_UFO_PRICE=n` gives them a
+different price (base symbol UFO) — together they make a token-switch race visible (a7).
 
 Actions (semicolon-separated, in order): `shot=<name>` viewport screenshot, `scroll=<y>`,
 `click=<playwright selector>` (add `:visible` — several controls exist twice for phone/desktop),
