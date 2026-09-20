@@ -17,7 +17,7 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-18)
+## Current state (end of 2026-09-20)
 
 Roadmap: 83 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 38 of the 67
 Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; a14, a15, a17, a18,
@@ -25,7 +25,11 @@ a19, a20, a21, a23 — 2026-09-17, the honest-failure pass; a29, a28, a31, a30, 
 a35, a37 — 2026-09-17 evening/night, the pipeline week; **a5, a6, a7, a8, a9 — 2026-09-18, the
 calculators; a36 the same evening; a12 + a26 at night — `sessions/2026-09-18.md`**). **2026-09-18 cadence check: GitHub runs the one hourly
 workflow ~5×/day (gaps up to 5 h, all green) — stale thresholds raised instead (value-generated 6 h,
-burn-summary amber 8 h). Next: a27 is Shaka's call (0 partial entries live), then a39+.**
+burn-summary amber 8 h). **2026-09-20: no code changed — the 09-18 deploys were verified on the LIVE
+site (a5, a6, a8, a9 on calculators; a12 on portfolio; a36 on ledger; the 09-17 index.html pass's owed
+look), all pass; a26 code-verified only, a7 not forceable live. One cleanup filed: `ptgc-ufo.com/data/*.json`
+is published in `_site` but frozen at the last code deploy while every reader uses raw GitHub —
+`sessions/2026-09-20.md`.** **Next: a27 is Shaka's call (0 partial entries live), then a39+.**
 u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
@@ -40,6 +44,9 @@ whole-repo deep dive, 67 items on the roadmap, no code changed (`sessions/2026-0
 header dot and `DAO_BUYS_LIVE` gate removed; creature lines (`DaoCreatures`), Recent DAO Buys
 ledger, screenshot-only share card, phone header Buy/Sell row (`sessions/2026-09-14.md`).
 Check `git --no-optional-locks status` before starting.
+2026-09-20: **live verification pass, no code** — every 09-18 item confirmed on ptgc-ufo.com
+(`sessions/2026-09-20.md`); the a5–a9 / a12 / a36 live looks the 09-18 handover asked for are now done
+and can come off the "after the deploy" list.
 
 | Area | Status |
 |---|---|
@@ -287,12 +294,13 @@ Check `git --no-optional-locks status` before starting.
 
 -1. **Audit II, top of the list:** cadence measured and thresholds moved 2026-09-18 (done — ~5
    runs/day is the new normal; a30/a32 migrations verified in the first scheduled run). Calculators
-   a5–a9 done the same day. **After the deploy, a 30-second live look at calculators.html:** header PLS
-   ratio is a number (not "—" — if it dashes, the WPLS/DAI pair call is failing live), tap Switch and
-   watch the amber "Loading UFO data… your inputs are kept" line instead of the full-screen gate, and
-   on Rewards type a bag, reload, and see it come back. a36 done the same evening (Ledger → `treasury-recent.json`); a12 + a26 at night. **After the
-   deploy:** portfolio.html with your saved wallets — chips go yellow together, the UFO lifetime bar says
-   "scanning the chain…" then a number (or "unavailable — Retry", never 0). Next: a27 only if Shaka wants
+   a5–a9 done the same day, a36 the same evening, a12 + a26 at night. **All of those live looks are now
+   DONE — 2026-09-20, on ptgc-ufo.com, nothing to re-check** (`sessions/2026-09-20.md`): PLS ratio 0.59 /
+   3.81, MCaps real, the amber "Loading PTGC data… your inputs are kept" line instead of the gate, a typed
+   bag saved per token and surviving a reload, portfolio reflections "scanning" → 3.93M with no zero
+   standing in for an unknown, the Ledger on one `treasury-recent.json` request for both September and the
+   oldest month offered. Still unexercised live: a26 (code-verified only), a7 (the race), and every
+   failure path — they stay harness-only until something actually breaks. Next: a27 only if Shaka wants
    per-buy paid/pending (0 partial entries live — see the 09-18 note), otherwise a39+ (a11y / mobile /
    cleanup) in any order. Optional: `charts.html` `STATUS_STALE_MS` 2 h → 6 h if the
    permanent amber "as of" on the Charts page grates. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
@@ -374,6 +382,15 @@ Check `git --no-optional-locks status` before starting.
   `probes/portfolio-state.js`), **a26** (ErrorBoundary `resetKey` + Try again; `probes/eb-state.js`),
   a27 read against the live API and left open. Note: `.github/workflows/*` is protected from the
   bridge's file writer — edit those in place from the shell.
+- `sessions/2026-09-20.md` — live verification of the 09-18 deploys, no code changed: a5 (PLS ratio
+  0.59 / 3.81), a6 (MCaps $6.00M / $12.39M, circ supply and reflection-eligible real), a8 (bag saved on
+  typing, per-token, survives reload and a Switch), a9 (amber "Loading PTGC data… your inputs are kept",
+  values dash then land in ~1 s, no full-screen gate), a12 (UFO reflections "scanning" → 3.93M, no zero
+  for an unknown, test wallets removed after), a36 (one `treasury-recent.json` request; Sep 2026 and the
+  oldest month, Mar 2026, both render with no fallback fetch), plus the owed index.html look (Value
+  Generated $3,160 delivered, PTGC-burned-by-UFO lifetime + four windows). a26 code-verified only.
+  The "as of 3.8h ago" vs an 8.9 h file was the probe's error, not the site's: the app reads raw GitHub,
+  `_site`'s `data/` copies are deploy-frozen — filed as cleanup for a39+.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
