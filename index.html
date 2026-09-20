@@ -338,6 +338,10 @@
      * Flip this ONE value to go live. Nothing else needs to change.
      * ========================================= */
     const UFO_MAINTENANCE=false;   // LIVE. Home UFO card, dashboard access, the secret dot, and operator-only data all follow this flag.
+    /* a40 (2026-09-20): diagnostics are on for the operator build and for anyone who asked for
+       them with ?debug=1 — the same test line 39 uses to decide whether console output survives.
+       Work that exists ONLY to feed a console line belongs behind this. */
+    const DIAG=(()=>{try{return UFO_MAINTENANCE||/[?&]debug=1\b/.test(location.search);}catch(e){return false;}})();
     const COMBINED_LOGO='07_Combined_PTGC_UFO_Transparent.png';
     /* ===================== RESILIENCE: RPC ENDPOINT POOL =====================
      * Every on-chain read on this page — prices when DexScreener is down, burns,
@@ -363,6 +367,15 @@
     const RPC=RPC_ENDPOINTS[0];
     let _rpcIdx=0,_rpcSince=0;
     const RPC_STICKY_MS=120000;
+    /* a41 (2026-09-20): when an endpoint HANGS (the Aug-2026 pattern — 15 s of nothing, not a
+       fast refusal) every concurrent call used to pay its full timeout before rotating: a log
+       scan runs CONC=3 chunks plus a boundary search, and the sticky drift-back below points
+       them all at the same dead primary every 120 s. 8 s per eth_call, 20 s per eth_getLogs,
+       each, every two minutes, with the spinner up. Remember when an endpoint last failed and
+       skip it while it cools down; if every endpoint is cooling down we still try, because a
+       stale cooldown must never turn into "no RPC at all". */
+    const RPC_COOLDOWN_MS=30000;
+    const _rpcFailedAt=RPC_ENDPOINTS.map(()=>0);
     const _rpcOnce=async(url,body,timeout)=>{
       const controller=new AbortController();
       const timeoutId=setTimeout(()=>controller.abort(),timeout);
@@ -381,10 +394,20 @@
       if(_rpcIdx!==0&&Date.now()-_rpcSince>RPC_STICKY_MS){_rpcIdx=0;}
       const n=RPC_ENDPOINTS.length;
       let lastErr=null;
-      for(let i=0;i<n;i++){
-        const idx=(_rpcIdx+i)%n;
+      const order=[];for(let i=0;i<n;i++)order.push((_rpcIdx+i)%n);
+      const now=Date.now();
+      const fresh=order.filter(idx=>now-_rpcFailedAt[idx]>=RPC_COOLDOWN_MS);
+      const tryList=fresh.length?fresh:order;   // all cooling down: ask anyway rather than fail unasked
+      for(const idx of tryList){
         try{
           const j=await _rpcOnce(RPC_ENDPOINTS[idx],body,timeout);
+          /* a41: a JSON-RPC rate limit (HTTP 200 + error -32005, which some public nodes send
+             instead of a 429) is this endpoint's answer, not the chain's — rotate off it rather
+             than handing it back as a result. Splitting a log range on one of these only
+             multiplies requests against a node that is already throttling. */
+          const em=j&&j.error&&(j.error.message||'');
+          if(j&&j.error&&(j.error.code===-32005||/rate limit|too many requests|429/i.test(em)))throw new Error('rate limited: '+(em||j.error.code));
+          _rpcFailedAt[idx]=0;
           if(idx!==_rpcIdx){
             _rpcIdx=idx;_rpcSince=Date.now();
             console.warn('RPC failover → '+RPC_ENDPOINTS[idx]);
@@ -392,11 +415,16 @@
           return j;
         }catch(e){
           lastErr=e;
+          _rpcFailedAt[idx]=Date.now();
           console.warn('RPC '+RPC_ENDPOINTS[idx]+' failed: '+e.message);
         }
       }
       console.error('RPC error (all '+n+' endpoints failed):',lastErr&&lastErr.message);
-      return{result:null};
+      /* a41: say WHY there is no result. `{result:null}` alone is indistinguishable from a
+         chain answer with no `result` field, and getLogsRange read it as a range-cap error and
+         halved the range six times — up to ~7 minutes of retries per scan, three scans deep,
+         while nothing was reachable. `transport` means the pool never got an answer at all. */
+      return{result:null,transport:true,message:(lastErr&&lastErr.message)||'all endpoints failed'};
     };
     const MIN_LIQ=1000;
     
@@ -586,7 +614,11 @@
         }
         return r.result;
       }
-      const msg=(r&&r.error&&r.error.message)||'no result field';
+      const msg=(r&&r.transport&&('transport: '+r.message))||(r&&r.error&&r.error.message)||'no result field';
+      /* a41: only a real RPC answer can mean "range too big". When the pool itself never got
+         through (r.transport), halving is pointless work against a dead or hanging node, so
+         fail now and let the caller's retry ladder handle it. */
+      if(r&&r.transport){noteLogError(address,`eth_getLogs failed (blocks ${a}-${b}): ${msg}`);return null;}
       /* depth<6 only reached ~1,500 blocks from a 100k chunk; the span check is the real floor. */
       if(depth<10&&(b-a)>250){
         const mid=Math.floor((a+b)/2);
@@ -1156,16 +1188,23 @@
         const mintsByPair={};
         let mintQueryOk=true;
         /* All three pairs, both queries, in parallel. These were six sequential round
-           trips (Mint x3 then token0 x3); one flight now. Swap logs ride along — they
-           cost one memoised scan each and they are what the reconciliation guardrail
-           needs, so the check survives even when the dev audit is switched off. */
+           trips (Mint x3 then token0 x3); one flight now.
+           a40 (2026-09-20): the Swap logs used to ride along on EVERY visit. They feed
+           `pairSwapByPeriod` / `swapFeeTokensByPeriod`, which nothing in the UI reads — their
+           only consumer is the reconciliation console.log at the end of this function, and
+           console.log is silenced for anyone who did not ask for diagnostics (line 39). So
+           every visitor whose value-generated.json was stale paid four full-window Swap scans
+           (~690k blocks each, 69 chunks, the busy WPLS chunks split again) on top of the Mint
+           and Transfer scans, for output they could never see — slower dashes in the Value
+           Generated panel and the RPC pool pushed toward failover. The guardrail still runs,
+           for the people who can read it: ?debug=1 or the operator build. */
         const ufoIsToken0={};
         const pairSwapUfo={};   // pair -> [{block, ufo}]
         await Promise.all(pairs.map(async p=>{
           const[logs,t0raw,swaps]=await Promise.all([
             getLogsChunked(p.address,[[PAIR_MINT_TOPIC,PAIR_MINT_TOPIC_PULSEX]],scanFrom,cur),
             ethCallRead(p.address,SEL_TOKEN0),
-            getLogsChunked(p.address,[PAIR_SWAP_TOPIC],scanFrom,cur)
+            DIAG?getLogsChunked(p.address,[PAIR_SWAP_TOPIC],scanFrom,cur):Promise.resolve(undefined)
           ]);
           if(logs===null){mintQueryOk=false;mintsByPair[p.address]=[];}
           else mintsByPair[p.address]=logs;
@@ -1175,15 +1214,18 @@
           ufoIsToken0[p.address]=isT0;
           /* The pair's Swap event carries exact token amounts. Summing the UFO leg
              (in + out) gives swap volume in TOKENS — no price, no DexScreener. */
+          /* a40: undefined = not asked for (diagnostics off) or the scan FAILED; either way
+             this pair has no swap data and `swapScanOk` below must drop. It used to record an
+             empty array for a failed scan, so the reconciliation printed a ratio built on
+             "no swaps" as if it were a measurement. */
+          if(!Array.isArray(swaps))return;
           const arr=[];
-          if(Array.isArray(swaps)){
-            for(const l of swaps){
-              const h=l.data.startsWith('0x')?l.data.slice(2):l.data;
-              if(h.length<256)continue;
-              const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // 0In,1In,0Out,1Out
-              const ufo=weiToTokens((isT0?w(0):w(1))+(isT0?w(2):w(3)));
-              arr.push({block:parseInt(l.blockNumber,16),ufo,tx:l.transactionHash});
-            }
+          for(const l of swaps){
+            const h=l.data.startsWith('0x')?l.data.slice(2):l.data;
+            if(h.length<256)continue;
+            const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // 0In,1In,0Out,1Out
+            const ufo=weiToTokens((isT0?w(0):w(1))+(isT0?w(2):w(3)));
+            arr.push({block:parseInt(l.blockNumber,16),ufo,tx:l.transactionHash});
           }
           pairSwapUfo[p.address]=arr;
         }));
