@@ -743,7 +743,11 @@
       let lo=Math.max(0,Math.floor(guess-pad));
       let hi=Math.min(headBlock,Math.ceil(guess+pad));
       const tLo=await getBlockTs(lo);
-      if(tLo&&tLo>targetSec)lo=0;                 // guess was too late; widen down
+      /* a67: a FAILED read (0) used to leave `lo` where it was, and the search then converged
+         on it — a boundary later than the real one, so every window (24h/7d/30d/90d fees,
+         burns, delivered value) came back silently short. Widen on a failed read, exactly as
+         the `hi` probe below already does. */
+      if(!tLo||tLo>targetSec)lo=0;                // guess was too late, or unreadable; widen down
       const tHi=await getBlockTs(hi);
       if(!tHi||tHi<targetSec)hi=headBlock;        // guess was too early; widen up
       let ans=hi;
@@ -1858,13 +1862,38 @@
       {n:'Poseidon',p:10},{n:'Whale',p:1},{n:'Shark',p:0.1},{n:'Dolphin',p:0.01},{n:'Squid',p:0.001},{n:'Turtle',p:0.0001},{n:'Shrimp',p:0.00001},{n:'Shell',p:0}
     ];
     
+    /* a67: BURN_C's Shell is the FLOOR (p:0): every holder below Shrimp is a Shell, and that
+       is what the dashboard's tier counts and the portfolio use. The two share cards print a
+       token amount for every row, so they need a number for Shell — a tenth of Shrimp, what
+       both cards have always shown. One name, one place, instead of two magic constants. */
+    const SHELL_CARD_PCT=0.00000001;
+    /* a67: percent → fraction for those two cards. Plain division re-rounds — 0.00001/100 is
+       1.0000000000000001e-7, one ulp off the 1e-7 the literals carried — so this lands back on
+       the decimal they had and the cards' numbers stay byte-identical. */
+    const tierFraction=c=>c.p>0?Number((c.p/100).toPrecision(15)):SHELL_CARD_PCT;
     const BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
     
+    /* a42 (2026-09-20): 0.3/0.1 is 2.9999999999999996 in binary floating point, so a plain
+       Math.floor() rendered ONE creature too few of the top tier and then a tail of ×9s —
+       getBurnC(0.3,'Squid') gave "2 sharks + 9 dolphins + 9 squids" instead of "3 sharks".
+       38 of the 100 exact tenths of a percent between 0.1 and 10 were wrong. A quotient within
+       a RELATIVE 1e-9 of a whole number IS that whole number (relative, because the quotient
+       can be in the millions and an absolute epsilon would be meaningless there); anything
+       else still floors. Every tier counter goes through this. */
+    const creatureCount=(value,unit)=>{
+      if(!(unit>0)||!(value>0))return 0;
+      const q=value/unit,r=Math.round(q);
+      return Math.abs(q-r)<=1e-9*Math.max(1,Math.abs(r))?r:Math.floor(q);
+    };
+
     const fmt=n=>n==null||isNaN(n)?'\u2014':Math.floor(Number(n)).toLocaleString('en-US');
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
     const fmtComma=(n,dec=2)=>n==null||isNaN(n)?'\u2014':Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
-    const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
+    /* a67: the unit is chosen AFTER the 2-dp rounding, so 999,999 prints "1.00M", not
+       "1000.00K" (same band at every magnitude: 999,999,999 was "1000.00M"). 999.995e3 is the
+       smallest number that rounds up to 1000.00K, so that is where the next unit starts. */
+    const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=999.995e9)return(num/1e12).toFixed(2)+'T';if(num>=999.995e6)return(num/1e9).toFixed(2)+'B';if(num>=999.995e3)return(num/1e6).toFixed(2)+'M';if(num>=999.995)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     /* RESILIENCE: human age for the "as of" freshness label ("14m ago", "5.5h ago"). */
     const fmtSnapshotAge=ms=>{if(ms==null||!isFinite(ms))return'';const m=ms/60000;if(m<90)return Math.max(1,Math.round(m))+'m ago';if(m>=2880)return(m/1440).toFixed(1).replace(/\.0$/,'')+'d ago';return(m/60).toFixed(1).replace(/\.0$/,'')+'h ago';};
     const fmtPrice=p=>{if(!p||isNaN(p)||p===0)return'\u2014';if(p>=1)return'$'+p.toFixed(2);if(p>=0.0001)return'$'+p.toFixed(6);const s=p.toExponential(4),[m,e]=s.split('e'),exp=Math.abs(parseInt(e));return{pre:'$0.0',z:exp-1,d:parseFloat(m).toFixed(4).replace('.','').slice(0,4)}};
@@ -1943,13 +1972,13 @@
         </div>
       );
     };
-    const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0&&rem>=c.p){const cnt=Math.floor(rem/c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
+    const getBurnC=(pct,min='Shell')=>{const r=[];let rem=pct;const minI=BURN_C.findIndex(c=>c.n===min);for(let i=0;i<BURN_C.length;i++){if(minI>=0&&i>minI)continue;const c=BURN_C[i];if(c.p>0){const cnt=creatureCount(rem,c.p);if(cnt>0){r.push({...c,cnt});rem-=cnt*c.p}}}return r};
     const getSingleC=pct=>{for(const c of BURN_C)if(pct>=c.p)return c;return BURN_C[BURN_C.length-1]};
     // Get highest tier creature with count for period burns
     const getHighestCreatureWithCount=pct=>{
       for(const c of BURN_C){
         if(pct>=c.p){
-          const cnt=c.p>0?Math.floor(pct/c.p):1;
+          const cnt=c.p>0?creatureCount(pct,c.p):1;
           return{...c,cnt:Math.max(1,cnt)};
         }
       }
@@ -1966,11 +1995,12 @@
       const supply=SUPPLY[tokenName]||SUPPLY.PTGC;
       const t={POSEIDON:supply*0.10,WHALE:supply*0.01,SHARK:supply*0.001,DOLPHIN:supply*0.0001,SQUID:supply*0.00001};
       let rem=burnTotal;
-      const poseidons=Math.floor(rem/t.POSEIDON);rem=rem%t.POSEIDON;
-      const whales=Math.floor(rem/t.WHALE);rem=rem%t.WHALE;
-      const sharks=Math.floor(rem/t.SHARK);rem=rem%t.SHARK;
-      const dolphins=Math.floor(rem/t.DOLPHIN);rem=rem%t.DOLPHIN;
-      const squids=Math.floor(rem/t.SQUID);
+      /* a42: same rounding trap as getBurnC, in token units instead of percent. */
+      const poseidons=creatureCount(rem,t.POSEIDON);rem-=poseidons*t.POSEIDON;
+      const whales=creatureCount(rem,t.WHALE);rem-=whales*t.WHALE;
+      const sharks=creatureCount(rem,t.SHARK);rem-=sharks*t.SHARK;
+      const dolphins=creatureCount(rem,t.DOLPHIN);rem-=dolphins*t.DOLPHIN;
+      const squids=creatureCount(rem,t.SQUID);
       const creatures=[];
       if(poseidons>0)creatures.push({emoji:'🔱',count:poseidons});
       if(whales>0)creatures.push({emoji:'🐋',count:whales});
@@ -2167,6 +2197,11 @@
        remembered from the last good DexScreener answer. When DexScreener is down and the price
        comes from the chain, mcap = impliedSupply × price. Falls back to the configured max
        supply (an overstatement by the burned share — better than a stale or zero figure). */
+    /* a39 (2026-09-20): the last good ON-CHAIN burn per token — totalSupply() and the burn
+       address's balance, both read by fetchBurn this session. The cold-cache market cap below
+       prefers this over any file: it is this contract's own number, and burn-summary's UFO
+       section belongs to the RETIRED contract. Empty until the first fetchBurn resolves. */
+    const liveBurnedCache={};
     const IMPLIED_SUPPLY_STORE=LS.IMPLIED_SUPPLY;
     const impliedSupplyCache=(()=>{try{const j=JSON.parse(localStorage.getItem(IMPLIED_SUPPLY_STORE)||'{}');return (j&&typeof j==='object')?j:{};}catch(e){return{};}})();
     const rememberImpliedSupply=(addr,supply)=>{
@@ -2178,9 +2213,21 @@
       if(impliedSupplyCache[k]>0)return impliedSupplyCache[k]*price;
       const cfg=Object.values(TOKENS).find(t=>t.address.toLowerCase()===k);
       if(cfg&&cfg.totalSupply>0){
-        /* No remembered supply: starting supply minus the burn we know about (burn-summary.json),
-           so the cold-cache figure is circulating, not starting (a 16–25% overstatement otherwise). */
-        const burned=(burnHistoryCache&&burnHistoryCache[cfg.name]&&burnHistoryCache[cfg.name].totalBurned)||0;
+        /* No remembered supply: starting supply minus the burn we know about, so the cold-cache
+           figure is circulating, not starting (a 16–25% overstatement otherwise).
+           a39 (2026-09-20): WHOSE burn, though. This read burn-summary.json by token NAME, and
+           that file's UFO section is the RETIRED contract (fetch-burn-history.js UFO_ADDRESS
+           0x456548…): subtracting its 209.98 B from the live token's supply printed UFO's market
+           cap about 12% under the truth on a first visit during a DexScreener outage — a plain
+           number, no label. Order now: (1) this session's own on-chain read, which is the right
+           answer and needs no file; (2) the file, but only when the section is stamped with THIS
+           contract's address, so a generator repointed at the live contract starts working on its
+           own; (3) the starting supply, the documented overstatement, rather than a wrong number. */
+        const live=liveBurnedCache[k];
+        if(live&&live.supply>0)return Math.max(0,live.supply-live.burned)*price;
+        const sec=burnHistoryCache&&burnHistoryCache[cfg.name];
+        const secAddr=((sec&&sec.address)||'').toLowerCase();
+        const burned=(secAddr&&secAddr===k&&sec.totalBurned>0)?sec.totalBurned:0;
         return Math.max(0,cfg.totalSupply-burned)*price;
       }
       return dsMcap||0;
@@ -2459,7 +2506,7 @@
     /* Returns null (not zeros) when the RPC pool fails: rpcFetch resolves {result:null} after
        all endpoints time out, and a zero here used to paint "0 burned / 0.00%" on the page.
        Every caller guards on null and keeps its previous value. */
-    const fetchBurn=async(addr,dec)=>{try{const[bRes,sRes]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})]);if(!bRes||!sRes||bRes.result==null||sRes.result==null){console.warn('fetchBurn: RPC returned no result');return null;}const burned=Number(BigInt(bRes.result))/Math.pow(10,dec);const supply=Number(BigInt(sRes.result))/Math.pow(10,dec);if(!(supply>0))return null;return{total:burned,pct:(burned/supply)*100,supply}}catch(e){console.error('fetchBurn error:',e);return null}};
+    const fetchBurn=async(addr,dec)=>{try{const[bRes,sRes]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x70a08231000000000000000000000000'+BURN_ADDRESS.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:addr,data:'0x18160ddd'},'latest'],id:2})]);if(!bRes||!sRes||bRes.result==null||sRes.result==null){console.warn('fetchBurn: RPC returned no result');return null;}const burned=Number(BigInt(bRes.result))/Math.pow(10,dec);const supply=Number(BigInt(sRes.result))/Math.pow(10,dec);if(!(supply>0))return null;liveBurnedCache[addr.toLowerCase()]={burned,supply};/* a39 */return{total:burned,pct:(burned/supply)*100,supply}}catch(e){console.error('fetchBurn error:',e);return null}};
 
     /* (removed) fetchLive24hBurn — the old block-counted 24h burn (currentBlock-8640 @10s/block)
        drifted past launch on fast blocks and swept in the ~93B launch burn. It was replaced by
@@ -2567,6 +2614,13 @@
           fetch(UFO_PTGC_BURNS_URL+'?t='+Date.now())
         ]);
         burnHistoryCache=await r.json();
+        /* a39: burn-summary's own `PTGCbyUFO` is "PTGC burns sent from the PTGC/WPLS pair" —
+           PTGC's buy-and-burn leg, 4.14 B — NOT the UFO-driven figure this page means by that
+           name. It only ever read like the right number because ufo-ptgc-burns.json overwrote
+           it two lines below; when that 300 KB fetch failed, the headline quietly became
+           4.14 B + v2 (10% low) with no label. Clear it first: the v1 base comes from
+           ufo-ptgc-burns.json or it is unknown, and `oldMissing` makes the panel say so. */
+        if(burnHistoryCache&&burnHistoryCache.PTGCbyUFO)burnHistoryCache.PTGCbyUFO=null;
         try{
           const ufoPtgcData=await r2.json();
           if(ufoPtgcData?.PTGCbyUFO){
@@ -2590,7 +2644,9 @@
               (burnHistoryCache.PTGCbyUFORows?` (${burnHistoryCache.PTGCbyUFORows.length} dated rows)`:' (no dated rows — periods will show the new contract only)'));
           }
         }catch(e2){
-          console.warn('Could not load ufo-ptgc-burns.json, using fallback:',e2);
+          /* a39: there is no fallback for the v1 base — the panel prints the live contract's
+             figure and labels the total as incomplete (computePtgcBurnedByUfo → oldMissing). */
+          console.warn('[a39] ufo-ptgc-burns.json did not load; the v1 (retired contract) base is unknown, so "PTGC burned by UFO" shows the live contract only:',e2);
         }
         burnHistoryCacheTime=Date.now();
         console.log('Burn history loaded, last updated:',burnHistoryCache.lastUpdated);
@@ -6510,16 +6566,12 @@
         return<span>$0.0<sub style={{fontSize:'0.6em'}}>{exp-1}</sub>{parseFloat(m).toFixed(4).replace('.','').slice(0,4)}</span>;
       };
       
-      const tiers=[
-        {name:'Poseidon',emoji:'🔱',pct:0.10},
-        {name:'Whale',emoji:'🐋',pct:0.01},
-        {name:'Shark',emoji:'🦈',pct:0.001},
-        {name:'Dolphin',emoji:'🐬',pct:0.0001},
-        {name:'Squid',emoji:'🦑',pct:0.00001},
-        {name:'Turtle',emoji:'🐢',pct:0.000001},
-        {name:'Shrimp',emoji:'🦐',pct:0.0000001},
-        {name:'Shell',emoji:'🐚',pct:0.00000001},
-      ];
+      /* a67: was a third copy of the eight percentages — adjust BURN_C and this card kept
+         printing the old thresholds. BURN_C carries percent (10 = 10%), this card wants a
+         fraction. Shell is BURN_C's floor (p:0 — everyone below Shrimp), but a card that
+         prints a token amount per row needs a number for it, so its display threshold is
+         named once here instead of being a magic constant in two modals. */
+      const tiers=BURN_C.map(c=>({name:c.n,emoji:c.e,pct:tierFraction(c)}));
       
       return(
         <ShareCardModal onClose={close} width={800} height={1000} label="Combined Grays Leagues share card" filename={`grays-leagues-${supplyMode==='circ'?'circulating':'starting'}-supply-${new Date().toISOString().slice(0,10)}.png`}
@@ -6645,16 +6697,8 @@
       const basis=circ?currentSupply:startingSupply;
 
       // Calculate tier thresholds on the selected supply basis
-      const tiers=[
-        {name:'Poseidon',emoji:'🔱',threshold:basis*0.10},
-        {name:'Whale',emoji:'🐋',threshold:basis*0.01},
-        {name:'Shark',emoji:'🦈',threshold:basis*0.001},
-        {name:'Dolphin',emoji:'🐬',threshold:basis*0.0001},
-        {name:'Squid',emoji:'🦑',threshold:basis*0.00001},
-        {name:'Turtle',emoji:'🐢',threshold:basis*0.000001},
-        {name:'Shrimp',emoji:'🦐',threshold:basis*0.0000001},
-        {name:'Shell',emoji:'🐚',threshold:basis*0.00000001},
-      ];
+      /* a67: the same eight tiers as the Leagues card and BURN_C, on the selected basis. */
+      const tiers=BURN_C.map(c=>({name:c.n,emoji:c.e,threshold:basis*tierFraction(c)}));
       
       const isPTGC=token==='PTGC';
       const pc=isPTGC?'#D4AF37':'#7CFC00';
@@ -11094,16 +11138,12 @@
     // Affiliates Dashboard Page
     // Module-level helper (used by BuyerDistributionModal and AffiliatesPage)
     const PTGC_SUPPLY_GLOBAL=SUPPLY.PTGC;
+    /* a67: this was getHighestCreatureWithCount's loop with renamed keys and its own
+       (unfixed) floor. One implementation now; this is the shape its callers want. */
     const getCreatureForPtgc=(ptgcAmount)=>{
       if(!ptgcAmount||ptgcAmount<=0)return null;
-      const pct=(ptgcAmount/PTGC_SUPPLY_GLOBAL)*100;
-      for(const c of BURN_C){
-        if(pct>=c.p){
-          const cnt=c.p>0?Math.floor(pct/c.p):1;
-          return{emoji:c.e,name:c.n,count:Math.max(1,cnt)};
-        }
-      }
-      return{emoji:'🐚',name:'Shell',count:1};
+      const c=getHighestCreatureWithCount((ptgcAmount/PTGC_SUPPLY_GLOBAL)*100);
+      return{emoji:c.e,name:c.n,count:Math.max(1,c.cnt)};
     };
 
     // ===== BUYER DISTRIBUTION MODAL =====

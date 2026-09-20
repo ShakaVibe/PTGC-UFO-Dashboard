@@ -808,6 +808,11 @@ async function main() {
     dataSource: 'RPC/eth_getLogs (burns), DexScreener (price/volume/liquidity), PulseScan (holders)',
     
     PTGC: {
+      // a39: the contract this section was scanned from. index.html's cold-cache market cap
+      // only subtracts `totalBurned` when this matches the token it is pricing — the UFO
+      // section below is the RETIRED contract, and subtracting its 205 B put UFO's mcap ~12%
+      // under the truth during a DexScreener outage.
+      address: PTGC_ADDRESS,
       totalBurned: ptgcTotal,
       burnCount: ptgcBurns.length,
       periods: ptgcPeriods,
@@ -827,6 +832,7 @@ async function main() {
     },
     
     UFO: {
+      address: UFO_ADDRESS,   // a39: the RETIRED UFO contract — see the note on PTGC.address
       totalBurned: ufoTotal,
       burnCount: ufoBurns.length,
       periods: ufoPeriods,
@@ -845,7 +851,11 @@ async function main() {
     },
     
     // PTGC burned via automated buybacks (from LP swaps)
+    // a39: this is PTGC's OWN buy-and-burn leg (burns sent from the PTGC/WPLS pair), NOT the
+    // "PTGC burned by UFO" figure the dashboard shows — that one comes from ufo-ptgc-burns.json.
+    // index.html now clears this field on load so the two can never be confused again.
     PTGCbyUFO: {
+      source: 'PTGC burns sent from the PTGC/WPLS pair (PTGC own buy-and-burn leg)',
       totalBurned: ptgcBuybackTotal,
       burnCount: ptgcBuybackBurns.length,
       periods: ptgcBuybackPeriods

@@ -59,8 +59,12 @@
     // Update these values from the Moon Math calculator in Portfolio
     // These are fallbacks; coingeckoDataCache ATH will be used if available
     // MIGRATION (per site owner): UFO's ATH carries over from the old token — the
-    // migration is one continuous asset. The value below (old-token ATH) is the baseline;
-    // ufoNewTokenAthCache (new pools' highs) supersedes it automatically once exceeded.
+    // migration is one continuous asset, so the pre-migration high IS the mark to beat.
+    // a67 (2026-09-20): this page used to raise that mark to the new pool's own daily
+    // candle highs (ufoNewTokenAthCache), so the first day a wick beat $0.000113 the
+    // calculators printed a different "X's to ATH" than the dashboard header the visitor
+    // had just left. One rule now, index.html's: CoinGecko's ATH, else ATH_PRICES.
+    // (Handover gotcha 0 / roadmap d10: the original contract's ATH is deliberate.)
     const ATH_PRICES = {
       PTGC: 0.00133,    // from Moon Math calculator in portfolio.html
       UFO: 0.000113     // from Moon Math calculator in portfolio.html
@@ -416,24 +420,16 @@
        many days each window actually covers so a 2-week-old token can't fake a "30 day
        avg" — the UI collapses uncovered windows into an honest "Since Launch Avg".
        PTGC (unchanged token, deep history) keeps using the prebuilt file. */
-    let ufoNewTokenAthCache=0; /* ATH of the NEW UFO token, from its main pool's daily
-       candle highs (set by fetchUfoVolumeByPeriod). The CoinGecko ATH and the ATH_PRICES
-       fallback both belong to the OLD contract and must never be shown for the new one. */
     const fetchUfoVolumeByPeriod=async(vol24hLive)=>{
       const todayStartSec=Math.floor(Date.now()/86400000)*86400; // UTC start of today
       const byDay={}; // unix day-start (s) -> summed USD volume across pools
-      const mainPairAddr=(TOKENS.UFO.mainPair||'').toLowerCase();
       await Promise.all(HARDCODED_UFO_PAIRS.map(async p=>{
         try{
           const r=await fetch(`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${p.address.toLowerCase()}/ohlcv/day?aggregate=1&limit=95&currency=usd`);
           if(!r.ok)return;
           const j=await r.json();
-          const isMain=p.address.toLowerCase()===mainPairAddr;
           (j?.data?.attributes?.ohlcv_list||[]).forEach(c=>{
-            const ts=c[0],high=parseFloat(c[2])||0,vol=parseFloat(c[5])||0;
-            /* ATH from the MAIN pool only (thin pools wick to silly highs), and it
-               INCLUDES today — an ATH set an hour ago counts. */
-            if(isMain&&high>ufoNewTokenAthCache)ufoNewTokenAthCache=high;
+            const ts=c[0],vol=parseFloat(c[5])||0;   // a67: the candle HIGH was only read to raise the UFO ATH — that rule is gone
             const dayStart=Math.floor(ts/86400)*86400;
             if(dayStart>=todayStartSec)return; // skip today's partial candle (volume averages only)
             byDay[dayStart]=(byDay[dayStart]||0)+vol;
@@ -2343,13 +2339,9 @@
       const circulatingSupply=burn?totalSupply-burn.total:null;
       const supplyUnknown=circulatingSupply==null;
       const mcap=data?.mcap||0;
-      /* MIGRATION (per site owner): UFO's ATH carries over from the OLD token — the
-         migration is treated as one continuous asset, so the pre-migration high remains
-         the mark to beat. The moment the new token's own pools (ufoNewTokenAthCache) or
-         the live price exceed it, the larger number takes over automatically. */
-      const athPrice=token==='UFO'
-        ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache,price||0)
-        :(coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0);
+      /* MIGRATION: the pre-migration high is the mark to beat (see ATH_PRICES above).
+         a67: identical to index.html's rule, so both headers print the same "X's to ATH". */
+      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
       
       const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'Mx';if(n>=1e4)return(n/1e3).toFixed(0)+'Kx';if(n>=1e3)return(n/1e3).toFixed(1)+'Kx';if(n>=100)return Math.round(n).toLocaleString()+'x';if(n>=10)return n.toFixed(1)+'x';return n.toFixed(2)+'x';};
       const fmtMcap=v=>{if(!v||isNaN(v))return'\u2014';if(v>=1e12)return'$'+(v/1e12).toFixed(2)+'T';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(2)+'K';return fmtDollar(v);};
@@ -3490,9 +3482,7 @@ if(p>0)setRwdPtgcPrice(p);
             const moonBagGain=moonBagNew-moonBagCurrent;
             const moonTotalLiq=moonResultsList.reduce((s,r)=>s+(r.poolLiq||0),0);
             /* MIGRATION: ATH continuity across the migration (see CalculatorsTab athPrice). */
-            const mAthPrice=moonToken==='UFO'
-              ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache)
-              :(coingeckoDataCache?.[moonToken]?.ath||ATH_PRICES[moonToken]||0);
+            const mAthPrice=coingeckoDataCache?.[moonToken]?.ath||ATH_PRICES[moonToken]||0;
             const mMcap=mCirc>0?mPrice*mCirc:null;
             
             return(
@@ -5078,9 +5068,7 @@ if(p>0)setRwdPtgcPrice(p);
       const _hdrFirstPool=data?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
       const hdrDaysOld=(_hdrFirstPool&&isFinite(_hdrFirstPool))?Math.max(0,Math.floor((Date.now()-_hdrFirstPool)/86400000)):null;
       /* MIGRATION: ATH continuity across the migration (see CalculatorsTab athPrice). */
-      const athPrice=token==='UFO'
-        ?Math.max(coingeckoDataCache?.UFO?.ath||ATH_PRICES.UFO||0,ufoNewTokenAthCache,data?.price||0)
-        :(coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0);
+      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
       const xToATH=data?.price>0&&athPrice>data.price?(athPrice/data.price).toFixed(1):'\u2014';
       const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';
       const hdrFmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};
