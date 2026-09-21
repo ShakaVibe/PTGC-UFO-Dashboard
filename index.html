@@ -6995,7 +6995,15 @@
       const[sortDir,setSortDir]=useState('desc');
       const[lastUpdate,setLastUpdate]=useState(new Date());
       const[burnPeriods,setBurnPeriods]=useState(undefined); // undefined = loading, null = failed, object = data (never zeros: "$0" is a claim)
-      const[burnPeriodsSource,setBurnPeriodsSource]=useState(null); // {ageMs} when UFO's windows came from the hourly snapshot
+      /* a52 (2026-09-21): these two hold WHEN the snapshot was generated, not how old it was at
+         load. They used to store `ageMs`, computed once, and the labels printed it verbatim
+         forever — so a UFO dashboard opened on a 20-minute-old snapshot and left open for the
+         afternoon still said nothing at all six hours later (the label only appears past an
+         hour), while the freshness badge beside it kept saying "updated 2 min ago" because the
+         quick path does keep `lastUpdate` moving. Nothing re-fetches value-generated.json after
+         load, so the windows really were six hours old. Age is computed at render now, and the
+         dashboard re-renders on every 5-minute refresh, so the label follows the clock. */
+      const[burnPeriodsSource,setBurnPeriodsSource]=useState(null); // {at} = when UFO's snapshot windows were generated
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
       const[valueGenPeriod,setValueGenPeriod]=useState('7d');
       // MIGRATION: UFO's Value Generated is always measured on-chain (see fetchRealizedFees).
@@ -7324,7 +7332,7 @@
                 if(validFile&&ageMs<VALUE_GEN_STALE_MS&&!cancelled){
                   setRealizedFees(j.realizedFees);
                   applyDelivered(j.delivered);
-                  setSnapshotInfo({ageMs,interim:false});
+                  setSnapshotInfo({at:Date.now()-ageMs,interim:false});   // a52: when, not how old
                   setRealizedLoading(false);
                   fetchContractHealth(TOKENS.UFO.address).then(h=>{if(!cancelled)setHealth(h&&h.ok?h:null);}).catch(()=>{});
                   return;   // snapshot served both boxes; no on-chain scan this load
@@ -7338,7 +7346,7 @@
                   seededInterim=true;
                   setRealizedFees(j.realizedFees);
                   applyDelivered(j.delivered);
-                  setSnapshotInfo({ageMs,interim:true});
+                  setSnapshotInfo({at:Date.now()-ageMs,interim:true});   // a52
                   setRealizedLoading(false);
                 }
               }
@@ -7813,7 +7821,7 @@
                 if(bp&&!bp.carriedForward&&typeof bp.h24==='number'&&typeof bp.d90==='number'){
                   setBurnPeriods({h12:bp.h12||0,h24:bp.h24,d7:bp.d7,d30:bp.d30,d90:bp.d90,sinceLaunch:!!bp.sinceLaunch,burnTxs:bp.burnTxs});
                   setLive24hBurn(bp.h24);
-                  setBurnPeriodsSource({ageMs:snap.ageMs});
+                  setBurnPeriodsSource({at:Date.now()-snap.ageMs});   // a52
                   return;
                 }
               }catch(e){}
@@ -8119,6 +8127,11 @@
           }
           if(d){setData(prev=>mergeDex(prev,d));setLastUpdate(new Date());setRefreshError(false);}
           else setRefreshError(true);
+          /* a52: volumeByPeriod was written only inside load(), so the Value Generated panel on
+             "24H" kept first-load volume all afternoon while the volume tile a few centimetres
+             above it climbed with every refresh — two figures from the same source disagreeing,
+             with no staleness cue. Same null rule as load() (a14/a19): unknown stays unknown. */
+          if(d){const nv=(d.vol!=null&&isFinite(d.vol))?d.vol:null;setVolumeByPeriod(v=>(v&&v.vol24h===nv)?v:{...v,vol24h:nv});}
           // No-op guards: identical values return the previous reference → no re-render.
           if(h!=null)setHolders(prev=>h===prev?prev:h);
           // (was prev.burned — a field fetchBurn never returns, so the guard always short-circuited
@@ -8618,7 +8631,7 @@
                     if(burnPeriods===undefined)return null;
                     if(token==='UFO'){
                       /* windows from the hourly snapshot: label them once they are more than an hour old */
-                      const a=burnPeriodsSource&&burnPeriodsSource.ageMs;
+                      const a=burnPeriodsSource&&burnPeriodsSource.at!=null?Date.now()-burnPeriodsSource.at:null;   // a52: live age
                       if(a==null||a<60*60*1000)return null;
                       return <div className="text-[10px] uppercase tracking-[0.14em] text-white/35 text-right mb-1" title="These windows come from the hourly on-chain snapshot.">as of {fmtSnapshotAge(a)}</div>;
                     }
@@ -8849,8 +8862,8 @@
                               {/* RESILIENCE: honest freshness. Fresh snapshot → quiet "as of";
                                   stale interim → amber note that a live refresh is running. */}
                               {snapshotInfo&&(snapshotInfo.interim
-                                ?<span className="text-amber-300/70 text-[10px]">as of {fmtSnapshotAge(snapshotInfo.ageMs)} — refreshing from chain…</span>
-                                :<span className="text-white/35 text-[10px]">as of {fmtSnapshotAge(snapshotInfo.ageMs)}</span>)}
+                                ?<span className="text-amber-300/70 text-[10px]">as of {fmtSnapshotAge(Date.now()-snapshotInfo.at)} — refreshing from chain…</span>
+                                :<span className="text-white/35 text-[10px]">as of {fmtSnapshotAge(Date.now()-snapshotInfo.at)}</span>)}
                             </>
                           ):realizedLoading&&token==='UFO'?(
                             <span className="text-base text-white/40">Reading fees from chain…</span>
@@ -9190,7 +9203,7 @@
                         Lifetime
                         {/* RESILIENCE: same freshness label as Value Generated — both panels
                             render from the same snapshot/live data. */}
-                        {snapshotInfo&&<span className={`block normal-case tracking-normal ${snapshotInfo.interim?'text-amber-300/70':'text-white/35'}`}>as of {fmtSnapshotAge(snapshotInfo.ageMs)}{snapshotInfo.interim?' — refreshing…':''}</span>}
+                        {snapshotInfo&&<span className={`block normal-case tracking-normal ${snapshotInfo.interim?'text-amber-300/70':'text-white/35'}`}>as of {fmtSnapshotAge(Date.now()-snapshotInfo.at)}{snapshotInfo.interim?' — refreshing…':''}</span>}
                       </span>
                     </div>
                     {(()=>{

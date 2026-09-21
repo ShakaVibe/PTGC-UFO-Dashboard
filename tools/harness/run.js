@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, AFFIL_DATA=1, AFFIL_SYNC=iso, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, AFFIL_DATA=1, AFFIL_SYNC=iso, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -86,13 +86,19 @@ const rpcAnswer=(body)=>{
   };
   return Array.isArray(body)?body.map(one):one(body);
 };
-const dsPair=(base,quote,price,liq,vol)=>({chainId:'pulsechain',dexId:'pulsex',url:'https://dexscreener.com/pulsechain/x',pairAddress:'0x'+'ab'.repeat(20),
+/* DS_VOL_DRIFT=1: every successive DexScreener answer reports a bigger 24 h volume, the way a
+   busy afternoon does. Without it the stub returns the same number forever and a figure that
+   never follows a refresh looks identical to one that does (a52). */
+let dsCalls=0;
+const volDrift=v=>process.env.DS_VOL_DRIFT?Math.round(v*(1+0.5*dsCalls)):v;
+const dsPair=(base,quote,price,liq,vol0)=>({chainId:'pulsechain',dexId:'pulsex',url:'https://dexscreener.com/pulsechain/x',pairAddress:'0x'+'ab'.repeat(20),
   baseToken:{address:base,name:base==='PTGC'?'The Grays Currency':'UFO',symbol:base},quoteToken:{address:'0x'+'cd'.repeat(20),name:quote,symbol:quote},
   priceNative:'0.5',priceUsd:String(price),txns:{h24:{buys:120,sells:80},h6:{buys:30,sells:20},h1:{buys:5,sells:3},m5:{buys:1,sells:0}},
-  volume:{h24:vol,h6:vol/4,h1:vol/24,m5:vol/288},priceChange:{h24:3.21,h6:1,h1:0.2,m5:0},liquidity:{usd:liq,base:1e9,quote:1e9},fdv:price*3e11,marketCap:price*3e11,pairCreatedAt:Date.now()-1062*86400000,
+  volume:(v=>({h24:v,h6:v/4,h1:v/24,m5:v/288}))(volDrift(vol0)),priceChange:{h24:3.21,h6:1,h1:0.2,m5:0},liquidity:{usd:liq,base:1e9,quote:1e9},fdv:price*3e11,marketCap:price*3e11,pairCreatedAt:Date.now()-1062*86400000,
   info:{imageUrl:''}});
 const UFO_ADDR=/49eD499433Bee42DD34C169470feF2C8f9fAe6e6|E221e6fC30e5787F0d551f980B4da1055D832A03/i;   // TOKENS.UFO.address | TOKENS.UFO.mainPair
 const dsAnswer=(url)=>{
+  if(process.env.DS_VOL_DRIFT&&/tokens\//.test(url))dsCalls++;
   const isUFO=UFO_ADDR.test(url);   // the UFO token or its main pair in the URL
   const P=isUFO&&process.env.DS_UFO_PRICE?+process.env.DS_UFO_PRICE:(+process.env.DS_PRICE||0.000142);   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48); DS_UFO_PRICE=n: a DIFFERENT price for UFO calls, so a token-switch race is visible (a7)
   const B=isUFO&&process.env.DS_UFO_PRICE?'UFO':'PTGC';
