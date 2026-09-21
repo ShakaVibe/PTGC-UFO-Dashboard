@@ -223,7 +223,7 @@
         <a href="#" onclick="navTo('dashboard');return false" class="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Dashboard</a>
         <a href="#" onclick="navTo('kpi');return false" class="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">KPI Report</a>
         <a href="#" onclick="navTo('social');return false" class="relative px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Socials</a>
-        <a href="./calculators.html" onclick="try{localStorage.setItem('ptgc_last_token',currentHdrToken)}catch(e){}" class="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Calculators</a>
+        <a href="./calculators.html" onclick="try{localStorage.setItem('ptgc_last_token',currentHdrToken)}catch(e){};window.location.href='./calculators.html?from='+currentHdrToken;return false" class="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0 no-underline">Calculators</a>
         <span id="navCharts" class="relative px-3.5 py-3 text-sm font-semibold shrink-0" style="color:#D4AF37">
           Charts
           <div id="navChartsIndicator" class="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style="background:#D4AF37"></div>
@@ -420,7 +420,23 @@ const HDR_TOKENS = {
   }
 };
 
-let currentHdrToken = 'PTGC';
+/* a59 (2026-09-21): charts.html used to hard-code PTGC and never read the handoff, so a visitor
+   who clicked Charts from the UFO dashboard got a gold PTGC header, PTGC's buy button and PTGC
+   cards — and then navTo() wrote ptgc_last_token='PTGC' and dropped them on the PTGC dashboard
+   when they clicked Dashboard. Seeded the way calculators.html and portfolio.html already do it:
+   ?from= / ?token= first, then the ptgc_last_token handoff key, both validated. */
+let currentHdrToken = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const p = q.get('from') || q.get('token');
+    if (p === 'PTGC' || p === 'UFO') return p;
+  } catch (e) {}
+  try {
+    const t = localStorage.getItem('ptgc_last_token');
+    if (t === 'PTGC' || t === 'UFO') return t;
+  } catch (e) {}
+  return 'PTGC';
+})();
 
 function fmtPrice(p) {
   if (!p || isNaN(p) || p === 0) return '\u2014';
@@ -944,6 +960,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function getDays() { return range ? range.days : 30 }
 
+/* a59 (2026-09-21): every daily candle is stamped 00:00 UTC (GeckoTerminal candle open times;
+   build-charts-data.js pushes `ts * 1000`), but Chart.js's date-fns adapter and toLocaleDateString
+   format in the viewer's zone. West of UTC that made every date on the 1M/3M/6M/1Y views one day
+   early — the candle GeckoTerminal calls 2026-09-16 read "Sep 15" in the tooltip, on the axis and
+   in the share PNG. Daily-tier labels are formatted in UTC now. The tick MARKS still land on the
+   viewer's local midnights: the date-fns adapter takes no time zone, and switching to the luxon
+   adapter would add a CDN script and another SRI hash (gotcha 1) to save a few hours of offset on
+   an axis 30 to 365 days wide. Intraday tiers (24H/7D/14D) stay local, which is what they mean. */
+function isDailyTier() { return getTier(getDays()) === 'daily'; }
+function xAxisTickLabel(value) {
+  if (isDailyTier()) return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return this.getLabelForValue(value);
+}
+
 function clearCacheAndRefresh() {
   // Cancel any pending debounced go()
   clearTimeout(_goDebounceTimer);
@@ -1175,7 +1205,12 @@ function externalChartTip(context) {
   const v = dp.parsed.y;
   const pct = (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   const color = dp.dataset.borderColor || '#fff';
-  const when = new Date(dp.parsed.x).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}) });
+  const daily = isDailyTier();   // a59: a daily candle is a UTC day, so say so
+  const when = new Date(dp.parsed.x).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+    ...(getDays() <= 7 ? { hour: '2-digit', minute: '2-digit' } : {}),
+    ...(daily ? { timeZone: 'UTC' } : {})
+  }) + (daily ? ' UTC' : '');
   el.innerHTML =
     '<div style="display:flex;align-items:center;gap:9px;background:rgba(10,10,10,0.96);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:9px 12px;font-family:\'JetBrains Mono\',monospace;box-shadow:0 6px 24px rgba(0,0,0,0.55)">' +
       '<img src="' + (tk.logo || '') + '" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:rgba(255,255,255,0.05)" onerror="this.style.visibility=\'hidden\'"/>' +
@@ -1941,7 +1976,7 @@ function _doRenderChart() {
     responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: false },
     plugins: { legend: { display: false }, tooltip: { enabled: false, external: externalChartTip } },
     scales: {
-      x: { type: 'time', min: xMin, max: xMax, time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
+      x: { type: 'time', min: xMin, max: xMax, time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10, callback: xAxisTickLabel }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.55)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 10 }, border: { display: false } }
     }
   };
@@ -2142,7 +2177,7 @@ function renderShareChart() {
     responsive: true, maintainAspectRatio: false, animation: false,
     plugins: { legend: { display: false }, tooltip: { enabled: false } },
     scales: {
-      x: { type: 'time', min: xMin, max: xMax, time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10 }, border: { display: false } },
+      x: { type: 'time', min: xMin, max: xMax, time: { tooltipFormat: 'MMMM d, yyyy', displayFormats: { minute: 'HH:mm', hour: 'MMM d HH:mm', day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' } }, grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, maxRotation: 0, maxTicksLimit: getDays() <= 1 ? 8 : 10, callback: xAxisTickLabel }, border: { display: false } },
       y: { position: 'right', grid: { color: c => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)', drawBorder: false, lineWidth: c => c.tick.value === 0 ? 1.5 : 1 }, ticks: { color: 'rgba(255,255,255,0.5)', font: { family: "'JetBrains Mono',monospace", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%', maxTicksLimit: 8 }, border: { display: false } }
     }
   }});

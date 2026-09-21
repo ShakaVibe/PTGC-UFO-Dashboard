@@ -2645,6 +2645,16 @@
        stalled Action froze PTGC's 24H/7D/30D/90D burn boxes at the last run's values with no
        label — indefinitely. Now: older than BURN_HISTORY_STALE_MS shows an amber "as of" label
        on the boxes; older than BURN_HISTORY_MAX_AGE_MS is treated as unknown ("—"). */
+    /* a53 (2026-09-21): token-allocation.json had no freshness check at all, so a stalled
+       build-token-allocation step served week-old Poseidon/Whale/Shark/Dolphin counts to every
+       visitor as current AND short-circuited the two fallbacks that would have been right. The
+       arithmetic: the step is gated to rebuild every 6 h (data-pipeline.yml) and GitHub delivers
+       the pipeline ~5x/day with gaps up to 5 h (gotcha 21), so a healthy file can be ~11 h old.
+       Past 14 h (a missed rebuild) the tiles carry an "as of" label; past 36 h (three missed
+       rebuilds) the file is treated as missing and the localStorage / live-scan path runs. */
+    const ALLOC_STALE_MS=14*60*60*1000;
+    const ALLOC_DEAD_MS=36*60*60*1000;
+    const allocStampedAt=j=>{const t=j&&j.lastUpdated?Date.parse(j.lastUpdated):NaN;return isFinite(t)?t:null;};
     const BURN_HISTORY_STALE_MS=8*60*60*1000;     // the pipeline lands ~5x/day (gaps up to 5 h, measured 2026-09-18) — amber only past a missed run
     const BURN_HISTORY_MAX_AGE_MS=7*24*60*60*1000; // a week-old window is not "the last 24 hours"
     const burnHistoryAgeMs=()=>{const t=burnHistoryCache&&burnHistoryCache.lastUpdated?Date.parse(burnHistoryCache.lastUpdated):NaN;return isFinite(t)?Math.max(0,Date.now()-t):null;};
@@ -3433,7 +3443,13 @@
          above; a pool listed twice used to be subtracted twice). A pool that holds nothing is
          still subtracted — PulseScan's count can't tell us, and the error is a handful at most. */
       const excludedAddresses=allLPAddresses.length+(cfg.stakingContract?1:0);
-      const squidAndBelow=Math.max(0,totalHolderCount-countedHolders-excludedAddresses);
+      /* a53 (2026-09-21): totalHolderCount is null when PulseScan's /counters endpoint failed
+         (documented as intermittent), which made this NaN -> Math.max(0,NaN) -> NaN, and the
+         caller's `squidAndBelow||0` turned that into a flat "0" for a token with thousands of
+         holders, cached for two hours. Unknown in, unknown out. */
+      const squidAndBelow=(typeof totalHolderCount==='number'&&isFinite(totalHolderCount)&&totalHolderCount>0)
+        ?Math.max(0,totalHolderCount-countedHolders-excludedAddresses)
+        :null;
       
       return{counts,countedHolders,squidAndBelow,total:totalFetched,
              ok:(queryOk||complete),          // a failure after completion is not a failure
@@ -7508,8 +7524,10 @@
               const r=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/token-allocation.json?t='+Math.floor(Date.now()/3600000));
               if(r.ok){
                 const j=await r.json();
-                const pt=j&&j.tokens&&j.tokens.PTGC&&j.tokens.PTGC.tiers;
-                const ut=j&&j.tokens&&j.tokens.UFO&&j.tokens.UFO.tiers;
+                const allocTs=allocStampedAt(j);   // a53: same freshness rule as the dashboard box
+                const allocDead=allocTs!=null&&(Date.now()-allocTs)>=ALLOC_DEAD_MS;
+                const pt=allocDead?null:(j&&j.tokens&&j.tokens.PTGC&&j.tokens.PTGC.tiers);
+                const ut=allocDead?null:(j&&j.tokens&&j.tokens.UFO&&j.tokens.UFO.tiers);
                 if(pt&&typeof pt.Whale==='number')ptgcTierObj={Poseidon:pt.Poseidon||0,Whale:pt.Whale||0,Shark:pt.Shark||0,Dolphin:pt.Dolphin||0,SquidAndBelow:pt.SquidAndBelow||0};
                 if(ut&&typeof ut.Whale==='number')ufoTierObj={Poseidon:ut.Poseidon||0,Whale:ut.Whale||0,Shark:ut.Shark||0,Dolphin:ut.Dolphin||0,SquidAndBelow:ut.SquidAndBelow||0};
               }
@@ -7535,8 +7553,9 @@
                 !ptgcTierObj?fetchHolderTiers(TOKENS.PTGC.address,TOKENS.PTGC,ptgcHolders,ptgcLPAddrs):Promise.resolve(null),
                 !ufoTierObj?fetchHolderTiers(TOKENS.UFO.address,TOKENS.UFO,ufoHolders,ufoLPAddrs):Promise.resolve(null)
               ]);
-              if(!ptgcTierObj&&ptgcTiers)ptgcTierObj={Poseidon:ptgcTiers.counts.Poseidon||0,Whale:ptgcTiers.counts.Whale||0,Shark:ptgcTiers.counts.Shark||0,Dolphin:ptgcTiers.counts.Dolphin||0,SquidAndBelow:ptgcTiers.squidAndBelow||0};
-              if(!ufoTierObj&&ufoTiers)ufoTierObj={Poseidon:ufoTiers.counts.Poseidon||0,Whale:ufoTiers.counts.Whale||0,Shark:ufoTiers.counts.Shark||0,Dolphin:ufoTiers.counts.Dolphin||0,SquidAndBelow:ufoTiers.squidAndBelow||0};
+              const sq=r=>Number.isFinite(r&&r.squidAndBelow)?r.squidAndBelow:null;   // a53
+              if(!ptgcTierObj&&ptgcTiers)ptgcTierObj={Poseidon:ptgcTiers.counts.Poseidon||0,Whale:ptgcTiers.counts.Whale||0,Shark:ptgcTiers.counts.Shark||0,Dolphin:ptgcTiers.counts.Dolphin||0,SquidAndBelow:sq(ptgcTiers)};
+              if(!ufoTierObj&&ufoTiers)ufoTierObj={Poseidon:ufoTiers.counts.Poseidon||0,Whale:ufoTiers.counts.Whale||0,Shark:ufoTiers.counts.Shark||0,Dolphin:ufoTiers.counts.Dolphin||0,SquidAndBelow:sq(ufoTiers)};
             }
 
             // Final defaults so the card never renders undefined tiers / a 0 count from a null.
@@ -7837,10 +7856,16 @@
               if(r.ok){
                 const j=await r.json();
                 const t=j&&j.tokens&&j.tokens[token]&&j.tokens[token].tiers;
-                if(t&&typeof t.Whale==='number'){
-                  applyTiers({Poseidon:t.Poseidon||0,Whale:t.Whale||0,Shark:t.Shark||0,Dolphin:t.Dolphin||0,SquidAndBelow:(t.SquidAndBelow!=null?t.SquidAndBelow:null),ok:true,partial:false,error:null},true);
+                /* a53: asOfTs is the file's own lastUpdated, not the moment we read it, so the
+                   2 h localStorage copy below keeps telling the truth about how old the numbers
+                   are. A file with no stamp is accepted as before. */
+                const asOfTs=allocStampedAt(j);
+                const dead=asOfTs!=null&&(Date.now()-asOfTs)>=ALLOC_DEAD_MS;
+                if(t&&typeof t.Whale==='number'&&!dead){
+                  applyTiers({Poseidon:t.Poseidon||0,Whale:t.Whale||0,Shark:t.Shark||0,Dolphin:t.Dolphin||0,SquidAndBelow:(t.SquidAndBelow!=null?t.SquidAndBelow:null),ok:true,partial:false,error:null,asOfTs},true);
                   return;
                 }
+                if(dead)console.warn('token-allocation.json is '+fmtSnapshotAge(Date.now()-asOfTs)+' \u2014 ignoring it and scanning holders instead');
               }
             }catch(e){}
             // 2) localStorage cache from a prior live scan
@@ -7866,7 +7891,7 @@
                 Whale:v(result.counts.Whale),
                 Shark:v(result.counts.Shark),
                 Dolphin:v(result.counts.Dolphin),
-                SquidAndBelow:result.ok?(result.squidAndBelow||0):null,  // needs a complete count
+                SquidAndBelow:(result.ok&&Number.isFinite(result.squidAndBelow))?result.squidAndBelow:null,  // a53: needs a complete count AND a real holder total
                 ok:result.ok,partial:!!result.partial,error:result.error
               },result.ok);
             }).catch(e=>{
@@ -8372,7 +8397,7 @@
                   {activeTab==='social' && <div className="absolute bottom-0 left-3.5 right-3.5 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}
                 </button>
                 <a href={`./calculators.html?from=${token}`} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Calculators</a>
-                <a href="./charts.html" className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
+                <a href={`./charts.html?from=${token}`} className="px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">Charts</a>
                 {/* LIVE FEED — opens the Abduction Deck (live value tape) as a full-screen overlay */}
                 <button onClick={()=>setShowBeam(true)} className="relative flex items-center gap-1.5 px-3.5 py-3 text-sm font-semibold text-white/55 hover:text-white transition-colors shrink-0">
                   Live Feed
@@ -8415,7 +8440,7 @@
               <button data-active={activeTab==='kpi'?'1':'0'} aria-current={activeTab==='kpi'?'page':undefined} onClick={()=>gotoTab('kpi')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='kpi'?theme.text:'text-white/55'}`}>KPI Report{activeTab==='kpi'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
               <button data-active={activeTab==='social'?'1':'0'} aria-current={activeTab==='social'?'page':undefined} onClick={()=>gotoTab('social')} className={`relative px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0 ${activeTab==='social'?theme.text:'text-white/55'}`}>Socials{activeTab==='social'&&<div className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full" style={{background:cfg.colorHex}}></div>}</button>
               <a href={`./calculators.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Calculators</a>
-              <a href="./charts.html" className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Charts</a>
+              <a href={`./charts.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Charts</a>
               <button onClick={()=>setShowBeam(true)} className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/55 whitespace-nowrap shrink-0">Live Feed<span className="font-orbitron text-[7px] font-bold tracking-[0.18em] px-1.5 py-[2px] rounded-full leading-none" style={{background:cfg.colorHex,color:'#0a0a0a',boxShadow:`0 0 8px ${cfg.colorHex}`}}>NEW</span></button>
               <a href={`portfolio.html?from=${token}`} className="px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap shrink-0"><span style={{background:'linear-gradient(to right,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Portfolio</span></a>
               <button onClick={onAffiliates} className="px-3 py-2.5 text-[13px] font-semibold text-purple-300 whitespace-nowrap shrink-0">Affiliates</button>
@@ -8935,6 +8960,15 @@
                           <div className="col-span-2"><div className="text-xl sm:text-2xl">{'\u{1F991}'}<span className="text-white/60 mx-0.5">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-sm sm:text-base font-semibold tabular-nums ${theme.text}`}>{holderTiers?.SquidAndBelow==null?'\u2014':fmtAbbr(holderTiers.SquidAndBelow)}</div></div>
                         </div>
                       )}
+                      {/* a53: the prebuilt allocation file is normally a few hours old and says
+                          nothing; past a missed rebuild it says how old it is. */}
+                      {(()=>{
+                        const ts=holderTiers&&holderTiers.asOfTs;
+                        if(!ts)return null;
+                        const age=Date.now()-ts;
+                        if(!(age>=ALLOC_STALE_MS))return null;
+                        return <div className="mt-2 text-[10px] uppercase tracking-[0.14em] text-amber-300/70 text-center" title="Holder tiers come from the hourly allocation snapshot, which has not been rebuilt recently.">as of {fmtSnapshotAge(age)}</div>;
+                      })()}
                     </div>
                   </div>
 

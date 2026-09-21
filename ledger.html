@@ -146,6 +146,21 @@
        hour-old copy. Local harness runs rewrite this host to the local data/ (tools/harness/run.js). */
     const DATA_BASE_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
     const DATA_BUST = '?t=' + Date.now();
+
+    /* a60 (2026-09-21): the treasury files come from the same ~5-runs-a-day pipeline that writes
+       burn-summary.json, so the Ledger uses the same freshness rule index.html uses for that file
+       (gotcha 21): amber past one missed run, and past a week the month's totals are unknown
+       rather than presented as current. Before this, a stalled workflow showed only a 30 %-opacity
+       "Last updated" line at the very bottom of the page. */
+    const LEDGER_STALE_MS = 8 * 60 * 60 * 1000;
+    const LEDGER_DEAD_MS = 7 * 24 * 60 * 60 * 1000;
+    const fmtDataAge = ms => {
+      if (ms == null || !isFinite(ms)) return '';
+      const m = ms / 60000;
+      if (m < 90) return Math.max(1, Math.round(m)) + 'm old';
+      if (m >= 2880) return (m / 1440).toFixed(1).replace(/\.0$/, '') + 'd old';
+      return (m / 60).toFixed(1).replace(/\.0$/, '') + 'h old';
+    };
     
     const DAOLedger = () => {
       const [transactions, setTransactions] = useState([]);
@@ -154,9 +169,13 @@
       const [error, setError] = useState(null);
       const [dataSource, setDataSource] = useState('');
       const [lastUpdated, setLastUpdated] = useState(null);
+      /* a60: every month boundary on this page is UTC. The block timestamps are UTC seconds, so
+         cutting the buckets at the viewer's local midnight put a burn at 2026-08-31 22:00 UTC in
+         August for London and September for Sydney — two viewers screenshotting the same page and
+         getting different monthly totals. A viewer at UTC-10 also opened on the previous month. */
       const [selectedMonth, setSelectedMonth] = useState(() => {
         const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
       });
       const [availableMonths, setAvailableMonths] = useState([]);
       const [filter, setFilter] = useState('all');
@@ -169,16 +188,16 @@
       // Both DAO wallets
       const DAO_WALLETS = [WALLET1, WALLET2];
       
-      // Generate month options (current + past 6 months)
+      // Generate month options (current + past 6 months), in UTC (a60)
       useEffect(() => {
         const months = [];
         const now = new Date();
         for (let i = 0; i < 7; i++) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
           months.push({
-            value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-            label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-            shortLabel: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+            value: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+            label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+            shortLabel: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
           });
         }
         setAvailableMonths(months);
@@ -196,7 +215,7 @@
                years of rows the 7-month picker can never show. It is trusted only when its window
                covers the oldest month the picker offers; otherwise (missing, old shape, or a
                shorter window) the four full files below are the fallback, then the API. */
-            const oldestPicker = new Date(new Date().getFullYear(), new Date().getMonth() - 6, 1).getTime() / 1000;
+            const oldestPicker = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 6, 1) / 1000;
             let recent = null;
             try {
               const r = await fetch(`${DATA_BASE_URL}treasury-recent.json${DATA_BUST}`);
@@ -328,8 +347,10 @@
         if (!transactions.length && !tokenTxns.length) return [];
         
         const [year, month] = selectedMonth.split('-').map(Number);
-        const startOfMonth = new Date(year, month - 1, 1).getTime() / 1000;
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59).getTime() / 1000;
+        // a60: UTC boundaries — tx.timeStamp is UTC seconds. Local-time constructors moved the
+        // cut by the viewer's offset and shuffled month-edge rows between months.
+        const startOfMonth = Date.UTC(year, month - 1, 1) / 1000;
+        const endOfMonth = Date.UTC(year, month, 1) / 1000 - 1;
         
         // Get outgoing transactions only (where from === one of our wallets) AND successful only
         const outgoingTx = transactions.filter(tx => 
@@ -1044,15 +1065,24 @@
             const dec = 18;
             const amt = Number(ttx.value) / Math.pow(10, dec);
             
-            const isFromRouter = Object.keys(KNOWN_ROUTERS).some(r => r.toLowerCase() === fromAddr);
-            
-            if (isFromRouter || !DAO_WALLETS.includes(fromAddr)) {
+            /* a60 (2026-09-21): this branch only sees PTGC that arrived at a DAO wallet in a
+               transaction the DAO wallet did NOT send (anything it sent is already in seenHashes
+               from the outgoing pass above). Typing those `ptgc_buy` put airdrops, refunds and
+               contract payouts in the "PTGC Buys" tile and its PTGC total, so the Ledger and the
+               dashboard's DAO Buys chart — which counts wallet-sent, PLS-paid swaps only
+               (build-dao-buys.mjs) — reported different buy counts for the same month from the
+               same files. Measured over the full treasury files: 80 such rows, none from a known
+               router, including two in Oct 2023 worth 265.1B PTGC (the treasury's own funding)
+               and 76 in Jul 2025 from a single non-router address. They are now inbound transfers:
+               counted under Transfers, shown with an arrival icon, still listed in full. A row
+               here is a buy only if the wallet paid for it, which means it has an outgoing tx. */
+            if (!DAO_WALLETS.includes(fromAddr)) {
               seenHashes.add(hash);
               processed.push({
                 hash: ttx.hash,
                 timestamp: new Date(timestamp * 1000),
-                type: 'ptgc_buy',
-                icon: '💰',
+                type: 'transfer',
+                icon: '📥',
                 description: `Received ${fmtAbbr(amt)} PTGC`,
                 details: [
                   { label: 'Amount', value: `${fmtAbbr(amt)} PTGC` },
@@ -1077,7 +1107,17 @@
       // Calculate summary stats
       /* a35: "unknown" while loading or after an error — the summary is computed from an empty
          processedTxns in both states and would otherwise read "0 total transactions / 0 buys". */
-      const unknown = loading || !!error;
+      /* a60: age of the files behind this page. Past LEDGER_STALE_MS an amber banner sits above
+         the summary; past LEDGER_DEAD_MS the month's figures are unknown rather than shown as
+         current, the same call index.html makes for a burn snapshot older than a week. */
+      const dataAgeMs = useMemo(() => {
+        if (!lastUpdated) return null;
+        const t = new Date(lastUpdated).getTime();
+        return isFinite(t) ? Math.max(0, Date.now() - t) : null;
+      }, [lastUpdated]);
+      const stale = dataAgeMs != null && dataAgeMs >= LEDGER_STALE_MS;
+      const tooOld = dataAgeMs != null && dataAgeMs >= LEDGER_DEAD_MS;
+      const unknown = loading || !!error || tooOld;
       const sv = v => (unknown ? '\u2014' : v);
       const summary = useMemo(() => {
         const stats = {
@@ -1120,24 +1160,30 @@
         return processedTxns.filter(tx => tx.type === filter);
       }, [processedTxns, filter]);
       
+      // a60: rows are printed in UTC, like the month buckets they are filed under — a local
+      // clock could otherwise date a row outside the month whose summary it is counted in.
       const formatDate = (date) => {
         return date.toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric',
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          timeZone: 'UTC'
         });
       };
       
       const formatLastUpdated = (isoString) => {
         if (!isoString) return 'Unknown';
         const date = new Date(isoString);
+        if (!isFinite(date.getTime())) return 'Unknown';
         return date.toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric',
+          year: date.getUTCFullYear() === new Date().getUTCFullYear() ? undefined : 'numeric',
           hour: '2-digit',
-          minute: '2-digit'
-        });
+          minute: '2-digit',
+          timeZone: 'UTC'
+        }) + ' UTC';
       };
       
       return (
@@ -1187,6 +1233,23 @@
               ))}
             </div>
             
+            {/* a60 (2026-09-21): a stalled treasury workflow used to be invisible here: the page
+                kept reporting last week's counts as this month's with only a faint footer line. */}
+            {stale && (
+              <div
+                role="status"
+                className={`mb-4 rounded-xl border px-4 py-3 text-sm text-center ${
+                  tooOld
+                    ? 'border-red-500/40 bg-red-500/10 text-red-200'
+                    : 'border-amber-400/40 bg-amber-400/10 text-amber-200'
+                }`}
+              >
+                {'Data as of '}{formatLastUpdated(lastUpdated)}{' \u2014 '}{fmtDataAge(dataAgeMs)}{'. '}
+                {tooOld
+                  ? 'The treasury feed has not refreshed in over a week, so this month\u2019s totals are shown as unknown.'
+                  : 'The hourly treasury refresh has not landed recently \u2014 newer transactions may be missing.'}
+              </div>
+            )}
             {/* Summary Box. a35 (2026-09-17): while the files load — and after a failed load — the
                 counts are unknown, not 0: every figure prints "—" until processedTxns is real. The box
                 keeps its size so nothing jumps when the data lands. */}
@@ -1194,6 +1257,7 @@
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-[#D9CA5D]">
                   {availableMonths.find(m => m.value === selectedMonth)?.label} Summary
+                  <span className="ml-2 text-white/30 text-xs font-normal align-middle" title="Months are cut at UTC midnight and every time on this page is UTC, so the totals are the same for every viewer.">(UTC)</span>
                 </h2>
                 <div className="text-blue-300/60 text-sm">
                   <span className="text-blue-300 font-bold">{sv(summary.total)}</span> total transactions
@@ -1432,7 +1496,7 @@
             )}
             
             <div className="mt-8 text-center text-white/30 text-xs">
-              <p>Data sourced from {dataSource || 'PulseScan'} • {lastUpdated ? `Last updated ${formatLastUpdated(lastUpdated)}` : 'Updates periodically'}</p>
+              <p>Data sourced from {dataSource || 'PulseScan'} • {lastUpdated ? `Last updated ${formatLastUpdated(lastUpdated)}${dataAgeMs != null ? ` (${fmtDataAge(dataAgeMs)})` : ''}` : 'Updates periodically'}</p>
             </div>
           </div>
         </div>

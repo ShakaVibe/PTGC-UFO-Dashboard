@@ -153,7 +153,11 @@ async function fetchTokenPools(address) {
  * For 30 pools: 30 calls → 1 call. For 50 pools: 50 calls → 2 calls.
  * Returns map: { poolAddress (lowercase) → attributes }
  */
-async function fetchPoolsBatch(poolAddresses) {
+/* a61 (2026-09-21): these three fetchers used to swallow every error and hand back an empty
+   answer, so a rate-limited run produced a total that was simply missing a pool and looked exactly
+   like a quiet day. They now return null / report the chunk, and fetchTokenData records what did
+   not load so main() can keep the previous figures instead of publishing a partial one as fresh. */
+async function fetchPoolsBatch(poolAddresses, errors) {
   if (!poolAddresses.length) return {};
   const result = {};
   // Split into chunks of 30 (CoinGecko multi endpoint limit)
@@ -170,6 +174,7 @@ async function fetchPoolsBatch(poolAddresses) {
       }
     } catch (e) {
       console.error('  Batch pool error:', e.message);
+      if (errors) errors.push({ kind: 'liquidity', chunk: Math.floor(i / 30) + 1, error: e.message });
     }
   }
   return result;
@@ -183,7 +188,7 @@ async function fetchOHLCV(poolAddress, days = 90) {
     return data?.data?.attributes?.ohlcv_list || [];
   } catch (e) {
     console.error(`  OHLCV error [${poolAddress.slice(0, 10)}]:`, e.message);
-    return [];
+    return null;   // a61: null = we do not know this pool's volume; [] would read as "no trades"
   }
 }
 
@@ -195,7 +200,7 @@ async function fetchTrades(poolAddress) {
     return data?.data || [];
   } catch (e) {
     console.error(`  Trades error [${poolAddress.slice(0, 10)}]:`, e.message);
-    return [];
+    return null;   // a61: null = unknown, not "no trades in 24 h"
   }
 }
 
@@ -315,7 +320,7 @@ async function fetchTokenData(tokenName, tokenConfig) {
     const poolAddresses = pools.map(p => p.id?.split('_')[1]).filter(Boolean);
 
     // 4. BATCH pool info — 30 pools per call instead of 1 per call (huge saving!)
-    const poolInfoMap = await fetchPoolsBatch(poolAddresses);
+    const poolInfoMap = await fetchPoolsBatch(poolAddresses, result.errors);
     for (const attrs of Object.values(poolInfoMap)) {
       result.liquidity += parseFloat(attrs?.reserve_in_usd) || 0;
     }
@@ -329,31 +334,54 @@ async function fetchTokenData(tokenName, tokenConfig) {
 
       try {
         const ohlcv = await fetchOHLCV(poolAddr, 90);
-        const vol   = processVolume(ohlcv);
-        result.volume.vol7d  += vol.vol7d;
-        result.volume.vol30d += vol.vol30d;
-        result.volume.vol90d += vol.vol90d;
-        console.log(`    7D Vol: $${vol.vol7d.toLocaleString()}`);
+        if (ohlcv === null) {
+          result.errors.push({ kind: 'volume', pool: poolAddr, error: 'ohlcv unavailable' });
+          console.error(`    7D Vol: unknown (ohlcv failed) — this token's volume totals are incomplete`);
+        } else {
+          const vol = processVolume(ohlcv);
+          result.volume.vol7d  += vol.vol7d;
+          result.volume.vol30d += vol.vol30d;
+          result.volume.vol90d += vol.vol90d;
+          console.log(`    7D Vol: $${vol.vol7d.toLocaleString()}`);
+        }
 
         const trades = await fetchTrades(poolAddr);
-        const txns   = processTrades(trades);
-        result.transactions.buys       += txns.buys;
-        result.transactions.sells      += txns.sells;
-        result.transactions.total      += txns.total;
-        result.transactions.buyVolume  += txns.buyVolume;
-        result.transactions.sellVolume += txns.sellVolume;
-        console.log(`    24H Txns: ${txns.total} (${txns.buys}B / ${txns.sells}S)`);
+        if (trades === null) {
+          result.errors.push({ kind: 'transactions', pool: poolAddr, error: 'trades unavailable' });
+          console.error(`    24H Txns: unknown (trades failed) — this token's txn totals are incomplete`);
+        } else {
+          const txns = processTrades(trades);
+          result.transactions.buys       += txns.buys;
+          result.transactions.sells      += txns.sells;
+          result.transactions.total      += txns.total;
+          result.transactions.buyVolume  += txns.buyVolume;
+          result.transactions.sellVolume += txns.sellVolume;
+          console.log(`    24H Txns: ${txns.total} (${txns.buys}B / ${txns.sells}S)`);
+        }
 
       } catch (e) {
         console.error(`    Error [${poolAddr.slice(0, 10)}]:`, e.message);
-        result.errors.push({ pool: poolAddr, error: e.message });
+        result.errors.push({ kind: 'pool', pool: poolAddr, error: e.message });
       }
     }
 
   } catch (e) {
     console.error(`Fatal error for ${tokenName}:`, e.message);
-    result.errors.push({ type: 'fatal', error: e.message });
+    result.errors.push({ kind: 'fatal', type: 'fatal', error: e.message });
   }
+
+  /* a61: which of this token's figures are whole. A partial total is worse than an old one:
+     the reader's gates (fresh < 24 h, positive, monotonic) all pass for a 7D volume that is
+     simply missing its biggest pool, and the dashboard then prints that as "7D volume",
+     "vs 7D avg" and PTGC Value Generated. */
+  const bad = k => result.errors.some(e => e.kind === k || e.kind === 'fatal' || e.kind === 'pool');
+  result.complete = {
+    volume:       !bad('volume'),
+    transactions: !bad('transactions'),
+    liquidity:    !bad('liquidity')
+  };
+  const missing = Object.entries(result.complete).filter(([, ok]) => !ok).map(([k]) => k);
+  if (missing.length) console.warn(`  \u26a0 ${tokenName}: incomplete this run \u2014 ${missing.join(', ')} (${result.errors.length} error(s))`);
 
   console.log(`\n${tokenName} TOTALS:`);
   console.log(`  Pools     : ${result.poolCount}`);
@@ -395,6 +423,7 @@ async function main() {
 
   const timestamp = new Date().toISOString();
 
+  const previous           = loadHistory('coingecko-data.json');   // a61: what is published now
   const liquidityHistory   = loadHistory('liquidity-history.json');
   const transactionHistory = loadHistory('transaction-history.json');
   const tokensInLPHistory  = loadHistory('tokensinlp-history.json');
@@ -430,17 +459,24 @@ async function main() {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Append snapshots — only if data is valid
-  if (ptgcValid && ufoValid) {
-    liquidityHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.liquidity, UFO: tokenData.UFO.liquidity });
-    transactionHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.transactions, UFO: tokenData.UFO.transactions });
-  } else if (ptgcValid) {
-    liquidityHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.liquidity });
-    transactionHistory.snapshots.push({ timestamp, PTGC: tokenData.PTGC.transactions });
-  } else if (ufoValid) {
-    liquidityHistory.snapshots.push({ timestamp, UFO: tokenData.UFO.liquidity });
-    transactionHistory.snapshots.push({ timestamp, UFO: tokenData.UFO.transactions });
-  }
+  /* a61 (2026-09-21): the history files are append-only and averaged by their readers, so ONE
+     understated point is permanent. A token contributes a point only when the figure behind it
+     came back whole this run — a run that lost a pool's OHLCV or trades writes no point for
+     that token rather than a low one. (Same defect the LV snapshot had with zeroed rows.) */
+  const valid = { PTGC: ptgcValid, UFO: ufoValid };
+  const whole = (name, figure) => valid[name] && tokenData[name].complete[figure];
+
+  const liqPoint = { timestamp };
+  if (whole('PTGC', 'liquidity')) liqPoint.PTGC = tokenData.PTGC.liquidity;
+  if (whole('UFO',  'liquidity')) liqPoint.UFO  = tokenData.UFO.liquidity;
+  if (liqPoint.PTGC !== undefined || liqPoint.UFO !== undefined) liquidityHistory.snapshots.push(liqPoint);
+  else console.warn('\u26a0 liquidity-history: no complete figure this run \u2014 no point appended.');
+
+  const txnPoint = { timestamp };
+  if (whole('PTGC', 'transactions')) txnPoint.PTGC = tokenData.PTGC.transactions;
+  if (whole('UFO',  'transactions')) txnPoint.UFO  = tokenData.UFO.transactions;
+  if (txnPoint.PTGC !== undefined || txnPoint.UFO !== undefined) transactionHistory.snapshots.push(txnPoint);
+  else console.warn('\u26a0 transaction-history: no complete figure this run \u2014 no point appended.');
 
   if ((ptgcValid && tokenData.PTGC.tokensInLP !== null) || (ufoValid && tokenData.UFO.tokensInLP !== null)) {
     tokensInLPHistory.snapshots.push({
@@ -464,27 +500,48 @@ async function main() {
   saveData('transaction-history.json', transactionHistory);
   saveData('tokensinlp-history.json',  tokensInLPHistory);
 
+  /* a61: a figure that did not come back whole is published as the PREVIOUS run's figure, with
+     the stamp it was actually measured at, instead of this run's partial total. The reader's
+     freshness gate (< 24 h on lastUpdated) could never see the difference before — a 7D volume
+     missing its biggest pool is positive, monotonic and "fresh". carriedFrom says which figures
+     are older than lastUpdated; `complete` says what this run managed. */
+  const section = (name) => {
+    const t = tokenData[name];
+    const p = (previous && previous[name]) || null;
+    const out = {
+      volume:       t.volume,
+      liquidity:    t.liquidity,
+      transactions: t.transactions,
+      holders:      t.holders,
+      tokensInLP:   t.tokensInLP,
+      poolCount:    t.poolCount,
+      priceChanges: t.priceChanges,
+      complete:     { ...t.complete }
+    };
+    const carriedFrom = {};
+    const carry = (figure, key) => {
+      if (t.complete[figure] && valid[name]) return;
+      if (!p || p[key] == null) {           // nothing to fall back to: keep what we have and say so
+        console.warn(`\u26a0 ${name} ${figure} incomplete and no previous value to keep \u2014 publishing the partial figure.`);
+        return;
+      }
+      out[key] = p[key];
+      carriedFrom[figure] = (p.carriedFrom && p.carriedFrom[figure]) || (previous && previous.lastUpdated) || null;
+      out.complete[figure] = false;
+      console.warn(`\u26a0 ${name} ${figure}: kept the previous value (measured ${carriedFrom[figure] || 'unknown'}).`);
+    };
+    carry('volume', 'volume');
+    carry('transactions', 'transactions');
+    carry('liquidity', 'liquidity');
+    if (Object.keys(carriedFrom).length) out.carriedFrom = carriedFrom;
+    return out;
+  };
+
   // Save current snapshot
   saveData('coingecko-data.json', {
     lastUpdated: timestamp,
-    PTGC: {
-      volume:       tokenData.PTGC.volume,
-      liquidity:    tokenData.PTGC.liquidity,
-      transactions: tokenData.PTGC.transactions,
-      holders:      tokenData.PTGC.holders,
-      tokensInLP:   tokenData.PTGC.tokensInLP,
-      poolCount:    tokenData.PTGC.poolCount,
-      priceChanges: tokenData.PTGC.priceChanges
-    },
-    UFO: {
-      volume:       tokenData.UFO.volume,
-      liquidity:    tokenData.UFO.liquidity,
-      transactions: tokenData.UFO.transactions,
-      holders:      tokenData.UFO.holders,
-      tokensInLP:   tokenData.UFO.tokensInLP,
-      poolCount:    tokenData.UFO.poolCount,
-      priceChanges: tokenData.UFO.priceChanges
-    },
+    PTGC: section('PTGC'),
+    UFO:  section('UFO'),
     rhCores: rhCoreData
   });
 
@@ -495,4 +552,7 @@ async function main() {
   console.log('='.repeat(60));
 }
 
-main().catch(console.error);
+/* a61: `main().catch(console.error)` printed the stack and exited 0, so a throw anywhere outside
+   fetchTokenData was a green run with nothing written and no alert. The pipeline's "Report step
+   failures" step turns a non-zero exit into a red run. */
+main().catch(e => { console.error(e); process.exit(1); });

@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -17,6 +17,10 @@ const html=html0
   .replace(/<script src="https:\/\/unpkg\.com\/react-dom@18\.3\.1\/umd\/react-dom\.production\.min\.js"[^>]*><\/script>/,'<script src="/__react-dom.js"></script>')
   .replace(/<script src="https:\/\/unpkg\.com\/@babel\/standalone@7\.26\.4\/babel\.min\.js"[^>]*><\/script>/,'<script src="/__babel.js"></script>')
   .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/chart\.js@4\.4\.1\/dist\/chart\.umd\.js"[^>]*><\/script>/,'<script src="/__chart.js"></script>')
+  /* charts.html pins the date-fns adapter too; without it Chart.js throws "Check that a complete
+     date adapter is provided" and every time-axis chart on that page stays blank, which is how the
+     harness ran from a37 until 2026-09-21 (a59). */
+  .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/chartjs-adapter-date-fns@3\.0\.0\/dist\/chartjs-adapter-date-fns\.bundle\.min\.js"[^>]*><\/script>/,'<script src="/__chart-adapter.js"></script>')
   .replace(/<link href="https:\/\/fonts\.googleapis\.com[^"]*" rel="stylesheet">/,'<link rel="stylesheet" href="/__fonts.css">');
 if(html===html0)console.warn('WARNING: no CDN tags rewritten');
 
@@ -32,6 +36,7 @@ const files={
   '/__react-dom.js':['node_modules/react-dom/umd/react-dom.production.min.js','text/javascript'],
   '/__babel.js':['node_modules/@babel/standalone/babel.min.js','text/javascript'],
   '/__chart.js':['node_modules/chart.js/dist/chart.umd.js','text/javascript'],
+  '/__chart-adapter.js':['node_modules/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js','text/javascript'],
 };
 const mime={'.json':'application/json','.png':'image/png','.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
@@ -120,6 +125,10 @@ const dsAnswer=(url)=>{
     if(/api\.dexscreener\.com/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(dsAnswer(u))});
     if(/dd\.dexscreener\.com|dexscreener\.com/.test(u))return r.fulfill({status:200,contentType:'image/png',body:fs.readFileSync(path.join(REPO,'07_Ufo_transparent.png'))});
     if(/api\.scan\.pulsechain\.com/.test(u)&&process.env.PS_DOWN)return r.fulfill({status:503,body:'down'});   // PS_DOWN=1: PulseScan returns 503 (holders → null)
+    /* PS_COUNTERS_DOWN=1: only /counters 500s while the holder PAGES keep answering — PulseScan's
+       documented intermittent failure, and the one that used to make "Squid & Below" a cached 0
+       for a token with thousands of holders (a53). */
+    if(/api\.scan\.pulsechain\.com.*counters/.test(u)&&process.env.PS_COUNTERS_DOWN)return r.fulfill({status:500,body:'counters down'});
     if(/api\.scan\.pulsechain\.com.*counters/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token_holders_count:'4321',transfers_count:'100000'})});
     if(/api\.scan\.pulsechain\.com.*holders/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:[],next_page_params:null})});
     if(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/.*)/.test(u)){const f=u.match(/main\/(data\/[^?]*)/)[1];const p=path.join(REPO,f);if(fs.existsSync(p))return r.fulfill({status:200,contentType:'application/json',body:fs.readFileSync(p)});return r.fulfill({status:404,body:''});}
@@ -137,7 +146,7 @@ const dsAnswer=(url)=>{
     const i=a.indexOf('=');const kind=a.slice(0,i),arg=a.slice(i+1);
     if(kind==='click'){const loc=page.locator(arg).first();await loc.scrollIntoViewIfNeeded().catch(()=>{});await loc.click({timeout:5000}).catch(e=>errors.push('CLICKFAIL '+arg+' '+e.message.split('\n')[0]));await page.waitForTimeout(600);}
     if(kind==='wait')await page.waitForTimeout(+arg);
-    if(kind==='reload'){await page.reload({waitUntil:'load'});await page.waitForFunction(()=>document.querySelector('#root')&&document.querySelector('#root').children.length>0,{timeout:30000});await page.waitForTimeout(+arg||2500);}   // reload=<ms>: reload in place (localStorage survives) and wait
+    if(kind==='reload'){await page.reload({waitUntil:'load'});await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?r.children.length>0:true;},{timeout:30000});await page.waitForTimeout(+arg||2500);}   // reload=<ms>: reload in place (localStorage survives) and wait. Same #root rule as the first load — charts.html has none, and `reload` used to time out there (a59)
     if(kind==='key'){await page.keyboard.press(arg);await page.waitForTimeout(300);}
     if(kind==='scroll'){await page.evaluate(y=>window.scrollTo(0,y),+arg);await page.waitForTimeout(400);}
     if(kind==='scrollnav'){await page.evaluate(()=>{const el=document.querySelector('.no-scrollbar');if(el)el.scrollLeft=9999;});await page.waitForTimeout(400);}

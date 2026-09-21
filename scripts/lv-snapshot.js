@@ -28,12 +28,18 @@ const RH_CORES = new Set([
 const PTGC_ADDR = TOKENS.PTGC.address.toLowerCase();
 const UFO_ADDR = TOKENS.UFO.address.toLowerCase();
 
+/* a61 (2026-09-21): the status code was never looked at, so a DexScreener error body
+   ({"error": ...}) parsed as JSON, produced `pairs: undefined` -> zero totals, and was appended
+   to an append-only history as a real observation. */
 function fetch(url) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'LV-Snapshot/1.0' } }, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`HTTP ${res.statusCode} from ${url} (${data.slice(0, 120)})`));
+        }
         try { resolve(JSON.parse(data)); }
         catch (e) { reject(new Error('JSON parse error: ' + e.message)); }
       });
@@ -86,6 +92,22 @@ async function main() {
   console.log('Capturing LV snapshot...');
 
   const [ptgc, ufo] = await Promise.all([processToken('PTGC'), processToken('UFO')]);
+
+  /* a61: lv-snapshots.json is append-only and its readers average per day, so one bad row is
+     permanent — four snapshots a day means an empty answer knocks ~25 % off that day's average
+     liquidity in the L/V Analyser and the Growth Projection percentiles, for good. A token with
+     no pairs, or pairs that add up to no liquidity, is an unanswered question, not an
+     observation: write nothing and go red so the run is visible. (The 20 zero-UFO rows already
+     in the file are from 7–12 Jul 2026, when this script still pointed at the pre-migration
+     contract whose pools were drained — left alone; they are history, not a failed fetch.) */
+  const checks = [['PTGC', ptgc], ['UFO', ufo]]
+    .filter(([, t]) => !(t.pairCount > 0) || !(t.totalLiquidity > 0))
+    .map(([name, t]) => `${name} (pairs ${t.pairCount}, total liquidity $${t.totalLiquidity})`);
+  if (checks.length) {
+    console.error('Refusing to append a snapshot \u2014 ' + checks.join('; ') + '.');
+    console.error('DexScreener answered but the figures are not usable; the history file is unchanged.');
+    process.exit(1);
+  }
 
   const snapshot = {
     timestamp: new Date().toISOString(),

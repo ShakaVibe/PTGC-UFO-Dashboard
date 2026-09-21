@@ -17,19 +17,35 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-20)
+## Current state (end of 2026-09-21)
 
-Roadmap: 83 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 38 of the 67
+**2026-09-21: a60, a59, a61 and a53 — the wrong numbers on the pages other than index.html.**
+The Ledger stops calling an inbound transfer a "buy" (80 such rows in the full files, incl. 265.1B
+of Oct-2023 treasury funding; none inside today's 7-month picker), cuts its months at UTC midnight
+(a Sydney viewer and Shaka disagreed about 5 of the 7 months on offer — proved with
+`probes/ledger-digest.js`) and shows an amber banner past 8 h / "—" past 7 days when the treasury
+feed stalls. Charts opens as the token you came from and labels daily candles in UTC (they were a
+day early west of UTC). fetch-coingecko-data keeps the previous figure instead of publishing a
+partial one and exits non-zero on a throw; lv-snapshot checks the status code and refuses to append
+a zeroed row. token-allocation.json is age-gated (14 h label / 36 h ignore) and an unknown holder
+count leaves "Squid & Below" as "—" instead of a cached 0. Harness: all five pages are scanned for
+Tailwind classes now, charts.html's date adapter is served (its charts had been blank since a37),
+`reload=` works on pages without `#root`, and `PS_COUNTERS_DOWN=1` exists. Details, evidence and the
+owed live look: `sessions/2026-09-21.md`.
+
+Roadmap: 93 of 126 items closed — 45 of the original 59 (u11 + u14 done 2026-09-16), 48 of the 67
 Audit II items (a1–a4, a13; a10, a11, a25; a16, a22, a24, a48 — 2026-09-16; a14, a15, a17, a18,
 a19, a20, a21, a23 — 2026-09-17, the honest-failure pass; a29, a28, a31, a30, a34, a33, a32, a38,
-a35, a37 — 2026-09-17 evening/night, the pipeline week; **a5, a6, a7, a8, a9 — 2026-09-18, the
-calculators; a36 the same evening; a12 + a26 at night — `sessions/2026-09-18.md`**). **2026-09-18 cadence check: GitHub runs the one hourly
+a35, a37 — 2026-09-17 evening/night, the pipeline week; a5, a6, a7, a8, a9 — 2026-09-18, the
+calculators; a36 the same evening; a12 + a26 at night; a27 closed won't-do, a39, a42, a67, a40, a41
+— 2026-09-20; **a60, a59, a61, a53 — 2026-09-21, `sessions/2026-09-21.md`**). **2026-09-18 cadence check: GitHub runs the one hourly
 workflow ~5×/day (gaps up to 5 h, all green) — stale thresholds raised instead (value-generated 6 h,
 burn-summary amber 8 h). **2026-09-20: no code changed — the 09-18 deploys were verified on the LIVE
 site (a5, a6, a8, a9 on calculators; a12 on portfolio; a36 on ledger; the 09-17 index.html pass's owed
 look), all pass; a26 code-verified only, a7 not forceable live. One cleanup filed: `ptgc-ufo.com/data/*.json`
 is published in `_site` but frozen at the last code deploy while every reader uses raw GitHub —
-`sessions/2026-09-20.md`.** **Next: a27 is Shaka's call (0 partial entries live), then a39+.**
+`sessions/2026-09-20.md`.** **Next: a43-a47, a49-a52, a54-a58, a62-a66 (19 left: a11y / mobile / cleanup / calculators /
+affiliates), in any order.**
 u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
 tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
@@ -69,7 +85,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 | **Affiliates API (`ptgcapi` worker, outside this repo)** | **Was 500ing site-wide, fixed 2026-09-20 (worker v4).** GitHub's contents API stops inlining a file over 1 MB (`200 OK`, `"content": ""`), and `data/affiliate-commissions.json` in `ShakaVibe/ToolBox` grew past it — `atob("")` → `JSON.parse("")` → "Unexpected end of JSON input" → 500, which also killed the worker's own cron sync silently. v4 reads via `Accept: application/vnd.github.raw` (no ceiling) and writes compact JSON. Source: `handover/ptgcapi-worker-v4.js` — the ONLY copy outside the Cloudflare editor; deploy is dash.cloudflare.com → Compute (Workers) → ptgcapi → Edit code. Still latent: `btoa()` dies on a non-Latin1 username, and nothing prunes that file. |
 | Wording — no "tax" anywhere on the site (Shaka, 2026-09-14) | **Done.** `taxRate`/`taxBreakdown` are now `feeRate`/`feeBreakdown`; the u7 "x% tax on every trade" line under Value Generated is gone. Keep it that way: write "fee" |
 | Phase 4 — g8 DAO Buys chart | **Done, live** (2026-09-14). `DaoBuysModal` + `data/dao-buys.json` (hourly); "PTGC Buys" button in the DAO Treasury panel |
-| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **44 of 67 done (a27 closed won't-do).** **2026-09-20 evening: a40** the four pair Swap scans run only under `DIAG` (`?debug=1` / `UFO_MAINTENANCE`) — 1,443 RPC calls instead of 2,055 on a stale-file UFO visit, same figures on screen; **a41** `rpcFetch` skips an endpoint for 30 s after it fails, rotates off a `-32005` rate limit, and marks pool exhaustion `transport:true` so `getLogsRange` fails at once instead of halving the range six times. **2026-09-20: a39** burn-summary's UFO section (the RETIRED contract) no longer reaches either fallback — `mcapFromPrice` prefers this session's on-chain `totalSupply − burned` (`liveBurnedCache`, filled by `fetchBurn`), then an `address`-stamped file section, then the starting supply; burn-summary's own `PTGCbyUFO` (PTGC's buy-and-burn leg) is cleared on load so a failed `ufo-ptgc-burns.json` reads as `oldMissing` instead of printing 4.30B unlabeled; **a42** one `creatureCount(value,unit)` (relative 1e-9) behind every tier counter — 0.3% is 3 sharks again; **a67** `fmtAbbr` picks its unit after rounding, `findBlockAtTime` widens on a failed low probe, the two share-card tier tables derive from `BURN_C` (`tierFraction`, `SHELL_CARD_PCT`), portfolio's Shell is the floor, calculators use index's UFO ATH rule (`ufoNewTokenAthCache` gone). **a27 closed** — another site manages commissions. **2026-09-18 night: a12** portfolio reflections scanned one wallet at a time on the RPC pool, pending / failed states, total only when every wallet resolved; **a26** ErrorBoundary `resetKey` + Try again. **2026-09-18 evening: a36** Ledger reads `data/treasury-recent.json` (859 KB, both wallets, 8 whole months, ledger fields only) with the four full files as fallback. **2026-09-18, calculators.html:** a6 RPC pool + `fetchBurn` null (circ. supply / every MCap "—", Rewards share never bag/1), a5 PLS price null + `dsOnePair` (no $0.00005 placeholder), a8 Rewards inputs saved on typing + per-token bags (no cross-token leak), a9 calculators stay mounted across a Switch (inputs kept, amber banner, `LiveBadge`), a7 token-switch race cancelled. 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a43–a47, a49–a66 |
+| **Audit II (a1–a67)** — Charts/Ledger wrong numbers, sibling-page hardening, index.html silent zeros, pipeline cadence + failure handling, a11y/mobile, cleanup | **48 of 67 done (a27 closed won't-do).** **2026-09-21: a60** Ledger — inbound PTGC with no outgoing DAO tx is a transfer, not a buy (it disagreed with the DAO Buys chart); month buckets and every printed time in UTC, heading marked "(UTC)"; amber banner past 8 h and "—" past 7 days from `lastUpdated`. **a59** charts.html seeds its token from `?from=`/`?token=`/`ptgc_last_token` (it always opened PTGC and bounced UFO visitors to the PTGC dashboard) and labels daily-tier dates in UTC; index.html links `./charts.html?from=${token}`. **a61** `fetch-coingecko-data.js` publishes the previous figure with a `carriedFrom` stamp rather than a partial one, appends no history point for an incomplete figure, and `process.exit(1)`s on a throw; `lv-snapshot.js` rejects a non-2xx and refuses to append a row with no pairs or no liquidity. **a53** `token-allocation.json` age-gated (label 14 h, ignored 36 h, stamped `asOfTs`) and `squidAndBelow` is null when the holder count is unknown. **2026-09-20 evening: a40** the four pair Swap scans run only under `DIAG` (`?debug=1` / `UFO_MAINTENANCE`) — 1,443 RPC calls instead of 2,055 on a stale-file UFO visit, same figures on screen; **a41** `rpcFetch` skips an endpoint for 30 s after it fails, rotates off a `-32005` rate limit, and marks pool exhaustion `transport:true` so `getLogsRange` fails at once instead of halving the range six times. **2026-09-20: a39** burn-summary's UFO section (the RETIRED contract) no longer reaches either fallback — `mcapFromPrice` prefers this session's on-chain `totalSupply − burned` (`liveBurnedCache`, filled by `fetchBurn`), then an `address`-stamped file section, then the starting supply; burn-summary's own `PTGCbyUFO` (PTGC's buy-and-burn leg) is cleared on load so a failed `ufo-ptgc-burns.json` reads as `oldMissing` instead of printing 4.30B unlabeled; **a42** one `creatureCount(value,unit)` (relative 1e-9) behind every tier counter — 0.3% is 3 sharks again; **a67** `fmtAbbr` picks its unit after rounding, `findBlockAtTime` widens on a failed low probe, the two share-card tier tables derive from `BURN_C` (`tierFraction`, `SHELL_CARD_PCT`), portfolio's Shell is the floor, calculators use index's UFO ATH rule (`ufoNewTokenAthCache` gone). **a27 closed** — another site manages commissions. **2026-09-18 night: a12** portfolio reflections scanned one wallet at a time on the RPC pool, pending / failed states, total only when every wallet resolved; **a26** ErrorBoundary `resetKey` + Try again. **2026-09-18 evening: a36** Ledger reads `data/treasury-recent.json` (859 KB, both wallets, 8 whole months, ledger fields only) with the four full files as fallback. **2026-09-18, calculators.html:** a6 RPC pool + `fetchBurn` null (circ. supply / every MCap "—", Rewards share never bag/1), a5 PLS price null + `dsOnePair` (no $0.00005 placeholder), a8 Rewards inputs saved on typing + per-token bags (no cross-token leak), a9 calculators stay mounted across a Switch (inputs kept, amber banner, `LiveBadge`), a7 token-switch race cancelled. 2026-09-17 night, pipeline: a29 one hourly workflow, a28 PulseScan paging, a31 fatal log chunks, a30 half-year burn files, a34 Ledger reads raw GitHub, a33 token-allocation builder null-on-failure + staking under PTGC, a32 ufo-ptgc-burns.json 3.1 MB → 295 KB (caches in ufo-ptgc-burns-cache.json), a38 Pages deploys `_site/` only (18 MB, no handover/tools), a35 Ledger summary dashes while loading, a37 Charts status describes the data's age. 2026-09-16: a1 Charts 24H window, a2 + a4 Ledger amounts, a3 coingecko d90, a13 SRI on all four sibling pages, a10 + a11 portfolio, a25 phone Live Feed header, a16 DAO panel dashes, a22 deck-reopen flag gone, a24 Holder Analytics null guards, a48 sub-price sr-only text. **2026-09-17 — the honest-failure pass, index.html only:** a14 DexScreener-outage fallback (null vol/txns/change, chain liquidity from reserves), a15 burn USD + allocation donut, a17 PTGC-burned-by-UFO pending/failed/oldMissing, a18 five share cards (`CardLoadState` overlay + Retry), a19 KPI compare card, a20 quickRefresh token guard (`tokenRef`), a21 partner-price null through the Value Generated model (`missing`), a23 deck windows from `computeValueGen`. **Not started:** a43–a47, a49–a52, a54–a58, a62–a66 |
 
 ### How a session goes
 1. Shaka opens the task in the Claude desktop app with `~/Desktop/PTGC-UFO` linked (Add folder).
@@ -286,6 +302,32 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    pending, `null` failed (+`reflError`), number done — keep those three apart; the aggregate shows a total
    only when every checked wallet resolved. Anything that reloads or removes a wallet bumps `genRef` and
    calls `dropReflScans`. Harness needs `HEAD_BLOCK=27100000` for the scan to do anything.
+24. **ledger.html is a UTC page** (a60, 2026-09-21). Month buckets, the picker, the default month,
+   the `treasury-recent.json` window gate and every time printed on a row are UTC, and the summary
+   heading says so — block timestamps are UTC seconds, and cutting at the viewer's local midnight
+   made a Sydney viewer and Shaka disagree about 5 of the 7 months on offer. Don't reintroduce a
+   local-time `new Date(y,m,d)` here. Staleness mirrors index.html's burn-summary rule because the
+   same pipeline writes both: `LEDGER_STALE_MS` 8 h (amber banner above the summary),
+   `LEDGER_DEAD_MS` 7 d (red banner and every tile "—"). And: a PTGC transfer INTO a DAO wallet whose
+   hash has no outgoing DAO transaction is a `transfer` with a 📥 icon, never `ptgc_buy` — a buy is
+   something the wallet paid for, which is what the DAO Buys chart counts. Folding them into
+   Transfers was the cheap choice; a dedicated "Received" tile is a small edit if Shaka wants one.
+25. **Pipeline scripts publish the previous figure, never a partial one** (a61, 2026-09-21).
+   `fetch-coingecko-data.js` now marks each token's `complete:{volume,transactions,liquidity}`;
+   anything not whole is written as the last run's value with a `carriedFrom` stamp, and the
+   append-only history files get no point for it (one understated point is permanent — they are
+   averaged per day). A fetcher that cannot answer returns `null`, never `[]`. `lv-snapshot.js`
+   rejects a non-2xx and refuses to append a row with `pairCount === 0` or `totalLiquidity === 0`.
+   Both `process.exit(1)` on failure, which the pipeline's "Report step failures" step turns red.
+   The 20 zero-UFO rows already in `lv-snapshots.json` are 7–12 Jul 2026, from when the script
+   pointed at the pre-migration contract — history, not failed fetches; left alone.
+26. **The harness serves all five pages now** (2026-09-21). `tailwind.config.js` scans index.html
+   *and* the four sibling pages — a class used only on a sibling page used to have no CSS here, so
+   the screenshot lied about it. charts.html's `chartjs-adapter-date-fns@3.0.0` is served too; it
+   never was, so every chart on that page was blank in the harness from a37 until now. `reload=`
+   no longer waits for `#root` (charts.html has none). `PS_COUNTERS_DOWN=1` fails only PulseScan's
+   `/counters` while the holder pages answer — the a53 case. Rebuild `tw.out.css` (`npm run css`)
+   after touching ANY of the five pages, not just index.html.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -306,9 +348,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    same day (`sessions/2026-09-20.md`); after that deploy, a 30-second live look: UFO's "PTGC BURNED BY
    UFO" headline should still read ~4.74B / 1.42% (if it reads 157.76M with "Old-contract history
    unavailable", `ufo-ptgc-burns.json` is not loading on the live site), and the creature row under a
-   burn figure should no longer end in a run of ×9s.** a40 + a41 followed the same evening. Next: a27 only if Shaka wants
-   per-buy paid/pending (0 partial entries live — see the 09-18 note), otherwise a39+ (a11y / mobile /
-   cleanup) in any order. Optional: `charts.html` `STATUS_STALE_MS` 2 h → 6 h if the
+   burn figure should no longer end in a run of ×9s.** a40 + a41 followed the same evening. **2026-09-21 closed a60, a59, a61 and a53** — none of it seen
+   live yet; the 60-second look it is owed is at the end of `sessions/2026-09-21.md`, and the two
+   pipeline scripts want one manual run each (Actions → Data Pipeline → `only=coingecko`,
+   `only=lv-snapshot`, `force=true`). **19 Audit II items left: a43–a47, a49–a52, a54–a58, a62–a66**
+   — a11y / mobile / cleanup / calculators / affiliates, in any order. Optional: `charts.html` `STATUS_STALE_MS` 2 h → 6 h if the
    permanent amber "as of" on the Charts page grates. Ordered list on the artifact's "Next up". Done 2026-09-16: a1–a4, a13, a10, a11, a25, a16,
    a22, a24, a48; 2026-09-17: a14, a15, a17–a21, a23 (honest-failure pass — after deploy, a
    30-second live look: PTGC header change line, UFO Value Generated headline (should be a number,
@@ -397,6 +441,20 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   Generated $3,160 delivered, PTGC-burned-by-UFO lifetime + four windows). a26 code-verified only.
   The "as of 3.8h ago" vs an 8.9 h file was the probe's error, not the site's: the app reads raw GitHub,
   `_site`'s `data/` copies are deploy-frozen — filed as cleanup for a39+.
+- `sessions/2026-09-21.md` — Audit II, the wrong numbers on the pages other than index.html.
+  **a60** Ledger: inbound PTGC with no outgoing DAO transaction is a transfer (📥 "Received"), not a
+  buy — 80 such rows in the full treasury files, none from a router, two of them 265.1B of Oct-2023
+  funding, none inside today's picker; UTC month buckets, picker, window gate and row times, with a
+  "(UTC)" mark; `LEDGER_STALE_MS` 8 h amber banner / `LEDGER_DEAD_MS` 7 d "—". **a59** charts.html
+  seeds `currentHdrToken` from `?from=`/`?token=`/`ptgc_last_token`, index.html links
+  `./charts.html?from=${token}`, daily-tier dates formatted in UTC (the 2026-09-21 candle read
+  "Sep 20" in Los Angeles). **a61** fetch-coingecko-data: `fetchOHLCV`/`fetchTrades` null on failure,
+  per-figure `complete`, previous value carried with `carriedFrom`, no history point for an
+  incomplete figure, `process.exit(1)` on a throw; lv-snapshot: status-code check and no zeroed row.
+  **a53** token-allocation.json age-gated (14 h / 36 h, `asOfTs`), `squidAndBelow` null when the
+  holder count is. Proofs: `probes/ledger-digest.js` across three time zones, stubbed `main()` runs
+  for both scripts, `PS_COUNTERS_DOWN=1` before/after on UFO. Harness: Tailwind scans all five pages,
+  charts.html's date adapter is served at last, `reload=` fixed for pages without `#root`.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
