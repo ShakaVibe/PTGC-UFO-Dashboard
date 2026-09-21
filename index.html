@@ -4794,7 +4794,7 @@
     };
 
     const Home=({onSelect})=>{
-      const[data,setData]=useState({PTGC:null,UFO:null});
+      const[data,setData]=useState({PTGC:undefined,UFO:undefined});   // a62: undefined = not answered yet, null = failed
       const[showMaint,setShowMaint]=useState(false); // MAINT-MIGRATION
       const[swapToken,setSwapToken]=useState(null);  // BUY / SELL from a Home card → SwapModal (null = closed)
       const[pls,setPls]=useState(0);
@@ -4814,12 +4814,24 @@
         swallow(fetchBurnHistory());swallow(fetchCoingeckoData());swallow(fetchLiquidityHistory());
         swallow(fetchTransactionHistory());swallow(fetchHolderHistoryNew());swallow(fetchTokensInLPHistory());
         try{
-          await bootReady;   // UFO's pair/fee config is confirmed on-chain first (≤5 s); the skeletons are already on screen
-          const[p,u,plsPrice]=await Promise.all([
-            fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair).catch(()=>null),
-            UFO_MAINTENANCE?Promise.resolve(null):fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair).catch(()=>null),
-            fetchPLS().catch(()=>0)
-          ]);
+          /* a62 (2026-09-21): this used to `await bootReady` before firing ANY fetch, so both
+             cards sat on skeletons for up to 5 s while an on-chain bootstrap they do not use
+             finished or timed out (rpcFetch's own per-endpoint timeout is 8 s, longer than the
+             race, so a hanging primary RPC always cost the full 5 s). PTGC's price and the PLS
+             price need nothing from the chain, and UFO only needs its mainPair, whose seeded
+             value already equals the chain's (bootstrapUFO only warns on a mismatch). So: fire
+             everything at once, gate only UFO's fetch on bootReady, and let each card paint as
+             its own data lands instead of holding both for the slowest.
+             `undefined` = still loading, `null` = the fetch failed (gotcha 3) — the card that
+             has not answered yet keeps its skeleton, it does not render zeros. */
+          const ptgcP=fetchDex(TOKENS.PTGC.address,TOKENS.PTGC.mainPair).catch(()=>null);
+          const plsP=fetchPLS().catch(()=>0);
+          const ufoP=UFO_MAINTENANCE?Promise.resolve(null)
+            :bootReady.then(()=>fetchDex(TOKENS.UFO.address,TOKENS.UFO.mainPair)).catch(()=>null);
+          ptgcP.then(v=>setData(prev=>({...prev,PTGC:v})));
+          ufoP.then(v=>setData(prev=>({...prev,UFO:v})));
+          plsP.then(v=>{if(v>0)setPls(v);});
+          const[p,u,plsPrice]=await Promise.all([ptgcP,ufoP,plsP]);
           setData({PTGC:p,UFO:u});setPls(plsPrice);
           /* Only stamp "Updated just now" when something actually arrived. A failed boot used
              to show a green "just now" badge beside cards reading $0.00 / —. The retry ladder
@@ -4852,18 +4864,29 @@
          interval below had its next go — which is what "sometimes the prices don't load"
          looks like from the outside. Retry on a short escalating ladder instead, and stop
          as soon as a price arrives (or after four tries, so a real outage isn't hammered). */
-      const bootRetryRef=useRef(0);
+      /* a51 (2026-09-21): the ladder only ever fired its first rung. The next rung was
+         scheduled by this effect re-running, and the effect depends on [data,loading] — neither
+         of which a FAILED retry changes (quickRefresh just flips refreshError), and neither of
+         which an unchanged payload changes either (mergeDex returns the previous reference on
+         purpose). So the comment promised 4s / 10s / 25s / 60s and the visitor got one retry and
+         then the 5-minute interval. The rung counter is state now and is bumped after every
+         attempt settles, which is what re-runs the effect. */
+      const[bootRetry,setBootRetry]=useState(0);
       useEffect(()=>{
         if(loading)return;
         const ok=(data?.PTGC?.price>0)||(!UFO_MAINTENANCE&&data?.UFO?.price>0);
-        if(ok){bootRetryRef.current=0;return;}
+        if(ok){if(bootRetry!==0)setBootRetry(0);return;}
         const ladder=[4000,10000,25000,60000];
-        if(bootRetryRef.current>=ladder.length)return;
-        const wait=ladder[bootRetryRef.current++];
-        console.warn(`no price data yet — retrying in ${wait/1000}s`);
-        const id=setTimeout(()=>quickRefreshRef.current&&quickRefreshRef.current(),wait);
-        return()=>clearTimeout(id);
-      },[data,loading]);
+        if(bootRetry>=ladder.length)return;
+        const wait=ladder[bootRetry];
+        console.warn(`no price data yet — retrying in ${wait/1000}s (try ${bootRetry+1} of ${ladder.length})`);
+        let done=false;
+        const id=setTimeout(()=>{
+          const fn=quickRefreshRef.current;
+          Promise.resolve(fn&&fn()).catch(()=>{}).then(()=>{if(!done)setBootRetry(n=>n+1);});
+        },wait);
+        return()=>{done=true;clearTimeout(id);};
+      },[data,loading,bootRetry]);
       useEffect(()=>{
         const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},300000); // 5 min — per site owner's preference
         const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>300000)quickRefreshRef.current();};
@@ -4873,7 +4896,11 @@
       return(
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>
-          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl lg:max-w-4xl w-full">{loading?<><HomeCardSkeleton gold/><HomeCardSkeleton/><div className="flex justify-center"><Sk w={150} h={16}/></div></>:<><HomeCard token="PTGC" d={data.PTGC} pls={pls} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/><HomeCard token="UFO" d={data.UFO} pls={pls} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/>{swapToken&&<SwapModal token={swapToken} data={data[swapToken]} onClose={()=>setSwapToken(null)}/>}<div className="flex justify-center"><FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/></div></>}</div></div>
+          <div className="flex-1 flex justify-center pb-8"><div className="flex flex-col gap-4 sm:gap-6 max-w-3xl lg:max-w-4xl w-full">{/* a62: one skeleton per card, each dropped by its own data */}
+              {data.PTGC===undefined?<HomeCardSkeleton gold/>:<HomeCard token="PTGC" d={data.PTGC} pls={pls} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/>}
+              {data.UFO===undefined?<HomeCardSkeleton/>:<HomeCard token="UFO" d={data.UFO} pls={pls} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/>}
+              {swapToken&&<SwapModal token={swapToken} data={data[swapToken]} onClose={()=>setSwapToken(null)}/>}
+              <div className="flex justify-center">{loading?<Sk w={150} h={16}/>:<FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={()=>quickRefreshRef.current()}/>}</div></div></div>
           {/* ===== SECRET-ACCESS: hidden entry to the UFO dashboard during migration.
                Controlled by UFO_MAINTENANCE — set that to false and this disappears. ===== */}
           {UFO_MAINTENANCE&&<button
@@ -7712,8 +7739,11 @@
 
         let loadCancelled=false;
         const tierAbort=new AbortController();   // stops the PulseScan holder-tier scan on token switch / unmount
+        let painted=false;   // a51: has first paint happened? (set right after the first setData)
         const load=async()=>{try{
-          await bootReady;   // seeded UFO config may be replaced by the chain's answer; wait for it (≤5 s) before the first fetch
+          // a62: only UFO's own config can be rewritten by the chain, so only a UFO boot waits
+          // for it. A PTGC visitor used to pay up to 5 s for a bootstrap it never reads.
+          if(token==='UFO')await bootReady;
           if(loadCancelled)return;
           /* LIVE FEED FIX: the UFO deck's Burn PTGC pod (and the Value Generated panel's PTGC
              bucket) is delivered pTGC × PTGC/USD. That price used to arrive only from DexScreener,
@@ -7760,7 +7790,7 @@
             setLoading(false);
             return;
           }
-          setData(d);setHolders(prev=>h!=null?h:prev);if(b)setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);
+          setData(d);setHolders(prev=>h!=null?h:prev);if(b)setBurn(b);setPls(p);setLastUpdate(new Date());setLoading(false);painted=true;   // a51
           
           /* firstPoolMs is read again OUTSIDE this if-block (the live24hBurn fetch below),
              so it must live in load()'s scope. @babel/standalone renames a block-scoped
@@ -8037,7 +8067,17 @@
           /* Any throw in here used to orphan every setter after it AND leave loading=true
              forever — a spinner with no header, no back button and no retry. */
           console.error('Dashboard load failed:',e);
-          if(!loadCancelled){setLoadError(String(e&&e.message||e));setLoading(false);}
+          if(loadCancelled)return;
+          /* a51 (2026-09-21): this used to set loadError whether or not first paint had already
+             happened. quickRefresh reads loadError as "the first load failed" and responds by
+             re-running the WHOLE load (setLoading(true) + setLoadAttempt), so a throw anywhere
+             after the first setData turned every 5-minute tick, every tab refocus and every
+             badge tap into: skeleton, full re-load, same throw, skeleton again, forever. The
+             error screen itself is gated on `loadError && !data`, so none of it was visible.
+             Past first paint the dashboard on screen is real: log it, mark the badge as failed,
+             and leave it alone. */
+          if(painted){setRefreshError(true);return;}
+          setLoadError(String(e&&e.message||e));setLoading(false);
         }};
         load();
         return()=>{loadCancelled=true;tierAbort.abort();};   // a token switch mid-flight must not paint the other dashboard's data
@@ -8070,7 +8110,7 @@
              holders and burn into the NEW dashboard — and UFO's own failed reads would then
              keep them. Drop the result. */
           if(tokenRef.current!==t)return;
-          if(d&&loadErrorRef.current){
+          if(d&&loadErrorRef.current&&!data){   // a51: ...and only when first paint never happened
             /* The first load failed outright and the retry ladder has now reached the data
                sources: re-run the FULL load (burn periods, tiers, DAO, volume windows…) rather
                than just clearing the error, which would show a dashboard with half its
@@ -8091,17 +8131,29 @@
       /* RESILIENCE: same short retry ladder as the home page. Without it a single
          DexScreener 429 or RPC blip on mount left the whole dashboard reading "—" until
          the 5-minute interval came round. */
-      const bootRetryRef=useRef(0);
+      /* a51 (2026-09-21): the ladder only ever fired its first rung. The next rung was
+         scheduled by this effect re-running, and the effect depends on [data,loading] — neither
+         of which a FAILED retry changes (quickRefresh just flips refreshError), and neither of
+         which an unchanged payload changes either (mergeDex returns the previous reference on
+         purpose). So the comment promised 4s / 10s / 25s / 60s and the visitor got one retry and
+         then the 5-minute interval. The rung counter is state now and is bumped after every
+         attempt settles, which is what re-runs the effect. */
+      const[bootRetry,setBootRetry]=useState(0);
+      useEffect(()=>{setBootRetry(0)},[token]);   // a new token starts its own ladder
       useEffect(()=>{
         if(loading)return;
-        if(data&&data.price>0){bootRetryRef.current=0;return;}
+        if(data&&data.price>0){if(bootRetry!==0)setBootRetry(0);return;}
         const ladder=[4000,10000,25000,60000];
-        if(bootRetryRef.current>=ladder.length)return;
-        const wait=ladder[bootRetryRef.current++];
-        console.warn(`${token}: no price data yet — retrying in ${wait/1000}s`);
-        const id=setTimeout(()=>quickRefreshRef.current&&quickRefreshRef.current(),wait);
-        return()=>clearTimeout(id);
-      },[data,loading]);
+        if(bootRetry>=ladder.length)return;
+        const wait=ladder[bootRetry];
+        console.warn(`${token}: no price data yet — retrying in ${wait/1000}s (try ${bootRetry+1} of ${ladder.length})`);
+        let done=false;
+        const id=setTimeout(()=>{
+          const fn=quickRefreshRef.current;
+          Promise.resolve(fn&&fn()).catch(()=>{}).then(()=>{if(!done)setBootRetry(n=>n+1);});
+        },wait);
+        return()=>{done=true;clearTimeout(id);};
+      },[data,loading,bootRetry,token]);
       useEffect(()=>{
         const id=setInterval(()=>{if(!document.hidden)quickRefreshRef.current();},300000); // 5 min — per site owner's preference
         const onVis=()=>{if(!document.hidden&&Date.now()-lastUpdateRef.current>300000)quickRefreshRef.current();};

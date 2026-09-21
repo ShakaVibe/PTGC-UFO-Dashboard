@@ -38,6 +38,8 @@ DS_UFO_PRICE=0.00005 SLOW_UFO=2500 HTML=calculators.html node run.js "" 1280 900
 HTML=calculators.html node run.js "" 1280 900 out/keep "wait=3000;click=button:has-text('Rewards'):visible;wait=800;evalfile=probes/calc-type.js;wait=600;reload=4000;evalfile=probes/calc-header.js;click=button:has-text('Switch'):visible;wait=6000;evalfile=probes/calc-header.js"   # a8/a9: the typed holding survives a reload (saved on typing), a switch keeps the page mounted (amber "Loading UFO data… your inputs are kept" banner) and the bag is per token (UFO starts empty, PTGC's is still in localStorage). probes/calc-type.js types into `window.__typeSel` (default: the Rewards holding box) — set it with `eval=window.__typeSel='input[type=number][step=any]'` for the X-factor box
 
 DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:has-text('Live Feed'):visible;wait=4000;evalfile=probes/deck-header.js"   # deck header geometry at phone width (a25)
+SLOW_RPC=6000 node run.js "#/" 1280 900 out/fp "evalfile=probes/first-paint.js"   # a62: the chain answers slowly (RPC_DOWN cannot show this - a 503 returns instantly). The PTGC card must paint ~5 s before the UFO one, which alone waits for bootReady
+DS_DOWN=1 RPC_DOWN=1 node run.js "#/" 1280 900 out/ladder "evalfile=probes/ladder-watch.js"   # a51: BOTH sources must be down or the chain-reserve fallback supplies a price and the ladder correctly never starts. Two rungs must appear in 22 s (4s then 10s), not one
 PS_DOWN=1 node run.js "#/ptgc" 1280 900 out/psdown      # PulseScan returns 503 (holders → null unless the history file has a snapshot)
 AFFIL_DATA=1 node run.js "#/ptgc" 1400 950 out/a54 "wait=6000;click=button:has-text('Affiliates'):visible;wait=4000;evalfile=probes/affil-a54.js"   # a54: three referrers against a $100 monthly minimum (alice clears it, bob does not, carol has her own 5% rate) and thresholdType deliberately "USD" in the wrong case. ALL-TIME Commissions must read 40.00K PTGC, not 41.60K, and bob's row must be BELOW MIN
 AFFIL_DATA=1 node run.js "#/ptgc" 1400 950 out/a54card "wait=6000;click=button:has-text('Affiliates'):visible;wait=4000;eval=window.__who='bob';evalfile=probes/affil-card.js"   # a54: bob's progress card must read "$60.00 to go", "$40.00 / $100.00", 0 PTGC pending and "Min: $100 monthly total" — never "Threshold Met"
@@ -76,3 +78,17 @@ mounts, walks its tabs and degrades without throwing, not that the figures are r
 
 Not wired to CI (roadmap b7/b8). To turn a run into a test, assert on `errors` being empty
 and on `evalfile` probes, e.g. that every `button[aria-label^="What is"]` measures ≥32×32.
+
+### Reproducing the a51 skeleton loop
+
+A throw anywhere in `load()` AFTER first paint used to make every quick refresh re-run the whole
+load, so the page flipped to `DashboardSkeleton` on every 5-minute tick, every tab refocus and
+every badge tap — while the error screen stayed invisible (it is gated on `loadError && !data`).
+To see it, copy index.html and put a `throw` immediately after the first-paint line
+(`setData(d);…setLoading(false);`), then:
+
+```
+HTML=boom.html node run.js "#/ptgc" 1280 900 out/boom "wait=4000;evalfile=probes/skeleton-watch.js"
+```
+
+`sawSkeletonAfterRefresh` must be **false**. It was true before a51.
