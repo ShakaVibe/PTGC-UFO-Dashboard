@@ -320,7 +320,12 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    rejects a non-2xx and refuses to append a row with `pairCount === 0` or `totalLiquidity === 0`.
    Both `process.exit(1)` on failure, which the pipeline's "Report step failures" step turns red.
    The 20 zero-UFO rows already in `lv-snapshots.json` are 7–12 Jul 2026, from when the script
-   pointed at the pre-migration contract — history, not failed fetches; left alone.
+   pointed at the pre-migration contract — history, not failed fetches; left in the file, but both
+   readers in `calculators.html` now share `lvRowUsable(s)` and skip a snapshot where either token's
+   `totalLiquidity` is not > 0 before averaging per day (three of those days had been averaging to
+   exactly $0 of UFO liquidity). **Open, and wider:** every UFO row before ~12 Jul 2026 is the
+   pre-migration contract, healthy-looking ones included — reading UFO liquidity history further
+   back than that is reading a different asset. Needs its own decision (see `sessions/2026-09-21.md`).
 26. **The harness serves all five pages now** (2026-09-21). `tailwind.config.js` scans index.html
    *and* the four sibling pages — a class used only on a sibling page used to have no CSS here, so
    the screenshot lied about it. charts.html's `chartjs-adapter-date-fns@3.0.0` is served too; it

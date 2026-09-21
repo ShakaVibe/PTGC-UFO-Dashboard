@@ -536,6 +536,18 @@
     // Public repo — fetch directly, no proxy needed
     const LV_HISTORY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/lv-snapshots.json';
 
+    /* a61 follow-up (2026-09-21): lv-snapshots.json is append-only and both readers below average
+       it per day, so one bad row is permanent. 20 rows written 7-12 Jul 2026 carry a token's
+       totalLiquidity as 0 next to a pairCount of 30 - the window when lv-snapshot.js still watched
+       the pre-migration UFO contract as its pools drained - and `avg` counted each of them as a
+       real $0 reading: three of those six days averaged to exactly $0 of UFO liquidity, and the
+       other three came out 2-4x low. The generator refuses to write such a row now (a61), but these
+       are already in the file. A row where either token measured no liquidity at all is not an
+       observation, so it does not vote; three days lose every row and drop out of the series
+       entirely, which is honest - nothing usable was recorded on them. The rows stay in the file:
+       this is a reader rule, not a deletion. */
+    const lvRowUsable = (s) => ['PTGC', 'UFO'].every(t => s && s[t] && s[t].totalLiquidity > 0);
+
     const lvFmtDollar = (n, dec=0) => {
       if (n==null||isNaN(n)) return '—';
       if (n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
@@ -637,7 +649,7 @@
           const res = await fetch(LV_HISTORY_URL + '?t=' + Date.now());
           if (!res.ok) return [];
           const raw = await res.json();
-          const snapshots = Array.isArray(raw) ? raw : (raw?.snapshots || []);
+          const snapshots = (Array.isArray(raw) ? raw : (raw?.snapshots || [])).filter(lvRowUsable);   // a61 follow-up
           return snapshots.map(s => ({...s, date: s.date||(s.timestamp?s.timestamp.split('T')[0]:null)})).filter(s=>s.date);
         } catch(e) { return []; }
       };
@@ -1268,7 +1280,7 @@
         const res = await fetch(LV_HISTORY_URL + '?t=' + Date.now());
         if (!res.ok) return null;
         const raw = await res.json();
-        const snapshots = Array.isArray(raw) ? raw : (raw?.snapshots || []);
+        const snapshots = (Array.isArray(raw) ? raw : (raw?.snapshots || [])).filter(lvRowUsable);   // a61 follow-up
         if (!snapshots.length) return null;
 
         // Group snapshots by date and average them (mirrors LVAnalyserTab.buildDailyData)
