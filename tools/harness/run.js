@@ -141,15 +141,24 @@ const dsAnswer=(url)=>{
       if(!process.env.AFFIL_DATA)return r.fulfill({status:200,contentType:'application/json',body:'{"entries":[]}'});
       const month=new Date().toISOString().slice(0,7);
       const sync=process.env.AFFIL_SYNC||new Date(Date.now()-90*60000).toISOString();
+      /* Three referrers on purpose (a54): alice clears the minimum on the month's total, bob does
+         not (meetsThreshold:false, commissionPtgc:0 — the case the "Commissions" tile used to bill
+         for anyway), carol has her own commissionRate. thresholdType is deliberately "USD" in the
+         wrong case, which used to flip the whole page from dollars to PTGC. */
+      const buy=(n,usd,ptgc,paid)=>({date:month+'-1'+n+'T12:00:00.000Z',buyerWallet:'0x'+String(n).repeat(40),usdAmount:usd,ptgcAmount:ptgc,txHash:'0x'+String(n).repeat(64),paid:!!paid});
+      const entry=(u,usd,ptgc,meets,comm,rate,buys)=>({id:month+'-'+u,username:u,wallet:'0x'+u.charCodeAt(0).toString(16).repeat(20),
+        buysCount:buys.length,usdAmount:usd,ptgcAmount:ptgc,commissionRate:rate,commissionPtgc:comm,meetsThreshold:meets,
+        status:'unpaid',paidTxHash:null,paidDate:null,buys,addedDate:sync,lastSyncDate:sync});
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-        referrers:{alice:{wallet:'0x'+'11'.repeat(20),addedDate:'2026-09-01T00:00:00.000Z'}},
-        monthlyLogs:{[month]:{settings:{commissionRate:2,threshold:0,thresholdType:'usd',coverFee:true},
+        referrers:{alice:{wallet:'0xa'.padEnd(42,'1'),addedDate:sync},bob:{wallet:'0xb'.padEnd(42,'2'),addedDate:sync},carol:{wallet:'0xc'.padEnd(42,'3'),addedDate:sync}},
+        monthlyLogs:{[month]:{settings:{commissionRate:2,threshold:100,thresholdType:'USD',coverFee:true},
           lastSyncDate:sync,
-          entries:[{id:month+'-alice',username:'alice',wallet:'0x'+'11'.repeat(20),buysCount:1,usdAmount:120,ptgcAmount:840000,
-            commissionRate:2,commissionPtgc:16800,meetsThreshold:true,status:'unpaid',buys:[
-              {date:month+'-15T12:00:00.000Z',buyerWallet:'0x'+'22'.repeat(20),usdAmount:120,ptgcAmount:840000,txHash:'0x'+'ab'.repeat(32),paid:false}],
-            lastSyncDate:sync}]}},
-        receipts:[{id:'r1',date:month+'-10T09:00:00.000Z',username:'alice',wallet:'0x'+'11'.repeat(20),amount:9000,rate:2,txCount:1,txHash:'0x'+'cd'.repeat(32),month,ptgcPrice:0.000142,usdValue:1.28,feeCovered:true}]
+          entries:[
+            entry('alice',500,1000000,true,20000,undefined,[buy(1,300,600000),buy(2,200,400000)]),
+            entry('bob',40,80000,false,0,undefined,[buy(3,40,80000)]),
+            entry('carol',200,400000,true,20000,5,[buy(4,200,400000)])
+          ]}},
+        receipts:[{id:'r1',date:month+'-30T23:30:00.000Z',username:'alice',wallet:'0xa'.padEnd(42,'1'),amount:9000,rate:2,txCount:1,txHash:'0x'+'cd'.repeat(32),month,ptgcPrice:0.000142,usdValue:1.28,feeCovered:true}]
       })});
     }
     if(/fonts\.g/.test(u))return r.fulfill({status:200,contentType:'text/css',body:''});

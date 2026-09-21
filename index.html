@@ -11681,11 +11681,12 @@
         return months.sort().reverse();
       },[data,currentMonth]);
       
-      // Get current month settings
-      const currentMonthSettings=useMemo(()=>{
-        if(!data?.monthlyLogs?.[currentMonth])return{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
-        return data.monthlyLogs[currentMonth].settings||{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
-      },[data,currentMonth]);
+      /* Get current month settings. a54: thresholdType is normalised HERE, once. The header
+         pill lower-cased it and the progress card did not, so a month whose settings said
+         "USD" instead of "usd" showed "Min Threshold $10" up top while every referrer's bar
+         measured PTGC volume against 10 and reported "Threshold Met" for everybody. */
+      const normSettings=st=>({commissionRate:2,threshold:10,coverFee:true,...(st||{}),thresholdType:((st&&st.thresholdType)||'usd').toLowerCase()});
+      const currentMonthSettings=useMemo(()=>normSettings(data?.monthlyLogs?.[currentMonth]?.settings),[data,currentMonth]);
       
       // Helper: is an entry fully paid? Uses same logic as getEntryStatus
       const isEntryPaid=(e)=>{
@@ -11695,11 +11696,19 @@
         return qualify.filter(b=>b.paid).length===qualify.length;
       };
       
-      // Helper: get the commission amount for an entry (entry-level, NOT from buys array)
+      /* Helper: the commission an entry is owed (entry-level, NOT from the buys array).
+         a54 (2026-09-21), two bugs in one line. The worker sets `commissionPtgc = 0` for an entry
+         that missed the month's threshold, and `0||fallback` is falsy, so the old code fell
+         through and recomputed the full 2% anyway: the stats bar's "Commissions" counted money
+         the program never owes, and could never be reconciled against Paid + Pending, which do
+         exclude it. Respect an explicit 0, and respect the backend's own verdict first. */
       const getEntryComm=(e,fallbackRate)=>{
-        return e.commissionPtgc||((e.ptgcAmount||0)*((e.commissionRate||fallbackRate)/100));
+        if(!e||e.meetsThreshold===false)return 0;
+        if(typeof e.commissionPtgc==='number'&&isFinite(e.commissionPtgc))return e.commissionPtgc;
+        return(e.ptgcAmount||0)*((e.commissionRate||fallbackRate)/100);
       };
       const getEntryCommUsd=(e,fallbackRate)=>{
+        if(!e||e.meetsThreshold===false)return 0;
         return(e.usdAmount||0)*((e.commissionRate||fallbackRate)/100);
       };
       
@@ -11775,9 +11784,16 @@
       
       // Copy icon SVG component
       
-      const formatDate=(d)=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
-      const formatDateTime=(d)=>d?new Date(d).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';
-      const formatMonthYear=(m)=>m?new Date(m+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
+      /* a54 (2026-09-21): this page is UTC throughout. Every timestamp in the commission data is
+         UTC, the month keys it groups by are UTC (`currentMonth` is toISOString().slice(0,7)), and
+         the receipts list groups by the UTC calendar day — but the dates and times printed under
+         those headings were the viewer's local clock. A payment sent 2026-09-30T23:30:00Z sat
+         under "Tue, Sep 30" and read "01:30 AM" for a viewer in UTC+2, and appeared in the
+         referrer modal as "Oct 1", in the wrong month's receipts table. Printing UTC keeps the
+         label and the bucket the same fact; the visible "(UTC)" marks say which clock it is. */
+      const formatDate=(d)=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):'—';
+      const formatDateTime=(d)=>d?new Date(d).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'UTC'}):'—';
+      const formatMonthYear=(m)=>m?new Date(m+'-01T12:00:00Z').toLocaleDateString('en-US',{month:'long',year:'numeric',timeZone:'UTC'}):'—';
       
       // Filter leaderboard by search
       // Get referrer details with their monthly breakdown and transaction details
@@ -11847,10 +11863,11 @@
                 commPaid+=getEntryComm(entry,rate);
                 commPaidUsd+=getEntryCommUsd(entry,rate);
               }else{
-                // Not fully paid - check if below threshold
-                const isBelowThreshold=entry.buys?.length?
-                  entry.buys.filter(b=>b.ptgcAmount>0&&b.meetsThreshold!==false).length===0:
-                  entry.meetsThreshold===false;
+                /* a54: the threshold is an ENTRY rule in the worker — `meetsThreshold` is set on
+                   the entry from its whole-month total (runCommissionSync STEP 4), never on a buy.
+                   The old per-buy test looked for a `b.meetsThreshold` the sync does not write, so
+                   it was always false and a below-minimum entry counted as pending. */
+                const isBelowThreshold=entry.meetsThreshold===false;
                 if(!isBelowThreshold)pending+=entryComm;
               }
             }
@@ -11881,8 +11898,7 @@
       // Get commission log settings for selected month
       const commLogSettings=useMemo(()=>{
         const cm=commLogMonth||currentMonth;
-        if(!cm||!data?.monthlyLogs?.[cm])return{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
-        return data.monthlyLogs[cm].settings||{commissionRate:2,threshold:10,thresholdType:'usd',coverFee:true};
+        return normSettings(cm?data?.monthlyLogs?.[cm]?.settings:null);   // a54: same normalisation as currentMonthSettings
       },[data,commLogMonth,currentMonth]);
       
       const commLogEntries=useMemo(()=>{
@@ -11921,7 +11937,12 @@
       
       
       const getEntryStatus=(e)=>{
-        if(!e.buys?.length){if(e.meetsThreshold===false)return'below';return e.status||'unpaid';}
+        /* a54: the entry's own verdict first. The per-buy test below looks for a
+           `b.meetsThreshold` the worker never writes (it decides the threshold on the entry's
+           whole-month total), so an entry that missed the minimum was badged UNPAID while its
+           commission read 0 — and the stats bar billed for it anyway. */
+        if(e.meetsThreshold===false)return'below';
+        if(!e.buys?.length)return e.status||'unpaid';
         const valid=e.buys.filter(b=>b.ptgcAmount>0);
         const qualify=valid.filter(b=>b.meetsThreshold!==false);
         if(!qualify.length)return'below';
@@ -12003,9 +12024,7 @@
             details.monthlyEntries.forEach(me=>{
               const rate=me.commissionRate||me.settings?.commissionRate||2;
               if(!isEntryPaid(me)){
-                const isBelowThreshold=me.buys?.length?
-                  me.buys.filter(b=>b.ptgcAmount>0&&b.meetsThreshold!==false).length===0:
-                  me.meetsThreshold===false;
+                const isBelowThreshold=me.meetsThreshold===false;   // a54: entry-level, as the worker decides it
                 if(!isBelowThreshold){
                   pending+=getEntryComm(me,rate);
                   pendingUsd+=getEntryCommUsd(me,rate);
@@ -12062,7 +12081,10 @@
                       <button 
                         onClick={(e)=>{
                           e.stopPropagation();
-                          navigator.clipboard.writeText(`https://goptgc.com/#/ptgc-onboarding?referid=${details.username}`);
+                          // a54: a username with a space, & or # used to be pasted raw into the
+                          // query string, so the onboarding page read a truncated id or none and
+                          // credited the buyer to nobody.
+                          navigator.clipboard.writeText(`https://goptgc.com/#/ptgc-onboarding?referid=${encodeURIComponent(details.username)}`);
                           const btn=e.currentTarget;
                           const originalHTML=btn.innerHTML;
                           btn.innerHTML='<span class="text-green-400">✓ Copied!</span>';
@@ -12123,24 +12145,37 @@
                   
                   {/* Current Month Progress Bar */}
                   {(()=>{
-                    // Find current month's unpaid transactions for this referrer
+                    /* a54 (2026-09-21). This card used to describe three different rules at once:
+                       the tooltip said the MONTHLY TOTAL must clear the threshold, the footer said
+                       the minimum was "per txn", and the bar measured neither — it summed only the
+                       UNPAID buys, so a referrer who had just been paid watched their progress fall
+                       back towards zero and read "$10.00 to go" for a month that had already
+                       qualified. The worker decides it one way (runCommissionSync STEP 4):
+                           entry.usdAmount = sum of every buy in the entry's month
+                           meetsThreshold  = entry.usdAmount >= threshold
+                       — a whole-month total per referrer, paid or not, with the verdict stored on
+                       the entry. The bar now shows exactly those numbers, so the card, the tooltip
+                       and the BELOW MIN badge in the log can no longer disagree. Unpaid figures
+                       stay unpaid figures: they answer "what is owed", not "does it qualify". */
                     const currentMonthLog=data.monthlyLogs?.[currentMonth];
                     const currentEntry=currentMonthLog?.entries?.find(e=>e.username===selectedReferrer);
-                    const threshold=currentMonthLog?.settings?.threshold||10;
-                    const thresholdType=currentMonthLog?.settings?.thresholdType||'usd';
-                    const rate=currentMonthLog?.settings?.commissionRate||2;
+                    const settings=normSettings(currentMonthLog?.settings);
+                    const threshold=settings.threshold||0;
+                    const thresholdType=settings.thresholdType;                       // already lower-cased (a54)
+                    const rate=currentEntry?.commissionRate||settings.commissionRate||2;   // a54: the entry's own rate, like every other figure on this modal
                     
-                    // Get unpaid transactions for current month
-                    const currentMonthTx=allTx.filter(tx=>tx.month===currentMonth&&!tx.paid&&tx.meetsThreshold!==false);
+                    const monthTx=allTx.filter(tx=>tx.month===currentMonth);
+                    const monthPtgc=currentEntry?.ptgcAmount??monthTx.reduce((s,tx)=>s+(tx.ptgcAmount||0),0);
+                    const monthUsd=currentEntry?.usdAmount??monthTx.reduce((s,tx)=>s+(tx.usdAmount||0),0);
+                    const currentMonthTx=monthTx.filter(tx=>!tx.paid);
                     const unpaidPtgc=currentMonthTx.reduce((s,tx)=>s+(tx.ptgcAmount||0),0);
-                    const unpaidUsd=currentMonthTx.reduce((s,tx)=>s+(tx.usdAmount||0),0);
-                    const unpaidComm=unpaidPtgc*(rate/100);
                     
-                    // Progress calculation based on threshold type
-                    const progressValue=thresholdType==='usd'?unpaidUsd:unpaidPtgc;
-                    const progressPct=Math.min((progressValue/threshold)*100,100);
-                    const hasMetThreshold=progressValue>=threshold;
+                    // Progress is measured against the month's total, the figure the worker compares
+                    const progressValue=thresholdType==='usd'?monthUsd:monthPtgc;
+                    const progressPct=threshold>0?Math.min((progressValue/threshold)*100,100):100;
+                    const hasMetThreshold=currentEntry?currentEntry.meetsThreshold!==false:(threshold<=0||progressValue>=threshold);
                     const remaining=Math.max(threshold-progressValue,0);
+                    const unpaidComm=hasMetThreshold?unpaidPtgc*(rate/100):0;   // below the minimum, nothing is owed
                     
                     return(
                       <div className="mx-4 mb-4 bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-purple-500/10 border border-purple-500/30 rounded-xl p-4">
@@ -12148,7 +12183,7 @@
                           <div className="flex items-center gap-2">
                             <span className="text-xl">🎯</span>
                             <span className="text-white font-semibold">Current Month Progress</span>
-                            <span className="text-gray-500 text-sm">({new Date(currentMonth+'-01T12:00:00').toLocaleDateString('en-US',{month:'long'})} '{currentMonth.slice(2,4)})</span>
+                            <span className="text-gray-500 text-sm">({new Date(currentMonth+'-01T12:00:00Z').toLocaleDateString('en-US',{month:'long',timeZone:'UTC'})} '{currentMonth.slice(2,4)})</span>
                           </div>
                           <div className="text-sm">
                             {hasMetThreshold?(
@@ -12168,7 +12203,7 @@
                             style={{width:`${progressPct}%`}}
                           />
                           <div className={`absolute inset-0 flex items-center justify-center text-sm font-bold drop-shadow-lg ${progressPct>=50?'text-purple-900':'text-white'}`}>
-                            {thresholdType==='usd'?`${fmtDollar(unpaidUsd)}`:`${fmtAbbr(unpaidPtgc)} PTGC`} / {thresholdType==='usd'?`${fmtDollar(threshold)}`:`${fmtAbbr(threshold)} PTGC`}
+                            {thresholdType==='usd'?`${fmtDollar(monthUsd)}`:`${fmtAbbr(monthPtgc)} PTGC`} / {thresholdType==='usd'?`${fmtDollar(threshold)}`:`${fmtAbbr(threshold)} PTGC`}
                           </div>
                         </div>
                         
@@ -12179,7 +12214,7 @@
                             <span className="text-gray-400">Pending Commission: <span className="text-purple-400 font-bold">{fmtComma(unpaidComm)} PTGC</span></span>
                           </div>
                           <div className="text-gray-500 text-xs">
-                            Min: {thresholdType==='usd'?`$${threshold}`:`${threshold} PTGC`} per txn @ {rate}% rate
+                            Min: {thresholdType==='usd'?`$${threshold}`:`${threshold} PTGC`} monthly total @ {rate}% rate
                           </div>
                         </div>
                       </div>
@@ -12189,7 +12224,7 @@
                   {/* Transaction History - Grouped by Month */}
                   <div className="p-4 border-t border-white/10">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-white flex items-center gap-2"><span>📊</span> Transaction History ({allTx.length})</h3>
+                      <h3 className="font-semibold text-white flex items-center gap-2"><span>📊</span> Transaction History ({allTx.length})<span className="ml-1.5 text-white/30 text-xs font-normal" title="Every date and time on this page is UTC, and the months are cut at UTC midnight, so the figures read the same for every viewer.">(UTC)</span></h3>
                       {allTx.length>0&&(
                         <button
                           onClick={(e)=>{e.stopPropagation();setShowBuyerDist(true);}}
@@ -12282,7 +12317,7 @@
                                       <tbody>
                                         {displayTxs.map((tx,i)=>(
                                           <tr key={i} className="border-b border-white/5">
-                                            <td className="py-2 px-3 text-white/70">{tx.date||'—'}</td>
+                                            <td className="py-2 px-3 text-white/70">{formatDateTime(tx.date)}</td>{/* a54: was the raw ISO string under a heading that now says (UTC) */}
                                             <td className="py-2 px-3 text-right text-[#D4AF37]">{fmtAbbr(tx.ptgcAmount)}</td>
                                             <td className="py-2 px-3 text-right text-white">{fmtDollar(tx.usdAmount||0)}</td>
                                             <td className="py-2 px-3 text-center text-white/50">{tx.rate}%</td>
@@ -12316,7 +12351,7 @@
                   
                   {/* Payment Receipts */}
                   <div className="p-4 border-t border-white/10">
-                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>🧾</span> Payment Receipts ({details.receipts.length})</h3>
+                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><span>🧾</span> Payment Receipts ({details.receipts.length})<span className="ml-1.5 text-white/30 text-xs font-normal" title="Every date and time on this page is UTC, and the months are cut at UTC midnight, so the figures read the same for every viewer.">(UTC)</span></h3>
                     {details.receipts.length>0?(
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -12521,7 +12556,7 @@
             <Modal className="z-[100] flex items-center justify-center p-4 bg-black/90" onClose={()=>setShowPayments(false)} label="Payment receipts">
               <div className="bg-[#111] border border-purple-500/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
                 <div className="flex items-center justify-between p-4 border-b border-white/10">
-                  <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">💰 Payment Receipts ({data?.receipts?.length||0})</h2>
+                  <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">💰 Payment Receipts ({data?.receipts?.length||0})<span className="ml-1.5 text-white/30 text-xs font-normal" title="Every date and time on this page is UTC, and the months are cut at UTC midnight, so the figures read the same for every viewer.">(UTC)</span></h2>
                   <button aria-label="Close" onClick={()=>setShowPayments(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
                 </div>
                 
@@ -12537,7 +12572,7 @@
                       const dateReceipts=receiptsByDate[dateKey]||[];
                       const isExpanded=expandedReceipts.has(dateKey);
                       const dateTotal=dateReceipts.reduce((sum,r)=>sum+(r.amount||0),0);
-                      const formattedDate=new Date(dateKey+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+                      const formattedDate=new Date(dateKey+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});   // a54: dateKey is a UTC calendar day
                       
                       return(
                         <div key={dateKey} className="border border-purple-500/20 rounded-xl overflow-hidden">
@@ -12557,7 +12592,7 @@
                                   <div className="flex items-center justify-between flex-wrap gap-2">
                                     <div className="flex items-center gap-2">
                                       <span className="text-purple-400 font-bold cursor-pointer hover:underline" onClick={()=>{setShowPayments(false);setSelectedReferrer(receipt.username);}}>{receipt.username}</span>
-                                      <span className="text-gray-600 text-xs">{new Date(receipt.date).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</span>
+                                      <span className="text-gray-600 text-xs">{new Date(receipt.date).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'})}</span>
                                     </div>
                                     <div className="flex items-center gap-4">
                                       <span className="text-[#D4AF37] font-bold">{fmtAbbr(receipt.amount)} PTGC</span>
@@ -12611,7 +12646,7 @@
                       <span className="text-white/20">|</span>
                       <div className="flex flex-col items-center">
                         <span className="text-gray-400 text-[10px] sm:text-xs">Min Threshold</span>
-                        <span className="px-2 py-0.5 bg-green-500/20 rounded text-green-400 font-bold whitespace-nowrap">{currentMonthSettings.thresholdType?.toLowerCase()==='usd'?'$':''}{currentMonthSettings.threshold}{currentMonthSettings.thresholdType?.toLowerCase()!=='usd'?' PTGC':''}</span>
+                        <span className="px-2 py-0.5 bg-green-500/20 rounded text-green-400 font-bold whitespace-nowrap">{currentMonthSettings.thresholdType==='usd'?'$':''}{currentMonthSettings.threshold}{currentMonthSettings.thresholdType!=='usd'?' PTGC':''}</span>
                       </div>
                       <span className="text-white/20">|</span>
                       <div className="flex flex-col items-center">
@@ -12687,7 +12722,7 @@
                     </select>
                     <div className="flex items-center gap-2 bg-gradient-to-r from-green-500/20 via-green-500/10 to-green-500/20 border border-green-500/40 hover:border-green-500/70 rounded-lg px-3 py-2 cursor-pointer transition-colors">
                       <span className="text-3xl">📅</span>
-                      <span className="text-lg font-bold text-green-400 whitespace-nowrap">{new Date((viewingMonth||currentMonth)+'-01T12:00:00').toLocaleDateString('en-US',{month:'long'})} '{(viewingMonth||currentMonth).slice(2,4)}</span>
+                      <span className="text-lg font-bold text-green-400 whitespace-nowrap">{new Date((viewingMonth||currentMonth)+'-01T12:00:00Z').toLocaleDateString('en-US',{month:'long',timeZone:'UTC'})} '{(viewingMonth||currentMonth).slice(2,4)}</span>
                       <span className="text-green-400/70 text-base ml-1">▼</span>
                     </div>
                   </div>
@@ -12737,7 +12772,7 @@
                     {(recentActivityExpanded?recentTransactions:recentTransactions.slice(0,3)).map((tx,i)=>(
                       <div key={i} className="grid hover:bg-purple-500/5 transition-colors group px-5 py-2 items-center" style={{gridTemplateColumns:'80px 200px 150px 100px 1fr'}}>
                         <div className="px-2.5 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/25 group-hover:border-purple-400/40 transition w-fit">
-                          <span className="text-purple-300 font-bold text-sm whitespace-nowrap">{tx.date?new Date(tx.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'—'}</span>
+                          <span className="text-purple-300 font-bold text-sm whitespace-nowrap">{tx.date?new Date(tx.date).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'}):'—'}</span>
                         </div>
                         <span className="text-purple-300 font-semibold text-lg cursor-pointer hover:text-purple-200 hover:underline truncate pl-3" onClick={()=>setSelectedReferrer(tx.username)}>{tx.username}</span>
                         <span className="text-[#D4AF37] font-bold text-lg text-right">{fmtAbbr(tx.ptgcAmount)} <span className="text-[#D4AF37]/50 text-sm font-normal">PTGC</span></span>
@@ -12868,7 +12903,7 @@
                                             <td className="py-2 px-4" style={{width:'15%'}}>
                                               <div className="flex items-center gap-2">
                                                 <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs shrink-0 ${tx.paid?'bg-green-500/20 text-green-400':tx.meetsThreshold===false?'bg-red-500/20 text-red-400':'bg-yellow-500/20 text-yellow-400'}`}>{tx.paid?'✓':tx.meetsThreshold===false?'✗':'○'}</span>
-                                                <span className="text-white/70 text-xs truncate">{tx.date||'—'}</span>
+                                                <span className="text-white/70 text-xs truncate">{formatDateTime(tx.date)}</span>
                                               </div>
                                             </td>
                                             <td className="py-2 px-4" style={{width:'15%'}}>

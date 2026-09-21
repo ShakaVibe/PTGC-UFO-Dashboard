@@ -39,6 +39,8 @@ HTML=calculators.html node run.js "" 1280 900 out/keep "wait=3000;click=button:h
 
 DECK_LOGS=4 node run.js "#/ptgc" 375 812 out/deck-m "scrollnav=1;click=button:has-text('Live Feed'):visible;wait=4000;evalfile=probes/deck-header.js"   # deck header geometry at phone width (a25)
 PS_DOWN=1 node run.js "#/ptgc" 1280 900 out/psdown      # PulseScan returns 503 (holders → null unless the history file has a snapshot)
+AFFIL_DATA=1 node run.js "#/ptgc" 1400 950 out/a54 "wait=6000;click=button:has-text('Affiliates'):visible;wait=4000;evalfile=probes/affil-a54.js"   # a54: three referrers against a $100 monthly minimum (alice clears it, bob does not, carol has her own 5% rate) and thresholdType deliberately "USD" in the wrong case. ALL-TIME Commissions must read 40.00K PTGC, not 41.60K, and bob's row must be BELOW MIN
+AFFIL_DATA=1 node run.js "#/ptgc" 1400 950 out/a54card "wait=6000;click=button:has-text('Affiliates'):visible;wait=4000;eval=window.__who='bob';evalfile=probes/affil-card.js"   # a54: bob's progress card must read "$60.00 to go", "$40.00 / $100.00", 0 PTGC pending and "Min: $100 monthly total" — never "Threshold Met"
 PS_COUNTERS_DOWN=1 node run.js "#/ptgc" 1280 900 out/counters "wait=12000;eval=(document.body.innerText.match(/🦑→🐚[\\s\\S]{0,20}/u)||[''])[0]"   # a53: only /counters fails, holder pages answer → "🦑→🐚 —", never 0 (age the allocation file past ALLOC_DEAD_MS first, or the prebuilt file answers instead)
 DS_PRICE=4.542e-5 node run.js "#/ptgc" 1280 900 out/subprice "evalfile=probes/price-copy.js"   # a sub-micro price → the $0.0₄… notation; the probe reads what a copy yields (a48)
 node run.js "#/ptgc" 1440 900 out/buys "click=button[aria-label^='PTGC Buys'];wait=2500;shot=modal;hoverfile=probes/dao-buys-dot.js;shot=tip"
