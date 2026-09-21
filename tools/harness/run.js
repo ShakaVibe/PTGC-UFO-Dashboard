@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, DS_DOWN=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, AFFIL_DATA=1, AFFIL_SYNC=iso, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -132,7 +132,26 @@ const dsAnswer=(url)=>{
     if(/api\.scan\.pulsechain\.com.*counters/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token_holders_count:'4321',transfers_count:'100000'})});
     if(/api\.scan\.pulsechain\.com.*holders/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:[],next_page_params:null})});
     if(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/.*)/.test(u)){const f=u.match(/main\/(data\/[^?]*)/)[1];const p=path.join(REPO,f);if(fs.existsSync(p))return r.fulfill({status:200,contentType:'application/json',body:fs.readFileSync(p)});return r.fulfill({status:404,body:''});}
-    if(/ptgcapi/.test(u))return r.fulfill({status:200,contentType:'application/json',body:'{"entries":[]}'});
+    /* AFFIL_DATA=1 serves a shaped /public/commissions body (one referrer, one buy, one
+       receipt) instead of the empty default, so the affiliates page renders with data — the
+       freshness badge, the leaderboard and the receipts modal have something to show.
+       AFFIL_SYNC=<iso> sets monthlyLogs[<current month>].lastSyncDate, which is what the badge
+       reads; default is 90 minutes ago. The empty default is unchanged for every other run. */
+    if(/ptgcapi/.test(u)){
+      if(!process.env.AFFIL_DATA)return r.fulfill({status:200,contentType:'application/json',body:'{"entries":[]}'});
+      const month=new Date().toISOString().slice(0,7);
+      const sync=process.env.AFFIL_SYNC||new Date(Date.now()-90*60000).toISOString();
+      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        referrers:{alice:{wallet:'0x'+'11'.repeat(20),addedDate:'2026-09-01T00:00:00.000Z'}},
+        monthlyLogs:{[month]:{settings:{commissionRate:2,threshold:0,thresholdType:'usd',coverFee:true},
+          lastSyncDate:sync,
+          entries:[{id:month+'-alice',username:'alice',wallet:'0x'+'11'.repeat(20),buysCount:1,usdAmount:120,ptgcAmount:840000,
+            commissionRate:2,commissionPtgc:16800,meetsThreshold:true,status:'unpaid',buys:[
+              {date:month+'-15T12:00:00.000Z',buyerWallet:'0x'+'22'.repeat(20),usdAmount:120,ptgcAmount:840000,txHash:'0x'+'ab'.repeat(32),paid:false}],
+            lastSyncDate:sync}]}},
+        receipts:[{id:'r1',date:month+'-10T09:00:00.000Z',username:'alice',wallet:'0x'+'11'.repeat(20),amount:9000,rate:2,txCount:1,txHash:'0x'+'cd'.repeat(32),month,ptgcPrice:0.000142,usdValue:1.28,feeCovered:true}]
+      })});
+    }
     if(/fonts\.g/.test(u))return r.fulfill({status:200,contentType:'text/css',body:''});
     if(/cdnjs.*html2canvas/.test(u))return r.fulfill({status:200,contentType:'text/javascript',body:process.env.H2C?fs.readFileSync(path.join(__dirname,'node_modules/html2canvas/dist/html2canvas.min.js'),'utf8'):'window.html2canvas=null;'});
     return r.fulfill({status:404,body:''});

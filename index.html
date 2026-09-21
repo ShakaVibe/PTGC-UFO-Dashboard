@@ -11540,6 +11540,89 @@
       );
     };
 
+    /* AFFILIATE FRESHNESS BADGE (2026-09-21) ————————————————————————————————
+       The affiliates page reads one endpoint, ptgcapi's /public/commissions, and that answer
+       carries no "as of" of its own: getPublicCommissions returns referrers, monthlyLogs and
+       receipts and drops the lastAutoSync the sync writes. The freshest thing on the wire is
+       monthlyLogs[month].lastSyncDate, so that is what this reads.
+
+       Read it for what it IS. The worker's sync writes to GitHub only when it found new
+       transactions (`if (newTxCount > 0)`), so that stamp is when the data last CHANGED, not
+       when it was last checked — a quiet week leaves it a week old with nothing wrong. That is
+       why this badge has no amber state and never says "overdue": from here we cannot tell a
+       quiet stretch from a stalled worker, and a warning that cries wolf on a healthy system is
+       worse than none. The schedule is printed as the fact it is (a Cloudflare cron trigger,
+       `0 8 * * *`, read off the dashboard 2026-09-21), never inferred from the timestamp.
+       A genuine "last checked" needs the worker to record a heartbeat that does not involve
+       re-uploading the whole commission file — see sessions/2026-09-21.md. */
+    const AFFILIATE_SYNC_UTC_HOURS=[8];   // Cloudflare cron `0 8 * * *` = daily 08:00 UTC
+
+    const affiliateLastChange=data=>{
+      if(!data||!data.monthlyLogs)return null;
+      let best=null;
+      for(const log of Object.values(data.monthlyLogs)){
+        const t=log&&log.lastSyncDate?Date.parse(log.lastSyncDate):NaN;
+        if(isFinite(t)&&(best==null||t>best))best=t;
+      }
+      return best;
+    };
+    const nextAffiliateSync=fromMs=>{
+      if(!AFFILIATE_SYNC_UTC_HOURS||!AFFILIATE_SYNC_UTC_HOURS.length)return null;
+      const hours=[...AFFILIATE_SYNC_UTC_HOURS].sort((a,b)=>a-b);
+      const d=new Date(fromMs);
+      for(let day=0;day<2;day++)for(const h of hours){
+        const t=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+day,h,0,0,0);
+        if(t>fromMs)return t;
+      }
+      return null;
+    };
+    const fmtSyncClock=(ms,utc)=>new Date(ms).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,...(utc?{timeZone:'UTC'}:{})});
+    const localZoneName=()=>{try{return(Intl.DateTimeFormat().resolvedOptions().timeZone||'').replace(/_/g,' ')}catch(e){return''}};
+    const fmtIn=ms=>{const m=ms/60000;if(m<1)return'any moment';if(m<90)return'in '+Math.round(m)+'m';const h=m/60;if(h<36)return'in '+h.toFixed(h<10?1:0).replace(/[.]0$/,'')+'h';return'in '+(h/24).toFixed(1).replace(/[.]0$/,'')+'d';};
+
+    const AffiliateFreshness=({data,loading})=>{
+      /* its own component with its own minute tick, so the rest of the page does not
+         re-render on the clock (gotcha 19) */
+      const[now,setNow]=useState(()=>Date.now());
+      useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),60000);return()=>clearInterval(t);},[]);
+      const last=useMemo(()=>affiliateLastChange(data),[data]);
+      const next=nextAffiliateSync(now);
+      const zone=localZoneName();
+      const short=loading?'Checking\u2026':(last==null?'Last update unknown':'Updated '+fmtSnapshotAge(now-last));
+      return(
+        <InfoTip label="affiliate data freshness"
+                 className="px-3 sm:px-4 py-1.5 bg-white/[0.06] border border-white/15 hover:border-white/30 hover:bg-white/10 transition"
+                 trigger={
+                   <span className="flex items-center gap-2 text-xs sm:text-sm font-medium text-white/70 whitespace-nowrap">
+                     <span aria-hidden="true" className="text-[#D4AF37]">{'\u27F3'}</span>
+                     <span>{short}</span>
+                     {next!=null&&<><span className="text-white/25" aria-hidden="true">{'\u00b7'}</span><span className="text-white/50">next {fmtIn(next-now)}</span></>}
+                   </span>
+                 }>
+          <div className="space-y-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-white/40 mb-1">Last update</div>
+              {last==null?<div className="text-white/70 text-sm">{'\u2014'}</div>:(<>
+                <div className="text-white text-sm font-semibold tabular-nums">{fmtSyncClock(last,true)} UTC</div>
+                <div className="text-white/50 text-xs tabular-nums">{fmtSyncClock(last,false)} your time{zone?` (${zone})`:''}</div>
+              </>)}
+            </div>
+            {next!=null&&(
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-white/40 mb-1">Next automatic check</div>
+                <div className="text-white text-sm font-semibold tabular-nums">{fmtSyncClock(next,true)} UTC</div>
+                <div className="text-white/50 text-xs tabular-nums">{fmtSyncClock(next,false)} your time</div>
+              </div>
+            )}
+            <p className="text-white/45 text-xs leading-relaxed border-t border-white/10 pt-2.5">
+              The sync runs every day at 08:00 UTC and only rewrites the data when it finds new
+              referral activity, so a quiet stretch leaves an older time here. That is normal.
+            </p>
+          </div>
+        </InfoTip>
+      );
+    };
+
     const AffiliatesPage=({onBack})=>{
       const[data,setData]=useState(null);
       const[loading,setLoading]=useState(true);
@@ -12545,6 +12628,7 @@
                     <button onClick={()=>setShowPayments(true)} className="px-3 sm:px-4 py-1.5 bg-purple-500/20 border border-purple-500/30 rounded-lg text-purple-400 font-medium hover:bg-purple-500/30 transition text-xs sm:text-sm flex items-center gap-2">
                       💰 Payment Receipts
                     </button>
+                    <AffiliateFreshness data={data} loading={loading}/>
                   </div>
                 </div>
               </div>
