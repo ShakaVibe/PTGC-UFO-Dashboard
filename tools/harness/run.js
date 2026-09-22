@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, AFFIL_DATA=1, AFFIL_SYNC=iso, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -147,7 +147,16 @@ const dsAnswer=(url)=>{
        AFFIL_SYNC=<iso> sets monthlyLogs[<current month>].lastSyncDate, which is what the badge
        reads; default is 90 minutes ago. The empty default is unchanged for every other run. */
     if(/ptgcapi/.test(u)){
-      if(!process.env.AFFIL_DATA)return r.fulfill({status:200,contentType:'application/json',body:'{"entries":[]}'});
+      /* AFFIL_BAD=1 serves well-formed JSON that is NOT the worker's payload - the 2026-09-22
+         case, where a blocker / filtering DNS / VPN / corporate proxy answers that one request
+         with 200 and `{}`. The page must show its error screen, never a dashboard of zeros.
+         AFFIL_BAD=<body> sends that body verbatim (try '[]' or '{"entries":[]}').
+         The DEFAULT is now a valid EMPTY PROGRAM instead of {"entries":[]}: the shape guard
+         rejects the latter - correctly, it is not what getPublicCommissions builds - while an
+         empty program still renders the same zero state every non-affiliates run has always
+         screenshotted. Keep those two cases apart; collapsing them is the whole bug. */
+      if(process.env.AFFIL_BAD)return r.fulfill({status:200,contentType:'application/json',body:process.env.AFFIL_BAD==='1'?'{}':process.env.AFFIL_BAD});
+      if(!process.env.AFFIL_DATA)return r.fulfill({status:200,contentType:'application/json',body:'{"referrers":{},"monthlyLogs":{},"receipts":[]}'});
       const month=new Date().toISOString().slice(0,7);
       const sync=process.env.AFFIL_SYNC||new Date(Date.now()-90*60000).toISOString();
       /* Three referrers on purpose (a54): alice clears the minimum on the month's total, bob does

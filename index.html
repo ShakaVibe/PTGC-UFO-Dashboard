@@ -11719,9 +11719,30 @@
       useEffect(()=>{
         const fetchData=async()=>{
           try{
-            const res=await fetch('https://ptgcapi.ptgctools.workers.dev/public/commissions');
-            if(!res.ok)throw new Error('Failed to fetch');
-            const json=await res.json();
+            /* 2026-09-22: viewers reported a dashboard of zeros that a hard refresh, a cleared
+               cache and a browser opened for the first time in months could not shift - because
+               none of it was ever cached. This page's HTML comes from this domain; every NUMBER on
+               it comes from a SECOND host (ptgcapi...workers.dev), so one extension, one filtering
+               DNS, one VPN or one corporate proxy can answer that single request with a 200 and a
+               body that is not the data. `{}` parses, every `data?.x` falls through to its default,
+               the sums run over empty arrays, and the page paints a complete, healthy-looking
+               REFERRERS 0 / $0 / 0 PTGC dashboard carrying "Min Threshold $10" (normSettings'
+               default, not the real 250) and "Last update unknown", with no warning anywhere. A
+               HARD failure - blocked outright, or the 500 of 2026-09-20 - already reached the error
+               screen; this closes the SOFT one. Two rules, both load-bearing:
+                 1. no-store + a per-load cache-buster. The worker sends no Cache-Control, no ETag
+                    and no Last-Modified (jsonResponse, worker v4), so anything in between is free
+                    to hold one bad copy of this body forever with nothing able to revalidate it.
+                 2. the answer must have the SHAPE getPublicCommissions builds - referrers and
+                    monthlyLogs, both objects. An empty PROGRAM is legitimate and still renders its
+                    zero state (both {}); an empty ANSWER is a failure and now says so. Never relax
+                    this to "it parsed, so use it" - that is exactly what printed the zeros. */
+            const res=await fetch(`https://ptgcapi.ptgctools.workers.dev/public/commissions?t=${Date.now()}`,{cache:'no-store'});
+            if(!res.ok)throw new Error(`Could not reach the commission data (HTTP ${res.status}).`);
+            let json=null;
+            try{json=JSON.parse(await res.text());}catch(_){json=null;}
+            if(!json||typeof json!=='object'||Array.isArray(json)||!json.referrers||typeof json.referrers!=='object'||!json.monthlyLogs||typeof json.monthlyLogs!=='object')
+              throw new Error('The commission data came back empty or unreadable. Something between you and the data service is the usual cause - an ad or content blocker, a VPN, a filtering DNS, or a work network. Try again with those turned off, or on a different connection.');
             setData(json);
             // Set to current UTC month
             const utcMonth=new Date().toISOString().slice(0,7);
@@ -12049,8 +12070,8 @@
       
       if(error){
         return(
-          <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-            <div className="text-center">
+          <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
+            <div className="text-center max-w-md">
               <div className="text-6xl mb-4">⚠️</div>
               <p className="text-red-400 font-orbitron mb-4">Error Loading Data</p>
               <p className="text-white/50 mb-6">{error}</p>
