@@ -11798,6 +11798,34 @@
         return(e.usdAmount||0)*((e.commissionRate||fallbackRate)/100);
       };
       
+      /* ONE lifetime-per-referrer total, summed from the monthly logs — 2026-09-22.
+         The payload carries a per-referrer summary block (`referrers[x].totalBuys/totalPtgc/
+         totalUsd`) that the worker writes unreliably: measured live, 3 of 68 active referrers had
+         those fields MISSING (so `r.totalBuys||0` printed a clean 0 against a name with real buys
+         — that is what viewers were reporting), 41 more were simply wrong, and only 24 agreed with
+         the monthly data. The rot is an overwrite rather than an accumulate: DomDoos' `totalPtgc`
+         was exactly his February figure and his `totalUsd` exactly his March one, while his real
+         lifetime is 266 buys / 1.41B / $124,142.24. The monthly logs are the source of truth and
+         always were — the ALL-TIME tiles have always summed them, which is why the top of the page
+         looked healthy while a row in the Registry read zero.
+         So: nothing on this page reads `referrers[x].total*` any more. This map is the only place
+         these three numbers are summed; the Registry, the Leaderboard and the referrer card all
+         take them from here. Do not re-introduce a second sum, and do not "fix" a zero by falling
+         back to the summary block — a referrer with no entries in any month legitimately has none.
+         `wallet` and `addedDate` still come from `referrers[x]`; those the worker writes once. */
+      const lifetimeByUser=useMemo(()=>{
+        const m={};
+        Object.values(data?.monthlyLogs||{}).forEach(log=>{
+          (log.entries||[]).forEach(e=>{
+            if(!e||!e.username)return;
+            const t=m[e.username]||(m[e.username]={buys:0,ptgc:0,usd:0});
+            t.buys+=e.buysCount||0; t.ptgc+=e.ptgcAmount||0; t.usd+=e.usdAmount||0;
+          });
+        });
+        return m;
+      },[data]);
+      const lifetimeOf=username=>lifetimeByUser[username]||{buys:0,ptgc:0,usd:0};
+
       // Calculate stats from data based on viewing period
       const stats=useMemo(()=>{
         if(!data)return null;
@@ -11826,12 +11854,10 @@
         }
         console.log('[PTGC-FIX] All-time totalPaid:',totalPaid,'allTimeCommission:',allTimeCommission);
         
-        // Fallback to referrers totals if no monthlyLogs
-        if(allTimeBuys===0&&allTimeUsd===0){
-          allTimeBuys=referrers.reduce((sum,[,r])=>sum+(r.totalBuys||0),0);
-          allTimeUsd=referrers.reduce((sum,[,r])=>sum+(r.totalUsd||0),0);
-          allTimePtgc=referrers.reduce((sum,[,r])=>sum+(r.totalPtgc||0),0);
-        }
+        /* The old fallback here summed `referrers[x].total*` when the monthly logs came out
+           empty. That block is the unreliable one (see lifetimeByUser), so falling back to it
+           meant answering "no data" with wrong data. No entries in any month means zero, and
+           zero is the honest answer. */
         
         // Viewing period stats
         const selectedMonth=viewingMonth||currentMonth;
@@ -11860,10 +11886,10 @@
         const activeThisMonth=(currentMonthLog?.entries||[]).length;
         
         // Leaderboard sorted by total PTGC (always all-time for leaderboard)
-        const leaderboard=referrers.map(([username,r])=>({username,...r})).sort((a,b)=>(b.totalPtgc||0)-(a.totalPtgc||0));
+        const leaderboard=referrers.map(([username,r])=>{const lt=lifetimeOf(username);return{username,...r,totalBuys:lt.buys,totalPtgc:lt.ptgc,totalUsd:lt.usd};}).sort((a,b)=>(b.totalPtgc||0)-(a.totalPtgc||0));
         
         return{totalReferrers,allTimeBuys,allTimeUsd,allTimePtgc,allTimeCommission,totalPaid,totalPaidUsd,periodBuys,periodUsd,periodPtgc,periodCommission,periodReferrers,periodPaid,activeThisMonth,leaderboard,currentMonth};
-      },[data,viewingMonth,currentMonth]);
+      },[data,viewingMonth,currentMonth,lifetimeByUser]);
       
       const truncateWallet=(w)=>w?`${w.slice(0,6)}...${w.slice(-4)}`:'—';
       
@@ -11889,19 +11915,14 @@
         if(!referrer)return null;
         
         const monthlyEntries=[];
-        let lifetimeBuys=0;
-        let lifetimePtgc=0;
-        let lifetimeUsd=0;
-        
         Object.entries(data.monthlyLogs||{}).forEach(([month,log])=>{
           const entry=(log.entries||[]).find(e=>e.username===username);
-          if(entry){
-            monthlyEntries.push({month,settings:log.settings,...entry});
-            lifetimeBuys+=(entry.buysCount||0);
-            lifetimePtgc+=(entry.ptgcAmount||0);
-            lifetimeUsd+=(entry.usdAmount||0);
-          }
+          if(entry)monthlyEntries.push({month,settings:log.settings,...entry});
         });
+        /* This card was the ONLY surface with the right lifetime figures, because it summed the
+           monthly entries itself while the Registry and the Leaderboard read the summary block.
+           It now takes them from the shared map instead of keeping its own copy of the sum. */
+        const {buys:lifetimeBuys,ptgc:lifetimePtgc,usd:lifetimeUsd}=lifetimeOf(username);
         monthlyEntries.sort((a,b)=>b.month.localeCompare(a.month));
         
         const receipts=(data.receipts||[]).filter(r=>r.username===username).sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -11958,9 +11979,14 @@
               }
             }
           });
-          return{name:username,wallet:r.wallet,buys:r.totalBuys||0,ptgc:r.totalPtgc||0,usd:r.totalUsd||0,commPaid,commPaidUsd,pending};
+          /* buys/ptgc/usd came from `r.total*` until 2026-09-22, so three columns of every row
+             were read off the unreliable summary while the three beside them (commPaid,
+             commPaidUsd, pending) were computed from the monthly logs in the loop just above —
+             two sources in one row, and `||0` dressed a missing field as a clean zero. */
+          const lt=lifetimeOf(username);
+          return{name:username,wallet:r.wallet,buys:lt.buys,ptgc:lt.ptgc,usd:lt.usd,commPaid,commPaidUsd,pending};
         });
-      },[data]);
+      },[data,lifetimeByUser]);
       
       const sortedRegistry=useMemo(()=>{
         if(!referrerStats.length)return[];

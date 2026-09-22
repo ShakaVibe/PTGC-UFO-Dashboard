@@ -31,7 +31,25 @@ The fetch is now `cache:'no-store'` + a per-load cache-buster, and the answer mu
 `getPublicCommissions` builds (`referrers` + `monthlyLogs`) or it throws — an empty PROGRAM still
 renders its zero state, an empty ANSWER now says so, in words a viewer can act on. Deploy and data
 were both verified healthy first (live page, live endpoint, DomDoos correct in every place).
-Details, the two screenshot tells and what is still open: `sessions/2026-09-22.md`.
+**Part two, the actual cause of the zeros:** the morning's fix was real but was not their bug.
+The Referrers Registry on the main page built three of its six numeric columns from the payload's
+per-referrer summary block (`r.totalBuys||0` and friends) while computing the other three from the
+monthly logs - two sources in one row. Live, 3 referrers read 0 with real buys, 41 more were wrong,
+24 right. One `lifetimeByUser` map now feeds the Registry, the Leaderboard and the referrer card;
+nothing reads that block any more (gotcha 29). The ALL-TIME tiles were always correct, which is
+exactly why this hid. See `sessions/2026-09-22.md` Part two.
+
+**Deployed and verified live** (`73580760b`, Pages 14:24:40 UTC): the affiliates page renders the
+real payload exactly as before - Min Threshold $250, 71 referrers, 1,404 buys, $520,651, no `0.00`
+anywhere - and the cache-busted request fires. **Open, waiting on one referrer's reply:** he was
+asked to open the endpoint directly and answered "a ton of text", which does NOT clear the blocker
+theory - content blockers filter what a PAGE fetches from another origin and leave a typed
+top-level navigation alone, so both facts fit together. The two unanswered follow-ups and the
+three-way decision tree they settle (real numbers / error screen / still 0.00 - only the third
+needs work) are at the end of `sessions/2026-09-22.md`, along with the costed comparison of the
+custom-domain move (needs a GoDaddy -> Cloudflare nameserver migration for the whole domain) versus
+publishing the public projection into this repo and reading it from raw GitHub like every other
+number. Details and the two screenshot tells: `sessions/2026-09-22.md`.
 
 **2026-09-21: a60, a59, a61 and a53 — the wrong numbers on the pages other than index.html.**
 The Ledger stops calling an inbound transfer a "buy" (80 such rows in the full files, incl. 265.1B
@@ -357,6 +375,21 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    way. Also: `e.commissionPtgc` is legitimately `0` for such an entry, so never `||` it.
    `thresholdType` is normalised to lower case once, in `normSettings()` — the API has sent "USD".
    Every date on that page is UTC (the data and the month keys are), and three headings say so.
+29. **Nothing reads `referrers[x].totalBuys/totalPtgc/totalUsd`** (2026-09-22). The payload's
+   per-referrer summary block is written unreliably by the worker - measured live, 3 of 68 active
+   referrers had those fields MISSING (`r.totalBuys||0` then printed a clean 0 against a name with
+   real buys, which is what viewers were reporting), 41 more were wrong and 24 right; the rot is an
+   overwrite rather than an accumulate, so DomDoos' `totalPtgc` was exactly his February figure and
+   his `totalUsd` exactly his March one against a real lifetime of 266 / 1.41B / $124,142.24. The
+   Registry built three columns of every row from that block while computing the three beside them
+   from the monthly logs. One `lifetimeByUser` map (memoised on `data`, just above `stats`) now sums
+   `buysCount`/`ptgcAmount`/`usdAmount` per username, and the Registry, the Leaderboard and the
+   referrer card all read it through `lifetimeOf(username)`. Only `wallet` and `addedDate` still
+   come from `referrers[x]`. Do not add a second sum, and do not "fix" a zero by falling back to the
+   summary block. The ALL-TIME tiles were always right because they sum the monthly logs - that is
+   why the top of the page looked healthy while a row read zero. `Comm. Paid 0` (never paid) and
+   `Pending 0` (fully paid) are CORRECT zeros; leave them. Probe: `probes/affil-registry.js` with
+   `AFFIL_DATA=1`, whose fixture carries no `total*` and so reproduces the live shape for free.
 28. **An empty ANSWER is not an empty PROGRAM** (2026-09-22). `AffiliatesPage` reads ONE endpoint
    on a host this repo does not control, and until now anything that parsed was rendered: `{}` from
    a blocker, a proxy or a filtering DNS became `REFERRERS 0 / $0 / 0 PTGC` with no warning, which
@@ -377,6 +410,15 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    height, change the skeleton too (measure with `SLOW=9000` in the harness).
 
 ## Next up (in order)
+
+-2. **Affiliates, waiting on a reply (2026-09-22).** The page fix is live and verified; nothing more
+   is worth building until one affected referrer answers two questions: does his own username appear
+   in the raw endpoint text, and what does `#/affiliates` show him on the new build - real numbers
+   (resolved), the error screen (a page-context block; an onboarding line, not a DNS migration), or
+   still `0.00` (the interesting one - impossible from a missing payload on this build, so it would
+   mean a different bug or a different site; get a screenshot). Cheap and unblocked meanwhile: the
+   one-line `'Cache-Control': 'no-store'` in the worker's `jsonResponse`, by hand in the Cloudflare
+   editor. Full reasoning: `sessions/2026-09-22.md`.
 
 -1. **Audit II, top of the list:** cadence measured and thresholds moved 2026-09-18 (done — ~5
    runs/day is the new normal; a30/a32 migrations verified in the first scheduled run). Calculators
