@@ -5049,7 +5049,7 @@
     };
     /* `screenshot` (DAO Buys card, Shaka 2026-09-14): no Download/Share buttons — the card is laid out
        to be screenshotted, because html2canvas cannot paint the metallic-gold text. */
-    const ShareCardModal=({onClose,width,height,filename='grays-share-card.png',label='Share card',controls=null,footer=null,zIndex=50,screenshot=false,children})=>{
+    const ShareCardModal=({onClose,width,height,filename='grays-share-card.png',label='Share card',controls=null,footer=null,zIndex=50,screenshot=false,toolbarClass='mb-2',children})=>{
       const[sc,setSc]=useState(()=>Math.min(1,(window.innerWidth-32)/width,(window.innerHeight-150)/height));
       const[busy,setBusy]=useState(false);
       const[msg,setMsg]=useState(null);   // {kind:'ok'|'err', text}
@@ -5093,7 +5093,7 @@
         <div className="fixed inset-0 flex items-center justify-center p-3 modal-overlay bg-black/90 overflow-y-auto" style={{zIndex}} onClick={e=>{e.stopPropagation();onClose&&onClose();}}>
           <div ref={dlgRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className="relative outline-none" style={{width:`${W}px`,maxWidth:'100%'}} onClick={e=>e.stopPropagation()}>
             {/* toolbar: card-specific controls on the left, export + close on the right */}
-            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <div className={`flex items-center justify-between gap-2 ${toolbarClass} flex-wrap`}>{/* toolbarClass: the DAO Buys card asks for mb-6 so a screenshot has room (Shaka, 2026-09-23) */}
               <div className="flex items-center gap-2 flex-wrap min-w-0">{controls}</div>
               <div className="flex items-center gap-1.5 ml-auto shrink-0">
                 {!screenshot&&<button onClick={()=>save(false)} disabled={busy} aria-label="Download PNG" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/[0.06] hover:bg-white/[0.12] text-white text-xs font-semibold tracking-wide disabled:opacity-50 transition-colors">
@@ -6089,7 +6089,8 @@
     /* ===================== DAO BUYS — SOCIALS CARD (2026-09-23) =====================
      * Socials → PTGC → "DAO Buys". A 1200×675 share card in the Latest-DAO-buy tile's look (gold
      * frame, glow, metallic amount, Grays creatures), with a period switch ABOVE the card (never in
-     * the image): Latest buy (default) · 24H · 7D · 30D · 90D · All time.
+     * the image): Latest buy · 24H · 7D · 30D · 90D · All time (default since round 3), and a
+     * Wide 1200×675 / Tall 1080×1350 shape switch beside it.
      *   - Same data as the PTGC Buys chart: data/dao-buys.json (fetchDaoBuys) + fetchFreshDaoBuys
      *     for buys newer than the snapshot, deduped by hash. Windows are rolling ("past 24 hours" =
      *     now − 24 h), and money is what was actually PAID (usd / pls on the buy). No "worth today"
@@ -6133,17 +6134,33 @@
       return{rangeDef,isLatest,buysAll,buys,latest,t,avgUsd,biggest,life,
         fromMs,nowMs,stripBuys,maxPtgc,latestIndex:buysAll.length,freshCount:(fresh||[]).filter(b=>!known.has(b.hash)).length};
     };
-    /* Buy timeline: one gold dot per buy on a time axis, area ∝ PTGC. Plain SVG (html2canvas-safe). */
-    const DaoSocialStrip=({v})=>{
-      const W=1104,H=78,PADX=16,AX=46;
+    /* Two shapes (Shaka, 2026-09-23 round 3): WIDE 1200×675 (16:9, X's feed size) and TALL 1080×1350
+       (4:5, fills a phone screen so a screenshot there stays readable). One component, sizes from
+       DAO_SOCIAL_SHAPES — the tall card is a centred stack, with the brand line moved to the foot. */
+    const DAO_SOCIAL_SHAPES={
+      wide:{W:1200,H:675,padX:48,top:40,bottom:36,title:46,dot:20,range:26,logo:132,amount:124,unit:40,crit:'text-[42px]',detail:36,perPtgc:26,stripFs:14,stripR:14,tileLbl:14,tileVal:32,tileSub:16,tilePad:'14px 18px 15px',gap:14},
+      tall:{W:1080,H:1350,padX:56,top:64,bottom:48,title:62,dot:24,range:34,logo:196,amount:178,unit:56,crit:'text-[64px]',detail:46,perPtgc:34,stripFs:20,stripR:18,tileLbl:20,tileVal:52,tileSub:24,tilePad:'22px 26px 24px',gap:18}
+    };
+    /* Both clocks (round 3): the viewer's local time with its zone, and UTC — a screenshot travels
+       across time zones, and the Ledger's months are UTC. A viewer on UTC gets one line. */
+    const fmtDaoWhen=ts=>{
+      const d=new Date(ts*1000);
+      const local=d.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+      const utc=d.toLocaleString('en-US',{timeZone:'UTC',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})+' UTC';
+      return d.getTimezoneOffset()===0?[utc]:[local,utc];
+    };
+    const DaoWhenLines=({ts})=><>{fmtDaoWhen(ts).map((l,i)=><div key={i}>{l}</div>)}</>;
+    /* Buy timeline: one gold dot per buy on a time axis, area ∝ PTGC. Plain SVG. */
+    const DaoSocialStrip=({v,W,fs,rTop})=>{
+      const H=Math.round(fs*5.6),PADX=16,AX=Math.round(H*0.59);
       const span=Math.max(1,v.nowMs-v.fromMs);
       const xOf=ms=>PADX+(W-2*PADX)*Math.min(1,Math.max(0,(ms-v.fromMs)/span));
-      const rMax=v.stripBuys.length>60?9:14;   // All time: 300+ dots, smaller so the clusters stay readable
+      const rMax=v.stripBuys.length>60?Math.round(rTop*0.65):rTop;   // All time: 300+ dots, smaller so the clusters stay readable
       const rOf=b=>v.maxPtgc>0?3.5+(rMax-3.5)*Math.sqrt(b.ptgc/v.maxPtgc):3.5;
       const dots=v.stripBuys.map(b=>({b,x:xOf(b.ts*1000),r:rOf(b),hot:v.isLatest&&v.latest&&b.hash===v.latest.hash})).sort((a,c)=>c.r-a.r);
       const label=v.isLatest?`Last ${DAO_SOCIAL_LATEST_STRIP_DAYS} days`:'Every buy';
       return(
-        <div style={{position:'relative',width:W,height:H+22}}>
+        <div style={{position:'relative',width:W,height:H+fs+8}}>
           <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{display:'block',overflow:'visible'}}>
             <defs>
               <linearGradient id="daoSocAxis" gradientUnits="userSpaceOnUse" x1="0" x2={W} y1="0" y2="0">
@@ -6159,9 +6176,9 @@
                 {d.hot&&<circle cx={d.x} cy={AX} r={d.r+5} fill="none" stroke="#FAEAA0" strokeWidth="1.5" opacity="0.9"/>}
               </g>
             ))}
-            {!dots.length&&<text x={W/2} y={AX-10} textAnchor="middle" fill="rgba(255,255,255,0.35)" style={{font:"600 15px Rajdhani, sans-serif",letterSpacing:'0.12em'}}>NO BUYS IN THIS WINDOW</text>}
+            {!dots.length&&<text x={W/2} y={AX-10} textAnchor="middle" fill="rgba(255,255,255,0.35)" style={{font:`600 ${fs+1}px Rajdhani, sans-serif`,letterSpacing:'0.12em'}}>NO BUYS IN THIS WINDOW</text>}
           </svg>
-          <div style={{position:'absolute',left:PADX,right:PADX,top:H-6,display:'flex',justifyContent:'space-between',fontSize:14,color:'rgba(255,255,255,0.4)',letterSpacing:'0.08em'}} className="tabular-nums">
+          <div style={{position:'absolute',left:PADX,right:PADX,top:H-6,display:'flex',justifyContent:'space-between',fontSize:fs,color:'rgba(255,255,255,0.4)',letterSpacing:'0.08em'}} className="tabular-nums">
             <span>{new Date(v.fromMs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
             <span style={{textTransform:'uppercase',letterSpacing:'0.24em',color:'rgba(245,222,131,0.55)',fontWeight:600}}>{label}</span>
             <span>Now</span>
@@ -6169,124 +6186,170 @@
         </div>
       );
     };
-    const DaoSocialTile=({label,children,sub,subTone})=>(
-      <div style={{flex:'1 1 0',minWidth:0,borderRadius:16,background:'rgba(255,255,255,0.045)',border:'1px solid rgba(212,175,55,0.22)',padding:'14px 18px 15px'}}>
-        <div style={{fontSize:14,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,lineHeight:1.2}}>{label}</div>
-        <div className="tabular-nums" style={{fontSize:32,fontWeight:700,color:'#E8C044',lineHeight:1.1,marginTop:6}}>{children}</div>
-        {sub!=null&&sub!==''&&<div className="tabular-nums" style={{fontSize:16,color:subTone||'rgba(255,255,255,0.5)',lineHeight:1.25,marginTop:4}}>{sub}</div>}
+    const DaoSocialTile=({z,pad,label,children,sub,subTone})=>(
+      <div style={{flex:'1 1 0',minWidth:0,borderRadius:16,background:'rgba(255,255,255,0.045)',border:'1px solid rgba(212,175,55,0.22)',padding:pad||z.tilePad}}>
+        <div style={{fontSize:z.tileLbl,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,lineHeight:1.2}}>{label}</div>
+        <div className="tabular-nums" style={{fontSize:z.tileVal,fontWeight:700,color:'#E8C044',lineHeight:1.1,marginTop:6}}>{children}</div>
+        {sub!=null&&sub!==''&&<div className="tabular-nums" style={{fontSize:z.tileSub,color:subTone||'rgba(255,255,255,0.5)',lineHeight:1.25,marginTop:4}}>{sub}</div>}
       </div>
     );
     /* The dollar figure is the headline of the detail line (Shaka, 2026-09-23): green, bold, glowing. */
     const DaoUsd=({v})=><span><span style={{color:'rgba(255,255,255,0.4)'}}>(</span><span style={{color:'#4ADE80',fontWeight:700,fontSize:'1.12em',padding:'0 0.08em',textShadow:'0 0 20px rgba(74,222,128,0.45)'}}>{fmtDollar(v,0)}</span><span style={{color:'rgba(255,255,255,0.4)'}}>)</span></span>;
-    const DaoBuysSocialCard=({v,logo,asOf})=>{
+    const DaoBuysSocialCard=({v,logo,asOf,shape='wide'})=>{
+      const z=DAO_SOCIAL_SHAPES[shape]||DAO_SOCIAL_SHAPES.wide,tall=shape==='tall';
       const L=v.latest,isL=v.isLatest,has=v.buys.length>0;
       const hero=isL?L:null;
       const ago=L?fmtSnapshotAge(Date.now()-L.ts*1000):'';
       const title=v.rangeDef.long;
       const plural=n=>`${n.toLocaleString('en-US')} buy${n===1?'':'s'}`;
+      const innerW=z.W-2*z.padX;
+      const nTiles=isL?(L?4:0):has?3:4;
+      const tight=tall&&nTiles===4;   // tall + 2×2 tiles: the stack needs ~100 px back (Latest, empty window)
+      const logoSz=tight?168:z.logo,tilePad=tight?'18px 24px 19px':z.tilePad;
+      const asOfTxt=asOf?asOf.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      const dot=(
+        <span style={{position:'relative',width:z.dot,height:z.dot,flexShrink:0,display:'inline-block'}}>
+          <span style={{position:'absolute',inset:-Math.round(z.dot*0.3),borderRadius:'50%',background:'rgba(247,195,37,0.28)'}}></span>
+          <span style={{position:'absolute',inset:0,borderRadius:'50%',background:'#F7C325',boxShadow:'0 0 16px #F7C325'}}></span>
+        </span>
+      );
+      const titleMain=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:Math.round(z.title*0.38),color:'#F5DE83',fontSize:z.title,fontWeight:700,letterSpacing:'0.2em',textTransform:'uppercase',lineHeight:1,textShadow:'0 0 28px rgba(247,195,37,0.45)'}}>
+          {dot}
+          <span>{isL?'Latest DAO buy':'DAO buys'}</span>
+          {isL&&L&&L.fresh&&<span style={{color:'#6EE7B7',fontSize:Math.round(z.range*0.85),letterSpacing:'0.16em',textShadow:'none'}}>{'•'} NEW</span>}
+          {!isL&&!tall&&<span style={{color:'rgba(255,255,255,0.82)',fontSize:z.range,letterSpacing:'0.2em',textShadow:'none'}}>{'·'} {title}</span>}
+        </div>
+      );
+      const brand=(
+        <div style={{textAlign:'right',flexShrink:0}}>
+          <div className="font-orbitron metallic-gold" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+          <div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{'\u{1F3DB}️'} PTGC DAO Treasury</div>
+          {asOf&&<div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>on-chain data {'·'} {asOfTxt}</div>}
+        </div>
+      );
+      const amountBlock=has?(
+        <>
+          <div style={{display:'flex',alignItems:'baseline',justifyContent:tall?'center':'flex-start',gap:Math.round(z.unit*0.45)}}>
+            <span className="metallic-gold tabular-nums" style={{fontSize:z.amount,fontWeight:700,lineHeight:0.9,letterSpacing:'-0.01em'}}>{fmtAbbr(isL?hero.ptgc:v.t.ptgc)}</span>
+            <span style={{fontSize:z.unit,fontWeight:600,color:'rgba(255,255,255,0.78)'}}>PTGC</span>
+          </div>
+          <div style={{marginTop:tall?(tight?16:22):14,display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start'}}>
+            <DaoCreatures ptgc={isL?hero.ptgc:v.t.ptgc} min="Squid" max={4} size={z.crit} className={tall?'justify-center':''}/>
+          </div>
+        </>
+      ):(
+        <>
+          <div className="metallic-gold" style={{fontSize:Math.round(z.amount*(tall?0.6:0.74)),fontWeight:700,lineHeight:0.95}}>No DAO buys</div>
+          <div style={{marginTop:10,fontSize:Math.round(z.detail*0.84),fontWeight:600,color:'rgba(255,255,255,0.7)'}}>{v.rangeDef.days?`in the ${title.toLowerCase()}`:'on record yet'}</div>
+        </>
+      );
+      const logoEl=(
+        <div style={{position:'relative',width:logoSz,height:logoSz,flexShrink:0}}>
+          <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(logoSz*0.2),borderRadius:'50%',background:'radial-gradient(circle, rgba(247,195,37,0.45) 0%, rgba(247,195,37,0) 68%)'}}></div>
+          <img src={logo} alt="" style={{position:'relative',width:logoSz,height:logoSz,borderRadius:'50%',boxShadow:'0 0 0 2px rgba(212,175,55,0.85), 0 0 34px rgba(212,175,55,0.7)'}}/>
+        </div>
+      );
+      const tiles=(
+        <>
+          {isL&&L&&<>
+            <DaoSocialTile z={z} pad={tilePad} label="When" sub={<DaoWhenLines ts={L.ts}/>}>{ago}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Price paid" sub="per PTGC, incl. fee"><Price p={L.price}/></DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Market then" sub="pool price at the buy">{L.marketUsd>0?<Price p={L.marketUsd}/>:'—'}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Lifetime" sub={`buy #${v.latestIndex.toLocaleString('en-US')} · ${fmtDollar(v.life.usd,0)}`}>{fmtAbbr(v.life.ptgc)}</DaoSocialTile>
+          </>}
+          {!isL&&has&&<>
+            <DaoSocialTile z={z} pad={tilePad} label="Buys" sub={v.biggest?`biggest ${fmtAbbr(v.biggest.ptgc)}`:''}>{v.buys.length.toLocaleString('en-US')}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Spent" sub={`${fmtAbbr(v.t.pls)} PLS`}>{fmtDollar(v.t.usd,0)}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Avg cost" sub="per PTGC, paid"><Price p={v.avgUsd}/></DaoSocialTile>
+          </>}
+          {!isL&&!has&&<>
+            <DaoSocialTile z={z} pad={tilePad} label="Last buy" sub={L?<DaoWhenLines ts={L.ts}/>:''}>{L?ago:'—'}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Last buy size" sub={L?fmtDollar(L.usd,0):''}>{L?fmtAbbr(L.ptgc):'—'}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Lifetime buys" sub={v.buysAll.length?`since ${fmtDateShort(v.buysAll[0].ts)}`:''}>{v.buysAll.length.toLocaleString('en-US')}</DaoSocialTile>
+            <DaoSocialTile z={z} pad={tilePad} label="Lifetime PTGC" sub={fmtDollar(v.life.usd,0)+' spent'}>{fmtAbbr(v.life.ptgc)}</DaoSocialTile>
+          </>}
+        </>
+      );
       return(
-        <div className="relative overflow-hidden text-white" style={{width:1200,height:675,background:'#070707',fontFamily:"'Rajdhani',sans-serif"}}>
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#070707',fontFamily:"'Rajdhani',sans-serif"}}>
           {/* glow + frame: the Latest-buy tile's recipe at card size */}
           <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(135deg, rgba(212,175,55,0.24) 0%, rgba(212,175,55,0.07) 48%, rgba(0,0,0,0) 100%)'}}></div>
           <div aria-hidden="true" style={{position:'absolute',right:-160,top:-220,width:640,height:640,borderRadius:'50%',background:'radial-gradient(circle, rgba(245,222,131,0.34) 0%, rgba(245,222,131,0.10) 35%, rgba(245,222,131,0) 68%)'}}></div>
           <div aria-hidden="true" style={{position:'absolute',left:-200,bottom:-320,width:620,height:620,borderRadius:'50%',background:'radial-gradient(circle, rgba(212,175,55,0.16) 0%, rgba(212,175,55,0) 65%)'}}></div>
-          <img src={logo} alt="" aria-hidden="true" style={{position:'absolute',right:-60,top:34,width:400,height:400,opacity:0.06}}/>
+          <img src={logo} alt="" aria-hidden="true" style={tall
+            ?{position:'absolute',left:'50%',top:170,width:640,height:640,marginLeft:-320,opacity:0.05}
+            :{position:'absolute',right:-60,top:34,width:400,height:400,opacity:0.06}}/>
           <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid rgba(212,175,55,0.8)',boxShadow:'0 0 0 1px rgba(250,222,140,0.25) inset, 0 0 60px -6px rgba(212,175,55,0.75), 0 0 20px -4px rgba(212,175,55,0.5)'}}></div>
           <div aria-hidden="true" style={{position:'absolute',left:90,right:90,top:14,height:2,background:'linear-gradient(90deg, rgba(250,234,160,0), #FAEAA0, rgba(250,234,160,0))'}}></div>
 
-          <div style={{position:'absolute',left:48,right:48,top:40,bottom:36,display:'flex',flexDirection:'column'}}>
-            {/* title row */}
-            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:24}}>
-              <div style={{minWidth:0}}>
-                <div style={{display:'flex',alignItems:'center',gap:18,color:'#F5DE83',fontSize:46,fontWeight:700,letterSpacing:'0.2em',textTransform:'uppercase',lineHeight:1,textShadow:'0 0 28px rgba(247,195,37,0.45)'}}>
-                  <span style={{position:'relative',width:20,height:20,flexShrink:0,display:'inline-block'}}>
-                    <span style={{position:'absolute',inset:-6,borderRadius:'50%',background:'rgba(247,195,37,0.28)'}}></span>
-                    <span style={{position:'absolute',inset:0,borderRadius:'50%',background:'#F7C325',boxShadow:'0 0 16px #F7C325'}}></span>
-                  </span>
-                  <span>{isL?'Latest DAO buy':'DAO buys'}</span>
-                  {isL&&L&&L.fresh&&<span style={{color:'#6EE7B7',fontSize:22,letterSpacing:'0.16em',textShadow:'none'}}>{'•'} NEW</span>}
-                  {!isL&&<span style={{color:'rgba(255,255,255,0.82)',fontSize:26,letterSpacing:'0.2em',textShadow:'none'}}>{'·'} {title}</span>}
+          <div style={{position:'absolute',left:z.padX,right:z.padX,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall?(
+              <>
+                {titleMain}
+                {!isL&&<div style={{marginTop:16,textAlign:'center',color:'rgba(255,255,255,0.82)',fontSize:z.range,fontWeight:700,letterSpacing:'0.24em',textTransform:'uppercase'}}>{title}</div>}
+                <div style={{display:'flex',justifyContent:'center',marginTop:tight?(isL?40:30):44}}>{logoEl}</div>
+                <div style={{marginTop:tight?26:34,textAlign:'center'}}>{amountBlock}</div>
+              </>
+            ):(
+              <>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:24}}>
+                  <div style={{minWidth:0}}>{titleMain}</div>
+                  {brand}
                 </div>
-              </div>
-              <div style={{textAlign:'right',flexShrink:0}}>
-                <div className="font-orbitron metallic-gold" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
-                <div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{'\u{1F3DB}️'} PTGC DAO Treasury</div>
-                {asOf&&<div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>on-chain data {'\u00b7'} {asOf.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>}
-              </div>
-            </div>
-
-            {/* hero */}
-            <div style={{display:'flex',alignItems:'center',gap:30,marginTop:34}}>
-              <div style={{position:'relative',width:132,height:132,flexShrink:0}}>
-                <div aria-hidden="true" style={{position:'absolute',inset:-26,borderRadius:'50%',background:'radial-gradient(circle, rgba(247,195,37,0.45) 0%, rgba(247,195,37,0) 68%)'}}></div>
-                <img src={logo} alt="" style={{position:'relative',width:132,height:132,borderRadius:'50%',boxShadow:'0 0 0 2px rgba(212,175,55,0.85), 0 0 34px rgba(212,175,55,0.7)'}}/>
-              </div>
-              <div style={{minWidth:0,flex:1}}>
-                {has?(
-                  <>
-                    <div style={{display:'flex',alignItems:'baseline',gap:18}}>
-                      <span className="metallic-gold tabular-nums" style={{fontSize:124,fontWeight:700,lineHeight:0.9,letterSpacing:'-0.01em'}}>{fmtAbbr(isL?hero.ptgc:v.t.ptgc)}</span>
-                      <span style={{fontSize:40,fontWeight:600,color:'rgba(255,255,255,0.78)'}}>PTGC</span>
-                    </div>
-                    <div style={{marginTop:14,display:'flex',alignItems:'center',gap:16}}>
-                      <DaoCreatures ptgc={isL?hero.ptgc:v.t.ptgc} min="Squid" max={4} size="text-[42px]"/>
-                    </div>
-                  </>
-                ):(
-                  <>
-                    <div className="metallic-gold" style={{fontSize:92,fontWeight:700,lineHeight:0.95}}>No DAO buys</div>
-                    <div style={{marginTop:10,fontSize:30,fontWeight:600,color:'rgba(255,255,255,0.7)'}}>{v.rangeDef.days?`in the ${title.toLowerCase()}`:'on record yet'}</div>
-                  </>
-                )}
-              </div>
-            </div>
+                <div style={{display:'flex',alignItems:'center',gap:30,marginTop:34}}>
+                  {logoEl}
+                  <div style={{minWidth:0,flex:1}}>{amountBlock}</div>
+                </div>
+              </>
+            )}
 
             {/* detail line */}
-            <div className="tabular-nums" style={{marginTop:28,fontSize:36,color:'rgba(255,255,255,0.8)',lineHeight:1.2}}>
-              {has&&isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(hero.pls)} PLS</b> <DaoUsd v={hero.usd}/> at <Price p={hero.price} c="text-[#F5DE83] font-semibold"/> <span style={{color:'rgba(255,255,255,0.45)',fontSize:26}}>per PTGC</span></>}
-              {has&&!isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(v.t.pls)} PLS</b> <DaoUsd v={v.t.usd}/> across <b style={{color:'#fff'}}>{plural(v.buys.length)}</b> {'·'} avg <Price p={v.avgUsd} c="text-[#F5DE83] font-semibold"/></>}
-              {!has&&L&&<>Last buy <span style={{color:'#F5DE83',fontWeight:600}}>{ago}</span>: <b style={{color:'#fff'}}>{fmtAbbr(L.ptgc)} PTGC</b> for {fmtAbbr(L.pls)} PLS <DaoUsd v={L.usd}/></>}
+            <div className="tabular-nums" style={{marginTop:tall?(tight?24:34):28,fontSize:z.detail,color:'rgba(255,255,255,0.8)',lineHeight:1.25,textAlign:tall?'center':'left'}}>
+              {has&&isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(hero.pls)} PLS</b> <DaoUsd v={hero.usd}/>{tall?<br/>:' '}at <Price p={hero.price} c="text-[#F5DE83] font-semibold"/> <span style={{color:'rgba(255,255,255,0.45)',fontSize:z.perPtgc}}>per PTGC</span></>}
+              {has&&!isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(v.t.pls)} PLS</b> <DaoUsd v={v.t.usd}/>{tall?<br/>:' '}across <b style={{color:'#fff'}}>{plural(v.buys.length)}</b> {'·'} avg <Price p={v.avgUsd} c="text-[#F5DE83] font-semibold"/></>}
+              {!has&&L&&<>Last buy <span style={{color:'#F5DE83',fontWeight:600}}>{ago}</span>:{tall?<br/>:' '}<b style={{color:'#fff'}}>{fmtAbbr(L.ptgc)} PTGC</b> for {fmtAbbr(L.pls)} PLS <DaoUsd v={L.usd}/></>}
             </div>
 
             <div style={{flex:1}}></div>
-            <div style={{marginLeft:-4}}><DaoSocialStrip v={v}/></div>
+            <div style={{marginLeft:-4}}><DaoSocialStrip v={v} W={innerW} fs={z.stripFs} rTop={z.stripR}/></div>
 
-            {/* tiles */}
-            <div style={{display:'flex',gap:14,marginTop:10}}>
-              {isL&&L&&<>
-                <DaoSocialTile label="When" sub={fmtDateTime(L.ts)}>{ago}</DaoSocialTile>
-                <DaoSocialTile label="Price paid" sub="per PTGC, incl. fee"><Price p={L.price}/></DaoSocialTile>
-                <DaoSocialTile label="Market then" sub="pool price at the buy">{L.marketUsd>0?<Price p={L.marketUsd}/>:'—'}</DaoSocialTile>
-                <DaoSocialTile label="Lifetime" sub={`buy #${v.latestIndex.toLocaleString('en-US')} · ${fmtDollar(v.life.usd,0)}`}>{fmtAbbr(v.life.ptgc)}</DaoSocialTile>
-              </>}
-              {!isL&&has&&<>
-                <DaoSocialTile label="Buys" sub={v.biggest?`biggest ${fmtAbbr(v.biggest.ptgc)}`:''}>{v.buys.length.toLocaleString('en-US')}</DaoSocialTile>
-                <DaoSocialTile label="Spent" sub={`${fmtAbbr(v.t.pls)} PLS`}>{fmtDollar(v.t.usd,0)}</DaoSocialTile>
-                <DaoSocialTile label="Avg cost" sub="per PTGC, paid"><Price p={v.avgUsd}/></DaoSocialTile>
-              </>}
-              {!isL&&!has&&<>
-                <DaoSocialTile label="Last buy" sub={L?fmtDateShort(L.ts):''}>{L?ago:'—'}</DaoSocialTile>
-                <DaoSocialTile label="Last buy size" sub={L?fmtDollar(L.usd,0):''}>{L?fmtAbbr(L.ptgc):'—'}</DaoSocialTile>
-                <DaoSocialTile label="Lifetime buys" sub={v.buysAll.length?`since ${fmtDateShort(v.buysAll[0].ts)}`:''}>{v.buysAll.length.toLocaleString('en-US')}</DaoSocialTile>
-                <DaoSocialTile label="Lifetime PTGC" sub={fmtDollar(v.life.usd,0)+' spent'}>{fmtAbbr(v.life.ptgc)}</DaoSocialTile>
-              </>}
-            </div>
+            {/* tiles: one row wide; tall = one row of three, or 2×2 for four */}
+            <div style={tall&&nTiles===4
+              ?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:z.gap,marginTop:12}
+              :{display:'flex',gap:z.gap,marginTop:tall?12:10}}>{tiles}</div>
+
+            {tall&&(
+              <div style={{marginTop:tight?20:26,display:'flex',alignItems:'center',justifyContent:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.42)'}}>
+                <span className="font-orbitron metallic-gold" style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none'}}>ptgc-ufo.com</span>
+                <span>{'·'} {'\u{1F3DB}️'} PTGC DAO Treasury</span>
+                {asOf&&<span className="tabular-nums" style={{letterSpacing:'0.08em',textTransform:'none',color:'rgba(255,255,255,0.32)',fontSize:16}}>{'·'} on-chain data {asOfTxt}</span>}
+              </div>
+            )}
           </div>
         </div>
       );
     };
     /* Loading / failed: the same frame, empty, with CardLoadState over it (a18 pattern). */
-    const DaoBuysSocialShell=({loading,error,onRetry})=>(
-      <div className="relative overflow-hidden" style={{width:1200,height:675,background:'#070707',fontFamily:"'Rajdhani',sans-serif"}}>
-        <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(135deg, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 48%, rgba(0,0,0,0) 100%)'}}></div>
-        <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid rgba(212,175,55,0.55)'}}></div>
-        <CardLoadState loading={loading} error={error} what="the DAO buys" onRetry={onRetry} radius="26px" font="'Rajdhani',sans-serif"/>
-      </div>
-    );
+    const DaoBuysSocialShell=({loading,error,onRetry,shape='wide'})=>{
+      const z=DAO_SOCIAL_SHAPES[shape]||DAO_SOCIAL_SHAPES.wide;
+      return(
+        <div className="relative overflow-hidden" style={{width:z.W,height:z.H,background:'#070707',fontFamily:"'Rajdhani',sans-serif"}}>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(135deg, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 48%, rgba(0,0,0,0) 100%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid rgba(212,175,55,0.55)'}}></div>
+          <CardLoadState loading={loading} error={error} what="the DAO buys" onRetry={onRetry} radius="26px" font="'Rajdhani',sans-serif"/>
+        </div>
+      );
+    };
+    const daoSegBtn=on=>`tap-h inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] whitespace-nowrap transition-all ${on?'text-[#0a0a0a]':'text-[#F5DE83]/70 hover:text-[#F5DE83] hover:bg-[#D4AF37]/10'}`;
+    const daoSegOn={background:'linear-gradient(180deg,#FAEAA0 0%,#E0B843 45%,#B8901F 100%)',boxShadow:'0 0 16px rgba(247,195,37,0.55), inset 0 1px 0 rgba(255,255,255,0.5)'};
+    const daoSegWrap="inline-flex items-center gap-0.5 p-1 rounded-full border border-[#D4AF37]/40 bg-black/70";
+    const daoSegGlow={boxShadow:'0 0 26px -8px rgba(212,175,55,0.8), inset 0 0 0 1px rgba(250,222,140,0.08)'};
     const DaoBuysSocialModal=({onClose})=>{
       const[file,setFile]=useState(undefined);   // undefined = loading, null = failed, object = data (gotcha 3)
       const[fresh,setFresh]=useState([]);
-      const[range,setRange]=useState('LATEST');
+      const[range,setRange]=useState('ALL');     // round 3: opens on All time
+      const[shape,setShape]=useState('wide');    // 'wide' 1200×675 | 'tall' 1080×1350
       const[tryN,setTryN]=useState(0);
       useEffect(()=>{
         let dead=false;
@@ -6301,26 +6364,38 @@
       },[tryN]);
       const v=React.useMemo(()=>computeDaoSocialView({file,fresh,rangeK:range}),[file,fresh,range]);
       const asOf=file&&file.generatedAt?new Date(file.generatedAt):null;
+      const z=DAO_SOCIAL_SHAPES[shape];
       const controls=(
-        <div role="group" aria-label="DAO buys period" className="inline-flex items-center gap-0.5 p-1 rounded-full border border-[#D4AF37]/40 bg-black/70" style={{boxShadow:'0 0 26px -8px rgba(212,175,55,0.8), inset 0 0 0 1px rgba(250,222,140,0.08)'}}>
-          {DAO_SOCIAL_RANGES.map(r=>{
-            const on=range===r.k;
-            return(
-              <button key={r.k} type="button" onClick={()=>setRange(r.k)} aria-pressed={on} aria-label={r.long}
-                className={`tap-h inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] whitespace-nowrap transition-all ${on?'text-[#0a0a0a]':'text-[#F5DE83]/70 hover:text-[#F5DE83] hover:bg-[#D4AF37]/10'}`}
-                style={on?{background:'linear-gradient(180deg,#FAEAA0 0%,#E0B843 45%,#B8901F 100%)',boxShadow:'0 0 16px rgba(247,195,37,0.55), inset 0 1px 0 rgba(255,255,255,0.5)'}:undefined}>
-                {r.k==='LATEST'&&<span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${on?'bg-[#0a0a0a]':'bg-[#F7C325] shadow-[0_0_8px_#F7C325]'}`}></span>}
-                {r.label}
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <div role="group" aria-label="DAO buys period" className={daoSegWrap} style={daoSegGlow}>
+            {DAO_SOCIAL_RANGES.map(r=>{
+              const on=range===r.k;
+              return(
+                <button key={r.k} type="button" onClick={()=>setRange(r.k)} aria-pressed={on} aria-label={r.long} className={daoSegBtn(on)} style={on?daoSegOn:undefined}>
+                  {r.k==='LATEST'&&<span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${on?'bg-[#0a0a0a]':'bg-[#F7C325] shadow-[0_0_8px_#F7C325]'}`}></span>}
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+          <div role="group" aria-label="Card shape" className={daoSegWrap} style={daoSegGlow}>
+            {[{k:'wide',label:'Wide',long:'Wide card, 16:9',ic:'w-3.5 h-2'},{k:'tall',label:'Tall',long:'Tall card, 4:5 for phones',ic:'w-2 h-2.5'}].map(s=>{
+              const on=shape===s.k;
+              return(
+                <button key={s.k} type="button" onClick={()=>setShape(s.k)} aria-pressed={on} aria-label={s.long} className={daoSegBtn(on)} style={on?daoSegOn:undefined}>
+                  <span aria-hidden="true" className={`${s.ic} rounded-[2px] border ${on?'border-[#0a0a0a]':'border-[#F5DE83]/70'}`}></span>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
       );
       const stamp=new Date().toISOString().slice(0,10);
       return(
-        <ShareCardModal onClose={onClose} width={1200} height={675} zIndex={60} screenshot controls={controls} label="PTGC DAO buys share card" filename={`ptgc-dao-buys-${range.toLowerCase()}-${stamp}.png`}>
-          {v?<DaoBuysSocialCard v={v} logo={TOKENS.PTGC.logo} asOf={asOf}/>
-            :<DaoBuysSocialShell loading={file===undefined} error={file===null} onRetry={()=>setTryN(n=>n+1)}/>}
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} zIndex={60} screenshot controls={controls} toolbarClass="mb-6" label="PTGC DAO buys share card" filename={`ptgc-dao-buys-${range.toLowerCase()}-${shape}-${stamp}.png`}>
+          {v?<DaoBuysSocialCard v={v} logo={TOKENS.PTGC.logo} asOf={asOf} shape={shape}/>
+            :<DaoBuysSocialShell loading={file===undefined} error={file===null} onRetry={()=>setTryN(n=>n+1)} shape={shape}/>}
         </ShareCardModal>
       );
     };
@@ -9637,7 +9712,7 @@
                   </button>
                   <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowDaoBuysSocial(true),100)}} className="w-full px-4 py-3 rounded-lg bg-[#D4AF37]/20 border border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/30 transition-all text-left">
                     <div className="font-bold">🪙 DAO Buys</div>
-                    <div className="text-xs text-white/50">Latest buy, or any period</div>
+                    <div className="text-xs text-white/50">All time, any period, or the latest buy</div>
                   </button>
                   <button onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowKPI(true),100)}} className="w-full px-4 py-3 rounded-lg bg-[#D4AF37]/20 border border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/30 transition-all text-left">
                     <div className="font-bold">📋 KPI Report</div>
