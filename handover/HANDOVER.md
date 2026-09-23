@@ -25,7 +25,8 @@ creatures) with a gold switch above the card - Latest / 24H / 7D / 30D / 90D / A
 windows). A window with no buys says "No DAO buys in the past 24 hours" and points at the last buy.
 Screenshot-only, like the PTGC Buys chart card (gotcha 30). Live since 17044bd4c; round 2 live as be0ac1e6c;
 round 3 (opens on All time, Wide 16:9 / Tall 4:5 switch, local + UTC times, more room above the
-card) pushed as 895596037. Owed: a 30-second live look at both shapes on a phone. A Telegram
+card) pushed as 895596037. **Evening: the Socials Burn Stats cards (PTGC + UFO) were redone in a fire
+theme (`BurnSocialModal`, Wide/Tall, screenshot-only) - awaiting the push.** Owed: a 30-second live look at both shapes on a phone. A Telegram
 announcement was drafted for Shaka (not stored in the repo). `sessions/2026-09-23.md`.
 
 **2026-09-22: the affiliates page showed some viewers a dashboard of zeros — and it was never a
