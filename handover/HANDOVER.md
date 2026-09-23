@@ -23,8 +23,8 @@ Update it at the end of every session.
 opens on the latest buy in the Latest-DAO-buy tile's look (gold frame, glow, metallic amount, Grays
 creatures) with a gold switch above the card - Latest / 24H / 7D / 30D / 90D / All time (rolling
 windows). A window with no buys says "No DAO buys in the past 24 hours" and points at the last buy.
-Screenshot-only, like the PTGC Buys chart card (gotcha 30). Harness-verified desktop + phone, every
-range; NOT yet seen live. `sessions/2026-09-23.md`.
+Screenshot-only, like the PTGC Buys chart card (gotcha 30). Live since 17044bd4c; round 2 (bigger title,
+green dollar line, ×1 counts, no Worth today) harness-verified and awaiting the push. `sessions/2026-09-23.md`.
 
 **2026-09-22: the affiliates page showed some viewers a dashboard of zeros — and it was never a
 cache.** Shaka's viewers hard-refreshed, cleared caches and opened a months-unused browser, and

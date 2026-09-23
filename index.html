@@ -6092,7 +6092,8 @@
      * the image): Latest buy (default) · 24H · 7D · 30D · 90D · All time.
      *   - Same data as the PTGC Buys chart: data/dao-buys.json (fetchDaoBuys) + fetchFreshDaoBuys
      *     for buys newer than the snapshot, deduped by hash. Windows are rolling ("past 24 hours" =
-     *     now − 24 h), and money is what was actually PAID (usd / pls on the buy).
+     *     now − 24 h), and money is what was actually PAID (usd / pls on the buy). No "worth today"
+     *     (Shaka, 2026-09-23 round 2) - the card is about what the DAO bought and paid.
      *   - A window with no buys says so in words ("No DAO buys in the past 24 hours") and points at
      *     the last buy — never a 0 PTGC card.
      *   - Screenshot-only (`ShareCardModal screenshot`), like the PTGC Buys chart card: html2canvas
@@ -6109,7 +6110,7 @@
       {k:'ALL',days:null,label:'All time',long:'All time'}
     ];
     const DAO_SOCIAL_LATEST_STRIP_DAYS=90;   // Latest view: the timeline shows this many days, latest dot ringed
-    const computeDaoSocialView=({file,fresh,rangeK,livePrice})=>{
+    const computeDaoSocialView=({file,fresh,rangeK})=>{
       if(!file)return null;
       const nowMs=Date.now();
       const known=new Set(file.buys.map(b=>b.hash));
@@ -6124,22 +6125,13 @@
       const inWin=buysAll.filter(b=>b.ts*1000>=fromMs);
       const buys=isLatest?(latest?[latest]:[]):inWin;
       const t=buys.reduce((a,b)=>({ptgc:a.ptgc+b.ptgc,pls:a.pls+b.pls,usd:a.usd+b.usd}),{ptgc:0,pls:0,usd:0});
-      const px=livePrice>0?livePrice:0;
-      const worth=px>0?t.ptgc*px:null;                                   // null → "—" (no live price)
-      const worthPct=worth!=null&&t.usd>0?(worth/t.usd-1)*100:null;
       const avgUsd=t.ptgc>0?t.usd/t.ptgc:0;
       const biggest=buys.reduce((m,b)=>!m||b.ptgc>m.ptgc?b:m,null);
       const life=buysAll.reduce((a,b)=>({ptgc:a.ptgc+b.ptgc,usd:a.usd+b.usd}),{ptgc:0,usd:0});
       const stripBuys=isLatest?inWin:buys;
       const maxPtgc=stripBuys.reduce((m,b)=>Math.max(m,b.ptgc),0);
-      return{rangeDef,isLatest,buysAll,buys,latest,t,worth,worthPct,avgUsd,biggest,life,livePrice:px,
+      return{rangeDef,isLatest,buysAll,buys,latest,t,avgUsd,biggest,life,
         fromMs,nowMs,stripBuys,maxPtgc,latestIndex:buysAll.length,freshCount:(fresh||[]).filter(b=>!known.has(b.hash)).length};
-    };
-    const fmtDaoSpan=(fromMs,nowMs)=>{
-      const a=new Date(fromMs),b=new Date(nowMs);
-      const sameYear=a.getFullYear()===b.getFullYear();
-      const o={month:'short',day:'numeric'};
-      return a.toLocaleDateString('en-US',sameYear?o:{...o,year:'numeric'})+' – '+b.toLocaleDateString('en-US',{...o,year:'numeric'});
     };
     /* Buy timeline: one gold dot per buy on a time axis, area ∝ PTGC. Plain SVG (html2canvas-safe). */
     const DaoSocialStrip=({v})=>{
@@ -6184,7 +6176,8 @@
         {sub!=null&&sub!==''&&<div className="tabular-nums" style={{fontSize:16,color:subTone||'rgba(255,255,255,0.5)',lineHeight:1.25,marginTop:4}}>{sub}</div>}
       </div>
     );
-    const DaoPct=({p})=>p==null?null:<span style={{color:p>=0?'#6EE7B7':'#FDA4AF',fontWeight:600}}>{p>=0?'+':''}{Math.abs(p)>=1000?Math.round(p).toLocaleString('en-US'):p.toFixed(1)}%</span>;
+    /* The dollar figure is the headline of the detail line (Shaka, 2026-09-23): green, bold, glowing. */
+    const DaoUsd=({v})=><span><span style={{color:'rgba(255,255,255,0.4)'}}>(</span><span style={{color:'#4ADE80',fontWeight:700,fontSize:'1.12em',padding:'0 0.08em',textShadow:'0 0 20px rgba(74,222,128,0.45)'}}>{fmtDollar(v,0)}</span><span style={{color:'rgba(255,255,255,0.4)'}}>)</span></span>;
     const DaoBuysSocialCard=({v,logo,asOf})=>{
       const L=v.latest,isL=v.isLatest,has=v.buys.length>0;
       const hero=isL?L:null;
@@ -6205,18 +6198,14 @@
             {/* title row */}
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:24}}>
               <div style={{minWidth:0}}>
-                <div style={{display:'flex',alignItems:'center',gap:14,color:'#F5DE83',fontSize:24,fontWeight:700,letterSpacing:'0.28em',textTransform:'uppercase',lineHeight:1}}>
-                  <span style={{position:'relative',width:16,height:16,flexShrink:0,display:'inline-block'}}>
-                    <span style={{position:'absolute',inset:-5,borderRadius:'50%',background:'rgba(247,195,37,0.28)'}}></span>
-                    <span style={{position:'absolute',inset:0,borderRadius:'50%',background:'#F7C325',boxShadow:'0 0 14px #F7C325'}}></span>
+                <div style={{display:'flex',alignItems:'center',gap:18,color:'#F5DE83',fontSize:46,fontWeight:700,letterSpacing:'0.2em',textTransform:'uppercase',lineHeight:1,textShadow:'0 0 28px rgba(247,195,37,0.45)'}}>
+                  <span style={{position:'relative',width:20,height:20,flexShrink:0,display:'inline-block'}}>
+                    <span style={{position:'absolute',inset:-6,borderRadius:'50%',background:'rgba(247,195,37,0.28)'}}></span>
+                    <span style={{position:'absolute',inset:0,borderRadius:'50%',background:'#F7C325',boxShadow:'0 0 16px #F7C325'}}></span>
                   </span>
                   <span>{isL?'Latest DAO buy':'DAO buys'}</span>
-                  {isL&&L&&L.fresh&&<span style={{color:'#6EE7B7',fontSize:18,letterSpacing:'0.16em'}}>{'•'} NEW</span>}
-                  {!isL&&<span style={{color:'rgba(255,255,255,0.8)',fontSize:22,letterSpacing:'0.22em'}}>{'·'} {title}</span>}
-                </div>
-                <div className="tabular-nums" style={{marginTop:12,fontSize:18,color:'rgba(255,255,255,0.5)',letterSpacing:'0.04em'}}>
-                  {isL?(L?<>{fmtDateTime(L.ts)} <span style={{color:'#F5DE83',opacity:0.85,fontWeight:600}}>{'·'} {ago}</span></>:'No buys on record')
-                      :<>{v.rangeDef.days?fmtDaoSpan(v.fromMs,v.nowMs):(v.buysAll.length?`Since ${fmtDateShort(v.buysAll[0].ts)}`:'')}{' · '}<span style={{color:'rgba(255,255,255,0.75)',fontWeight:600}}>{has?plural(v.buys.length):'no buys'}</span></>}
+                  {isL&&L&&L.fresh&&<span style={{color:'#6EE7B7',fontSize:22,letterSpacing:'0.16em',textShadow:'none'}}>{'•'} NEW</span>}
+                  {!isL&&<span style={{color:'rgba(255,255,255,0.82)',fontSize:26,letterSpacing:'0.2em',textShadow:'none'}}>{'·'} {title}</span>}
                 </div>
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
@@ -6227,7 +6216,7 @@
             </div>
 
             {/* hero */}
-            <div style={{display:'flex',alignItems:'center',gap:30,marginTop:38}}>
+            <div style={{display:'flex',alignItems:'center',gap:30,marginTop:34}}>
               <div style={{position:'relative',width:132,height:132,flexShrink:0}}>
                 <div aria-hidden="true" style={{position:'absolute',inset:-26,borderRadius:'50%',background:'radial-gradient(circle, rgba(247,195,37,0.45) 0%, rgba(247,195,37,0) 68%)'}}></div>
                 <img src={logo} alt="" style={{position:'relative',width:132,height:132,borderRadius:'50%',boxShadow:'0 0 0 2px rgba(212,175,55,0.85), 0 0 34px rgba(212,175,55,0.7)'}}/>
@@ -6240,7 +6229,7 @@
                       <span style={{fontSize:40,fontWeight:600,color:'rgba(255,255,255,0.78)'}}>PTGC</span>
                     </div>
                     <div style={{marginTop:14,display:'flex',alignItems:'center',gap:16}}>
-                      <DaoCreatures ptgc={isL?hero.ptgc:v.t.ptgc} min="Squid" max={4} ones={false} size="text-[42px]"/>
+                      <DaoCreatures ptgc={isL?hero.ptgc:v.t.ptgc} min="Squid" max={4} size="text-[42px]"/>
                     </div>
                   </>
                 ):(
@@ -6253,10 +6242,10 @@
             </div>
 
             {/* detail line */}
-            <div className="tabular-nums" style={{marginTop:26,fontSize:28,color:'rgba(255,255,255,0.8)',lineHeight:1.2}}>
-              {has&&isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(hero.pls)} PLS</b> <span style={{color:'rgba(255,255,255,0.55)'}}>({fmtDollar(hero.usd,0)})</span> at <Price p={hero.price} c="text-[#F5DE83] font-semibold"/> <span style={{color:'rgba(255,255,255,0.45)',fontSize:22}}>per PTGC</span></>}
-              {has&&!isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(v.t.pls)} PLS</b> <span style={{color:'rgba(255,255,255,0.55)'}}>({fmtDollar(v.t.usd,0)})</span> across <b style={{color:'#fff'}}>{plural(v.buys.length)}</b> {'·'} avg <Price p={v.avgUsd} c="text-[#F5DE83] font-semibold"/></>}
-              {!has&&L&&<>Last buy <span style={{color:'#F5DE83',fontWeight:600}}>{ago}</span>: <b style={{color:'#fff'}}>{fmtAbbr(L.ptgc)} PTGC</b> for {fmtAbbr(L.pls)} PLS <span style={{color:'rgba(255,255,255,0.55)'}}>({fmtDollar(L.usd,0)})</span></>}
+            <div className="tabular-nums" style={{marginTop:28,fontSize:36,color:'rgba(255,255,255,0.8)',lineHeight:1.2}}>
+              {has&&isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(hero.pls)} PLS</b> <DaoUsd v={hero.usd}/> at <Price p={hero.price} c="text-[#F5DE83] font-semibold"/> <span style={{color:'rgba(255,255,255,0.45)',fontSize:26}}>per PTGC</span></>}
+              {has&&!isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(v.t.pls)} PLS</b> <DaoUsd v={v.t.usd}/> across <b style={{color:'#fff'}}>{plural(v.buys.length)}</b> {'·'} avg <Price p={v.avgUsd} c="text-[#F5DE83] font-semibold"/></>}
+              {!has&&L&&<>Last buy <span style={{color:'#F5DE83',fontWeight:600}}>{ago}</span>: <b style={{color:'#fff'}}>{fmtAbbr(L.ptgc)} PTGC</b> for {fmtAbbr(L.pls)} PLS <DaoUsd v={L.usd}/></>}
             </div>
 
             <div style={{flex:1}}></div>
@@ -6265,16 +6254,15 @@
             {/* tiles */}
             <div style={{display:'flex',gap:14,marginTop:10}}>
               {isL&&L&&<>
+                <DaoSocialTile label="When" sub={fmtDateTime(L.ts)}>{ago}</DaoSocialTile>
                 <DaoSocialTile label="Price paid" sub="per PTGC, incl. fee"><Price p={L.price}/></DaoSocialTile>
                 <DaoSocialTile label="Market then" sub="pool price at the buy">{L.marketUsd>0?<Price p={L.marketUsd}/>:'—'}</DaoSocialTile>
-                <DaoSocialTile label="Worth today" sub={v.worth!=null?<><DaoPct p={v.worthPct}/> vs paid</>:'no live price'}>{v.worth!=null?fmtDollar(v.worth,0):'—'}</DaoSocialTile>
                 <DaoSocialTile label="Lifetime" sub={`buy #${v.latestIndex.toLocaleString('en-US')} · ${fmtDollar(v.life.usd,0)}`}>{fmtAbbr(v.life.ptgc)}</DaoSocialTile>
               </>}
               {!isL&&has&&<>
                 <DaoSocialTile label="Buys" sub={v.biggest?`biggest ${fmtAbbr(v.biggest.ptgc)}`:''}>{v.buys.length.toLocaleString('en-US')}</DaoSocialTile>
                 <DaoSocialTile label="Spent" sub={`${fmtAbbr(v.t.pls)} PLS`}>{fmtDollar(v.t.usd,0)}</DaoSocialTile>
                 <DaoSocialTile label="Avg cost" sub="per PTGC, paid"><Price p={v.avgUsd}/></DaoSocialTile>
-                <DaoSocialTile label="Worth today" sub={v.worth!=null?<><DaoPct p={v.worthPct}/> vs spent</>:'no live price'}>{v.worth!=null?fmtDollar(v.worth,0):'—'}</DaoSocialTile>
               </>}
               {!isL&&!has&&<>
                 <DaoSocialTile label="Last buy" sub={L?fmtDateShort(L.ts):''}>{L?ago:'—'}</DaoSocialTile>
@@ -6295,7 +6283,7 @@
         <CardLoadState loading={loading} error={error} what="the DAO buys" onRetry={onRetry} radius="26px" font="'Rajdhani',sans-serif"/>
       </div>
     );
-    const DaoBuysSocialModal=({livePrice:livePriceProp=0,onClose})=>{
+    const DaoBuysSocialModal=({onClose})=>{
       const[file,setFile]=useState(undefined);   // undefined = loading, null = failed, object = data (gotcha 3)
       const[fresh,setFresh]=useState([]);
       const[range,setRange]=useState('LATEST');
@@ -6311,8 +6299,7 @@
         }).catch(e=>{console.warn('dao-buys.json:',e.message);if(!dead)setFile(null);});
         return()=>{dead=true;};
       },[tryN]);
-      const livePrice=livePriceProp>0?livePriceProp:(file&&file.price&&file.price.latest&&file.price.latest.ptgcUsd>0?file.price.latest.ptgcUsd:0);
-      const v=React.useMemo(()=>computeDaoSocialView({file,fresh,rangeK:range,livePrice}),[file,fresh,range,livePrice]);
+      const v=React.useMemo(()=>computeDaoSocialView({file,fresh,rangeK:range}),[file,fresh,range]);
       const asOf=file&&file.generatedAt?new Date(file.generatedAt):null;
       const controls=(
         <div role="group" aria-label="DAO buys period" className="inline-flex items-center gap-0.5 p-1 rounded-full border border-[#D4AF37]/40 bg-black/70" style={{boxShadow:'0 0 26px -8px rgba(212,175,55,0.8), inset 0 0 0 1px rgba(250,222,140,0.08)'}}>
@@ -9980,7 +9967,7 @@
           
           {/* BUY / SELL — switch.win widget */}
           {showSwap&&<SwapModal token={token} data={data} onClose={()=>setShowSwap(false)}/>}
-          {showDaoBuysSocial&&<DaoBuysSocialModal livePrice={token==='PTGC'&&data&&data.price>0?data.price:0} onClose={()=>closeModalAndReturn(setShowDaoBuysSocial)}/>}
+          {showDaoBuysSocial&&<DaoBuysSocialModal onClose={()=>closeModalAndReturn(setShowDaoBuysSocial)}/>}
           {showDaoBuys&&cfg.hasDAO&&<DaoBuysModal token={token} data={data} athPrice={athPrice} onClose={()=>setShowDaoBuys(false)}/>}
 
           {/* LIVE FEED — the Abduction Deck, live value tape */}
