@@ -17,7 +17,14 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-22)
+## Current state (end of 2026-09-23)
+
+**2026-09-23: DAO Buys share card in Socials (PTGC column, under DAO Treasury).** `DaoBuysSocialModal`
+opens on the latest buy in the Latest-DAO-buy tile's look (gold frame, glow, metallic amount, Grays
+creatures) with a gold switch above the card - Latest / 24H / 7D / 30D / 90D / All time (rolling
+windows). A window with no buys says "No DAO buys in the past 24 hours" and points at the last buy.
+Screenshot-only, like the PTGC Buys chart card (gotcha 30). Harness-verified desktop + phone, every
+range; NOT yet seen live. `sessions/2026-09-23.md`.
 
 **2026-09-22: the affiliates page showed some viewers a dashboard of zeros — and it was never a
 cache.** Shaka's viewers hard-refreshed, cleared caches and opened a months-unused browser, and
@@ -403,6 +410,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    not `{"entries":[]}`. **The two tells in a viewer's screenshot of the old build: `Min Threshold
    $10` (normSettings' default, not the real 250) and `Last update unknown`.** Same question is
    unasked for every other third-party read on the sibling pages.
+30. **The Socials DAO Buys card (`DaoBuysSocialModal`, 2026-09-23) is screenshot-only on purpose.**
+   Checked with `H2C=1` + `probes/share-png-real.js`: html2canvas flattened the metallic gold, drew the
+   frame's inset / negative-spread glow as hard boxes, and set every text line ~0.3-0.5em low, so the
+   124 px amount landed on the creature row. The same low-text offset shows on the existing Burn Stats
+   PNG in the harness (smaller type hides it). The view maths are `computeDaoSocialView` (pure; data =
+   `fetchDaoBuys` + `fetchFreshDaoBuys`, same as the PTGC Buys chart); `DAO_SOCIAL_RANGES` holds the
+   switch. Harness entrance: Socials -> `button:has-text('DAO Buys')`, ranges by `aria-label`
+   ('Past 7 days', 'All time').
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -548,6 +563,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-09-23.md` — Socials DAO Buys card: Latest (default) / 24H / 7D / 30D / 90D / All time,
+  timeline strip, empty-window wording, screenshot-only after an html2canvas check.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
