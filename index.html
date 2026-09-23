@@ -69,6 +69,7 @@
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
+    .dao-blue-text{background:linear-gradient(180deg,#F0FAFF 0%,#BFE9FF 20%,#7CCBFF 42%,#3B9BFF 62%,#1E5FD8 82%,#123A8C 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .burn-fire-text{background:linear-gradient(180deg,#FFF6D5 0%,#FFE08A 16%,#FFB23E 36%,#FF7A1A 56%,#E8420F 78%,#9E1B05 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     ::-webkit-scrollbar{width:8px;height:8px}
@@ -6590,6 +6591,179 @@
         </ShareCardModal>
       );
     };
+    /* ===================== DAO TREASURY — SHARE CARD (2026-09-23) =====================
+     * Socials → PTGC → "DAO Treasury" and the 📷 on the DAO Treasury panel. Replaces the 600×340 card
+     * (Shaka picked the blue "vault" mockup, round 4): title, PTGC logo + 📊 Total DAO Value, a
+     * breakdown bar (Available / Pending / Ready to deploy / PTGC held — colours match the tile
+     * stripes), and four equal tiles: 💰 Available for proposals, ⏳ Pending in live (n), 🏦 Ready to
+     * deploy, 🪙 Treasury holdings (every token in the treasury wallet worth more than $50, biggest
+     * first, with its logo). Wide 1200×675 / Tall 1080×1350, screenshot-only (gradient text, masks).
+     * Data is `daoData` from fetchDAOData — nothing new is fetched. null → "—" (a16), and the bar only
+     * draws when the total is known. The UFO "PTGC burned by UFO" card still uses the old markup. */
+    const DAO_TREASURY_SHAPES={
+      wide:{W:1200,H:675,title:38,big:132,logo:170,lbl:15,tv:42,ts:20,tp:'18px 18px 18px',hr:18,hi:24,bar:18,leg:18},
+      tall:{W:1080,H:1350,title:52,big:180,logo:210,lbl:20,tv:54,ts:25,tp:'24px 26px 24px',hr:25,hi:34,bar:24,leg:22}
+    };
+    const DAO_HOLDING_MIN_USD=50;
+    const DAO_T_BLUE='59,155,255';
+    const daoHoldingLogo=sym=>{
+      if(sym==='PTGC')return TOKENS.PTGC.logo;
+      if(sym==='PLS')return getLogo(ADDR.WPLS);
+      const t=MANAGEMENT_TOKENS.find(m=>m.symbol===sym);
+      return t?getLogo(t.address):null;
+    };
+    const DAO_HOLDING_BADGE={PLS:'linear-gradient(135deg,#00D4FF,#7B2FFF 50%,#FF2FA0)',HEX:'linear-gradient(135deg,#FFDB01,#FF6B01 45%,#FF0F6F 75%,#FF00FF)',PLSX:'linear-gradient(135deg,#7CFFCB,#23C4FF 50%,#8A2BFF)',WETH:'linear-gradient(135deg,#B8C3FF,#627EEA 60%,#3B4FA8)',EHEX:'linear-gradient(135deg,#FFE27A,#FF8A00 60%,#E0005F)',WBTC:'linear-gradient(135deg,#FFD08A,#F7931A 60%,#B35900)',USDC:'linear-gradient(135deg,#8FC3FF,#2775CA)',USDT:'linear-gradient(135deg,#7FE3C6,#26A17B)',DAI:'linear-gradient(135deg,#FFE08A,#F5AC37)',INC:'linear-gradient(135deg,#FFB3E6,#C21FB0)'};
+    /* Token icon: the DexScreener logo, or a gradient badge with the symbol when it will not load. */
+    const DaoHoldingIcon=({sym,size})=>{
+      const[bad,setBad]=useState(false);
+      const src=daoHoldingLogo(sym);
+      if(src&&!bad)return<img src={src} alt="" onError={()=>setBad(true)} style={{width:size,height:size,borderRadius:'50%',flexShrink:0,boxShadow:sym==='PTGC'?'0 0 0 2px rgba(212,175,55,0.8)':'0 0 10px rgba(255,255,255,0.12)'}}/>;
+      return<span style={{width:size,height:size,borderRadius:'50%',flexShrink:0,background:DAO_HOLDING_BADGE[sym]||'linear-gradient(135deg,#9FD6FF,#3B6BFF)',display:'inline-flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:Math.round(size*0.3),color:'#fff',textShadow:'0 1px 3px rgba(0,0,0,0.6)'}}>{sym.slice(0,4)}</span>;
+    };
+    const DaoTreasuryTile=({z,e,label,accent,children,sub})=>(
+      <div style={{flex:'1 1 0',minWidth:0,borderRadius:18,background:'linear-gradient(180deg,rgba(10,24,52,0.9),rgba(6,14,32,0.92))',border:'1px solid rgba(120,190,255,0.38)',boxShadow:`inset 0 1px 0 rgba(255,255,255,0.08), 0 0 26px -10px rgba(${DAO_T_BLUE},0.8)`,padding:z.tp,position:'relative',overflow:'hidden'}}>
+        <div aria-hidden="true" style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:accent,boxShadow:`0 0 14px ${accent}`}}></div>
+        <div style={{display:'flex',alignItems:'flex-start',gap:8,fontSize:z.lbl,letterSpacing:'0.12em',textTransform:'uppercase',color:'#9FD6FF',fontWeight:700,lineHeight:1.2}}><span style={{fontSize:'1.3em',letterSpacing:0,lineHeight:1}}>{e}</span><span>{label}</span></div>
+        {children}
+        {sub!=null&&sub!==''&&<div className="tabular-nums" style={{fontSize:z.ts,color:'rgba(255,255,255,0.72)',marginTop:4,fontWeight:600}}>{sub}</div>}
+      </div>
+    );
+    const DaoTreasuryCard=({dao,loading,shape='wide'})=>{
+      const z=DAO_TREASURY_SHAPES[shape]||DAO_TREASURY_SHAPES.wide,tall=shape==='tall';
+      const d=dao||null;
+      const money=v=>d&&v!=null&&isFinite(v)?(v>=1e7?'$'+fmtAbbr(v):fmtDollar(v,0)):'—';   // $12.34M past ten million so nothing overflows its box
+      const fitFs=(txt,base,chars)=>Math.round(base*Math.min(1,chars/Math.max(1,String(txt).length)));   // belt and braces: shrink a long figure to its box
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const holdings=d?[...(d.managementTokens||[]).map(t=>({s:t.symbol,amt:t.balance,usd:t.usdValue})),...(d.ptgcUSD>0?[{s:'PTGC',amt:d.ptgcBalance,usd:d.ptgcUSD}]:[])]
+        .filter(h=>h.usd>DAO_HOLDING_MIN_USD).sort((a,b)=>b.usd-a.usd):[];
+      /* up to 4 rows at full size, 5–6 compact, more → top 5 + "+n more" */
+      const compact=holdings.length>4;
+      const shown=holdings.length>6?holdings.slice(0,5):holdings;
+      const rest=holdings.length>6?holdings.slice(5):[];
+      const hr=compact?Math.round(z.hr*0.85):z.hr,hi=compact?Math.round(z.hi*0.8):z.hi;
+      const valueTxt=v=>v>=1e6?'$'+fmtAbbr(v):'$'+Math.round(v).toLocaleString('en-US');
+      const segs=d&&d.totalValue>0?[
+        {l:'Available',v:d.availableUSD||0,c:'#4ADE80'},{l:'Pending',v:d.pendingUSD||0,c:'#C084FC'},
+        {l:'Ready to deploy',v:d.managementValue||0,c:'#60A5FA'},{l:'PTGC held',v:d.ptgcUSD||0,c:'#E8C044'}]:null;
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:14,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
+          <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F3DB}️'}</span>
+          <span className="dao-blue-text" style={{filter:`drop-shadow(0 0 14px rgba(${DAO_T_BLUE},0.5))`}}>PTGC DAO Treasury</span>
+        </div>
+      );
+      const logoEl=(
+        <div style={{position:'relative',width:z.logo,height:z.logo,flexShrink:0}}>
+          <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(z.logo*0.2),borderRadius:'50%',background:`radial-gradient(circle, rgba(${DAO_T_BLUE},0.45) 0%, rgba(0,0,0,0) 68%)`}}></div>
+          <img src={TOKENS.PTGC.logo} alt="" style={{position:'relative',width:z.logo,height:z.logo,borderRadius:'50%',boxShadow:`0 0 0 3px rgba(212,175,55,0.9), 0 0 0 7px rgba(${DAO_T_BLUE},0.35), 0 0 40px rgba(${DAO_T_BLUE},0.75)`}}/>
+        </div>
+      );
+      const hero=(
+        <div style={{textAlign:tall?'center':'left'}}>
+          <div style={{fontSize:z.lbl+6,letterSpacing:'0.28em',textTransform:'uppercase',color:'#9FD6FF',fontWeight:700}}>{'\u{1F4CA}'} Total DAO value</div>
+          <div className="tabular-nums" style={{fontSize:fitFs(money(d&&d.totalValue),z.big,tall?10:9),fontWeight:700,lineHeight:0.95,marginTop:tall?10:6,color:'#4ADE80',textShadow:'0 0 34px rgba(74,222,128,0.45), 0 4px 18px rgba(0,0,0,0.8)'}}>{loading&&!d?'…':money(d&&d.totalValue)}</div>
+        </div>
+      );
+      const bar=segs&&(
+        <div style={{width:'100%'}}>
+          <div style={{display:'flex',height:z.bar,borderRadius:99,overflow:'hidden',border:'1px solid rgba(255,255,255,0.14)',boxShadow:`0 0 22px -4px rgba(${DAO_T_BLUE},0.6)`}}>
+            {segs.map(g=><div key={g.l} style={{width:`${g.v/d.totalValue*100}%`,background:`linear-gradient(180deg,${g.c},${g.c}bb)`,boxShadow:'inset 0 1px 0 rgba(255,255,255,0.45)'}}></div>)}
+          </div>
+          <div className="tabular-nums" style={{display:'flex',justifyContent:'space-between',marginTop:10,fontSize:z.leg,color:'rgba(255,255,255,0.78)',fontWeight:600}}>
+            {segs.map(g=><span key={g.l} style={{whiteSpace:'nowrap'}}><span style={{display:'inline-block',width:Math.round(z.leg*0.6),height:Math.round(z.leg*0.6),borderRadius:3,background:g.c,marginRight:7,verticalAlign:'middle',boxShadow:`0 0 8px ${g.c}`}}></span>{g.l} <span style={{color:'#fff'}}>{Math.round(g.v/d.totalValue*100)}%</span></span>)}
+          </div>
+        </div>
+      );
+      const val=v=><div className="tabular-nums" style={{fontSize:fitFs(v,z.tv,tall?11:10),fontWeight:700,color:'#5CF592',lineHeight:1.05,marginTop:tall?10:8,textShadow:'0 2px 10px rgba(0,0,0,0.8)'}}>{v}</div>;
+      const tiles=[
+        <DaoTreasuryTile key="a" z={z} e={'\u{1F4B0}'} label="Available for proposals" accent="#4ADE80" sub={d?fmtAbbr(d.availablePLS)+' PLS':''}>{val(money(d&&d.availableUSD))}</DaoTreasuryTile>,
+        <DaoTreasuryTile key="p" z={z} e={'⏳'} label={`Pending in live${d&&d.pendingCount!=null?` (${d.pendingCount})`:''}`} accent="#C084FC" sub={d?fmtAbbr(d.pendingPLS)+' PLS':''}>{val(money(d&&d.pendingUSD))}</DaoTreasuryTile>,
+        <DaoTreasuryTile key="r" z={z} e={'\u{1F3E6}'} label="Ready to deploy" accent="#60A5FA" sub={d?'management wallet':''}>{val(money(d&&d.managementValue))}</DaoTreasuryTile>,
+        <DaoTreasuryTile key="h" z={z} e={'\u{1FA99}'} label="Treasury holdings" accent="#E8C044">
+          {!d?val('—'):holdings.length===0?<div style={{fontSize:z.ts,color:'rgba(255,255,255,0.6)',marginTop:10}}>nothing over ${DAO_HOLDING_MIN_USD}</div>:(
+            <div>
+              {shown.map(h=>(
+                <div key={h.s} style={{display:'flex',alignItems:'center',gap:Math.round(hr*0.5),marginTop:compact?(tall?7:4):(tall?10:7)}}>
+                  <DaoHoldingIcon sym={h.s} size={hi}/>
+                  <span style={{fontSize:hr,fontWeight:700,color:'#fff'}}>{h.s}</span>
+                  <span className="tabular-nums" style={{fontSize:hr,color:'rgba(255,255,255,0.62)'}}>{h.amt<1000?String(+h.amt.toFixed(h.amt<1?4:2)):fmtAbbr(h.amt)}</span>
+                  <span className="tabular-nums" style={{marginLeft:'auto',fontSize:hr+1,fontWeight:700,color:'#5CF592',textShadow:'0 2px 8px rgba(0,0,0,0.8)'}}>{valueTxt(h.usd)}</span>
+                </div>
+              ))}
+              {rest.length>0&&<div className="tabular-nums" style={{fontSize:Math.round(hr*0.85),color:'rgba(255,255,255,0.55)',marginTop:4}}>+{rest.length} more {'·'} {valueTxt(rest.reduce((s,h)=>s+h.usd,0))}</div>}
+            </div>
+          )}
+        </DaoTreasuryTile>
+      ];
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#050810',fontFamily:"'Rajdhani',sans-serif"}}>
+          {/* vault backdrop: blue haze, faint grid, stars, watermark right, gradient frame */}
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:`radial-gradient(120% 80% at 50% -10%, rgba(${DAO_T_BLUE},0.30) 0%, rgba(30,70,180,0.12) 40%, rgba(0,0,0,0) 70%), linear-gradient(180deg,#050b18 0%,#060c1c 55%,#040811 100%)`}}></div>
+          <svg aria-hidden="true" width={z.W} height={z.H} style={{position:'absolute',inset:0}}>
+            {Array.from({length:Math.ceil(z.W/60)},(_,i)=><line key={'v'+i} x1={i*60} y1={0} x2={i*60} y2={z.H} stroke={`rgba(${DAO_T_BLUE},0.05)`}/>)}
+            {Array.from({length:Math.ceil(z.H/60)},(_,i)=><line key={'h'+i} x1={0} y1={i*60} x2={z.W} y2={i*60} stroke={`rgba(${DAO_T_BLUE},0.05)`}/>)}
+            {DAO_T_STARS(z.W,z.H).map((p,i)=><circle key={i} cx={p.x} cy={p.y} r={p.r} fill={`rgba(${DAO_T_BLUE},${p.o})`}/>)}
+          </svg>
+          <img src={TOKENS.PTGC.logo} alt="" aria-hidden="true" style={tall?{position:'absolute',right:-110,top:130,width:520,height:520,opacity:0.06}:{position:'absolute',right:-50,top:40,width:400,height:400,opacity:0.06}}/>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:'linear-gradient(#0000,#0000) padding-box, linear-gradient(180deg,#BFE9FF 0%,#3B9BFF 45%,#1E3F9C 100%) border-box',WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:`0 0 70px -8px rgba(${DAO_T_BLUE},0.75), 0 0 22px -4px rgba(${DAO_T_BLUE},0.5), inset 0 0 0 1px rgba(255,255,255,0.08)`}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:90,right:90,top:14,height:2,background:'linear-gradient(90deg, rgba(191,233,255,0), #BFE9FF, rgba(191,233,255,0))'}}></div>
+          {tall?(
+            <div style={{position:'absolute',left:56,right:56,top:60,bottom:42,display:'flex',flexDirection:'column'}}>
+              {title}
+              <div style={{display:'flex',justifyContent:'center',marginTop:40}}>{logoEl}</div>
+              <div style={{marginTop:30}}>{hero}</div>
+              <div style={{flex:1,minHeight:20}}></div>
+              {bar}
+              <div style={{marginTop:26,display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>{tiles}</div>
+              <div style={{marginTop:24,display:'flex',justifyContent:'center',alignItems:'center',gap:16}}>
+                <span className="font-orbitron dao-blue-text" style={{fontSize:28,fontWeight:700}}>ptgc-ufo.com</span>
+                <span className="tabular-nums" style={{fontSize:17,letterSpacing:'0.2em',color:'rgba(255,255,255,0.45)',textTransform:'uppercase'}}>{'·'} on-chain {'·'} {today}</span>
+              </div>
+            </div>
+          ):(
+            <div style={{position:'absolute',left:48,right:48,top:40,bottom:36,display:'flex',flexDirection:'column'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                {title}
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div className="font-orbitron dao-blue-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+                  <div className="tabular-nums" style={{marginTop:10,fontSize:14,letterSpacing:'0.2em',color:'rgba(255,255,255,0.45)',textTransform:'uppercase'}}>on-chain {'·'} {today}</div>
+                </div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:36,marginTop:14}}>{logoEl}{hero}</div>
+              <div style={{flex:1,minHeight:12}}></div>
+              {bar}
+              <div style={{marginTop:18,display:'flex',gap:14,alignItems:'stretch'}}>{tiles}</div>
+            </div>
+          )}
+        </div>
+      );
+    };
+    /* deterministic star field (same picture every render) */
+    const DAO_T_STARS=(W,H)=>{let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};return Array.from({length:60},()=>({x:(rnd()*W).toFixed(1),y:(rnd()*H).toFixed(1),r:(0.6+rnd()*1.6).toFixed(1),o:(0.15+rnd()*0.45).toFixed(2)}));};
+    const DaoTreasuryModal=({dao,loading,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=DAO_TREASURY_SHAPES[shape];
+      const controls=(
+        <div role="group" aria-label="Card shape" className="inline-flex items-center gap-0.5 p-1 rounded-full border border-sky-400/40 bg-black/70" style={{boxShadow:`0 0 26px -8px rgba(${DAO_T_BLUE},0.8)`}}>
+          {[{k:'wide',label:'Wide',long:'Wide card, 16:9',ic:'w-3.5 h-2'},{k:'tall',label:'Tall',long:'Tall card, 4:5 for phones',ic:'w-2 h-2.5'}].map(s=>{
+            const on=shape===s.k;
+            return(
+              <button key={s.k} type="button" onClick={()=>setShape(s.k)} aria-pressed={on} aria-label={s.long}
+                className={`tap-h inline-flex items-center gap-1.5 px-3 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] whitespace-nowrap transition-all ${on?'text-[#04122b]':'text-sky-200/70 hover:text-sky-100 hover:bg-sky-500/10'}`}
+                style={on?{background:'linear-gradient(180deg,#E0F4FF 0%,#7CCBFF 45%,#2F7BE6 100%)',boxShadow:'0 0 16px rgba(59,155,255,0.6), inset 0 1px 0 rgba(255,255,255,0.5)'}:undefined}>
+                <span aria-hidden="true" className={`${s.ic} rounded-[2px] border ${on?'border-[#04122b]':'border-sky-200/70'}`}></span>
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="PTGC DAO treasury share card" filename={`ptgc-dao-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <DaoTreasuryCard dao={dao} loading={loading} shape={shape}/>
+        </ShareCardModal>
+      );
+    };
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -10605,7 +10779,9 @@
           })()}
           
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
-          {showDAOShareModal&&(()=>{
+          {/* PTGC: DAO Treasury card, redesigned 2026-09-23 (DaoTreasuryModal). UFO keeps the 'PTGC burned by UFO' card below. */}
+          {showDAOShareModal&&cfg.hasDAO&&<DaoTreasuryModal dao={daoData} loading={daoLoading} onClose={()=>closeModalAndReturn(setShowDAOShareModal)}/>}
+          {showDAOShareModal&&!cfg.hasDAO&&(()=>{
             return(
             <ShareCardModal onClose={()=>closeModalAndReturn(setShowDAOShareModal)} width={600} height={340} label={token==='PTGC'?'PTGC DAO share card':'PTGC burned by UFO share card'} filename={`${token==='PTGC'?'ptgc-dao':'ptgc-burned-by-ufo'}-${new Date().toISOString().slice(0,10)}.png`}>
                 {/* Twitter Card - 600x340 */}
