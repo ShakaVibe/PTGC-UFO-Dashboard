@@ -17,7 +17,7 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-23)
+## Current state (end of 2026-09-23, late)
 
 **2026-09-23: DAO Buys share card in Socials (PTGC column, under DAO Treasury).** `DaoBuysSocialModal`
 opens on the latest buy in the Latest-DAO-buy tile's look (gold frame, glow, metallic amount, Grays
@@ -25,9 +25,12 @@ creatures) with a gold switch above the card - Latest / 24H / 7D / 30D / 90D / A
 windows). A window with no buys says "No DAO buys in the past 24 hours" and points at the last buy.
 Screenshot-only, like the PTGC Buys chart card (gotcha 30). Live since 17044bd4c; round 2 live as be0ac1e6c;
 round 3 (opens on All time, Wide 16:9 / Tall 4:5 switch, local + UTC times, more room above the
-card) pushed as 895596037. **Evening: the Socials Burn Stats cards (PTGC + UFO) were redone in a fire
-theme (`BurnSocialModal`, Wide/Tall, screenshot-only) - awaiting the push.** Owed: a 30-second live look at both shapes on a phone. A Telegram
-announcement was drafted for Shaka (not stored in the repo). `sessions/2026-09-23.md`.
+card) pushed as 895596037. **Evening: two more Socials cards redone, both live.** Burn Stats (PTGC + UFO) in a fire theme
+(`BurnSocialModal`, 002275416, logos/label enlarged in c0f65f15a + 493bcec2c) and the PTGC DAO Treasury card in
+a blue "vault" look (`DaoTreasuryModal`, eb12b1aa2: Total DAO Value, breakdown bar, four tiles incl. Treasury
+holdings = tokens over $50 with logos). Both Wide/Tall, screenshot-only, and both also open from their panel's
+📷. The UFO "PTGC burned by UFO" card is still the old design. **Owed: a live look at all three new cards
+(DAO Buys, Burn, Treasury) on a phone, both shapes - Burn and Treasury have only been seen on harness stub data.**
 
 **2026-09-22: the affiliates page showed some viewers a dashboard of zeros — and it was never a
 cache.** Shaka's viewers hard-refreshed, cleared caches and opened a months-unused browser, and
@@ -421,6 +424,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    `fetchDaoBuys` + `fetchFreshDaoBuys`, same as the PTGC Buys chart); `DAO_SOCIAL_RANGES` holds the
    switch. Harness entrance: Socials -> `button:has-text('DAO Buys')`, ranges by `aria-label`
    ('Past 7 days', 'All time').
+31. **The Socials share cards built 2026-09-23 share one pattern** - DAO Buys (`DaoBuysSocialModal`), Burn
+   (`BurnSocialModal`), DAO Treasury (`DaoTreasuryModal`): module-scope components just above `DashboardSkeleton`, a
+   `*_SHAPES` table for Wide 1200x675 / Tall 1080x1350, `ShareCardModal screenshot` with `toolbarClass="mb-6"`, and
+   gradient text via `.metallic-gold` / `.burn-fire-text` / `.dao-blue-text`. They are screenshot-only because
+   html2canvas cannot draw background-clip text, masks or SVG blur (gotcha 30). A card fed by the harness stub shows
+   absurd numbers (a 33-sextillion treasury, every burn 5.00%); inject real-shaped data through a copy of index.html
+   (`dao={window.__daoFake||daoData}` + `eval=`) to judge layout. Long figures: `money()` abbreviates past $10M and
+   `fitFs` shrinks text to its box - keep both if a tile is added.
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -566,8 +577,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-09-23.md` — Socials DAO Buys card: Latest (default) / 24H / 7D / 30D / 90D / All time,
-  timeline strip, empty-window wording, screenshot-only after an html2canvas check.
+- `sessions/2026-09-23.md` — Socials DAO Buys card (three rounds: period switch, All time default, Wide/Tall,
+  local + UTC times), Burn Stats fire redesign (PTGC + UFO), DAO Treasury blue redesign; all screenshot-only.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
