@@ -26,7 +26,9 @@ GeckoTerminal 15-minute candles) and ONE "BUY / SELL <token>" button per card (S
 opens the existing switch.win `SwapModal`. Round 2 the same day: the art COVERS the window at any
 shape (scaled, sides cropped, never stretched), 140px of faded headroom over the alien's crown that
 only shows when the window is tall enough (`--oy`), buttons with the classic glow + light sweep, stat
-tiles. **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
+tiles. **Also 2026-09-25: the Value Generated and Token Allocation share cards (both tokens) redone in the
+Burn / Treasury build — `ValueGenSocialModal`, `AllocSocialModal`, shared `SocialNebulaBackdrop` +
+`SocialShapeSwitch`; the 600x314 cards are gone.** **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
 set it to 'classic' to go back** — or look at either on the live site with `?home=classic` /
 `?home=cosmic`. Same loaders as before; only the view is new. Art in `logos/home/`. Details, checks
 and the owed live look: `sessions/2026-09-25.md`. Gotcha 32.
@@ -446,6 +448,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    absurd numbers (a 33-sextillion treasury, every burn 5.00%); inject real-shaped data through a copy of index.html
    (`dao={window.__daoFake||daoData}` + `eval=`) to judge layout. Long figures: `money()` abbreviates past $10M and
    `fitFs` shrinks text to its box - keep both if a tile is added.
+   2026-09-25: Value Generated (`ValueGenSocialModal`) and Token Allocation (`AllocSocialModal`) joined the pattern;
+   `SocialNebulaBackdrop` (colour via `rgb` + `edge`) and `SocialShapeSwitch` are the shared pieces for the next one.
 32. **Home has two designs; `HOME_DESIGN` picks one** (2026-09-25). 'cosmic' (live) is `HomeCosmicView` /
    `CosmicCard` / `CosmicCardSkeleton` / `HomeSpark`, styled by the `hc-*` block at the end of the head
    `<style>`; 'classic' is the original JSX, still inside `Home` below the cosmic `return`, untouched.

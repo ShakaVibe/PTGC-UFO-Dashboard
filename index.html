@@ -69,6 +69,8 @@
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
+    .vg-green-text{background:linear-gradient(180deg,#F0FFF8 0%,#C6F7E2 20%,#6EE7B7 42%,#34D399 62%,#10B981 82%,#047857 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
+    .alloc-violet-text{background:linear-gradient(180deg,#FAF8FF 0%,#E9E1FF 20%,#C4B5FD 42%,#A78BFA 62%,#7C3AED 82%,#4C1D95 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .dao-blue-text{background:linear-gradient(180deg,#F0FAFF 0%,#BFE9FF 20%,#7CCBFF 42%,#3B9BFF 62%,#1E5FD8 82%,#123A8C 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .burn-fire-text{background:linear-gradient(180deg,#FFF6D5 0%,#FFE08A 16%,#FFB23E 36%,#FF7A1A 56%,#E8420F 78%,#9E1B05 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
@@ -7091,6 +7093,303 @@
         </ShareCardModal>
       );
     };
+    /* ===================== VALUE GENERATED + TOKEN ALLOCATION — SOCIALS CARDS (2026-09-25) =====================
+     * Socials → PTGC / UFO → "Value Generated" and "Token Allocation", and the 📷 on both panels. Replace the
+     * 600×314 cards with two in the Burn / DAO Treasury build (gotcha 31): Wide 1200×675 / Tall 1080×1350,
+     * screenshot-only (gradient text, masks, SVG blur), module scope, one *_SHAPES table each.
+     * Value Generated (emerald): the ONE model (computeValueGen, gotcha 16) for the panel's window — the card
+     * prints `valueGenView` and nothing else; a pending / failed read is "—", never an estimate. Buckets =
+     * buildValueGenItems (PTGC keeps its synthetic "Total H&S" tile, which stays out of the bar).
+     * Token Allocation (violet): `chartData` / `chartColors` as the panel builds them (a15: any unknown slice →
+     * the ring stays empty and that row is "—"), holder tiers via tierCountLabel (u6), USD at today's price. */
+    const SocialNebulaBackdrop=({W,H,tall,logo,rgb,edge,seed=11})=>{
+      const art=React.useMemo(()=>{
+        let s=seed;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};
+        return Array.from({length:tall?110:90},()=>({x:rnd()*W,y:rnd()*H,r:0.6+rnd()*1.9,o:0.15+rnd()*0.6}));
+      },[W,H,tall,seed]);
+      return(
+        <>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:`radial-gradient(120% 80% at 50% 115%, rgba(${rgb},0.30) 0%, rgba(${rgb},0.12) 40%, rgba(0,0,0,0) 72%), linear-gradient(180deg,#040705 0%,#050807 60%,#070a08 100%)`}}></div>
+          <div aria-hidden="true" style={{position:'absolute',right:-200,top:-260,width:720,height:720,borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.30) 0%, rgba(${rgb},0.08) 40%, rgba(0,0,0,0) 68%)`}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:-220,bottom:-300,width:760,height:760,borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.22) 0%, rgba(${rgb},0.06) 42%, rgba(0,0,0,0) 68%)`}}></div>
+          <svg aria-hidden="true" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{position:'absolute',inset:0}}>
+            {art.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill={`rgba(255,255,255,${p.o.toFixed(2)})`}/>)}
+          </svg>
+          <img src={logo} alt="" aria-hidden="true" style={tall
+            ?{position:'absolute',left:'50%',marginLeft:-330,top:190,width:660,height:660,opacity:0.05}
+            :{position:'absolute',right:-50,top:30,width:420,height:420,opacity:0.05}}/>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:`linear-gradient(#0000,#0000) padding-box, linear-gradient(180deg,${edge[0]} 0%,${edge[1]} 50%,${edge[2]} 100%) border-box`,WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:`0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 70px -8px rgba(${rgb},0.75), 0 0 24px -4px rgba(${rgb},0.5)`}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:90,right:90,top:14,height:2,background:`linear-gradient(90deg, rgba(255,255,255,0), ${edge[0]}, rgba(255,255,255,0))`}}></div>
+        </>
+      );
+    };
+    const SocialShapeSwitch=({shape,setShape,ring,on,onText,offText,grad,glow})=>(
+      <div role="group" aria-label="Card shape" className={`inline-flex items-center gap-0.5 p-1 rounded-full border ${ring} bg-black/70`} style={{boxShadow:`0 0 26px -8px ${glow}`}}>
+        {[{k:'wide',label:'Wide',long:'Wide card, 16:9',ic:'w-3.5 h-2'},{k:'tall',label:'Tall',long:'Tall card, 4:5 for phones',ic:'w-2 h-2.5'}].map(s=>{
+          const isOn=shape===s.k;
+          return(
+            <button key={s.k} type="button" onClick={()=>setShape(s.k)} aria-pressed={isOn} aria-label={s.long}
+              className={`tap-h inline-flex items-center gap-1.5 px-3 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] whitespace-nowrap transition-all ${isOn?onText:offText}`}
+              style={isOn?{background:grad,boxShadow:`0 0 16px ${glow}, inset 0 1px 0 rgba(255,255,255,0.45)`}:undefined}>
+              <span aria-hidden="true" className={`${s.ic} rounded-[2px] border ${isOn?on:'border-white/50'}`}></span>
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+    /* ---------- Value Generated ---------- */
+    const VG_SHAPES={
+      wide:{W:1200,H:675,pad:48,top:38,bottom:34,title:40,logo:170,big:118,note:26,barH:16,leg:17,tl:16,tv:36,tq:17,tp:'14px 16px 16px',gap:12},
+      tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,logo:220,big:160,note:34,barH:20,leg:22,tl:21,tv:50,tq:22,tp:'20px 24px 22px',gap:16}
+    };
+    const VG_GREEN='52,211,153';
+    const VG_COLORS={'DAO':'#E8C044','Add LP':'#60A5FA','Buy & Burn':'#FB923C','Holders':'#34D399','Stakers':'#2DD4BF','Total H&S':'#A7F3D0',
+      reflection:'#34D399',ufoBurn:'#FB923C',ptgcBurn:'#E8C044',plsLP:'#C084FC',plsxLP:'#38BDF8',wethLP:'#818CF8'};
+    const vgColor=item=>VG_COLORS[item.key||item.name]||'#9DE8C4';
+    const VG_TILE_BG={background:'linear-gradient(180deg,rgba(8,30,20,0.9),rgba(4,16,11,0.93))',border:'1px solid rgba(110,231,183,0.38)',boxShadow:'inset 0 1px 0 rgba(200,255,230,0.12), 0 0 24px -8px rgba(52,211,153,0.6)'};
+    const ValueGenSocialTile=({z,item,usd,parts,tokenColor})=>{
+      const known=usd!=null;
+      const c=vgColor(item);
+      const qty=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
+      return(
+        <div style={{flex:'1 1 0',minWidth:0,borderRadius:16,padding:z.tp,position:'relative',overflow:'hidden',...VG_TILE_BG,...(item.isTotal?{border:'1px solid rgba(167,243,208,0.7)'}:{})}}>
+          <div aria-hidden="true" style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:c,boxShadow:`0 0 14px ${c}`}}></div>
+          <div style={{display:'flex',alignItems:'center',gap:7,fontSize:z.tl,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'#A7F3D0',lineHeight:1.1,whiteSpace:'nowrap'}}>
+            {item.isLP&&bucketLogoSrc(item.priceKey)?<PairLogo priceKey={item.priceKey} size={Math.round(z.tl*1.35)}/>:<span style={{fontSize:item.isTotal?'0.95em':'1.25em',letterSpacing:0,lineHeight:1}}>{item.emoji}</span>}
+            <span>{item.name}</span>
+          </div>
+          <div className="tabular-nums" style={{fontSize:z.tv,fontWeight:700,color:'#fff',lineHeight:1.05,marginTop:8,textShadow:'0 2px 10px rgba(0,0,0,0.8), 0 0 18px rgba(52,211,153,0.3)',whiteSpace:'nowrap'}}>{known?fmtUSD(usd):'—'}</div>
+          <div className="tabular-nums" style={{fontSize:z.tq,color:known&&qty?tokenColor:'rgba(255,255,255,0.35)',fontWeight:600,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{known&&qty?qty:'—'}</div>
+        </div>
+      );
+    };
+    const ValueGenSocialCard=({token,cfg,vg,items,prices,period,shape='wide'})=>{
+      const z=VG_SHAPES[shape]||VG_SHAPES.wide,tall=shape==='tall';
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const win={'24h':'24H','7d':'7D','30d':'30D','90d':'90D'}[period]||String(period).toUpperCase();
+      const winLong={'24h':'past 24 hours','7d':'past 7 days','30d':'past 30 days','90d':'past 90 days'}[period]||win;
+      const total=vg?vg.total:null;
+      const tokColor=token==='PTGC'?'#E8C044':'#9DFF3A';
+      const tokTag=<span style={{color:tokColor}}>{token}</span>;
+      const tiles=items.map(it=>{const usd=valueGenBucketUsd(vg,it);return{it,usd,parts:usd==null?null:valueGenParts(token,it,usd,prices)};});
+      const barItems=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0);
+      const barSum=barItems.reduce((s,t)=>s+t.usd,0);
+      const basis=!vg?'—':vg.pending?'reading fees from the chain…':vg.basis==='delivered'?'measured on chain, delivered to each bucket':vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
+          <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F4B0}'}</span>
+          <span className="vg-green-text" style={{filter:'drop-shadow(0 0 14px rgba(52,211,153,0.5))'}}>Value generated</span>
+          <span style={{fontSize:'0.62em',fontWeight:700,letterSpacing:'0.14em',color:'#0b1f16',background:'linear-gradient(180deg,#B9F5DC,#34D399 55%,#0FA36F)',padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:'0 0 18px rgba(52,211,153,0.55)'}}>{win}</span>
+        </div>
+      );
+      const logoEl=(
+        <div style={{position:'relative',width:z.logo,height:z.logo,flexShrink:0}}>
+          <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(z.logo*0.2),borderRadius:'50%',background:`radial-gradient(circle, rgba(${VG_GREEN},0.42) 0%, rgba(0,0,0,0) 68%)`}}></div>
+          <img src={cfg.logo} alt="" style={{position:'relative',width:z.logo,height:z.logo,borderRadius:'50%',boxShadow:`0 0 0 3px rgba(110,231,183,0.9), 0 0 0 6px rgba(16,120,80,0.35), 0 0 46px rgba(${VG_GREEN},0.75)`}}/>
+        </div>
+      );
+      const amount=(
+        <>
+          <div style={{fontSize:z.note,letterSpacing:'0.22em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,textAlign:tall?'center':'left'}}>{tokTag} {'·'} {winLong}</div>
+          <div className="vg-green-text tabular-nums" style={{fontSize:z.big,fontWeight:700,lineHeight:0.95,marginTop:6,textAlign:tall?'center':'left'}}>{total==null?'—':fmtUSD(total)}</div>
+          <div style={{fontSize:z.note,color:'rgba(255,255,255,0.72)',marginTop:10,lineHeight:1.25,textAlign:tall?'center':'left'}}>{basis}</div>
+        </>
+      );
+      const bar=barSum>0&&(
+        <div style={{width:'100%'}}>
+          <div style={{display:'flex',height:z.barH,borderRadius:99,overflow:'hidden',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(110,231,183,0.25)'}}>
+            {barItems.map(t=><div key={t.it.key||t.it.name} style={{width:`${(t.usd/barSum*100).toFixed(2)}%`,background:vgColor(t.it),boxShadow:`0 0 14px ${vgColor(t.it)}`}}></div>)}
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:'6px 22px',marginTop:10,fontSize:z.leg,color:'rgba(255,255,255,0.8)',justifyContent:tall?'center':'flex-start'}}>
+            {barItems.map(t=><span key={t.it.key||t.it.name} style={{display:'inline-flex',alignItems:'center',gap:7}}><span style={{width:'0.6em',height:'0.6em',borderRadius:'50%',background:vgColor(t.it),boxShadow:`0 0 8px ${vgColor(t.it)}`}}></span>{t.it.name} <b className="tabular-nums" style={{color:'#fff'}}>{(t.usd/barSum*100).toFixed(0)}%</b></span>)}
+          </div>
+        </div>
+      );
+      const tileEls=tiles.length===0?<div style={{fontSize:z.note,color:'rgba(255,255,255,0.45)',textAlign:'center',padding:'20px 0'}}>bucket split not available yet</div>:(
+        <div style={tall?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:z.gap}:{display:'flex',gap:z.gap}}>
+          {tiles.map(t=><ValueGenSocialTile key={t.it.key||t.it.name} z={z} item={t.it} usd={t.usd} parts={t.parts} tokenColor={tokColor}/>)}
+        </div>
+      );
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#040705',fontFamily:"'Rajdhani',sans-serif"}}>
+          <SocialNebulaBackdrop W={z.W} H={z.H} tall={tall} logo={cfg.logo} rgb={VG_GREEN} edge={['#B9F5DC','#34D399','#0B6B49']} seed={5}/>
+          <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall?(
+              <>
+                {title}
+                <div style={{display:'flex',justifyContent:'center',marginTop:26}}>{logoEl}</div>
+                <div style={{marginTop:22}}>{amount}</div>
+                <div style={{flex:1,minHeight:18}}></div>
+                {bar}
+                <div style={{marginTop:22}}>{tileEls}</div>
+                <div style={{marginTop:22,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}>
+                  <span className="font-orbitron" style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',color:'#D1FAE5',textShadow:'0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(52,211,153,0.6)'}}>ptgc-ufo.com</span>
+                  <span style={{color:'rgba(230,255,240,0.75)',textShadow:'0 2px 8px rgba(0,0,0,0.9)'}}>{'·'} {tokTag} {'·'} {today}</span>
+                </div>
+              </>
+            ):(
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}>
+                  {title}
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div className="font-orbitron vg-green-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+                    <div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{tokTag} {'·'} fees, {win}</div>
+                    <div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>{today}</div>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:30,marginTop:16}}>{logoEl}<div style={{flex:1,minWidth:0}}>{amount}</div></div>
+                <div style={{flex:1,minHeight:14}}></div>
+                {bar}
+                <div style={{marginTop:16}}>{tileEls}</div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+    const ValueGenSocialModal=({token,cfg,vg,items,prices,period,setPeriod,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=VG_SHAPES[shape];
+      const controls=(
+        <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'10px 14px',justifyContent:'center'}}>
+          <div role="group" aria-label="Window" className="inline-flex items-center gap-0.5 p-1 rounded-full border border-emerald-400/40 bg-black/70" style={{boxShadow:`0 0 26px -8px rgba(${VG_GREEN},0.8)`}}>
+            {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([pv,pl])=>{
+              const on=period===pv;
+              return<button key={pv} type="button" onClick={()=>setPeriod(pv)} aria-pressed={on} className={`tap-h px-3 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] transition-all ${on?'text-[#04130d]':'text-emerald-200/70 hover:text-emerald-100 hover:bg-emerald-500/10'}`} style={on?{background:'linear-gradient(180deg,#D1FAE5 0%,#34D399 50%,#0FA36F 100%)',boxShadow:`0 0 16px rgba(${VG_GREEN},0.6), inset 0 1px 0 rgba(255,255,255,0.5)`}:undefined}>{pl}</button>;
+            })}
+          </div>
+          <SocialShapeSwitch shape={shape} setShape={setShape} ring="border-emerald-400/40" on="border-[#04130d]" onText="text-[#04130d]" offText="text-emerald-200/70 hover:text-emerald-100 hover:bg-emerald-500/10" grad="linear-gradient(180deg,#D1FAE5 0%,#34D399 50%,#0FA36F 100%)" glow={`rgba(${VG_GREEN},0.6)`}/>
+        </div>
+      );
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label={`${token} value generated share card`} filename={`${token.toLowerCase()}-value-generated-${period}-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <ValueGenSocialCard token={token} cfg={cfg} vg={vg} items={items} prices={prices} period={period} shape={shape}/>
+        </ShareCardModal>
+      );
+    };
+    /* ---------- Token Allocation ---------- */
+    const ALLOC_SHAPES={
+      wide:{W:1200,H:675,pad:48,top:38,bottom:34,title:40,ring:300,ringW:46,cLbl:16,cVal:42,lg:24,lgSub:18,tE:46,tV:36,tL:15,tp:'12px 10px 14px',gap:12},
+      tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,ring:420,ringW:62,cLbl:22,cVal:58,lg:30,lgSub:22,tE:56,tV:44,tL:18,tp:'16px 10px 18px',gap:14}
+    };
+    const ALLOC_VIOLET='167,139,250';
+    const AllocRing=({data,colors,size,width,children})=>{
+      const known=data.length>0&&data.every(d=>d.value!=null);
+      const total=known?data.reduce((s,d)=>s+d.value,0):0;
+      const r=size/2,radius=r-width/2,circ=2*Math.PI*radius;
+      let cum=0;
+      return(
+        <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
+          <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(size*0.12),borderRadius:'50%',background:`radial-gradient(circle, rgba(${ALLOC_VIOLET},0.35) 0%, rgba(0,0,0,0) 66%)`}}></div>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{position:'relative',transform:'rotate(-90deg)'}}>
+            <circle cx={r} cy={r} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={width}/>
+            {known&&total>0&&data.map((d,i)=>{
+              const pct=d.value/total*100,len=circ*pct/100,off=circ*(1-cum/100);cum+=pct;
+              return<circle key={i} cx={r} cy={r} r={radius} fill="none" stroke={colors[i%colors.length]} strokeWidth={width} strokeDasharray={`${len} ${circ-len}`} strokeDashoffset={off} style={{filter:`drop-shadow(0 0 6px ${colors[i%colors.length]})`}}/>;
+            })}
+          </svg>
+          <div style={{position:'absolute',inset:width+6,borderRadius:'50%',background:'radial-gradient(circle, rgba(10,6,20,0.96) 0%, rgba(5,3,12,0.98) 100%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center'}}>{children}</div>
+        </div>
+      );
+    };
+    const AllocSocialCard=({token,cfg,chartData,chartColors,tiers,price,shape='wide'})=>{
+      const z=ALLOC_SHAPES[shape]||ALLOC_SHAPES.wide,tall=shape==='tall';
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const tokColor=token==='PTGC'?'#E8C044':'#9DFF3A';
+      const tokTag=<span style={{color:tokColor}}>{token}</span>;
+      const supply=cfg.totalSupply;
+      const worth=v=>(v!=null&&price>0)?fmtUSD(v*price):'—';
+      const tierRows=[['\u{1F531}','Poseidon',tierCountLabel(tiers,'Poseidon')],['\u{1F40B}','Whale',tierCountLabel(tiers,'Whale')],['\u{1F988}','Shark',tierCountLabel(tiers,'Shark')],['\u{1F42C}','Dolphin',tierCountLabel(tiers,'Dolphin')],['\u{1F991}→\u{1F41A}','Squid & below',tiers&&tiers.SquidAndBelow!=null?fmtAbbr(tiers.SquidAndBelow):'—']];
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
+          <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F4CA}'}</span>
+          <span className="alloc-violet-text" style={{filter:'drop-shadow(0 0 14px rgba(167,139,250,0.5))'}}>Token allocation</span>
+        </div>
+      );
+      const ring=(
+        <AllocRing data={chartData} colors={chartColors} size={z.ring} width={z.ringW}>
+          <img src={cfg.logo} alt="" style={{width:Math.round(z.ring*0.24),height:Math.round(z.ring*0.24),borderRadius:'50%',boxShadow:`0 0 0 2px rgba(${ALLOC_VIOLET},0.7), 0 0 20px rgba(${ALLOC_VIOLET},0.6)`}}/>
+          <div style={{fontSize:z.cLbl,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.5)',fontWeight:600,marginTop:Math.round(z.ring*0.04)}}>Total supply</div>
+          <div className="alloc-violet-text tabular-nums" style={{fontSize:z.cVal,fontWeight:700,lineHeight:1}}>{fmtAbbr(supply)}</div>
+        </AllocRing>
+      );
+      const legend=(
+        <div style={{display:'flex',flexDirection:'column',gap:tall?12:10,minWidth:0,width:'fit-content',margin:tall?'0 auto':0}}>
+          {chartData.map((d,i)=>{
+            const c=chartColors[i%chartColors.length];
+            return(
+              <div key={i} style={{display:'grid',gridTemplateColumns:'1.1em auto auto auto',alignItems:'baseline',columnGap:tall?22:20,fontSize:z.lg,lineHeight:1.15}}>
+                <span aria-hidden="true" style={{width:'0.7em',height:'0.7em',borderRadius:'50%',background:c,boxShadow:`0 0 10px ${c}`,alignSelf:'center'}}></span>
+                <span style={{color:'rgba(255,255,255,0.85)',fontWeight:600,whiteSpace:'nowrap'}}>{d.label}<span style={{color:'rgba(255,255,255,0.45)',fontSize:z.lgSub,fontWeight:500,marginLeft:10}} className="tabular-nums">{d.tokens==null?'':fmtAbbr(d.tokens)+' '+token}</span></span>
+                <b className="tabular-nums" style={{color:'#fff',fontSize:'1.1em',textAlign:'right',minWidth:'3.6em'}}>{d.value==null?'—':d.value.toFixed(2)+'%'}</b>
+                <span className="tabular-nums" style={{color:'#4ADE80',fontWeight:700,fontSize:z.lgSub,textAlign:'right',minWidth:'4.5em'}}>{worth(d.tokens)}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+      const tierEls=(
+        <div>
+          <div style={{fontSize:z.tL+1,letterSpacing:'0.22em',textTransform:'uppercase',color:'#C4B5FD',fontWeight:700,marginBottom:10,textAlign:tall?'center':'left'}}>Holder tiers</div>
+          <div style={{display:'flex',gap:z.gap}}>
+            {tierRows.map(([e,l,v])=>(
+              <div key={l} style={{flex:'1 1 0',minWidth:0,borderRadius:16,padding:z.tp,textAlign:'center',background:'linear-gradient(180deg,rgba(28,18,52,0.9),rgba(14,8,30,0.93))',border:`1px solid rgba(${ALLOC_VIOLET},0.4)`,boxShadow:`inset 0 1px 0 rgba(230,220,255,0.12), 0 0 24px -8px rgba(${ALLOC_VIOLET},0.65)`}}>
+                <div style={{fontSize:e.length>4?Math.round(z.tE*0.66):z.tE,lineHeight:1,whiteSpace:'nowrap'}}>{e}</div>
+                <div className="tabular-nums" style={{fontSize:z.tV,fontWeight:700,color:tokColor,lineHeight:1.05,marginTop:8,textShadow:'0 2px 10px rgba(0,0,0,0.8)'}}>{v}</div>
+                <div style={{fontSize:z.tL,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:4,whiteSpace:'nowrap'}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#050308',fontFamily:"'Rajdhani',sans-serif"}}>
+          <SocialNebulaBackdrop W={z.W} H={z.H} tall={tall} logo={cfg.logo} rgb={ALLOC_VIOLET} edge={['#EDE9FE','#A78BFA','#5B21B6']} seed={23}/>
+          <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall?(
+              <>
+                {title}
+                <div style={{display:'flex',justifyContent:'center',marginTop:30}}>{ring}</div>
+                <div style={{marginTop:30,padding:'0 30px'}}>{legend}</div>
+                <div style={{flex:1,minHeight:18}}></div>
+                {tierEls}
+                <div style={{marginTop:22,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}>
+                  <span className="font-orbitron" style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',color:'#EDE9FE',textShadow:'0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(167,139,250,0.6)'}}>ptgc-ufo.com</span>
+                  <span style={{color:'rgba(240,235,255,0.75)',textShadow:'0 2px 8px rgba(0,0,0,0.9)'}}>{'·'} {tokTag} {'·'} on-chain {'·'} {today}</span>
+                </div>
+              </>
+            ):(
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}>
+                  {title}
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div className="font-orbitron alloc-violet-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+                    <div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{tokTag} {'·'} supply distribution</div>
+                    <div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>on-chain {'·'} {today}</div>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:44,marginTop:14}}>{ring}<div style={{flex:1,minWidth:0}}>{legend}</div></div>
+                <div style={{flex:1,minHeight:14}}></div>
+                {tierEls}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+    const AllocSocialModal=({token,cfg,chartData,chartColors,tiers,price,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=ALLOC_SHAPES[shape];
+      const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring="border-violet-400/40" on="border-[#120a24]" onText="text-[#120a24]" offText="text-violet-200/70 hover:text-violet-100 hover:bg-violet-500/10" grad="linear-gradient(180deg,#EDE9FE 0%,#A78BFA 50%,#6D28D9 100%)" glow={`rgba(${ALLOC_VIOLET},0.6)`}/>;
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label={`${token} token allocation share card`} filename={`${token.toLowerCase()}-allocation-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <AllocSocialCard token={token} cfg={cfg} chartData={chartData} chartColors={chartColors} tiers={tiers} price={price} shape={shape}/>
+        </ShareCardModal>
+      );
+    };
+    /* ===== END VALUE GENERATED + TOKEN ALLOCATION cards ===== */
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -10947,163 +11246,11 @@
           })()}
 
 
-          {/* Value Generated Share Modal - Twitter optimized */}
-          {showValueGenShareModal&&(()=>{
-            /* Period selector — toolbar, outside the image (mirrors the combined card) */
-            const periodControls=(
-                <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                  <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',color:'rgba(255,255,255,0.4)',fontWeight:600,marginRight:'4px'}}>Period:</span>
-                  <div style={{display:'flex',gap:'4px',background:'rgba(0,0,0,0.5)',borderRadius:'20px',padding:'3px',border:'1px solid rgba(255,255,255,0.1)'}}>
-                    {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([pv,pl])=>(
-                      <button key={pv} onClick={()=>setValueGenPeriod(pv)} style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',fontWeight:700,padding:'5px 14px',borderRadius:'16px',border:'none',cursor:'pointer',transition:'all 0.18s',background:valueGenPeriod===pv?(token==='PTGC'?'rgba(212,175,55,0.45)':'rgba(124,252,0,0.35)'):'transparent',color:valueGenPeriod===pv?'#fff':'rgba(255,255,255,0.4)',outline:'none'}}>
-                        {pl}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-            );
-            return(
-            <ShareCardModal onClose={()=>closeModalAndReturn(setShowValueGenShareModal)} width={600} height={314} label={`${token} value generated share card`} filename={`${token.toLowerCase()}-value-generated-${valueGenPeriod}-${new Date().toISOString().slice(0,10)}.png`} controls={periodControls}>
-                {/* Twitter Card - 600x314 */}
-                <div id="valuegen-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#002a00':'#002a00'} 50%, #0a0a0a 100%)`}}>
-                  <div className={`h-full border-2 border-emerald-500/50 rounded-xl p-5 flex flex-col`}>
-                    
-                    {/* Header row */}
-                    <div className="flex items-center gap-4 mb-3">
-                      <img src={cfg.logo} alt={token} className="w-20 h-20 rounded-full"/>
-                      <div className="flex-1">
-                        <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
-                        <div className="text-emerald-400 text-xl font-bold">{'\u{1F4B0}'} Value Generated</div>
-                      </div>
-                      <span className="text-white/40 text-sm">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
-                    </div>
-                    
-                    {/* Content */}
-                    {(()=>{
-                      const periodVol=valueGenView.periodVol;
-                      const orderedItems=buildValueGenItems(token,cfg);
-                      const vgPrices=vgPricesNow;
-                      /* u5/u6: the card prints the shared model (valueGenView) — the same object
-                         the panel renders for this window. While UFO's chain read is still
-                         running the card shows "—" like the panel, never a volume×fee estimate. */
-                      const totalGen=valueGenView.total;   // null → "—"
-                      const dash=<span className="text-white/35">{'\u2014'}</span>;
-                      const basisNote=valueGenView.basis==='delivered'?'measured on chain'
-                        :valueGenView.basis==='accrued'?'accrued \u2014 delivery still being read'
-                        :valueGenView.pending?'reading fees from chain\u2026'
-                        :`${(cfg.feeRate*100).toFixed(0)}% fee rate`;
-
-                      return(
-                        <div className="flex gap-3 flex-1">
-                          {/* Left - totals */}
-                          <div className="w-[145px]">
-                            <div className="text-white/50 text-xs mb-1">{valueGenPeriod.toUpperCase()} Volume</div>
-                            <div className="text-lg font-bold text-white/80 mb-2">{periodVol>0?fmtUSD(periodVol):'\u2014'}</div>
-                            <div className="text-white/50 text-xs mb-1">Value Generated</div>
-                            <div className="text-4xl font-bold text-green-400">{totalGen==null?dash:fmtUSD(totalGen)}</div>
-                            <div className="text-white/40 text-xs mt-1">{basisNote}</div>
-                          </div>
-                          
-                          {/* Right - breakdown boxes */}
-                          <div className="flex-1 grid grid-cols-3 gap-1.5">
-                            {orderedItems.map((item,i)=>{
-                              const dollarVal=valueGenBucketUsd(valueGenView,item);   // null → "—", same as the panel tile
-                              const parts=dollarVal==null?null:valueGenParts(token,item,dollarVal,vgPrices);
-                              const partsLabel=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
-                              return(
-                                <div key={i} className={`bg-black/30 border ${item.isTotal?'border-emerald-400/50':'border-emerald-500/30'} rounded-lg ${valueGenShowTokens?'p-1.5':'p-2'}`}>
-                                  <div className={`flex items-center gap-1 ${valueGenShowTokens?'mb-0.5':'mb-1'}`}>
-                                    {item.tripleIcon
-                                      ?<span className="text-xs">{'\u{1F48E}'}{'\u{1F48E}'}{'\u{1F48E}'}</span>
-                                      :(item.isLP&&bucketLogoSrc(item.priceKey)
-                                        ?<PairLogo priceKey={item.priceKey} size={valueGenShowTokens?20:22}/>
-                                        :<span className={valueGenShowTokens?'text-sm':'text-lg'}>{item.emoji}</span>)}
-                                    <span className="text-white/70 text-xs leading-tight">{item.name}</span>
-                                  </div>
-                                  {valueGenShowTokens&&partsLabel?(
-                                    <div className={`font-bold text-base leading-tight ${item.isTotal?'text-emerald-400':theme.text}`}>{partsLabel}</div>
-                                  ):(
-                                    <div className={`font-bold text-xl ${item.isTotal?'text-emerald-400':theme.text}`}>{fmtUSD(dollarVal)}</div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    
-                    {/* Footer */}
-                    <div className="text-right mt-2">
-                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
-                    </div>
-                  </div>
-                </div>
-            </ShareCardModal>
-          );
-          })()}
-          
-          {/* Token Allocation Share Modal - Twitter optimized */}
-          {showAllocationShareModal&&(()=>{
-            return(
-            <ShareCardModal onClose={()=>closeModalAndReturn(setShowAllocationShareModal)} width={600} height={314} label={`${token} token allocation share card`} filename={`${token.toLowerCase()}-allocation-${new Date().toISOString().slice(0,10)}.png`}>
-                {/* Twitter Card - 600x314 */}
-                <div id="allocation-share-card" className="w-[600px] h-[314px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, ${token==='PTGC'?'#1a0020':'#001a00'} 50%, #0a0a0a 100%)`}}>
-                  <div className={`h-full border-2 border-purple-500/50 rounded-xl p-4 flex flex-col`}>
-                    
-                    {/* Header row */}
-                    <div className="flex items-center gap-3 mb-2">
-                      <img src={cfg.logo} alt={token} className="w-20 h-20 rounded-full"/>
-                      <div className="flex-1">
-                        <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
-                        <div className="text-purple-400 text-lg font-bold">{'\u{1F4CA}'} Token Allocation</div>
-                      </div>
-                      <span className="text-white/40 text-xs">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
-                    </div>
-                    
-                    {/* Main content - three columns */}
-                    <div className="flex gap-3 flex-1">
-                      {/* Left - Donut */}
-                      <div className="flex flex-col items-center justify-center">
-                        <DonutChart data={chartData} colors={chartColors} size={100}/>
-                      </div>
-                      
-                      {/* Middle - Legend */}
-                      <div className="flex flex-col justify-center space-y-1">
-                        {chartData.map((d,i)=>{
-                          const shortLabel=d.label==='Lock & Stk'?'Lock & Stk':d.label;
-                          return(
-                            <div key={i} className="flex items-center gap-1 text-base">
-                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{background:chartColors[i]}}></div>
-                              <span className="text-white/60">{shortLabel}:</span>
-                              <span className={`font-bold ${theme.text}`}>{d.value==null?'\u2014':d.value.toFixed(1)+'%'}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Right - Holder Tiers */}
-                      <div className="flex-1 bg-black/30 border border-purple-500/30 rounded-lg p-3">
-                        <div className="text-white/50 text-xs mb-2 uppercase">Holder Tiers</div>
-                        <div className="grid grid-cols-5 gap-1 text-center">
-                          <div><div className="text-4xl">{'\u{1F531}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Poseidon')}</div><div className="text-white/40 text-[10px]">Poseidon</div></div>
-                          <div><div className="text-4xl">{'\u{1F40B}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Whale')}</div><div className="text-white/40 text-[10px]">Whale</div></div>
-                          <div><div className="text-4xl">{'\u{1F988}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Shark')}</div><div className="text-white/40 text-[10px]">Shark</div></div>
-                          <div><div className="text-4xl">{'\u{1F42C}'}</div><div className={`text-lg font-bold ${theme.text}`}>{tierCountLabel(holderTiers,'Dolphin')}</div><div className="text-white/40 text-[10px]">Dolphin</div></div>
-                          <div><div className="text-2xl">{'\u{1F991}'}<span className="text-white/50">{'\u2192'}</span>{'\u{1F41A}'}</div><div className={`text-lg font-bold ${theme.text}`}>{holderTiers?.SquidAndBelow==null?'\u2014':fmtAbbr(holderTiers.SquidAndBelow)}</div><div className="text-white/40 text-[10px]">Others</div></div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Footer */}
-                    <div className="text-right mt-1">
-                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
-                    </div>
-                  </div>
-                </div>
-            </ShareCardModal>
-          );
-          })()}
+          {/* Value Generated + Token Allocation share cards — redesigned 2026-09-25 (ValueGenSocialModal /
+              AllocSocialModal, module scope above DashboardSkeleton). The window switch drives the same
+              valueGenPeriod the panel uses, so the card and the panel always show one window. */}
+          {showValueGenShareModal&&<ValueGenSocialModal token={token} cfg={cfg} vg={valueGenView} items={buildValueGenItems(token,cfg)} prices={vgPricesNow} period={valueGenPeriod} setPeriod={setValueGenPeriod} onClose={()=>closeModalAndReturn(setShowValueGenShareModal)}/>}
+          {showAllocationShareModal&&<AllocSocialModal token={token} cfg={cfg} chartData={chartData} chartColors={chartColors} tiers={holderTiers} price={data?.price||0} onClose={()=>closeModalAndReturn(setShowAllocationShareModal)}/>}
           
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
           {/* PTGC: DAO Treasury card, redesigned 2026-09-23 (DaoTreasuryModal). UFO keeps the 'PTGC burned by UFO' card below. */}
