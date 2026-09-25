@@ -23,7 +23,10 @@ Update it at the end of every session.
 gold/green alien art behind a metallic THE GRAYS / DASHBOARD title, two glowing token cards (price,
 24 h change, contract + copy, Day counter, MCap, volume, PLS ratio, a real 24 h chart from
 GeckoTerminal 15-minute candles) and ONE "BUY / SELL <token>" button per card (Shaka: not two) that
-opens the existing switch.win `SwapModal`. **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
+opens the existing switch.win `SwapModal`. Round 2 the same day: the art COVERS the window at any
+shape (scaled, sides cropped, never stretched), 140px of faded headroom over the alien's crown that
+only shows when the window is tall enough (`--oy`), buttons with the classic glow + light sweep, stat
+tiles. **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
 set it to 'classic' to go back** — or look at either on the live site with `?home=classic` /
 `?home=cosmic`. Same loaders as before; only the view is new. Art in `logos/home/`. Details, checks
 and the owed live look: `sessions/2026-09-25.md`. Gotcha 32.
@@ -452,7 +455,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (`fetchHomeSpark`), refuses a series that ends >25% from the card's price, and falls back to the
    classic five-point sparkline — when the CSP (b7) lands it needs `connect-src https://api.geckoterminal.com`
    next to switch.win's `frame-src`. If a card's element sizes change, change `CosmicCardSkeleton` too
-   (gotcha 11); it reuses the card's own classes so that is usually automatic. Harness: `GT_CANDLES=1`.
+   (gotcha 11); it reuses the card's own classes so that is usually automatic. Harness: `GT_CANDLES=1`. Layout maths: `--bgw` (painted art width, `max(window width, height x 1.3196)`)
+   and `--oy` (art shifted up by up to the 140px headroom band on short windows) — every vertical position
+   in the `hc-*` block is `fraction * --bgw + --oy`; the art is 1536x1164 and the fractions assume it.
 
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab

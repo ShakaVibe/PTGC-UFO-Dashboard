@@ -142,33 +142,43 @@
        phone would get a thumbnail-sized alien) and never over 1920px (past that the art stays
        1920 wide and fades into the page colour at its sides). The title's top and the dark band
        the cards sit on are both fractions of it, so they stay lined up at every width. ===== */
-    .hc-page{--bgw:clamp(1000px,100vw,1920px);position:relative;min-height:100vh;display:flex;flex-direction:column;color:#fff;overflow-x:hidden;
-      background-color:#050504;background-image:url('logos/home/cosmic-bg.jpg');background-repeat:no-repeat;background-position:top center;background-size:var(--bgw) auto}
-    @media(min-width:1921px){.hc-page::after{content:'';position:absolute;inset:0 0 auto 0;height:calc(var(--bgw)*0.667);pointer-events:none;
-      background:linear-gradient(90deg,#050504 calc(50% - 960px),rgba(5,5,4,0) calc(50% - 840px),rgba(5,5,4,0) calc(50% + 840px),#050504 calc(50% + 960px))}}
+    /* 2026-09-25 (round 2): the art is 1536x1164 — the original 1536x1024 plus a 140px band of dark
+       headroom above the alien's crown (its top edge was a hard crop in the source). It COVERS the
+       window: --bgw = the wider of the window and what the window's height needs (1.3196 = W/H), so a
+       tall window scales the art up and crops its sides, never stretches it. --oy shifts the art up by
+       up to the headroom band when the window is too short to show it: a 16:9 laptop gets the layout
+       it had before, a tall window gets the crown's fade-out and the cards further down. Every
+       vertical position below is a fraction of --bgw plus --oy. The second layer is the landscape
+       strip pinned to the page's foot, for the shapes where content still runs past the art. */
+    .hc-page{--bgw:max(clamp(1000px,100vw,2560px),calc(100vh * 1.3196));--oy:clamp(calc(var(--bgw) * -0.091),calc(100vh - (var(--bgw) * 0.383 + 30vw + 170px)),0px);
+      position:relative;min-height:100vh;display:flex;flex-direction:column;color:#fff;overflow-x:hidden;background-color:#050504;
+      background-image:url('logos/home/cosmic-bg.jpg'),url('logos/home/cosmic-ground.jpg');background-repeat:no-repeat,no-repeat;
+      background-position:center var(--oy),bottom center;background-size:var(--bgw) auto,var(--bgw) auto}
+    @media(min-width:2561px){.hc-page::after{content:'';position:absolute;inset:0 0 auto 0;height:calc(var(--bgw)*0.758 + var(--oy));pointer-events:none;
+      background:linear-gradient(90deg,#050504 calc(50% - 1280px),rgba(5,5,4,0) calc(50% - 1160px),rgba(5,5,4,0) calc(50% + 1160px),#050504 calc(50% + 1280px))}}
     /* below lg the cards stack, so the art fades out under the title and the landscape strip
        comes back at the foot of the page instead */
     @media(max-width:1023.98px){
-      .hc-page::before{content:'';position:absolute;left:0;right:0;top:0;height:calc(var(--bgw)*0.667);pointer-events:none;
-        background:linear-gradient(180deg,rgba(5,5,4,0) 0,rgba(5,5,4,0) calc(var(--bgw)*0.2),rgba(5,5,4,0.9) calc(var(--bgw)*0.27),#050504 calc(var(--bgw)*0.29))}
-      .hc-ground{position:absolute;left:0;right:0;bottom:0;height:145px;pointer-events:none;background:url('logos/home/cosmic-ground.jpg') no-repeat bottom center;background-size:1549px 145px}
+      .hc-page{--bgw:clamp(1000px,100vw,1920px);--oy:calc(var(--bgw) * -0.091)}   /* phones: the art at its old size, headroom hidden */
+      .hc-page::before{content:'';position:absolute;left:0;right:0;top:0;height:calc(var(--bgw)*0.758 + var(--oy));pointer-events:none;
+        background:linear-gradient(180deg,rgba(5,5,4,0) 0,rgba(5,5,4,0) calc(var(--bgw)*0.291 + var(--oy)),rgba(5,5,4,0.9) calc(var(--bgw)*0.361 + var(--oy)),#050504 calc(var(--bgw)*0.381 + var(--oy)))}
     }
-    @media(min-width:1024px){.hc-ground{display:none}}
-    .hc-inner{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;padding:calc(var(--bgw)*0.172) 16px 0}
+    .hc-ground{display:none}
+    .hc-inner{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;padding:calc(var(--bgw)*0.263 + var(--oy)) 16px 0}
     .hc-title{display:flex;flex-direction:column;align-items:center;text-align:center;margin:0 0 20px;padding-left:1%}
     .hc-t1,.hc-t2{font-family:'Orbitron',monospace;font-weight:900;line-height:1;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
-    .hc-t1{font-size:clamp(1.75rem,4.17vw,5rem);letter-spacing:.02em;background-image:linear-gradient(180deg,#FFF 0%,#E4E4E4 42%,#7E7E7E 56%,#D6D6D6 100%);filter:drop-shadow(0 3px 6px rgba(0,0,0,.85))}
-    .hc-t2{margin:.15rem 0 0;font-size:clamp(2.2rem,4.8vw,5.75rem);letter-spacing:.03em;background-image:linear-gradient(90deg,#FFE27A 0%,#E0A41E 40%,#9BDC3A 58%,#5FD12E 100%);filter:drop-shadow(0 3px 8px rgba(0,0,0,.9))}
-    .hc-tag{margin:.7rem 0 0;font-weight:600;font-size:clamp(.72rem,1.05vw,1.2rem);letter-spacing:.06em;color:#E8E8E8;text-shadow:0 1px 4px rgba(0,0,0,.9);white-space:nowrap}
+    .hc-t1{font-size:clamp(1.75rem,calc(var(--bgw) * 0.0417),5.5rem);letter-spacing:.02em;background-image:linear-gradient(180deg,#FFF 0%,#E4E4E4 42%,#7E7E7E 56%,#D6D6D6 100%);filter:drop-shadow(0 3px 6px rgba(0,0,0,.85))}
+    .hc-t2{margin:.15rem 0 0;font-size:clamp(2.2rem,calc(var(--bgw) * 0.048),6.4rem);letter-spacing:.03em;background-image:linear-gradient(90deg,#FFE27A 0%,#E0A41E 40%,#9BDC3A 58%,#5FD12E 100%);filter:drop-shadow(0 3px 8px rgba(0,0,0,.9))}
+    .hc-tag{margin:.7rem 0 0;font-weight:600;font-size:clamp(.72rem,calc(var(--bgw) * 0.0105),1.3rem);letter-spacing:.06em;color:#E8E8E8;text-shadow:0 1px 4px rgba(0,0,0,.9);white-space:nowrap}
     @media(min-width:640px){.hc-tag{letter-spacing:.2em}}
     @media(min-width:1024px){.hc-tag{letter-spacing:.3em}.hc-title{margin-bottom:16px}}
     .hc-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;width:100%;max-width:40rem}
-    @media(min-width:1024px){.hc-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(24px,2.3vw,44px);width:87.5vw;max-width:1300px}}
+    @media(min-width:1024px){.hc-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(24px,2.3vw,44px);width:87.5vw;max-width:max(1300px,110vh)}}
     .hc-card{position:relative;display:flex;flex-direction:column;gap:14px;padding:16px;border:2px solid var(--hc-c);border-radius:14px;cursor:pointer;
       background:linear-gradient(180deg,var(--hc-bg1) 0%,var(--hc-bg2) 100%);box-shadow:0 0 20px var(--hc-glow),inset 0 0 32px var(--hc-glow2);transition:transform .25s ease,box-shadow .25s ease}
     .hc-card:hover{transform:translateY(-3px);box-shadow:0 0 38px var(--hc-glow),inset 0 0 40px var(--hc-glow2)}
     .hc-card.hc-masked{opacity:.6}
-    @media(min-width:1024px){.hc-card{padding:16px 24px 20px clamp(20px,2.6vw,40px)}}
+    @media(min-width:1024px){.hc-card{padding:16px 24px 20px clamp(20px,2.6vw,40px);gap:max(14px,1.6vh)}}
     .hc-gold{--hc-c:#E8B53A;--hc-t:#F2C12E;--hc-glow:rgba(232,181,58,.5);--hc-glow2:rgba(232,181,58,.12);--hc-bg1:#241C05;--hc-bg2:#0A0904;--hc-dim:#CFC7AE;--hc-line:#FFD84D}
     .hc-green{--hc-c:#5EEA3A;--hc-t:#6CE83A;--hc-glow:rgba(94,234,58,.5);--hc-glow2:rgba(94,234,58,.12);--hc-bg1:#0A2207;--hc-bg2:#040A04;--hc-dim:#B9D4AE;--hc-line:#7CFF4A}
     .hc-skel{--hc-c:rgba(255,255,255,.12);--hc-glow:rgba(0,0,0,0);--hc-glow2:rgba(0,0,0,0);--hc-bg1:#141410;--hc-bg2:#0a0a08;cursor:default}
@@ -205,23 +215,33 @@
     .hc-dash span{display:none}
     @media(min-width:640px){.hc-dash span{display:inline}}
     .hc-dash:hover{background:rgba(255,255,255,.06)}
-    .hc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
-    .hc-stats>div{display:flex;flex-direction:column;gap:3px;min-width:0}
-    .hc-stats>div+div{padding-left:12px;border-left:1px solid rgba(255,255,255,.18)}
-    @media(min-width:1024px){.hc-stats{margin:6px 0 0 4px;grid-template-columns:1.3fr 1.3fr 1fr}.hc-stats>div{gap:6px}.hc-stats>div+div{padding-left:clamp(16px,2.8vw,40px)}}
-    .hc-lbl{font-weight:600;font-size:.7rem;letter-spacing:.06em;color:#E2E2E2;white-space:nowrap}
-    .hc-val{font-weight:700;font-size:.95rem;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    @media(min-width:1024px){.hc-lbl{font-size:.875rem}.hc-val{font-size:clamp(1rem,1.46vw,1.4rem)}}
+    .hc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .hc-stats>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:9px 10px 10px;border-radius:10px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+    @media(min-width:1024px){.hc-stats{gap:clamp(8px,1vw,14px);margin-top:2px}.hc-stats>div{gap:6px;padding:11px 14px 12px}}
+    .hc-lbl{font-weight:700;font-size:.66rem;letter-spacing:.14em;color:var(--hc-t);opacity:.8;white-space:nowrap}
+    .hc-val{font-weight:700;font-size:1.05rem;line-height:1.1;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    @media(min-width:1024px){.hc-lbl{font-size:.72rem}.hc-val{font-size:clamp(1.05rem,1.5vw,1.45rem)}}
     .hc-full{display:none}
     @media(min-width:640px){.hc-full{display:inline}.hc-abbr{display:none}}
     .hc-spark{display:block;width:100%;height:66px}
-    @media(min-width:1024px){.hc-spark{height:clamp(84px,7.5vw,120px);margin-top:-4px}}
+    @media(min-width:1024px){.hc-spark{height:clamp(84px,max(7.5vw,10vh),160px);margin-top:-4px}}
     .hc-spark .hc-sl{filter:drop-shadow(0 0 3px var(--hc-line))}
-    .hc-buy{height:50px;width:100%;border:0;border-radius:8px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.15rem;letter-spacing:.03em;cursor:pointer;transition:filter .2s ease,transform .2s ease}
-    @media(min-width:1024px){.hc-buy{height:56px;font-size:clamp(1.15rem,1.6vw,1.5rem)}}
-    .hc-gold .hc-buy{background:linear-gradient(180deg,#FFDF5C 0%,#F2BE2A 55%,#D99A12 100%);color:#1B1300;box-shadow:0 0 18px rgba(255,200,40,.42)}
-    .hc-green .hc-buy{background:linear-gradient(180deg,#9CFF6A 0%,#5EE83A 55%,#34C218 100%);color:#0A1F04;box-shadow:0 0 18px rgba(110,255,60,.42)}
-    .hc-buy:hover{filter:brightness(1.1)}
+    /* the classic rail's motion, on the cosmic button: a breathing glow in the token colour and a
+       band of light that sweeps across every 3 s (the ::after). Both stop under reduced motion. */
+    .hc-buy{position:relative;overflow:hidden;height:52px;width:100%;border:0;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:10px;
+      font-family:'Orbitron',monospace;font-weight:800;font-size:.95rem;letter-spacing:.16em;cursor:pointer;
+      box-shadow:0 0 18px var(--hc-glow),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -2px 0 rgba(0,0,0,.18);animation:hcGlow 3s ease-in-out infinite;transition:filter .2s ease,transform .2s ease}
+    @media(min-width:1024px){.hc-buy{height:58px;font-size:clamp(.95rem,1.15vw,1.2rem)}}
+    .hc-buy img{width:26px;height:26px;border-radius:50%;flex-shrink:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
+    @media(min-width:1024px){.hc-buy img{width:30px;height:30px}}
+    .hc-buy::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;
+      background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.28) 46%,rgba(255,255,255,.5) 50%,rgba(255,255,255,.28) 54%,transparent 62%);animation:hcSweep 3s ease-in-out infinite}
+    @keyframes hcSweep{0%{transform:translateX(-100%)}60%,100%{transform:translateX(100%)}}
+    @keyframes hcGlow{0%,100%{box-shadow:0 0 16px var(--hc-glow),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -2px 0 rgba(0,0,0,.18)}50%{box-shadow:0 0 34px var(--hc-glow),0 0 4px var(--hc-glow),inset 0 1px 0 rgba(255,255,255,.55),inset 0 -2px 0 rgba(0,0,0,.18)}}
+    .hc-gold .hc-buy{background:linear-gradient(180deg,#FFE97A 0%,#F5C43A 45%,#E0A61C 70%,#C88E10 100%);color:#1B1300}
+    .hc-green .hc-buy{background:linear-gradient(180deg,#B4FF86 0%,#6DF04A 45%,#43D122 70%,#2FAE14 100%);color:#0A1F04}
+    .hc-buy:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .hc-buy:active{transform:translateY(0);filter:brightness(.97)}
     .hc-maint{position:absolute;top:10px;right:10px;z-index:2;display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:rgba(234,179,8,.2);border:1px solid rgba(250,204,21,.4);color:#FEF08A;font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
     .hc-status{margin:18px 0 18px;display:flex;align-items:center;padding:6px 14px;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.12);border-radius:999px}
     @media(max-width:1023.98px){.hc-status{margin-bottom:84px}}
@@ -231,10 +251,10 @@
     .hc-sk{display:inline-block;vertical-align:middle;border-radius:6px;background:rgba(255,255,255,.08)}
     .hc-logo.hc-sk,.hc-spark.hc-sk,.hc-buy.hc-sk{display:block}
     .hc-logo.hc-sk{border-radius:50%}
-    .hc-skel .hc-buy.hc-sk{background:rgba(255,255,255,.08);box-shadow:none}
+    .hc-skel .hc-buy.hc-sk{background:rgba(255,255,255,.08);box-shadow:none;animation:none}.hc-skel .hc-buy.hc-sk::after{content:none}
     .hc-status .text-white\/40{color:rgba(255,255,255,.78)}
     .hc-status>div{font-size:.8rem}
-    @media(prefers-reduced-motion:reduce){.hc-card,.hc-buy{transition:none!important}.hc-card:hover{transform:none}}
+    @media(prefers-reduced-motion:reduce){.hc-card,.hc-buy{transition:none!important}.hc-card:hover,.hc-buy:hover{transform:none}.hc-buy,.hc-buy::after{animation:none!important}}
   </style>
 </head>
 <body>
@@ -5036,7 +5056,7 @@
             <div><span className="hc-lbl">PLS RATIO</span><span className="hc-val">{masked?'—':plsRatio}</span></div>
           </div>
           {masked?<HomeSparkFlat label={`${token} chart hidden during maintenance`}/>:<HomeSpark token={token} d={d}/>}
-          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`}>BUY / SELL {token}</button>}
+          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`}><img src={cfg.logo} alt=""/><span>BUY / SELL {token}</span></button>}
         </div>
       );
     };
