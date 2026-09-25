@@ -46,11 +46,11 @@ and the owed live look: `sessions/2026-09-25.md`. Gotcha 32.
 opens on the latest buy in the Latest-DAO-buy tile's look (gold frame, glow, metallic amount, Grays
 creatures) with a gold switch above the card - Latest / 24H / 7D / 30D / 90D / All time (rolling
 windows). A window with no buys says "No DAO buys in the past 24 hours" and points at the last buy.
-Screenshot-only, like the PTGC Buys chart card (gotcha 30). Live since 17044bd4c; round 2 live as be0ac1e6c;
+Screenshot-only, like the PTGC Buys chart card (gotcha 30). Live since b525c0d77; round 2 live as 53e7c9407;
 round 3 (opens on All time, Wide 16:9 / Tall 4:5 switch, local + UTC times, more room above the
-card) pushed as 895596037. **Evening: two more Socials cards redone, both live.** Burn Stats (PTGC + UFO) in a fire theme
-(`BurnSocialModal`, 002275416, logos/label enlarged in c0f65f15a + 493bcec2c) and the PTGC DAO Treasury card in
-a blue "vault" look (`DaoTreasuryModal`, eb12b1aa2: Total DAO Value, breakdown bar, four tiles incl. Treasury
+card) pushed as 4650e95f5. **Evening: two more Socials cards redone, both live.** Burn Stats (PTGC + UFO) in a fire theme
+(`BurnSocialModal`, 68cff6ee0, logos/label enlarged in 902b00ea7 + b0a46464d) and the PTGC DAO Treasury card in
+a blue "vault" look (`DaoTreasuryModal`, bc7fb3376: Total DAO Value, breakdown bar, four tiles incl. Treasury
 holdings = tokens over $50 with logos). Both Wide/Tall, screenshot-only, and both also open from their panel's
 📷. The UFO "PTGC burned by UFO" card followed on 2026-09-25. Shaka checked all three on his phone, both
 shapes, 2026-09-23: all good.
@@ -75,7 +75,7 @@ monthly logs - two sources in one row. Live, 3 referrers read 0 with real buys, 
 nothing reads that block any more (gotcha 29). The ALL-TIME tiles were always correct, which is
 exactly why this hid. See `sessions/2026-09-22.md` Part two.
 
-**Deployed and verified live** (`73580760b`, Pages 14:24:40 UTC): the affiliates page renders the
+**Deployed and verified live** (`0251ed93a`, Pages 14:24:40 UTC): the affiliates page renders the
 real payload exactly as before - Min Threshold $250, 71 referrers, 1,404 buys, $520,651, no `0.00`
 anywhere - and the cache-busted request fires. **Open, waiting on one referrer's reply:** he was
 asked to open the endpoint directly and answered "a ton of text", which does NOT clear the blocker
@@ -114,8 +114,8 @@ look), all pass; a26 code-verified only, a7 not forceable live. One cleanup file
 is published in `_site` but frozen at the last code deploy while every reader uses raw GitHub —
 `sessions/2026-09-20.md`.** **Next: a43-a47, a49, a50, a55-a58, a63-a66 (15 left: a11y / mobile / cleanup /
 calculators / Live Feed), in any order.**
-u1 + u9 pushed as `5c2d3cf93` (2026-09-09); a header
-tweak (`96afb0ed8`, PLS ratio / X's stats inline from 1024px) landed after the last
+u1 + u9 pushed as `b765a2f06` (2026-09-09); a header
+tweak (`178a3a577`, PLS ratio / X's stats inline from 1024px) landed after the last
 handover. 2026-09-13: **Buy/Sell button + switch.win widget modal built and live**; evening
 u4 + u13; night **DAO Buys chart built, HIDDEN behind `DAO_BUYS_LIVE=false`** — entrance is
 the faint gold dot top-right of the PTGC dashboard header (see `sessions/2026-09-13.md`).
@@ -142,7 +142,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 | Phase 3 — share cards (u2) | **Done, live** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
 | Phase 3 — loading shell (u12) | **Done, live** |
-| Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`5c2d3cf93`, 2026-09-09) |
+| Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`b765a2f06`, 2026-09-09) |
 | Phase 3 — u10 (rename Socials Hub) | **Dropped** — Shaka wants the tab name kept |
 | Phase 3 — u4 (hoisted render-defined components), u13 (chart late-data) | **Done** (2026-09-13 evening) |
 | Phase 3 — u5 (one Value Generated model), u6 (share-card parity) | **Done** (2026-09-14 night; `computeValueGen`, see gotcha 16) |
@@ -469,6 +469,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (gotcha 11); it reuses the card's own classes so that is usually automatic. Harness: `GT_CANDLES=1`. Layout maths: `--bgw` (painted art width, `max(window width, height x 1.3196)`)
    and `--oy` (art shifted up by up to the 140px headroom band on short windows) — every vertical position
    in the `hc-*` block is `fraction * --bgw + --oy`; the art is 1536x1164 and the fractions assume it.
+
+33. **Privacy: the owner's real name goes nowhere** (2026-09-25). This repo and `handover/` are PUBLIC on GitHub.
+   Never write the owner's real name, email, Mac name or `/Users/...` paths into a file, a commit message, or a
+   screenshot committed to the repo; he is "Shaka" / ShakaVibe. Git author must be `ShakaVibe
+   <145924450+ShakaVibe@users.noreply.github.com>` (check `git log -1 --format='%an <%ae>'`). On 2026-09-25 97 commits
+   (Sep 8-23) carried his real name as author; history was rewritten with git-filter-repo `--mailmap` and force-pushed,
+   so every commit ID from 2026-09-08 on changed — the IDs quoted in these notes were remapped from
+   `.git/filter-repo/commit-map`. X1-Validator-HQ got the same scrub.
 
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
