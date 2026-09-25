@@ -17,7 +17,13 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (2026-09-25)
+## Current state (end of 2026-09-25)
+
+**2026-09-25, close of day.** Everything below shipped and was pushed by Shaka through the day (last commit:
+"PTGC Burned by UFO share card: supply line moved down a little"). Nothing is half-done. The only thing owed is
+the usual live look on a phone: the cosmic Home (art fills the window, both charts jagged not smooth, DASHBOARD
+pills, one BUY / SELL per card), then the four redone Socials cards with real numbers — Value Generated, Token
+Allocation (both tokens) and PTGC Burned by UFO — in Wide and Tall. Full trail: `sessions/2026-09-25.md`.
 
 **2026-09-25: new Home screen ("cosmic") — the classic one kept as a switchable backup.** Shaka's
 gold/green alien art behind a metallic THE GRAYS / DASHBOARD title, two glowing token cards (price,
