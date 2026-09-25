@@ -7395,6 +7395,124 @@
       );
     };
     /* ===== END VALUE GENERATED + TOKEN ALLOCATION cards ===== */
+    /* ===================== PTGC BURNED BY UFO — SOCIALS CARD (2026-09-25) =====================
+     * Socials → UFO → "PTGC Burned by UFO" and the 📷 on that panel. Replaces the 600×340 card with the
+     * Burn Stats build (fire backdrop, `BurnSocialTile`, `BURN_SOCIAL_SHAPES`): title, UFO logo wearing a
+     * PTGC badge, the OLD + NEW total (computePtgcBurnedByUfo — the panel's own numbers, a17), creatures,
+     * "% of the PTGC supply · worth $X today", the old/new split, a bar to the next 🐋, four window tiles.
+     * Honest labels: pending → "—"; failed → "chain read failed"; oldMissing → "new contract only";
+     * lifetimeIsWindow → the headline is the 90-day window, and says so. Screenshot-only (gotcha 30). */
+    const PtgcByUfoSocialCard=({p,price,shape='wide'})=>{
+      const z=BURN_SOCIAL_SHAPES[shape]||BURN_SOCIAL_SHAPES.wide,tall=shape==='tall';
+      const supply=TOKENS.PTGC.totalSupply;
+      const known=!!p&&!p.pending&&p.totalBurned!=null;
+      const pct=known?p.burnPct:null;
+      const creatures=known&&pct!=null?getBurnC(pct,'Squid').slice(0,4):[];
+      const worth=known&&price>0?p.totalBurned*price:null;
+      const base=known&&pct!=null?Math.floor(pct+1e-9):0;
+      const nextAt=known?base+1:null;
+      const prog=known&&pct!=null?Math.max(0,Math.min(100,(pct-base)*100)):0;
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const P=(p&&p.periods)||{};
+      const wins=[['24H',P.h24?P.h24.amount:null],['7D',P.d7?P.d7.amount:null],['30D',P.d30?P.d30.amount:null],['90D',P.d90?P.d90.amount:null]];
+      const gold='#E8C044',green='#9DFF3A';
+      const note=!p?null:p.failed?'chain read failed — the live contract’s burns could not be read':p.pending?'reading the live contract…':p.oldMissing?'old-contract history unavailable — new contract only':p.lifetimeIsWindow?'90-day window (lifetime read unavailable)':null;
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
+          <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F6F8}'}</span>
+          <span className="burn-fire-text" style={{filter:'drop-shadow(0 0 14px rgba(255,110,30,0.55))'}}>PTGC burned by UFO</span>
+        </div>
+      );
+      const badge=Math.round(z.logo*0.46);
+      const logoEl=(
+        <div style={{position:'relative',width:z.logo+Math.round(badge*0.55),height:z.logo,flexShrink:0}}>
+          <div aria-hidden="true" style={{position:'absolute',left:0,top:0,width:z.logo,height:z.logo,borderRadius:'50%',background:'radial-gradient(circle, rgba(255,140,40,0.45) 0%, rgba(0,0,0,0) 68%)',transform:'scale(1.4)'}}></div>
+          <img src={TOKENS.UFO.logo} alt="" style={{position:'absolute',left:0,top:0,width:z.logo,height:z.logo,borderRadius:'50%',boxShadow:'0 0 0 3px rgba(157,255,58,0.85), 0 0 0 6px rgba(200,40,10,0.35), 0 0 46px rgba(255,100,20,0.8)'}}/>
+          <img src={TOKENS.PTGC.logo} alt="" style={{position:'absolute',right:0,bottom:-Math.round(badge*0.1),width:badge,height:badge,borderRadius:'50%',background:'#0b0604',boxShadow:'0 0 0 3px rgba(232,192,68,0.95), 0 0 0 6px #0b0604, 0 0 26px rgba(255,140,40,0.9)'}}/>
+          <span aria-hidden="true" style={{position:'absolute',right:-Math.round(badge*0.18),top:-Math.round(badge*0.12),fontSize:Math.round(badge*0.5),lineHeight:1,filter:'drop-shadow(0 0 8px rgba(255,120,30,0.9))'}}>{'\u{1F525}'}</span>
+        </div>
+      );
+      const amount=(
+        <>
+          <div style={{display:'flex',alignItems:'baseline',justifyContent:tall?'center':'flex-start',gap:Math.round(z.unit*0.45)}}>
+            <span className="burn-fire-text tabular-nums" style={{fontSize:z.amount,fontWeight:700,lineHeight:0.9}}>{known?fmtAbbr(p.totalBurned):'—'}</span>
+            <span style={{fontSize:z.unit,fontWeight:600,color:gold}}>PTGC</span>
+          </div>
+          {creatures.length>0&&<div style={{marginTop:14,display:'flex',justifyContent:tall?'center':'flex-start'}}><DaoCreatures ptgc={0} size={z.crit} className={tall?'justify-center':''} list={creatures}/></div>}
+        </>
+      );
+      const detail=(
+        <div className="tabular-nums" style={{fontSize:z.detail,color:'rgba(255,255,255,0.8)',lineHeight:1.25,textAlign:tall?'center':'left'}}>
+          <b style={{color:'#fff'}}>{pct!=null?pct.toFixed(2)+'%':'—'}</b> of the PTGC supply{tall?<br/>:' · '}worth <span style={{color:'#4ADE80',fontWeight:700,fontSize:'1.12em',textShadow:'0 0 20px rgba(74,222,128,0.45)'}}>{worth!=null?fmtDollar(worth,0):'—'}</span> <span style={{color:'rgba(255,255,255,0.45)',fontSize:'0.72em'}}>today</span>
+          {known&&!p.oldMissing&&<div style={{fontSize:'0.72em',color:'rgba(255,235,210,0.7)',marginTop:6}}>old contract <b style={{color:'#FFE3A6'}}>{fmtAbbr(p.oldBurned)}</b> {'·'} live contract <b style={{color:green}}>{fmtAbbr(p.newBurned)}</b>{p.lifetimeIsWindow?' (90d)':''}</div>}
+          {note&&<div style={{fontSize:'0.66em',color:'#FFC56B',marginTop:6,letterSpacing:'0.06em'}}>{'⚠'} {note}</div>}
+        </div>
+      );
+      const bar=known&&pct!=null&&(
+        <div style={{width:'100%'}}>
+          <div className="tabular-nums" style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:z.barFs,fontWeight:600,letterSpacing:'0.12em',textTransform:'uppercase',color:'rgba(255,235,210,0.85)',marginBottom:10,textShadow:'0 2px 8px rgba(0,0,0,0.8)'}}>
+            <span>Next {nextAt%10===0?'\u{1F531}':'\u{1F40B}'} at {nextAt}% of PTGC</span><span style={{color:'#FFC56B',fontWeight:700}}>{prog.toFixed(1)}%</span>
+          </div>
+          <div style={{height:z.barH,borderRadius:99,background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,106,26,0.25)',overflow:'hidden'}}>
+            <div style={{height:'100%',width:`${Math.max(0,Math.min(100,prog))}%`,borderRadius:99,background:'linear-gradient(90deg,#8E1402 0%,#E8420F 30%,#FF7A1A 62%,#FFD166 88%,#FFF3C4 100%)',boxShadow:'0 0 18px rgba(255,140,40,0.7)'}}></div>
+          </div>
+        </div>
+      );
+      const tiles=(
+        <div style={tall?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:z.gap}:{display:'flex',gap:z.gap}}>
+          {wins.map(([k,v])=><BurnSocialTile key={k} z={z} k={k} v={v} token="PTGC" supply={supply} price={price}/>)}
+        </div>
+      );
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#0b0604',fontFamily:"'Rajdhani',sans-serif"}}>
+          <BurnFireBackdrop W={z.W} H={z.H} tall={tall} logo={TOKENS.UFO.logo}/>
+          <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall?(
+              <>
+                {title}
+                <div style={{display:'flex',justifyContent:'center',marginTop:26}}>{logoEl}</div>
+                <div style={{marginTop:20}}>{amount}</div>
+                <div style={{marginTop:16}}>{detail}</div>
+                <div style={{flex:1,minHeight:18}}></div>
+                {bar}
+                <div style={{marginTop:20}}>{tiles}</div>
+                <div style={{marginTop:20,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}>
+                  <span className="font-orbitron" style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',color:'#FFF3C4',textShadow:'0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(255,140,40,0.6)'}}>ptgc-ufo.com</span>
+                  <span style={{color:'rgba(255,240,220,0.75)',textShadow:'0 2px 8px rgba(0,0,0,0.9)'}}>{'·'} <span style={{color:green}}>UFO</span> {'→'} <span style={{color:gold}}>PTGC</span> {'·'} on-chain {'·'} {today}</span>
+                </div>
+              </>
+            ):(
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}>
+                  {title}
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div className="font-orbitron burn-fire-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+                    <div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}><span style={{color:green}}>UFO</span> fees buy {'&'} burn <span style={{color:gold}}>PTGC</span></div>
+                    <div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>old + new contract {'·'} on-chain {'·'} {today}</div>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:30,marginTop:14}}>{logoEl}<div style={{flex:1,minWidth:0}}>{amount}</div></div>
+                <div style={{marginTop:12}}>{detail}</div>
+                <div style={{flex:1,minHeight:14}}></div>
+                {bar}
+                <div style={{marginTop:16}}>{tiles}</div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+    const PtgcByUfoSocialModal=({p,price,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=BURN_SOCIAL_SHAPES[shape];
+      const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring="border-orange-500/40" on="border-[#1a0703]" onText="text-[#1a0703]" offText="text-orange-200/70 hover:text-orange-100 hover:bg-orange-500/10" grad="linear-gradient(180deg,#FFE08A 0%,#FF9F1C 50%,#E8420F 100%)" glow="rgba(255,120,30,0.6)"/>;
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="PTGC burned by UFO share card" filename={`ptgc-burned-by-ufo-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <PtgcByUfoSocialCard p={p} price={price} shape={shape}/>
+        </ShareCardModal>
+      );
+    };
+    /* ===== END PTGC BURNED BY UFO card ===== */
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -11260,128 +11378,9 @@
           {/* DAO Treasury / PTGC Burned by UFO Share Modal - Twitter optimized */}
           {/* PTGC: DAO Treasury card, redesigned 2026-09-23 (DaoTreasuryModal). UFO keeps the 'PTGC burned by UFO' card below. */}
           {showDAOShareModal&&cfg.hasDAO&&<DaoTreasuryModal dao={daoData} loading={daoLoading} onClose={()=>closeModalAndReturn(setShowDAOShareModal)}/>}
-          {showDAOShareModal&&!cfg.hasDAO&&(()=>{
-            return(
-            <ShareCardModal onClose={()=>closeModalAndReturn(setShowDAOShareModal)} width={600} height={340} label={token==='PTGC'?'PTGC DAO share card':'PTGC burned by UFO share card'} filename={`${token==='PTGC'?'ptgc-dao':'ptgc-burned-by-ufo'}-${new Date().toISOString().slice(0,10)}.png`}>
-                {/* Twitter Card - 600x340 */}
-                <div id="dao-share-card" className="w-[600px] h-[340px] rounded-xl overflow-hidden" style={{background:`linear-gradient(135deg, #0a0a0a 0%, #001020 50%, #0a0a0a 100%)`}}>
-                  <div className={`h-full border-4 border-blue-500/80 rounded-xl pt-5 px-5 pb-9 flex flex-col relative`} style={{boxShadow:"0 0 30px rgba(59,130,246,0.3),inset 0 0 30px rgba(0,0,0,0.5)"}}>
-                    
-                    {/* Header row */}
-                    <div className="flex items-center gap-4 mb-3">
-                      <img src={cfg.logo} alt={token} className="w-16 h-16 rounded-full" style={{border:"2.5px solid rgba(59,130,246,0.7)",boxShadow:"0 0 14px rgba(59,130,246,0.5)"}}/>
-                      <div className="flex-1 flex flex-col justify-center">
-                        <div className="flex items-center gap-3">
-                          <div className={`font-orbitron text-3xl font-bold ${theme.text}`}>{token}</div>
-                          {!cfg.hasDAO&&<div className="text-blue-300 text-lg font-bold">{'\u{1F525} PTGC Burned by UFO'}</div>}
-                          {cfg.hasDAO&&<div className="text-blue-300 text-lg font-bold">{'\u{1F3DB}\uFE0F DAO Treasury'}</div>}
-                        </div>
-                      </div>
-                      <span className="text-white/40 text-sm">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
-                    </div>
-                    
-                    {cfg.hasDAO?(
-                      /* DAO Treasury Content */
-                      <div className="flex-1 grid grid-cols-2 gap-3">
-                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
-                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F4B0}'} Available for Proposals</div>
-                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.availableUSD||0):'\u2014'}</div>
-                          <div className="text-white/50 text-sm">{daoData?fmtAbbr(daoData.availablePLS||0)+' PLS':'\u00a0'}</div>
-                        </div>
-                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3 relative">
-                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{23F3}'} Pending in Live{daoData?` (${daoData.pendingCount||0})`:''}</div>
-                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.pendingUSD||0):'\u2014'}</div>
-                          <div className="text-white/50 text-sm">{daoData?fmtAbbr(daoData.pendingPLS||0)+' PLS':'\u00a0'}</div>
-                        </div>
-                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
-                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F3E6}'} Ready to Deploy</div>
-                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.managementValue||0):'\u2014'}</div>
-                        </div>
-                        <div className="bg-black/30 border border-blue-500/30 rounded-lg p-3">
-                          <div className="text-white/60 text-xs uppercase mb-1">{'\u{1F4CA}'} Total DAO Value</div>
-                          <div className="text-2xl font-bold text-green-400">{daoData?fmtUSD(daoData.totalValue||0):'\u2014'}</div>
-                        </div>
-                      </div>
-                    ):(
-                      /* PTGC Burned by UFO Content */
-                      (()=>{
-                        /* Same shared source as the Total Supply Burned panel — the delivered
-                           scan (fetchPtgcBurnedByUfo as fallback) plus the old contract's
-                           pre-launch history, so the shared image matches the panel. It used to
-                           read ptgcByUfoLive alone, which is null in the normal case, so it
-                           rendered zeros — that was the "not populating" bug. */
-                        const _ptgc=computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data);
-                        const totalBurned=_ptgc.totalBurned;          // a17: null while pending → "—"
-                        const burnPct=_ptgc.burnPct;
-                        const periods=_ptgc.periods||{h24:{},d7:{},d30:{},d90:{}};
-                        const whaleProgressUFO=getWhaleProgress(burnPct||0);
-                        const creaturesUFO=getBurnC(burnPct||0,'Squid');
-                        const cardPxOk=ptgcPrice>0;
-                        
-                        return(
-                          <div className="flex gap-4 flex-1">
-                            {/* Left column */}
-                            <div className="flex-1">
-                              <div className="grid grid-cols-3 gap-2 mb-2">
-                                <div className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 text-center" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
-                                  <div className="text-blue-300 text-xs font-bold uppercase tracking-wide">{_ptgc.lifetimeIsWindow?'Burned (90d)':'Burned'}</div>
-                                  <div className="text-xl font-bold text-[#D4AF37]">{fmtAbbr(totalBurned)}</div>
-                                </div>
-                                <div className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 text-center" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
-                                  <div className="text-blue-300 text-xs font-bold uppercase tracking-wide">USD Value</div>
-                                  <div className="text-xl font-bold text-green-400">{(totalBurned==null||!cardPxOk)?'\u2014':fmtUSD(totalBurned*ptgcPrice)}</div>
-                                </div>
-                                <div className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 text-center" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
-                                  <div className="text-blue-300 text-xs font-bold uppercase tracking-wide">% of PTGC</div>
-                                  <div className="text-xl font-bold text-white">{burnPct==null?'\u2014':burnPct.toFixed(4)+'%'}</div>
-                                </div>
-                              </div>
-                              
-                              {/* Whale progress */}
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden">
-                                  <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" style={{width:`${whaleProgressUFO.progress}%`}}></div>
-                                </div>
-                                <span className="text-xl">{'\u{1F40B}'}</span>
-                                <span className="text-blue-400 text-xs font-bold">{whaleProgressUFO.progress.toFixed(1)}%</span>
-                              </div>
-                              
-                              {/* Creatures */}
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-2xl">{'\u{1F525}'}</span>
-                                {creaturesUFO.map((c,i)=><span key={i} className="flex items-center gap-1"><span className="text-2xl">{c.e}</span><span className="text-white/70 text-sm font-bold">x{c.cnt}</span></span>)}
-                              </div>
-                            </div>
-                            
-                            {/* Separator line */}
-                            <div className="w-px bg-blue-500/30"></div>
-                            
-                            {/* Right column - period boxes */}
-                            <div className="grid grid-cols-2 gap-2 w-[210px]">
-                              {[{l:'24H',k:'24h',v:periods.h24?.amount},{l:'7D',k:'7d',v:periods.d7?.amount},{l:'30D',k:'30d',v:periods.d30?.amount},{l:'90D',k:'90d',v:periods.d90?.amount}].map(({l,k,v})=>(
-                                <div key={l} className="bg-black/30 border-2 border-blue-500/60 rounded-lg p-2 relative h-[80px]" style={{boxShadow:"0 0 8px rgba(59,130,246,0.15)"}}>
-                                  <div className="text-white font-bold text-base absolute top-1 left-2">{l}</div>
-                                  <div className="text-right mt-5">
-                                    <div className="text-blue-300 font-bold text-xl">{v==null?'\u2014':fmtAbbr(v)}</div>
-                                    <div className="text-green-400 text-sm font-semibold">{(v==null||!cardPxOk)?'\u2014':fmtUSD(v*ptgcPrice)}</div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })()
-                    )}
-                    
-                    {/* Footer - absolutely positioned so it never gets clipped by content overflow */}
-                    <div className="absolute bottom-2 right-5">
-                      <span className="text-white/30 text-xs">ptgc-ufo.com</span>
-                    </div>
-                  </div>
-                </div>
-            </ShareCardModal>
-          );
-          })()}
+          {/* UFO: "PTGC burned by UFO" — redesigned 2026-09-25 (PtgcByUfoSocialModal, the Burn Stats build). Same
+              numbers as the panel: computePtgcBurnedByUfo (old + new contract, a17) at today's PTGC price. */}
+          {showDAOShareModal&&!cfg.hasDAO&&<PtgcByUfoSocialModal p={computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data)} price={ptgcPrice} onClose={()=>closeModalAndReturn(setShowDAOShareModal)}/>}
           
           {/* Affiliate Program Share Modal - Twitter optimized */}
           {showAffiliateShareModal&&(()=>{

@@ -28,7 +28,8 @@ shape (scaled, sides cropped, never stretched), 140px of faded headroom over the
 only shows when the window is tall enough (`--oy`), buttons with the classic glow + light sweep, stat
 tiles. **Also 2026-09-25: the Value Generated and Token Allocation share cards (both tokens) redone in the
 Burn / Treasury build — `ValueGenSocialModal`, `AllocSocialModal`, shared `SocialNebulaBackdrop` +
-`SocialShapeSwitch`; the 600x314 cards are gone.** **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
+`SocialShapeSwitch`; the 600x314 cards are gone; the UFO "PTGC burned by UFO" card too (`PtgcByUfoSocialModal`, fire build) — every
+Socials card is on the 2026-09-23 pattern now.** **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
 set it to 'classic' to go back** — or look at either on the live site with `?home=classic` /
 `?home=cosmic`. Same loaders as before; only the view is new. Art in `logos/home/`. Details, checks
 and the owed live look: `sessions/2026-09-25.md`. Gotcha 32.
@@ -45,7 +46,7 @@ card) pushed as 895596037. **Evening: two more Socials cards redone, both live.*
 (`BurnSocialModal`, 002275416, logos/label enlarged in c0f65f15a + 493bcec2c) and the PTGC DAO Treasury card in
 a blue "vault" look (`DaoTreasuryModal`, eb12b1aa2: Total DAO Value, breakdown bar, four tiles incl. Treasury
 holdings = tokens over $50 with logos). Both Wide/Tall, screenshot-only, and both also open from their panel's
-📷. The UFO "PTGC burned by UFO" card is still the old design. Shaka checked all three on his phone, both
+📷. The UFO "PTGC burned by UFO" card followed on 2026-09-25. Shaka checked all three on his phone, both
 shapes, 2026-09-23: all good.
 
 **2026-09-22: the affiliates page showed some viewers a dashboard of zeros — and it was never a
