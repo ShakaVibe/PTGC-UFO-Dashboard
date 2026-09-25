@@ -6752,7 +6752,7 @@
       const layer=(n,hMul,wMul)=>Array.from({length:n},(_,i)=>{const cx=(i+0.5)*W/n+(rnd()-0.5)*W/n*0.6,w=W/n*wMul*(0.8+rnd()*0.6),h=H*hMul*(0.55+rnd()*0.75),lean=(rnd()-0.5)*w*0.9;return tongue(cx,H+12,w,h,lean);});
       return{embers,back:layer(tall?7:9,tall?0.24:0.36,1.9),mid:layer(tall?10:13,tall?0.17:0.27,1.5),front:layer(tall?13:17,tall?0.10:0.16,1.1)};
     };
-    const BurnFireBackdrop=({W,H,tall,logo})=>{
+    const BurnFireBackdrop=({W,H,tall,logo,wm=0.05})=>{
       const art=React.useMemo(()=>burnFireArt(W,H,tall),[W,H,tall]);
       return(
         <>
@@ -6776,8 +6776,8 @@
             <g filter="url(#bscGlow)">{art.embers.map((e,i)=><circle key={i} cx={e.x.toFixed(1)} cy={e.y.toFixed(1)} r={e.r.toFixed(1)} fill={e.fill}/>)}</g>
           </svg>
           <img src={logo} alt="" aria-hidden="true" style={tall
-            ?{position:'absolute',left:'50%',marginLeft:-320,top:170,width:640,height:640,opacity:0.05,filter:'sepia(1) saturate(3) hue-rotate(-20deg)'}
-            :{position:'absolute',right:-60,top:34,width:400,height:400,opacity:0.05,filter:'sepia(1) saturate(3) hue-rotate(-20deg)'}}/>
+            ?{position:'absolute',left:'50%',marginLeft:-320,top:170,width:640,height:640,opacity:wm,filter:'sepia(1) saturate(3) hue-rotate(-20deg)'}
+            :{position:'absolute',right:-60,top:34,width:400,height:400,opacity:wm,filter:'sepia(1) saturate(3) hue-rotate(-20deg)'}}/>
           {/* gradient border (yellow → red) via mask, then the glow */}
           <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:'linear-gradient(#0000,#0000) padding-box, linear-gradient(180deg,#FFD166 0%,#FF7A1A 45%,#C81E0A 100%) border-box',WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
           <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:'0 0 0 1px rgba(255,210,150,0.10) inset, 0 0 70px -8px rgba(255,90,20,0.8), 0 0 24px -4px rgba(255,140,40,0.55)'}}></div>
@@ -7402,8 +7402,12 @@
      * "% of the PTGC supply · worth $X today", the old/new split, a bar to the next 🐋, four window tiles.
      * Honest labels: pending → "—"; failed → "chain read failed"; oldMissing → "new contract only";
      * lifetimeIsWindow → the headline is the 90-day window, and says so. Screenshot-only (gotcha 30). */
+    const PBU_SHAPES={
+      wide:{W:1200,H:675,pad:48,top:36,bottom:30,title:40,logo:168,amount:104,unit:36,crit:'text-[36px]',detail:27,split:22,barFs:21,barH:13,tl:17,tv:38,ts:23,tp:'12px 20px 14px',gap:14},
+      tall:{W:1080,H:1350,pad:56,top:52,bottom:40,title:52,logo:230,amount:146,unit:50,crit:'text-[54px]',detail:38,split:28,barFs:28,barH:16,tl:23,tv:54,ts:30,tp:'18px 26px 20px',gap:16}
+    };
     const PtgcByUfoSocialCard=({p,price,shape='wide'})=>{
-      const z=BURN_SOCIAL_SHAPES[shape]||BURN_SOCIAL_SHAPES.wide,tall=shape==='tall';
+      const z=PBU_SHAPES[shape]||PBU_SHAPES.wide,tall=shape==='tall';
       const supply=TOKENS.PTGC.totalSupply;
       const known=!!p&&!p.pending&&p.totalBurned!=null;
       const pct=known?p.burnPct:null;
@@ -7429,7 +7433,7 @@
           <div aria-hidden="true" style={{position:'absolute',left:0,top:0,width:z.logo,height:z.logo,borderRadius:'50%',background:'radial-gradient(circle, rgba(255,140,40,0.45) 0%, rgba(0,0,0,0) 68%)',transform:'scale(1.4)'}}></div>
           <img src={TOKENS.UFO.logo} alt="" style={{position:'absolute',left:0,top:0,width:z.logo,height:z.logo,borderRadius:'50%',boxShadow:'0 0 0 3px rgba(157,255,58,0.85), 0 0 0 6px rgba(200,40,10,0.35), 0 0 46px rgba(255,100,20,0.8)'}}/>
           <img src={TOKENS.PTGC.logo} alt="" style={{position:'absolute',right:0,bottom:-Math.round(badge*0.1),width:badge,height:badge,borderRadius:'50%',background:'#0b0604',boxShadow:'0 0 0 3px rgba(232,192,68,0.95), 0 0 0 6px #0b0604, 0 0 26px rgba(255,140,40,0.9)'}}/>
-          <span aria-hidden="true" style={{position:'absolute',right:-Math.round(badge*0.18),top:-Math.round(badge*0.12),fontSize:Math.round(badge*0.5),lineHeight:1,filter:'drop-shadow(0 0 8px rgba(255,120,30,0.9))'}}>{'\u{1F525}'}</span>
+          <span aria-hidden="true" style={{position:'absolute',right:-Math.round(badge*0.08),top:Math.round(z.logo*0.02),fontSize:Math.round(badge*0.42),lineHeight:1,filter:'drop-shadow(0 0 8px rgba(255,120,30,0.9))'}}>{'\u{1F525}'}</span>
         </div>
       );
       const amount=(
@@ -7441,11 +7445,20 @@
           {creatures.length>0&&<div style={{marginTop:14,display:'flex',justifyContent:tall?'center':'flex-start'}}><DaoCreatures ptgc={0} size={z.crit} className={tall?'justify-center':''} list={creatures}/></div>}
         </>
       );
+      const chip=(lbl,val,col)=><span style={{display:'inline-flex',alignItems:'baseline',gap:8,padding:'0.3em 0.8em',borderRadius:999,background:'rgba(0,0,0,0.35)',border:'1px solid rgba(255,140,60,0.35)',fontSize:z.split,whiteSpace:'nowrap'}}><span style={{color:'rgba(255,235,210,0.65)',letterSpacing:'0.08em',textTransform:'uppercase',fontSize:'0.78em'}}>{lbl}</span><b className="tabular-nums" style={{color:col}}>{val}</b></span>;
+      const split=known&&!p.oldMissing&&(
+        <div style={{display:'flex',gap:10,justifyContent:tall?'center':'flex-end',flexWrap:'wrap'}}>
+          {chip('old contract',fmtAbbr(p.oldBurned),'#FFE3A6')}
+          {chip(p.lifetimeIsWindow?'live (90d)':'live contract',fmtAbbr(p.newBurned),green)}
+        </div>
+      );
       const detail=(
-        <div className="tabular-nums" style={{fontSize:z.detail,color:'rgba(255,255,255,0.8)',lineHeight:1.25,textAlign:tall?'center':'left'}}>
-          <b style={{color:'#fff'}}>{pct!=null?pct.toFixed(2)+'%':'—'}</b> of the PTGC supply{tall?<br/>:' · '}worth <span style={{color:'#4ADE80',fontWeight:700,fontSize:'1.12em',textShadow:'0 0 20px rgba(74,222,128,0.45)'}}>{worth!=null?fmtDollar(worth,0):'—'}</span> <span style={{color:'rgba(255,255,255,0.45)',fontSize:'0.72em'}}>today</span>
-          {known&&!p.oldMissing&&<div style={{fontSize:'0.72em',color:'rgba(255,235,210,0.7)',marginTop:6}}>old contract <b style={{color:'#FFE3A6'}}>{fmtAbbr(p.oldBurned)}</b> {'·'} live contract <b style={{color:green}}>{fmtAbbr(p.newBurned)}</b>{p.lifetimeIsWindow?' (90d)':''}</div>}
-          {note&&<div style={{fontSize:'0.66em',color:'#FFC56B',marginTop:6,letterSpacing:'0.06em'}}>{'⚠'} {note}</div>}
+        <div style={{display:'flex',flexDirection:tall?'column':'row',alignItems:tall?'center':'baseline',justifyContent:'space-between',gap:tall?14:24,flexWrap:'wrap'}}>
+          <div className="tabular-nums" style={{fontSize:z.detail,color:'rgba(255,255,255,0.8)',lineHeight:1.25,textAlign:tall?'center':'left'}}>
+            <b style={{color:'#fff'}}>{pct!=null?pct.toFixed(2)+'%':'\u2014'}</b> of the PTGC supply{tall?<br/>:' \u00B7 '}worth <span style={{color:'#4ADE80',fontWeight:700,fontSize:'1.12em',textShadow:'0 0 20px rgba(74,222,128,0.45)'}}>{worth!=null?fmtDollar(worth,0):'\u2014'}</span> <span style={{color:'rgba(255,255,255,0.45)',fontSize:'0.72em'}}>today</span>
+          </div>
+          {split}
+          {note&&<div style={{width:'100%',fontSize:Math.round(z.detail*0.66),color:'#FFC56B',letterSpacing:'0.06em',textAlign:tall?'center':'left'}}>{'\u26A0'} {note}</div>}
         </div>
       );
       const bar=known&&pct!=null&&(
@@ -7465,14 +7478,14 @@
       );
       return(
         <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#0b0604',fontFamily:"'Rajdhani',sans-serif"}}>
-          <BurnFireBackdrop W={z.W} H={z.H} tall={tall} logo={TOKENS.UFO.logo}/>
+          <BurnFireBackdrop W={z.W} H={z.H} tall={tall} logo={TOKENS.UFO.logo} wm={0.1}/>
           <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
             {tall?(
               <>
                 {title}
                 <div style={{display:'flex',justifyContent:'center',marginTop:26}}>{logoEl}</div>
-                <div style={{marginTop:20}}>{amount}</div>
-                <div style={{marginTop:16}}>{detail}</div>
+                <div style={{marginTop:22}}>{amount}</div>
+                <div style={{marginTop:20}}>{detail}</div>
                 <div style={{flex:1,minHeight:18}}></div>
                 {bar}
                 <div style={{marginTop:20}}>{tiles}</div>
@@ -7491,11 +7504,11 @@
                     <div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>old + new contract {'·'} on-chain {'·'} {today}</div>
                   </div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:30,marginTop:14}}>{logoEl}<div style={{flex:1,minWidth:0}}>{amount}</div></div>
-                <div style={{marginTop:12}}>{detail}</div>
-                <div style={{flex:1,minHeight:14}}></div>
+                <div style={{display:'flex',alignItems:'center',gap:34,marginTop:18}}>{logoEl}<div style={{flex:1,minWidth:0}}>{amount}</div></div>
+                <div style={{marginTop:18}}>{detail}</div>
+                <div style={{flex:1,minHeight:16}}></div>
                 {bar}
-                <div style={{marginTop:16}}>{tiles}</div>
+                <div style={{marginTop:18}}>{tiles}</div>
               </>
             )}
           </div>
@@ -7504,7 +7517,7 @@
     };
     const PtgcByUfoSocialModal=({p,price,onClose})=>{
       const[shape,setShape]=useState('wide');
-      const z=BURN_SOCIAL_SHAPES[shape];
+      const z=PBU_SHAPES[shape];
       const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring="border-orange-500/40" on="border-[#1a0703]" onText="text-[#1a0703]" offText="text-orange-200/70 hover:text-orange-100 hover:bg-orange-500/10" grad="linear-gradient(180deg,#FFE08A 0%,#FF9F1C 50%,#E8420F 100%)" glow="rgba(255,120,30,0.6)"/>;
       return(
         <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="PTGC burned by UFO share card" filename={`ptgc-burned-by-ufo-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
