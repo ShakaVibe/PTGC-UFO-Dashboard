@@ -17,7 +17,18 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-23, late)
+## Current state (2026-09-25)
+
+**2026-09-25: new Home screen ("cosmic") — the classic one kept as a switchable backup.** Shaka's
+gold/green alien art behind a metallic THE GRAYS / DASHBOARD title, two glowing token cards (price,
+24 h change, contract + copy, Day counter, MCap, volume, PLS ratio, a real 24 h chart from
+GeckoTerminal 15-minute candles) and ONE "BUY / SELL <token>" button per card (Shaka: not two) that
+opens the existing switch.win `SwapModal`. **`HOME_DESIGN` (next to `UFO_MAINTENANCE`) = 'cosmic';
+set it to 'classic' to go back** — or look at either on the live site with `?home=classic` /
+`?home=cosmic`. Same loaders as before; only the view is new. Art in `logos/home/`. Details, checks
+and the owed live look: `sessions/2026-09-25.md`. Gotcha 32.
+
+### Before that (end of 2026-09-23, late)
 
 **2026-09-23: DAO Buys share card in Socials (PTGC column, under DAO Treasury).** `DaoBuysSocialModal`
 opens on the latest buy in the Latest-DAO-buy tile's look (gold frame, glow, metallic amount, Grays
@@ -432,6 +443,17 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    absurd numbers (a 33-sextillion treasury, every burn 5.00%); inject real-shaped data through a copy of index.html
    (`dao={window.__daoFake||daoData}` + `eval=`) to judge layout. Long figures: `money()` abbreviates past $10M and
    `fitFs` shrinks text to its box - keep both if a tile is added.
+32. **Home has two designs; `HOME_DESIGN` picks one** (2026-09-25). 'cosmic' (live) is `HomeCosmicView` /
+   `CosmicCard` / `CosmicCardSkeleton` / `HomeSpark`, styled by the `hc-*` block at the end of the head
+   `<style>`; 'classic' is the original JSX, still inside `Home` below the cosmic `return`, untouched.
+   Both share `Home`'s state and loaders, so a data fix goes in ONE place and reaches both — never copy
+   the loader into the cosmic view. `?home=classic|cosmic` overrides the constant per visit. Images must
+   stay under `logos/` (the `_site` allow-list in `deploy.yml`, a38). The cosmic chart reads GeckoTerminal
+   (`fetchHomeSpark`), refuses a series that ends >25% from the card's price, and falls back to the
+   classic five-point sparkline — when the CSP (b7) lands it needs `connect-src https://api.geckoterminal.com`
+   next to switch.win's `frame-src`. If a card's element sizes change, change `CosmicCardSkeleton` too
+   (gotcha 11); it reuses the card's own classes so that is usually automatic. Harness: `GT_CANDLES=1`.
+
 11. **Loading is a shell, not a spinner.** `loading` in `Dashboard` only covers the first
    DexScreener/RPC round-trip. While it is true the header/nav render with `Sk` bars and the tab
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
@@ -570,6 +592,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-09-25.md` — new Home screen ("cosmic"): Shaka's alien art, metallic title, two glowing cards
+  with a real 24 h GeckoTerminal chart and one BUY / SELL button each; classic kept behind `HOME_DESIGN`.
 - `sessions/2026-09-23.md` — Socials DAO Buys card (three rounds: period switch, All time default, Wide/Tall,
   local + UTC times), Burn Stats fire redesign (PTGC + UFO), DAO Treasury blue redesign; all screenshot-only.
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the

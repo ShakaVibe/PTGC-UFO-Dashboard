@@ -135,6 +135,106 @@
   
     /* Share card mobile scaling — JS-based via inline style={{zoom}}.
        See "computeShareScale" pattern in each modal IIFE. */
+
+    /* ===== HOME — COSMIC design (2026-09-25). The classic Home is kept whole; HOME_DESIGN in the
+       script picks one (?home=classic / ?home=cosmic previews either). Everything below is hc-*.
+       --bgw is the painted width of the background art: the viewport, but never under 1000px (a
+       phone would get a thumbnail-sized alien) and never over 1920px (past that the art stays
+       1920 wide and fades into the page colour at its sides). The title's top and the dark band
+       the cards sit on are both fractions of it, so they stay lined up at every width. ===== */
+    .hc-page{--bgw:clamp(1000px,100vw,1920px);position:relative;min-height:100vh;display:flex;flex-direction:column;color:#fff;overflow-x:hidden;
+      background-color:#050504;background-image:url('logos/home/cosmic-bg.jpg');background-repeat:no-repeat;background-position:top center;background-size:var(--bgw) auto}
+    @media(min-width:1921px){.hc-page::after{content:'';position:absolute;inset:0 0 auto 0;height:calc(var(--bgw)*0.667);pointer-events:none;
+      background:linear-gradient(90deg,#050504 calc(50% - 960px),rgba(5,5,4,0) calc(50% - 840px),rgba(5,5,4,0) calc(50% + 840px),#050504 calc(50% + 960px))}}
+    /* below lg the cards stack, so the art fades out under the title and the landscape strip
+       comes back at the foot of the page instead */
+    @media(max-width:1023.98px){
+      .hc-page::before{content:'';position:absolute;left:0;right:0;top:0;height:calc(var(--bgw)*0.667);pointer-events:none;
+        background:linear-gradient(180deg,rgba(5,5,4,0) 0,rgba(5,5,4,0) calc(var(--bgw)*0.2),rgba(5,5,4,0.9) calc(var(--bgw)*0.27),#050504 calc(var(--bgw)*0.29))}
+      .hc-ground{position:absolute;left:0;right:0;bottom:0;height:145px;pointer-events:none;background:url('logos/home/cosmic-ground.jpg') no-repeat bottom center;background-size:1549px 145px}
+    }
+    @media(min-width:1024px){.hc-ground{display:none}}
+    .hc-inner{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;padding:calc(var(--bgw)*0.172) 16px 0}
+    .hc-title{display:flex;flex-direction:column;align-items:center;text-align:center;margin:0 0 20px;padding-left:1%}
+    .hc-t1,.hc-t2{font-family:'Orbitron',monospace;font-weight:900;line-height:1;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+    .hc-t1{font-size:clamp(1.75rem,4.17vw,5rem);letter-spacing:.02em;background-image:linear-gradient(180deg,#FFF 0%,#E4E4E4 42%,#7E7E7E 56%,#D6D6D6 100%);filter:drop-shadow(0 3px 6px rgba(0,0,0,.85))}
+    .hc-t2{margin:.15rem 0 0;font-size:clamp(2.2rem,4.8vw,5.75rem);letter-spacing:.03em;background-image:linear-gradient(90deg,#FFE27A 0%,#E0A41E 40%,#9BDC3A 58%,#5FD12E 100%);filter:drop-shadow(0 3px 8px rgba(0,0,0,.9))}
+    .hc-tag{margin:.7rem 0 0;font-weight:600;font-size:clamp(.72rem,1.05vw,1.2rem);letter-spacing:.06em;color:#E8E8E8;text-shadow:0 1px 4px rgba(0,0,0,.9);white-space:nowrap}
+    @media(min-width:640px){.hc-tag{letter-spacing:.2em}}
+    @media(min-width:1024px){.hc-tag{letter-spacing:.3em}.hc-title{margin-bottom:16px}}
+    .hc-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;width:100%;max-width:40rem}
+    @media(min-width:1024px){.hc-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(24px,2.3vw,44px);width:87.5vw;max-width:1300px}}
+    .hc-card{position:relative;display:flex;flex-direction:column;gap:14px;padding:16px;border:2px solid var(--hc-c);border-radius:14px;cursor:pointer;
+      background:linear-gradient(180deg,var(--hc-bg1) 0%,var(--hc-bg2) 100%);box-shadow:0 0 20px var(--hc-glow),inset 0 0 32px var(--hc-glow2);transition:transform .25s ease,box-shadow .25s ease}
+    .hc-card:hover{transform:translateY(-3px);box-shadow:0 0 38px var(--hc-glow),inset 0 0 40px var(--hc-glow2)}
+    .hc-card.hc-masked{opacity:.6}
+    @media(min-width:1024px){.hc-card{padding:16px 24px 20px clamp(20px,2.6vw,40px)}}
+    .hc-gold{--hc-c:#E8B53A;--hc-t:#F2C12E;--hc-glow:rgba(232,181,58,.5);--hc-glow2:rgba(232,181,58,.12);--hc-bg1:#241C05;--hc-bg2:#0A0904;--hc-dim:#CFC7AE;--hc-line:#FFD84D}
+    .hc-green{--hc-c:#5EEA3A;--hc-t:#6CE83A;--hc-glow:rgba(94,234,58,.5);--hc-glow2:rgba(94,234,58,.12);--hc-bg1:#0A2207;--hc-bg2:#040A04;--hc-dim:#B9D4AE;--hc-line:#7CFF4A}
+    .hc-skel{--hc-c:rgba(255,255,255,.12);--hc-glow:rgba(0,0,0,0);--hc-glow2:rgba(0,0,0,0);--hc-bg1:#141410;--hc-bg2:#0a0a08;cursor:default}
+    .hc-skel.hc-gold{--hc-c:rgba(232,181,58,.3)}.hc-skel.hc-green{--hc-c:rgba(94,234,58,.3)}
+    .hc-skel:hover{transform:none}
+    .hc-top{display:flex;align-items:flex-start;gap:14px}
+    @media(min-width:1024px){.hc-top{gap:clamp(16px,2.1vw,30px)}}
+    .hc-logo{width:76px;height:76px;flex-shrink:0;object-fit:contain;border-radius:50%;filter:drop-shadow(0 0 10px var(--hc-glow))}
+    @media(min-width:640px){.hc-logo{width:96px;height:96px}}
+    @media(min-width:1024px){.hc-logo{width:clamp(96px,9.2vw,140px);height:clamp(96px,9.2vw,140px)}}
+    .hc-info{display:flex;flex-direction:column;gap:8px;min-width:0;padding-top:2px}
+    @media(min-width:1024px){.hc-info{gap:10px;padding-top:6px}}
+    .hc-name{font-family:'Orbitron',monospace;font-weight:900;font-size:1.625rem;line-height:1;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+    .hc-gold .hc-name{background-image:linear-gradient(180deg,#FFE58A 0%,#F2C12E 55%,#C98F12 100%)}
+    .hc-green .hc-name{background-image:linear-gradient(180deg,#B8FF7A 0%,#6CE83A 55%,#34B81A 100%)}
+    @media(min-width:1024px){.hc-name{font-size:clamp(1.6rem,2.8vw,2.75rem)}}
+    .hc-pricerow{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+    @media(min-width:1024px){.hc-pricerow{gap:6px 18px}}
+    .hc-price{font-weight:700;font-size:1.6rem;line-height:1;font-variant-numeric:tabular-nums;color:#fff}
+    @media(min-width:1024px){.hc-price{font-size:clamp(1.6rem,2.5vw,2.4rem)}}
+    .hc-chip{font-weight:700;font-size:.9rem;line-height:1;padding:5px 8px;border-radius:5px;border:1px solid;white-space:nowrap}
+    @media(min-width:1024px){.hc-chip{font-size:clamp(.95rem,1.32vw,1.25rem);padding:5px 12px}}
+    .hc-up{color:#4BE37F;background:rgba(18,80,36,.7);border-color:rgba(75,227,127,.3)}
+    .hc-down{color:#FF6464;background:rgba(110,16,16,.75);border-color:rgba(255,90,90,.3)}
+    .hc-flat{color:rgba(255,255,255,.55);background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15)}
+    .hc-meta{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;color:var(--hc-dim)}
+    @media(min-width:1024px){.hc-meta{font-size:.82rem}}
+    .hc-copy{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;border-radius:6px}
+    .hc-copy:hover{color:#fff}
+    .hc-day{font-size:.66rem;letter-spacing:.06em;color:var(--hc-t);padding:2px 7px;border:1px solid var(--hc-c);border-radius:999px;white-space:nowrap;opacity:.9}
+    @media(min-width:1024px){.hc-day{font-size:.75rem;padding:3px 9px}}
+    .hc-dash{position:absolute;top:10px;right:8px;display:flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;padding:0 8px;border:0;background:transparent;border-radius:8px;
+      font-weight:700;font-size:.875rem;letter-spacing:.06em;color:var(--hc-t)}
+    .hc-dash span{display:none}
+    @media(min-width:640px){.hc-dash span{display:inline}}
+    .hc-dash:hover{background:rgba(255,255,255,.06)}
+    .hc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+    .hc-stats>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+    .hc-stats>div+div{padding-left:12px;border-left:1px solid rgba(255,255,255,.18)}
+    @media(min-width:1024px){.hc-stats{margin:6px 0 0 4px;grid-template-columns:1.3fr 1.3fr 1fr}.hc-stats>div{gap:6px}.hc-stats>div+div{padding-left:clamp(16px,2.8vw,40px)}}
+    .hc-lbl{font-weight:600;font-size:.7rem;letter-spacing:.06em;color:#E2E2E2;white-space:nowrap}
+    .hc-val{font-weight:700;font-size:.95rem;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    @media(min-width:1024px){.hc-lbl{font-size:.875rem}.hc-val{font-size:clamp(1rem,1.46vw,1.4rem)}}
+    .hc-full{display:none}
+    @media(min-width:640px){.hc-full{display:inline}.hc-abbr{display:none}}
+    .hc-spark{display:block;width:100%;height:66px}
+    @media(min-width:1024px){.hc-spark{height:clamp(84px,7.5vw,120px);margin-top:-4px}}
+    .hc-spark .hc-sl{filter:drop-shadow(0 0 3px var(--hc-line))}
+    .hc-buy{height:50px;width:100%;border:0;border-radius:8px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.15rem;letter-spacing:.03em;cursor:pointer;transition:filter .2s ease,transform .2s ease}
+    @media(min-width:1024px){.hc-buy{height:56px;font-size:clamp(1.15rem,1.6vw,1.5rem)}}
+    .hc-gold .hc-buy{background:linear-gradient(180deg,#FFDF5C 0%,#F2BE2A 55%,#D99A12 100%);color:#1B1300;box-shadow:0 0 18px rgba(255,200,40,.42)}
+    .hc-green .hc-buy{background:linear-gradient(180deg,#9CFF6A 0%,#5EE83A 55%,#34C218 100%);color:#0A1F04;box-shadow:0 0 18px rgba(110,255,60,.42)}
+    .hc-buy:hover{filter:brightness(1.1)}
+    .hc-maint{position:absolute;top:10px;right:10px;z-index:2;display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:rgba(234,179,8,.2);border:1px solid rgba(250,204,21,.4);color:#FEF08A;font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+    .hc-status{margin:18px 0 18px;display:flex;align-items:center;padding:6px 14px;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.12);border-radius:999px}
+    @media(max-width:1023.98px){.hc-status{margin-bottom:84px}}
+    .hc-footer{position:relative;z-index:1;padding:12px 20px 16px;text-align:center;font-size:.8rem;line-height:1.5;color:#C4C4C4;background:rgba(0,0,0,.72);border-top:1px solid rgba(255,255,255,.08)}
+    @media(min-width:1024px){.hc-footer{font-size:.875rem;padding:14px 20px}}
+    .hc-h1{margin:0;display:flex;flex-direction:column;align-items:center}
+    .hc-sk{display:inline-block;vertical-align:middle;border-radius:6px;background:rgba(255,255,255,.08)}
+    .hc-logo.hc-sk,.hc-spark.hc-sk,.hc-buy.hc-sk{display:block}
+    .hc-logo.hc-sk{border-radius:50%}
+    .hc-skel .hc-buy.hc-sk{background:rgba(255,255,255,.08);box-shadow:none}
+    .hc-status .text-white\/40{color:rgba(255,255,255,.78)}
+    .hc-status>div{font-size:.8rem}
+    @media(prefers-reduced-motion:reduce){.hc-card,.hc-buy{transition:none!important}.hc-card:hover{transform:none}}
   </style>
 </head>
 <body>
@@ -340,6 +440,16 @@
      * Flip this ONE value to go live. Nothing else needs to change.
      * ========================================= */
     const UFO_MAINTENANCE=false;   // LIVE. Home UFO card, dashboard access, the secret dot, and operator-only data all follow this flag.
+    /* ===================== HOME DESIGN (2026-09-25) =====================
+     * 'cosmic'  = the landing page Shaka picked on 2026-09-25: the gold/green alien art, metallic
+     *             title, two glowing token cards with a 24 h chart and ONE "BUY / SELL" button.
+     * 'classic' = the design before it (big combined logo, horizontal cards, BUY/SELL rail),
+     *             kept whole inside Home as the backup.
+     * Flip this ONE value to go back — nothing else needs to change. Either design can also be
+     * previewed on the live site without a deploy: ?home=classic or ?home=cosmic in the URL.
+     * ================================================================= */
+    const HOME_DESIGN='cosmic';
+    const homeDesign=()=>{try{const m=/[?&]home=(classic|cosmic)\b/.exec(location.search);if(m)return m[1];}catch(e){}return HOME_DESIGN;};
     /* a40 (2026-09-20): diagnostics are on for the operator build and for anyone who asked for
        them with ?debug=1 — the same test line 39 uses to decide whether console output survives.
        Work that exists ONLY to feed a console line belongs behind this. */
@@ -4795,6 +4905,180 @@
       );
     };
 
+    /* ===== HOME — COSMIC components (2026-09-25). Styles: the hc-* block in <style>. =====
+       Module scope on purpose (gotcha 14). The data is Home's own loader, unchanged — the same
+       fetchDex / fetchPLS / a62 per-card paint / a51 retry ladder / 5-minute refresh the classic
+       cards use. `d === undefined` = still loading (skeleton), `null` = failed ("—"), gotcha 3. */
+
+    /* The card's 24 h chart. First choice: GeckoTerminal's 15-minute candles for the token's
+       main pair — the source charts.html already uses — ~96 real closes. GeckoTerminal leaves
+       out intervals with no trades, so a quiet token has fewer points; they are drawn where
+       they fall in time, never filled in. If that answer is missing, late or malformed the
+       chart falls back to the five points the classic sparkline used (price now + DexScreener's
+       24h/6h/1h/5m changes back-computed), and with neither it is a flat dashed line — never an
+       invented shape. One request per card, cached per token for 10 minutes. */
+    const HOME_SPARK_TTL=10*60*1000;
+    const _homeSparkCache={};
+    const fetchHomeSpark=async(token)=>{
+      const hit=_homeSparkCache[token];
+      if(hit&&Date.now()-hit.at<HOME_SPARK_TTL)return hit.pts;
+      const cfg=TOKENS[token];
+      if(!cfg||!cfg.mainPair||!cfg.address)return null;
+      const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${cfg.mainPair}/ohlcv/minute?aggregate=15&limit=100&currency=usd&token=${cfg.address}`;
+      const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),8000);
+      try{
+        const r=await fetch(url,{signal:ctl.signal,headers:{accept:'application/json'}});
+        if(!r.ok)return null;
+        const j=await r.json();
+        const since=Date.now()-86400000;
+        const pts=(j&&j.data&&j.data.attributes&&Array.isArray(j.data.attributes.ohlcv_list)?j.data.attributes.ohlcv_list:[])
+          .map(c=>({t:Number(c[0])*1000,p:parseFloat(c[4])}))
+          .filter(x=>isFinite(x.t)&&x.t>=since&&x.p>0&&isFinite(x.p))
+          .sort((a,b)=>a.t-b.t);
+        if(pts.length<4)return null;
+        _homeSparkCache[token]={at:Date.now(),pts};
+        return pts;
+      }catch(e){return null;}
+      finally{clearTimeout(to);}
+    };
+    const homeSparkFallback=(d)=>{
+      const pc=d?.priceChange,price=d?.price||0;
+      if(!pc||!(price>0))return null;
+      const pts=[['h24',24],['h6',6],['h1',1],['m5',5/60]]
+        .filter(([k])=>pc[k]!=null&&isFinite(parseFloat(pc[k])))
+        .map(([k,hrs])=>({t:-hrs,p:price/(1+parseFloat(pc[k])/100)}))
+        .concat([{t:0,p:price}]);
+      if(pts.length<2)return null;
+      const tMax=Math.abs(pts[0].t)||1;   // sqrt-time x, as the classic sparkline (linear piles 6h/1h/5m into the last 4%)
+      return pts.map(x=>({x:1-Math.sqrt(Math.abs(x.t)/tMax),p:x.p}));
+    };
+    const HomeSparkFlat=({label})=>(
+      <svg className="hc-spark" viewBox="0 0 600 140" preserveAspectRatio="none" role="img" aria-label={label}>
+        <path d="M0,70 L600,70" fill="none" style={{stroke:'rgba(255,255,255,0.18)'}} strokeWidth="2" strokeDasharray="6 6" vectorEffect="non-scaling-stroke"/>
+      </svg>
+    );
+    const HomeSpark=({token,d})=>{
+      const[series,setSeries]=useState(()=>_homeSparkCache[token]?.pts||null);
+      useEffect(()=>{
+        let live=true;
+        const go=()=>{fetchHomeSpark(token).then(p=>{if(live&&p)setSeries(p);});};
+        go();
+        const id=setInterval(()=>{if(!document.hidden)go();},HOME_SPARK_TTL+5000);
+        return()=>{live=false;clearInterval(id);};
+      },[token]);
+      let pts=null;
+      /* Sanity: the last candle must sit within 25% of the price the card prints. A pool read
+         from the wrong side (GeckoTerminal's `token=` inverted) or a stale answer would draw a
+         confident, wrong chart — use the fallback instead. */
+      const seriesOk=series&&series.length>=4&&(!(d?.price>0)||Math.abs(series[series.length-1].p/d.price-1)<0.25);
+      if(seriesOk){
+        const now=Date.now(),t0=now-86400000;
+        const all=(d?.price>0)?series.concat([{t:now,p:d.price}]):series;   // end on the price the card prints
+        pts=all.map(s=>({x:Math.max(0,Math.min(1,(s.t-t0)/86400000)),p:s.p}));
+      }
+      if(!pts)pts=homeSparkFallback(d);
+      if(!pts)return<HomeSparkFlat label={`${token} 24 hour chart unavailable`}/>;
+      const up=(d?.change!=null&&isFinite(d.change))?d.change>=0:null;
+      const ps=pts.map(q=>q.p),lo=Math.min(...ps),hi=Math.max(...ps),span=hi-lo;
+      const line='M'+pts.map(q=>`${(q.x*600).toFixed(1)},${span>0?(132-((q.p-lo)/span)*116).toFixed(1):'70.0'}`).join(' L');
+      const gid=`hcg-${token}`;
+      return(
+        <svg className="hc-spark" viewBox="0 0 600 140" preserveAspectRatio="none" role="img" aria-label={`${token} price over the last 24 hours${up==null?'':up?', up':', down'}`}>
+          <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--hc-line)',stopOpacity:0.75}}/><stop offset="0.6" style={{stopColor:'var(--hc-line)',stopOpacity:0.22}}/><stop offset="1" style={{stopColor:'var(--hc-line)',stopOpacity:0}}/></linearGradient></defs>
+          <path d={`${line} L600,140 L0,140 Z`} fill={`url(#${gid})`}/>
+          <path className="hc-sl" d={line} fill="none" style={{stroke:'var(--hc-line)'}} strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
+        </svg>
+      );
+    };
+
+    const HC_COPY_ICON=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>;
+    const HC_DONE_ICON=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>;
+
+    /* One token card. Whole card → that token's dashboard (as the classic card); the
+       "DASHBOARD ›" button is the same thing for keyboards and for anyone who does not guess the
+       card is clickable. ONE "BUY / SELL" button (Shaka, 2026-09-25: not two) opens SwapModal —
+       the switch.win widget, where buy or sell is chosen (gotcha 13). */
+    const CosmicCard=({token,d,pls,onSelect,onMaint,onSwap})=>{
+      const cfg=TOKENS[token],isGold=cfg.color==='gold';
+      const masked=(token==='UFO'&&UFO_MAINTENANCE); // MAINT-MIGRATION: hide all live figures
+      const[copied,setCopied]=useState(false);
+      const handleCopy=(e)=>{e.stopPropagation();try{const p=navigator.clipboard&&navigator.clipboard.writeText(cfg.address);if(p&&p.catch)p.catch(()=>{});}catch(err){}setCopied(true);setTimeout(()=>setCopied(false),1500);};
+      const change=(d?.change!=null&&isFinite(d.change))?d.change:null;
+      const plsRatio=(pls>0&&d?.price>0)?(d.price/pls).toFixed(2):'—';
+      const _firstPool=d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
+      const daysOld=(_firstPool&&isFinite(_firstPool))?Math.max(0,Math.floor((Date.now()-_firstPool)/86400000)):null;
+      const abbr=v=>(v==null||isNaN(v))?'—':'$'+fmtAbbr(v);
+      const open=()=>{if(masked)onMaint();else onSelect(token);};
+      return(
+        <div onClick={open} className={`hc-card ${isGold?'hc-gold':'hc-green'}${masked?' hc-masked':''}`}>
+          {masked
+            ?<div className="hc-maint"><span aria-hidden="true">{'⚠'}</span>Under Maintenance</div>
+            :<button type="button" className="hc-dash" onClick={e=>{e.stopPropagation();onSelect(token);}} aria-label={`Open the ${token} dashboard`}><span>DASHBOARD</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>}
+          <div className="hc-top">
+            <img src={cfg.logo} alt={token} className="hc-logo"/>
+            <div className="hc-info">
+              <div className="hc-name">{token}</div>
+              <div className="hc-pricerow">
+                {masked?<span className="hc-price" style={{color:'rgba(255,255,255,0.3)'}}>{'———'}</span>:<Price p={d?.price} c="hc-price"/>}
+                {!masked&&<span className={`hc-chip ${change==null?'hc-flat':change>=0?'hc-up':'hc-down'}`}>{change==null?'—':`${change>=0?'▲':'▼'} ${Math.abs(change).toFixed(2)}%`}</span>}
+              </div>
+              <div className="hc-meta">
+                {masked
+                  ?<span style={{fontStyle:'italic',opacity:0.5}}>contract hidden</span>
+                  :<><span>{cfg.address.slice(0,6)}{'…'}{cfg.address.slice(-4)}</span><button type="button" className="hc-copy" onClick={handleCopy} aria-label={`Copy the ${token} contract address`}>{copied?HC_DONE_ICON:HC_COPY_ICON}</button></>}
+                {!masked&&daysOld!=null&&<span className="hc-day">DAY {daysOld.toLocaleString()}</span>}
+              </div>
+            </div>
+          </div>
+          <div className="hc-stats">
+            <div><span className="hc-lbl">MCAP</span><span className="hc-val">{masked?'—':<><span className="hc-full">{fmtUSD(d?.mcap)}</span><span className="hc-abbr">{abbr(d?.mcap)}</span></>}</span></div>
+            <div><span className="hc-lbl">VOL (24H)</span><span className="hc-val">{masked?'—':fmtUSD(d?.vol)}</span></div>
+            <div><span className="hc-lbl">PLS RATIO</span><span className="hc-val">{masked?'—':plsRatio}</span></div>
+          </div>
+          {masked?<HomeSparkFlat label={`${token} chart hidden during maintenance`}/>:<HomeSpark token={token} d={d}/>}
+          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`}>BUY / SELL {token}</button>}
+        </div>
+      );
+    };
+    /* Same wrapper and element classes as CosmicCard, so the skeleton has the card's height at
+       every breakpoint and nothing moves when the data lands (gotcha 11). */
+    const HcSk=({w,h='1em'})=><span className="hc-sk animate-pulse" style={{width:w,height:h}}></span>;
+    const CosmicCardSkeleton=({gold})=>(
+      <div aria-hidden="true" className={`hc-card hc-skel ${gold?'hc-gold':'hc-green'}`}>
+        <div className="hc-top">
+          <span className="hc-logo hc-sk animate-pulse"></span>
+          <div className="hc-info">
+            <div className="hc-name"><HcSk w="3.4em"/></div>
+            <div className="hc-pricerow"><span className="hc-price"><HcSk w="5.2em"/></span></div>
+            <div className="hc-meta"><HcSk w="15em" h="28px"/></div>
+          </div>
+        </div>
+        <div className="hc-stats">
+          {[0,1,2].map(i=><div key={i}><span className="hc-lbl"><HcSk w="5em" h="0.9em"/></span><span className="hc-val"><HcSk w="5.5em"/></span></div>)}
+        </div>
+        <span className="hc-spark hc-sk animate-pulse"></span>
+        <span className="hc-buy hc-sk animate-pulse"></span>
+      </div>
+    );
+    const HomeCosmicView=({data,pls,loading,lastUpdate,refreshing,refreshError,onRefresh,onSelect,onMaint,onSwap})=>(
+      <div className="hc-page">
+        <div className="hc-ground" aria-hidden="true"></div>
+        <div className="hc-inner">
+          <header className="hc-title">
+            <h1 className="hc-h1"><span className="hc-t1">THE GRAYS</span><span className="hc-t2">DASHBOARD</span></h1>
+            <p className="hc-tag">A COMMUNITY TOOL BUILT FOR THE GRAYS ECOSYSTEM</p>
+          </header>
+          <div className="hc-cards">{/* a62: one skeleton per card, each dropped by its own data */}
+            {data.PTGC===undefined?<CosmicCardSkeleton gold/>:<CosmicCard token="PTGC" d={data.PTGC} pls={pls} onSelect={onSelect} onMaint={onMaint} onSwap={onSwap}/>}
+            {data.UFO===undefined?<CosmicCardSkeleton/>:<CosmicCard token="UFO" d={data.UFO} pls={pls} onSelect={onSelect} onMaint={onMaint} onSwap={onSwap}/>}
+          </div>
+          <div className="hc-status">{loading?<Sk w={150} h={16}/>:<FreshnessBadge lastUpdate={lastUpdate} refreshing={refreshing} error={refreshError} onRefresh={onRefresh}/>}</div>
+        </div>
+        <footer className="hc-footer">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</footer>
+      </div>
+    );
+    /* ===== END HOME — COSMIC components ===== */
+
     const Home=({onSelect})=>{
       const[data,setData]=useState({PTGC:undefined,UFO:undefined});   // a62: undefined = not answered yet, null = failed
       const[showMaint,setShowMaint]=useState(false); // MAINT-MIGRATION
@@ -4895,6 +5179,25 @@
         document.addEventListener('visibilitychange',onVis);
         return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVis);};
       },[]);
+      /* HOME DESIGN (2026-09-25): the cosmic landing page. Same state, same loaders, same
+         SwapModal / maintenance notice / secret dot as the classic one below — only the view
+         differs. The classic return underneath is the backup, untouched: HOME_DESIGN='classic'
+         (or ?home=classic) brings it back. */
+      if(homeDesign()==='cosmic')return(<>
+        <HomeCosmicView data={data} pls={pls} loading={loading} lastUpdate={lastUpdate} refreshing={refreshing} refreshError={refreshError}
+          onRefresh={()=>quickRefreshRef.current()} onSelect={onSelect} onMaint={()=>setShowMaint(true)} onSwap={setSwapToken}/>
+        {swapToken&&<SwapModal token={swapToken} data={data[swapToken]} onClose={()=>setSwapToken(null)}/>}
+        {/* ===== SECRET-ACCESS (same as the classic view; controlled by UFO_MAINTENANCE) ===== */}
+        {UFO_MAINTENANCE&&<button
+          onClick={()=>{try{sessionStorage.setItem('ufo_operator','1')}catch(e){}onSelect('UFO')}}
+          aria-label="."
+          title=""
+          className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none"
+          style={{background:'#7CFC00',opacity:0.18,border:'none',padding:0,lineHeight:0}}
+        />}
+        <MaintenanceNotice open={showMaint} onClose={()=>setShowMaint(false)}/>{/* MAINT-MIGRATION */}
+      </>);
+      /* ----- CLASSIC design (before 2026-09-25) — kept whole as the backup ----- */
       return(
         <div className="min-h-screen flex flex-col px-4">
           <header className="text-center pt-4"><img src={COMBINED_LOGO} alt="PTGC & UFO" className="h-48 sm:h-64 md:h-80 lg:h-96 mx-auto"/><h1 className="font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold -mt-6 sm:-mt-10" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>THE GRAYS</h1><h1 className="font-orbitron text-3xl sm:text-4xl lg:text-5xl font-bold mb-2" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>DASHBOARD</h1><p className="text-white/50 text-sm sm:text-lg mb-6 sm:mb-10">A community tool built for The Grays Ecosystem</p></header>

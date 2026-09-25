@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -178,6 +178,17 @@ const dsAnswer=(url)=>{
           ]}},
         receipts:[{id:'r1',date:month+'-30T23:30:00.000Z',username:'alice',wallet:'0xa'.padEnd(42,'1'),amount:9000,rate:2,txCount:1,txHash:'0x'+'cd'.repeat(32),month,ptgcPrice:0.000142,usdValue:1.28,feeCovered:true}]
       })});
+    }
+    /* GeckoTerminal (the cosmic Home cards' 24 h chart, 2026-09-25). Default: 404, so the card
+       must fall back to its five-point sparkline. GT_CANDLES=1 serves 96 synthetic 15-minute
+       closes around the stub price (PTGC drifting up, UFO down); GT_CANDLES=slow:<ms> does the
+       same after a wait. */
+    if(/api\.geckoterminal\.com/.test(u)){
+      const gc=process.env.GT_CANDLES;if(!gc)return r.fulfill({status:404,body:''});
+      if(/^slow:/.test(gc))await sleep(+gc.slice(5));
+      const isUfo=UFO_ADDR.test(u),now=Math.floor(Date.now()/1000),base=isUfo?1.47e-4:1.36e-4;let p=base,s=isUfo?7:3;const list=[];
+      for(let i=95;i>=0;i--){s=(s*9301+49297)%233280;p=p*(1+(s/233280-0.5)*0.02+(isUfo?-0.0004:0.0005));list.push([now-i*900,p,p,p,p,1000]);}
+      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});
     }
     if(/fonts\.g/.test(u))return r.fulfill({status:200,contentType:'text/css',body:''});
     if(/cdnjs.*html2canvas/.test(u))return r.fulfill({status:200,contentType:'text/javascript',body:process.env.H2C?fs.readFileSync(path.join(__dirname,'node_modules/html2canvas/dist/html2canvas.min.js'),'utf8'):'window.html2canvas=null;'});
