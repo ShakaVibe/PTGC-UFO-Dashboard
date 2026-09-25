@@ -19,6 +19,8 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-25)
 
+**2026-09-25, night: privacy scrub.** The owner's real name was in the git author field of 97 commits here and in X1-Validator-HQ's public handover; both histories were rewritten and force-pushed, so **commit IDs from 2026-09-08 on are new** (the ones in these notes were remapped). Rule: gotcha 33. Details: `sessions/2026-09-25.md`, "Night".
+
 **2026-09-25, close of day.** Everything below shipped and was pushed by Shaka through the day (last commit:
 "PTGC Burned by UFO share card: supply line moved down a little"). Nothing is half-done. The only thing owed is
 the usual live look on a phone: the cosmic Home (art fills the window, both charts jagged not smooth, DASHBOARD
