@@ -19,6 +19,12 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-26)
 
+**2026-09-26, afternoon: the Live Feed reskinned** — Shaka's painted ship-over-city art is the sky
+(`logos/livefeed/deck-bg.jpg`; UFO is the same file hue-rotated to green), glass fee boxes with icons (LP boxes carry
+the PLS / PLSX / WETH logos), metallic totals, a glass Generated pill, green amounts in the ledger, and a two-line
+phone ledger instead of the sideways scroll. Every animation is the same code. Gotcha 34. Owed: the live look, desktop
+and phone, PTGC and UFO. `sessions/2026-09-26.md` "Afternoon, part two".
+
 **2026-09-26: the Holders cards redone — Socials → Holders (both tokens, gold→green) and the ⓘ on each
 dashboard's Holders box opens the one-token card directly (PTGC gold / UFO green, 7D/30D/90D trend, Wide/Tall) —
 the 2025 in-page modal is deleted. The Socials hub has a Holders button in all three columns, on one row.** Six rounds of mock-ups, then built
@@ -495,6 +501,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    and `--oy` (art shifted up by up to the 140px headroom band on short windows) — every vertical position
    in the `hc-*` block is `fraction * --bgw + --oy`; the art is 1536x1164 and the fractions assume it.
 
+34. **The Live Feed is a skin over the deck (2026-09-26).** `AbductionDeckModal`'s animations find their targets by
+   class and ref — `.deck-pod` (via `podRefs`), `.deck-ship`, `.deck-gen`, `.deck-cell[data-k] .deck-a`, `.deck-links`,
+   `.deck-beamclip` — so restyle freely but keep those names and the `data-k`/`data-id` attributes. The sky is
+   `.deck-sky` (430 px; `DECK_POD_POS` y-values are px inside it, x in %); the art is ONE jpg under `logos/livefeed/`
+   (the `_site` allow-list) and UFO is a `hue-rotate` of it — don't add a green copy. Phone (≤640) rules live in the
+   same `<style>` block: pods become a grid strip, rows become flex-wrap with `.deck-unit` hidden and `.deck-cell-n`
+   shown. Test with `DECK_LOGS=n` at 1440 and 375, and `REDUCED=1`.
+
 33. **Privacy: the owner's real name goes nowhere** (2026-09-25). This repo and `handover/` are PUBLIC on GitHub.
    Never write the owner's real name, email, Mac name or `/Users/...` paths into a file, a commit message, or a
    screenshot committed to the repo; he is "Shaka" / ShakaVibe. Git author must be `ShakaVibe
@@ -645,7 +659,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +
   `HoldersSingleModal` built, old html2canvas card + Chart.js canvases removed, loader honest-null; afternoon: the ⓘ
   opens the card directly (old modal deleted, 7D/30D/90D in the toolbar), Mac overflow fixed with measured slack
-  (`probes/card-slack.js`), harness `run.js` UFO `pairCreatedAt` fix.
+  (`probes/card-slack.js`), harness `run.js` UFO `pairCreatedAt` fix. Afternoon, part two: the Live Feed reskinned
+  on Shaka's art (gotcha 34).
 - `sessions/2026-09-25.md` — new Home screen ("cosmic"): Shaka's alien art, metallic title, two glowing cards
   with a real 24 h GeckoTerminal chart and one BUY / SELL button each; classic kept behind `HOME_DESIGN`.
 - `sessions/2026-09-23.md` — Socials DAO Buys card (three rounds: period switch, All time default, Wide/Tall,

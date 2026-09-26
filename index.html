@@ -3744,7 +3744,7 @@
       p.then(r=>{if(!r||!r.complete)delete deckPoolsCache[key];},()=>{delete deckPoolsCache[key];});
       return p;
     };
-    const DECK_POD_POS={5:[[12,74],[31,34],[50,14],[69,34],[88,74]],6:[[9,84],[25.5,40],[42,14],[58,14],[74.5,40],[91,84]],4:[[15,60],[38,14],[62,14],[85,60]],3:[[20,40],[50,14],[80,40]],2:[[30,24],[70,24]],1:[[50,14]]};
+    const DECK_POD_POS={5:[[13,240],[31,138],[50,44],[69,138],[87,240]],6:[[10,258],[25,150],[39,50],[61,50],[75,150],[90,258]],4:[[15,60],[38,14],[62,14],[85,60]],3:[[20,40],[50,14],[80,40]],2:[[30,24],[70,24]],1:[[50,14]]};
     /* u11: a seventh fee bucket used to throw (`pos[6]` undefined). Hand-placed layouts up to six;
        beyond that the pods sit on an arc, edge pods low, centre pod high, like the six-pod row. */
     const deckPodPos=n=>DECK_POD_POS[n]||Array.from({length:n},(_,i)=>{const u=n>1?i/(n-1):0.5;return[8+84*u,14+70*Math.pow(2*u-1,2)];});
@@ -3765,20 +3765,21 @@
     const deckTimeOf=r=>{const d=new Date(r.ts);const t=d.toTimeString().slice(0,8);return r.est?'~'+t:t;};
     const DeckRow=React.memo(({r,pods,token,ac,hi,reduced})=>(
       <div data-id={r.id} className={`deck-row${r.fresh?' deck-new':''}`}>
-        <div className="text-white/35 font-mono text-[12px] tabular-nums">{deckTimeOf(r)}</div>
-        <div className="font-orbitron text-[10px] tracking-[0.1em] py-[3px] text-center" style={{color:r.side==='BUY'?'#34d399':r.side==='SELL'?'#fb7185':'#fbbf24',background:r.side==='BUY'?'rgba(52,211,153,0.12)':r.side==='SELL'?'rgba(251,113,133,0.12)':'rgba(251,191,36,0.12)',clipPath:'polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px)'}}>{r.side}</div>
-        <div className="min-w-0 flex items-center gap-3 text-white">
+        <div className="deck-t text-white/70 text-[14px] font-medium tabular-nums">{deckTimeOf(r)}</div>
+        <div className="deck-side font-orbitron text-[10px] tracking-[0.1em] py-[4px] text-center rounded-[7px]" style={{color:r.side==='BUY'?'#86efac':r.side==='SELL'?'#fca5a5':'#F5DE8A',background:r.side==='BUY'?'rgba(22,101,52,0.5)':r.side==='SELL'?'rgba(127,29,29,0.5)':'rgba(120,53,15,0.45)',border:`1px solid ${r.side==='BUY'?'rgba(74,222,128,0.55)':r.side==='SELL'?'rgba(248,113,113,0.55)':'rgba(232,192,68,0.55)'}`}}>{r.side}</div>
+        <div className="deck-contact min-w-0 flex items-center gap-3 text-white">
           <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
           <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
             <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
             <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/35 font-normal font-mono hover:text-white/70">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
           </div>
         </div>
-        <div className="deck-gen flex items-center justify-end gap-2 pr-1.5"><span className="font-orbitron font-bold text-[15px] tabular-nums" style={{color:hi}}>+{fmtUSD2(r.gen)}</span><span style={{color:ac}}>{'⇧'}</span></div>
+        {/* 2026-09-26 skin: the lifted amount is green (Shaka), the split stays in the token colour */}
+        <div className="deck-gen flex items-center justify-end gap-1.5 pr-1.5"><span className="font-orbitron font-bold text-[17px] tabular-nums text-[#4ade80]" style={{textShadow:'0 0 14px rgba(74,222,128,0.45)'}}>+{fmtUSD2(r.gen)}</span><span className="text-[#4ade80] text-[15px]">{'↑'}</span></div>
         {pods.map(p=>(
           <div key={p.key} data-k={p.key} className="deck-cell text-center">
-            <span className={`deck-a font-orbitron text-[13px] font-bold tabular-nums${(r.fresh&&!reduced)?'':' on'}`} style={{color:ac}}>{fmtUSD2(r.gen*p.frac)}</span>
-            <span className="block font-mono text-[10px] text-white/35">{p.unit}</span>
+            <span className={`deck-a font-orbitron text-[14px] font-bold tabular-nums${(r.fresh&&!reduced)?'':' on'}`} style={{color:hi}}>{fmtUSD2(r.gen*p.frac)}</span>
+            <span className="block font-mono text-[10px] text-white/40 tracking-[0.06em] whitespace-nowrap"><span className="deck-unit">{p.unit}</span><span className="deck-cell-n hidden">{p.name}</span></span>
           </div>
         ))}
       </div>
@@ -3813,7 +3814,11 @@
        setState on the deck itself on every animation frame — sixty full re-renders per landing,
        forty rows each. Now only this subtree redraws. `podRefs` is the deck's, so the dispatch
        animation and the signal lines keep finding the pod elements. */
-    const DeckPods=({pods,pos,totals,ready,missingSet,ac,hi,reduced,podRefs,windowLabel,shipSize,noWindow})=>{
+    const DeckPodLogo=({src})=>{   // partner-token logo on an LP box (DexScreener CDN); the initial if it does not load
+      const[err,setErr]=useState(false);
+      return(src&&!err)?<img src={src} alt="" onError={()=>setErr(true)} className="deck-ic w-[18px] h-[18px] rounded-full bg-black/50 shrink-0"/>:<span className="deck-ic" aria-hidden="true">{'\u{1F4A7}'}</span>;
+    };
+    const DeckPods=({pods,pos,totals,ready,missingSet,ac,hi,reduced,podRefs,windowLabel,shipSize,noWindow,metal})=>{
       const[disp,setDisp]=useState({});
       const dispRef=useRef({});
       useEffect(()=>{
@@ -3835,18 +3840,21 @@
         <div className="deck-pods">
         {pods.map((p,i)=>(
           <div key={p.key} ref={el=>{podRefs.current[p.key]=el;}} className="deck-pod text-center" style={{left:pos[i][0]+'%',top:pos[i][1]+'px'}}>
-            <div className="deck-n font-orbitron text-[10px] tracking-[0.18em] uppercase whitespace-nowrap" style={{color:ac}}>{p.name}</div>
+            <div className="deck-n flex items-center justify-center gap-[7px] text-[12px] font-semibold tracking-[0.2em] uppercase whitespace-nowrap text-white/85">
+              {p.icon&&p.icon.logo?<DeckPodLogo src={p.icon.logo}/>:<span className="deck-ic" aria-hidden="true">{p.icon?p.icon.emoji:''}</span>}
+              <span>{p.name}</span>
+            </div>
             {ready&&!missingSet.has(p.key)
-              ?<div className="deck-tot font-orbitron font-bold text-[18px] mt-2 tabular-nums" style={{color:hi}}>{fmtUSD(disp[p.key]!=null?disp[p.key]:(totals[p.key]||0))}</div>
+              ?<div className={`deck-tot font-orbitron font-bold text-[24px] mt-[6px] tabular-nums leading-tight ${metal}`}>{fmtUSD(disp[p.key]!=null?disp[p.key]:(totals[p.key]||0))}</div>
               :<div className="deck-tot deck-loading font-mono text-[11px] tracking-[0.18em] uppercase mt-2 text-white/40" title={ready?'waiting for the '+String(p.unit||'').replace('UFO+','')+' price':(noWindow==='failed'?'the chain read failed — unknown, not zero':'')}>{noWindow==='failed'?'no data':'loading'}</div>}
           </div>
         ))}
         </div>
         {/* the ship's payload readout — the generated figure for the window, i.e. the sum of the pods */}
         {/* sits below the scan ring (176px, centred on the 150px ship → 13px past its edge) with a clear gap */}
-        <div className="deck-readout absolute left-1/2 -translate-x-1/2 text-center pointer-events-none" style={{top:132+shipSize+20}}>
-          <div className="font-mono text-[9.5px] tracking-[0.22em] uppercase text-white/45">Generated {windowLabel}</div>
-          <div className="deck-readout-n font-orbitron font-bold text-[22px] leading-tight tabular-nums" style={{color:hi,textShadow:`0 0 16px ${deckHexA(hi,0.55)}, 0 1px 2px rgba(0,0,0,.9)`}}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</div>
+        <div className="deck-readout absolute left-1/2 -translate-x-1/2 text-center pointer-events-none whitespace-nowrap" style={{top:150+shipSize+16}}>
+          <div className="text-[13px] font-medium tracking-[0.28em] uppercase text-white/80">Generated {windowLabel}</div>
+          <div className={`deck-readout-n font-orbitron font-black text-[34px] leading-tight tabular-nums ${metal}`}>{ready&&!missingSet.size?fmtUSD(gen24):'…'}</div>
         </div>
       </>);
     };
@@ -3943,7 +3951,14 @@
           if(b.isLP)return'UFO+'+(b.priceKey==='PLS'?'PLS':b.priceKey);
           return b.priceKey||'UFO';
         };
-        return items.map(b=>({key:b.key||b.name,name:b.name,frac:b.pct/tot,unit:unit(b)}));
+        /* 2026-09-26 skin: each box shows its icon — the partner token's logo for an LP bucket (PLS for PTGC's
+           Add LP; PLS / PLSX / WETH for UFO's three), the bucket's emoji otherwise (Stakers = coins, as on the mock). */
+        const icon=b=>{
+          const lp=b.isLP||b.name==='Add LP';
+          if(lp){const src=bucketLogoSrc(b.priceKey||'PLS');if(src)return{logo:src};}
+          return{emoji:b.name==='Stakers'?'\u{1FA99}':(b.emoji||'')};
+        };
+        return items.map(b=>({key:b.key||b.name,name:b.name,frac:b.pct/tot,unit:unit(b),icon:icon(b)}));
       },[cfg,cfg.feeRate,cfg.feeBreakdown,token]);
       stateRef.current.pods=pods;stateRef.current.price=data?.price||0;stateRef.current.fee=cfg.feeRate||0;
 
@@ -4330,24 +4345,31 @@
       const pos=deckPodPos(pods.length);
       const windowLabel=windowGen?windowGen.label:(token==='UFO'?(windowState==='failed'?'\u2014 chain read failed':'\u2014 reading chain'):'24h');   // a23: no window → say why, never 24h
       const shipSize=150;
+      const metal=isGold?'metallic-gold':'metallic-green';   // 2026-09-26 skin
       const statusText={connecting:'reading chain',live:'live · every block',partial:'live · backfill incomplete',retrying:'retrying',
         'no pools':'no pools loaded','chain read failed':'chain read failed'}[status]||status;
       const cols=`64px 44px minmax(230px,1.4fr) 108px${pods.length?` repeat(${pods.length},minmax(84px,1fr))`:''}`;   // repeat(0,…) is invalid CSS
       return(
         <Modal className="z-[60] bg-[#06070a] overflow-y-auto" onClose={close} label={`${token} Live Feed`}>
           <style>{`
-            .deck-pod{position:absolute;width:150px;transform:translateX(-50%);padding:11px 14px 10px;background:rgba(6,7,10,0.74);border:1px solid rgba(255,255,255,0.08);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);transition:box-shadow .3s,background .3s}
-            .deck-pod:before,.deck-pod:after{content:'';position:absolute;width:14px;height:14px;border:1px solid ${ac};opacity:.9}
-            .deck-pod:before{left:0;bottom:0;border-right:0;border-top:0}
-            .deck-pod:after{right:0;top:0;border-left:0;border-bottom:0}
-            .deck-pod.deck-hit{background:${deckHexA(ac,0.14)};box-shadow:0 0 30px -6px ${ac}}
+            /* 2026-09-26 skin: Shaka's art in the sky (UFO = the same art hue-shifted to its green), glass boxes with
+               the bucket's icon, metallic totals, the generated figure on a glass pill. Every animation is untouched. */
+            .deck-art{position:absolute;inset:0;background:url(logos/livefeed/deck-bg.jpg) center 42%/cover no-repeat;${isGold?'':'filter:hue-rotate(52deg) saturate(1) brightness(.95);'}}
+            .deck-art-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0) 62%,rgba(0,0,0,.6) 100%)}
+            .deck-sky{height:430px}
+            .deck-pod{position:absolute;min-width:${pods.length>5?162:190}px;transform:translate(-50%,-50%);padding:12px 18px 11px;border-radius:14px;background:linear-gradient(180deg,rgba(12,10,4,0.84),rgba(4,4,2,0.9));border:1.5px solid ${deckHexA(ac,0.7)};box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 28px -6px ${deckHexA(ac,0.6)},inset 0 1px 0 rgba(255,255,255,.12);transition:box-shadow .3s,background .3s}
+            .deck-pod .deck-ic{font-size:17px;line-height:1;letter-spacing:0}
+            .deck-pod.deck-hit{background:linear-gradient(180deg,${deckHexA(ac,0.22)},rgba(4,4,2,0.9));box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 36px -4px ${ac},inset 0 1px 0 rgba(255,255,255,.2)}
+            .deck-readout{padding:8px 26px 10px;border-radius:16px;background:linear-gradient(180deg,rgba(6,6,4,.8),rgba(2,2,1,.88));border:1px solid ${deckHexA(ac,0.45)};box-shadow:0 0 30px -8px ${deckHexA(ac,0.6)},inset 0 1px 0 rgba(255,255,255,.1)}
+            .deck-ship .deck-ring{position:absolute;inset:-10px;border-radius:50%;border:2px solid ${deckHexA(ac,0.55)};box-shadow:0 0 24px ${deckHexA(ac,0.5)};pointer-events:none}
+            .deck-ship .deck-halo{position:absolute;inset:-26px;border-radius:50%;background:radial-gradient(circle,${deckHexA(ac,0.55)} 0%,${deckHexA(ac,0.12)} 45%,rgba(0,0,0,0) 70%);pointer-events:none}
+            .deck-ship img{border-radius:50%;box-shadow:0 0 0 4px ${deckHexA(ac,0.95)},0 0 60px ${deckHexA(ac,0.8)}}
             .deck-ship img{filter:drop-shadow(0 0 22px ${deckHexA(ac,0.55)})}
             .deck-ship.deck-pulse img{animation:deckPulse .6s ease-out}
             @keyframes deckPulse{0%{filter:drop-shadow(0 0 22px ${deckHexA(ac,0.55)})}40%{filter:drop-shadow(0 0 44px ${hi})}100%{filter:drop-shadow(0 0 22px ${deckHexA(ac,0.55)})}}
-            .deck-ground{background:linear-gradient(180deg,transparent,${deckHexA(ac,0.07)})}
-            .deck-ground:before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,${deckHexA(ac,0.12)} 1px,transparent 1px) 0 0/72px 100%,linear-gradient(180deg,${deckHexA(ac,0.12)} 1px,transparent 1px) 0 0/100% 24px;mask-image:linear-gradient(180deg,transparent,#000 70%);-webkit-mask-image:linear-gradient(180deg,transparent,#000 70%)}
-            .deck-row{display:grid;grid-template-columns:${cols};gap:0 10px;align-items:center;padding:10px 18px;border-top:1px solid rgba(255,255,255,0.05)}
-            .deck-row:first-child{background:linear-gradient(90deg,transparent,${deckHexA(ac,0.12)} 50%,transparent);border-top-color:${deckHexA(ac,0.35)}}
+            .deck-ground{background:linear-gradient(180deg,transparent,rgba(0,0,0,.55))}   /* the art's water fades into the tape; the old grid lines are gone */
+            .deck-row{display:grid;grid-template-columns:${cols};gap:0 10px;align-items:center;padding:10px 18px;border-top:1px solid rgba(255,255,255,0.06)}
+            .deck-row:first-child{background:linear-gradient(90deg,${deckHexA(ac,0.14)},transparent 70%);border-top-color:${deckHexA(ac,0.35)}}
             .deck-row.deck-new{animation:deckDrop .5s cubic-bezier(.2,.8,.2,1)}
             @keyframes deckDrop{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:none}}
             .deck-a{opacity:.35;transition:opacity .3s}.deck-a.on{opacity:1}
@@ -4379,14 +4401,32 @@
             .deck-scan{background:repeating-linear-gradient(180deg,rgba(255,255,255,0.03) 0 1px,transparent 1px 4px)}   /* u11: was mix-blend-mode:overlay — a full-deck blend layer re-composited on every animation frame for an effect invisible on #0b0d12 */
             @media(prefers-reduced-motion:reduce){.deck-row.deck-new{animation:none}.deck-chip{display:none}}
             .deck-pods{position:absolute;inset:0;pointer-events:none}.deck-pod{pointer-events:auto}
-            @media(max-width:900px){.deck-pod{width:112px;padding:9px 10px 8px}.deck-pod .deck-tot{font-size:14px}.deck-pod .deck-n{font-size:9px;letter-spacing:.12em}}
+            @media(max-width:900px){.deck-pod{min-width:128px;padding:9px 10px 8px}.deck-pod .deck-tot{font-size:16px}.deck-pod .deck-n{font-size:9.5px;letter-spacing:.12em}.deck-pod .deck-ic{font-size:14px}}
             @media(max-width:640px){
-              .deck-pods{position:relative;inset:auto;display:grid;grid-template-columns:repeat(${pods.length},1fr);gap:6px;padding:10px 10px 0}
-              .deck-pod{position:static;transform:none;width:auto;padding:8px 5px 7px;text-align:center}
-              .deck-pod .deck-n{font-size:8px;letter-spacing:.06em;white-space:normal;line-height:1.2}
-              .deck-pod .deck-tot{font-size:12px;margin-top:4px}
-              .deck-ship{width:110px!important;height:110px!important;top:118px!important}
-              .deck-readout{top:268px!important}.deck-readout-n{font-size:18px}
+              /* phone: the boxes are a strip across the top of the art (five across, or three-by-two), the ship in
+                 the beam under them, the readout under the ship; the tape is two lines per contact — the trade and
+                 its green amount, then its split — instead of a sideways scroll */
+              .deck-art{background-position:center 45%}
+              .deck-sky{height:${pods.length>5?378:350}px}
+              .deck-pods{position:relative;inset:auto;display:grid;grid-template-columns:repeat(${pods.length>5?3:pods.length},1fr);gap:6px;padding:10px 10px 0}
+              .deck-pod{position:static;transform:none;min-width:0;padding:8px 4px 7px;text-align:center;border-radius:10px}
+              .deck-pod .deck-n{display:block;font-size:8.5px;letter-spacing:.08em;white-space:nowrap;line-height:1.2}
+              .deck-pod .deck-n>span:last-child{display:block;margin-top:4px}
+              .deck-pod .deck-ic{font-size:14px;width:14px;height:14px;display:inline-block}
+              .deck-pod .deck-tot{font-size:${pods.length>5?13:12}px;margin-top:3px}
+              .deck-ship{width:110px!important;height:110px!important;top:${pods.length>5?178:150}px!important}
+              .deck-readout{top:${pods.length>5?306:278}px!important;padding:6px 20px 8px}.deck-readout-n{font-size:24px}.deck-readout>div:first-child{font-size:10px}
+              .deck-tape{min-width:0!important}
+              .deck-head{grid-template-columns:52px 44px 1fr 84px!important;gap:0 8px!important;padding-left:10px!important;padding-right:10px!important}
+              .deck-head .deck-head-pod{display:none}
+              .deck-row{display:flex;flex-wrap:wrap;gap:6px 8px;padding:9px 10px}
+              .deck-row>.deck-t{flex:0 0 50px;font-size:12px}
+              .deck-row>.deck-side{flex:0 0 44px;font-size:8.5px;padding:3px 0}
+              .deck-row>.deck-contact{flex:1 1 120px;min-width:0}
+              .deck-row>.deck-gen{flex:0 0 84px;padding-right:0}.deck-row>.deck-gen span:first-child{font-size:16px}
+              .deck-row>.deck-cell{flex:1 1 calc(${(100/Math.max(1,pods.length)).toFixed(2)}% - 8px);padding-top:2px}
+              .deck-cell .deck-a{font-size:12px}.deck-unit{display:none}.deck-cell-n{display:inline;font-size:8px;letter-spacing:.04em}
+              .deck-head .deck-head-lift{display:none}
             }
           `}</style>
           <div className="min-h-full max-w-[1180px] mx-auto px-3 sm:px-5 py-4" onClick={e=>e.stopPropagation()}>
@@ -4395,8 +4435,8 @@
                 close it. The row now wraps: title and ✕ on the first line, the controls on their own line
                 below sm; on sm+ it is the single row it was. ✕ is a 32 px tap target. */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-              <div className="font-orbitron text-sm sm:text-base font-bold tracking-[0.14em]" style={{background:'linear-gradient(180deg,#FFF,#808080)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>LIVE FEED</div>
-              <span className="hidden sm:inline text-[11px] text-white/40 tracking-[0.08em]">every fee, as it lands on the chain</span>
+              <div className={`font-orbitron text-base sm:text-xl font-black tracking-[0.14em] ${metal}`}>LIVE FEED</div>
+              <span className="hidden sm:inline text-[13px] text-white/55 tracking-[0.04em]">Every fee, as it lands on the chain.</span>
               <button onClick={close} className="tap order-1 ml-auto sm:order-3 sm:ml-1 text-white/60 hover:text-white text-2xl leading-none" aria-label="Close">{'×'}</button>
               <div className="order-2 basis-full sm:basis-auto sm:ml-auto flex items-center justify-between sm:justify-start gap-2">
                 {/* token toggle: switching loads the other dashboard on the SAME Dashboard instance (gotcha 7), so the
@@ -4421,7 +4461,7 @@
               </div>
             </div>
 
-            <div ref={deckRef} className="relative rounded-2xl overflow-hidden" style={{background:'#0b0d12',border:`1px solid ${deckHexA(ac,0.18)}`,boxShadow:`0 0 60px -24px ${deckHexA(ac,0.45)}`}}>
+            <div ref={deckRef} className="relative rounded-2xl overflow-hidden" style={{background:'#0b0d12',border:`1px solid ${deckHexA(ac,0.45)}`,boxShadow:`0 0 60px -20px ${deckHexA(ac,0.6)}, 0 0 0 1px rgba(0,0,0,.8)`}}>
               <canvas ref={starsRef} className="absolute inset-0 w-full h-full block"/>
               <div className="deck-scan absolute inset-0 pointer-events-none"></div>
 
@@ -4458,11 +4498,15 @@
               </div>
 
               {/* SKY */}
-              <div ref={skyRef} className="relative" style={{height:380}}>
+              <div ref={skyRef} className="deck-sky relative">
+                <div className="deck-art" aria-hidden="true"></div>
+                <div className="deck-art-shade" aria-hidden="true"></div>
                 <svg ref={linksRef} className="deck-links absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none"></svg>
-                <DeckPods pods={pods} pos={pos} totals={totals} ready={ready} missingSet={missingSet} ac={ac} hi={hi} reduced={reduced} podRefs={podRefs} windowLabel={windowLabel} shipSize={shipSize} noWindow={(!windowGen&&token==='UFO')?windowState:null}/>
-                <div ref={shipRef} className="deck-ship absolute left-1/2 -translate-x-1/2" style={{top:132,width:shipSize,height:shipSize}}>
+                <DeckPods pods={pods} pos={pos} totals={totals} ready={ready} missingSet={missingSet} ac={ac} hi={hi} reduced={reduced} podRefs={podRefs} windowLabel={windowLabel} shipSize={shipSize} noWindow={(!windowGen&&token==='UFO')?windowState:null} metal={metal}/>
+                <div ref={shipRef} className="deck-ship absolute left-1/2 -translate-x-1/2" style={{top:150,width:shipSize,height:shipSize}}>
                   <div className="deck-hover w-full h-full relative">
+                    <div className="deck-halo" aria-hidden="true"></div>
+                    <div className="deck-ring" aria-hidden="true"></div>
                     {scan.n>0&&<div key={'p'+scan.n} className="deck-ping"></div>}
                     {scan.n>0&&!reduced&&<div key={'r'+scan.n} className="deck-scanring"></div>}
                     <img src={cfg.logo} alt={token} className="block w-full h-full relative"/>
@@ -4470,7 +4514,7 @@
                 </div>
                 <div className="absolute left-0 right-0 bottom-0 pointer-events-none" style={{height:120}}>
                   <svg viewBox="0 0 1000 120" preserveAspectRatio="none" className="w-full h-full block" aria-hidden="true">
-                    <defs><linearGradient id="deckBeam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={hi} stopOpacity=".5"/><stop offset="1" stopColor={ac} stopOpacity=".04"/></linearGradient></defs>
+                    <defs><linearGradient id="deckBeam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={hi} stopOpacity=".22"/><stop offset="1" stopColor={ac} stopOpacity=".03"/></linearGradient></defs>
                     <polygon points="452,0 548,0 985,120 15,120" fill="url(#deckBeam)"/>
                     <polygon points="478,0 522,0 745,120 255,120" fill={hi} opacity=".07"/>
                   </svg>
@@ -4484,10 +4528,10 @@
 
               {/* GROUND TAPE */}
               <div className="relative overflow-x-auto">
-                <div style={{minWidth:1040}}>
-                  <div className="grid font-mono text-[10px] tracking-[0.18em] uppercase text-white/35 px-[18px] pt-2 pb-1.5" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.18)}`}}>
-                    <span>Time</span><span></span><span>Contact</span><span className="text-right pr-1.5 whitespace-nowrap">Lifted <span className="normal-case tracking-normal" style={{color:hi}}>@ {(cfg.feeRate*100).toFixed(2)}%</span></span>
-                    {pods.map(p=><span key={p.key} className="text-center">→ {p.name}</span>)}
+                <div className="deck-tape" style={{minWidth:1040}}>
+                  <div className="deck-head grid text-[12px] font-semibold tracking-[0.16em] uppercase text-white/75 px-[18px] pt-2.5 pb-2" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.35)}`}}>
+                    <span>Time <span style={{color:hi}}>{'↓'}</span></span><span>Type</span><span>Contact / TX</span><span className="text-right pr-1.5 whitespace-nowrap">Amount <span className="deck-head-lift normal-case tracking-normal text-white/45">lifted @ <b className="font-semibold" style={{color:hi}}>{(cfg.feeRate*100).toFixed(2)}%</b></span></span>
+                    {pods.map(p=><span key={p.key} className="deck-head-pod text-center">{p.name}</span>)}
                   </div>
                   <DeckScanline contacts={contacts} lastScan={lastScan} status={status} statusText={statusText} hi={hi}/>
                   <div ref={feedRef} className="relative overflow-hidden" style={{maxHeight:520}}>
