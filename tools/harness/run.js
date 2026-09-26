@@ -103,6 +103,9 @@ const dsAnswer=(url)=>{
   const P=isUFO&&process.env.DS_UFO_PRICE?+process.env.DS_UFO_PRICE:(+process.env.DS_PRICE||0.000142);   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48); DS_UFO_PRICE=n: a DIFFERENT price for UFO calls, so a token-switch race is visible (a7)
   const B=isUFO&&process.env.DS_UFO_PRICE?'UFO':'PTGC';
   const pairs=[dsPair(B,'WPLS',P,850000,42000),dsPair(B,'PRVX',P*0.993,120000,4000),dsPair(B,'PLSX',P*1.007,90000,2000),dsPair(B,'HEX',P,50000,1500)];
+  /* UFO's pairs are born at the migration (2026-09-26): index.html learns ufoLaunchMs from the youngest pairCreatedAt,
+     and a 1062-day-old UFO pair let the OLD contract's holder-history rows into every UFO 90D figure in here (6,597 "then"). */
+  if(isUFO)pairs.forEach(pr=>{pr.pairCreatedAt=Date.parse('2026-07-08T00:00:00Z');});
   return {schemaVersion:'1.0.0',pairs};
 };
 

@@ -74,6 +74,8 @@
     .dao-blue-text{background:linear-gradient(180deg,#F0FAFF 0%,#BFE9FF 20%,#7CCBFF 42%,#3B9BFF 62%,#1E5FD8 82%,#123A8C 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .burn-fire-text{background:linear-gradient(180deg,#FFF6D5 0%,#FFE08A 16%,#FFB23E 36%,#FF7A1A 56%,#E8420F 78%,#9E1B05 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
+    .metallic-green{background:linear-gradient(180deg,#F4FFE6 0%,#D9FFA6 20%,#A8FF4A 42%,#7CFC00 62%,#4CB800 82%,#276600 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
+    .gold-green-text{background:linear-gradient(90deg,#FFF3C4 0%,#E8C044 30%,#C9D96A 50%,#A8FF4A 70%,#7CFC00 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-track{background:#1a1a1a}
     ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
@@ -4527,7 +4529,7 @@
       return<span className={`font-bold text-lg ${pos?'text-green-400':'text-red-400'}`}>{pos?'▲':'▼'} {Math.abs(val).toFixed(1)}%</span>;
     };
 
-    const HolderAnalyticsModal=({open,close,token,cfg,theme,holders,holderChange,holdersByPeriod})=>{
+    const HolderAnalyticsModal=({open,close,token,cfg,theme,holders,holderChange,holdersByPeriod,onShare})=>{   /* onShare: the 📷 → HoldersSingleModal (2026-09-26) */
       const[chartPeriod,setChartPeriod]=useState('30D');
       const chartRef=React.useRef(null);
       const chartInst=React.useRef(null);
@@ -4666,7 +4668,10 @@
                     <div className="text-white/50 text-xs sm:text-base mt-0.5 truncate">Holder Analytics</div>
                   </div>
                 </div>
-                <button aria-label="Close" onClick={close} className="text-white/50 hover:text-white text-2xl shrink-0">×</button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {onShare&&<button type="button" onClick={onShare} aria-label="Share holder analytics as an image" className="tap text-lg opacity-60 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>}
+                  <button aria-label="Close" onClick={close} className="text-white/50 hover:text-white text-2xl">×</button>
+                </div>
               </div>
 
               {/* Current + 24H change hero */}
@@ -7523,6 +7528,351 @@
       );
     };
     /* ===== END PTGC BURNED BY UFO card ===== */
+    /* ===================== HOLDERS — SOCIALS CARD + ⓘ CARD (2026-09-26) =====================
+     * Socials → "Holders" (both tokens, gold→green) and the 📷 in each dashboard's ⓘ Holder Analytics modal
+     * (one token, in its own colour). Same build as the other Socials cards (gotcha 31): module scope, one
+     * *_SHAPES table each, Wide 1200×675 / Tall 1080×1350, ShareCardModal screenshot-only (gradient text, masks,
+     * SVG blur). Replaces the old html2canvas Holders card and its two Chart.js canvases — the 30-day trend is an
+     * inline SVG drawn from snapshotsFor(token) (MIGRATION epoch), so nothing waits on a canvas to mount.
+     * Numbers: exactly what the ⓘ modal shows — current, 24H change, 7D/30D/90D "then" + net, per-day average and
+     * today-vs-average % (holdersRate = the modal's calcRatePct) — plus the tier counts. Every missing read is
+     * "—" / "Gathering…" (gotcha 20); the seeded {0,0,0,0,0} tier object reads as "not loaded", never five zeros. */
+    const HOLD_ALIENS='logos/combined/14_Two_Color__Alien_2_head.png';   // the two-colour alien cropped to the head (the 2000² original is ¾ margin)
+    const HOLD_TIERS=[['Poseidon','\u{1F531}'],['Whale','\u{1F40B}'],['Shark','\u{1F988}'],['Dolphin','\u{1F42C}'],['SquidAndBelow','\u{1F991}']];
+    const HOLD_SHAPES={
+      wide:{W:1200,H:675,pad:44,top:34,bottom:30,title:40,pp:20,logo:84,tok:34,big:64,lbl:13,chip:15,chartH:170,gap:11,tp:'9px 10px 9px 14px',tl:12,tv:28,tq:12,em:22,cnt:17},
+      tall:{W:1080,H:1350,pad:52,top:52,bottom:44,title:50,pp:26,logo:118,tok:46,big:84,lbl:16,chip:20,chartH:138,gap:14,tp:'12px 14px 12px 18px',tl:14,tv:34,tq:15,em:28,cnt:22}
+    };
+    const HOLD1_SHAPES={
+      wide:{W:1200,H:675,pad:48,top:38,bottom:34,title:40,logo:190,big:100,lbl:17,chip:18,chartH:170,gap:12,tp:'12px 14px 12px 18px',tl:14,tv:32,tq:14,em:34,cnt:26,cw:1104},
+      tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,logo:250,big:140,lbl:24,chip:26,chartH:180,gap:16,tp:'20px 22px 20px 26px',tl:20,tv:52,tq:20,em:44,cnt:34,cw:968}
+    };
+    const HOLD_THEME={
+      PTGC:{cls:'metallic-gold',pill:'linear-gradient(180deg,#FFF8DC,#E8C044 55%,#A67C1E)',pillText:'#2a1d05',glow:'rgba(232,192,68,0.55)',rgb:'232,192,68',hex:'#E8C044',edge:['#FFF8DC','#E8C044','#6B4E0E'],
+        ring:'border-yellow-400/40',on:'border-[#2a1d05]',onText:'text-[#2a1d05]',offText:'text-yellow-200/70 hover:text-yellow-100 hover:bg-yellow-500/10'},
+      UFO:{cls:'metallic-green',pill:'linear-gradient(180deg,#F4FFE6,#A8FF4A 55%,#4CB800)',pillText:'#0b2200',glow:'rgba(124,252,0,0.55)',rgb:'124,252,0',hex:'#9DFF3A',edge:['#F4FFE6','#7CFC00','#276600'],
+        ring:'border-lime-400/40',on:'border-[#0b2200]',onText:'text-[#0b2200]',offText:'text-lime-200/70 hover:text-lime-100 hover:bg-lime-500/10'}
+    };
+    const HOLD_COMBO={pill:'linear-gradient(180deg,#FFF3C4,#E8C044 45%,#7CFC00)',glow:'rgba(200,220,80,0.45)'};
+    const holdSgn=n=>n==null?'—':(n>0?'+':n<0?'':'±')+fmt(n);
+    const holdCol=n=>n==null?'rgba(255,255,255,0.45)':n>0?'#4ade80':n<0?'#f87171':'rgba(255,255,255,0.55)';
+    const holdArrow=n=>n==null?'':n>0?'▲':n<0?'▼':'•';
+    /* Same maths as HolderAnalyticsModal's calcRatePct: today's change against the period's average gain per day. */
+    const holdersRate=(chg24h,net,days)=>{
+      if(net==null)return{avg:null,pct:null};
+      const avg=net/days;
+      const pct=chg24h==null?null:avg===0?(chg24h>0?100:chg24h<0?-100:0):((chg24h-avg)/Math.abs(avg))*100;
+      return{avg,pct};
+    };
+    /* The seeded / failed tier object is all-zero; a token with holders always has someone in some tier, so that is "unknown". */
+    const holdersTierCounts=tiers=>{
+      if(!tiers)return null;
+      const vals=HOLD_TIERS.map(([k])=>(Number.isFinite(tiers[k])?tiers[k]:null));
+      return vals.every(v=>!v)?null:vals;
+    };
+    /* 30-day series from the holder-history file (epoch-filtered, gotcha: MIGRATION) + today's count on the end. */
+    const holdersSeries30=(tkn,current)=>{
+      const now=Date.now(),cutoff=now-30*864e5;
+      const rows=snapshotsFor(tkn).filter(s=>new Date(s.timestamp).getTime()>=cutoff);
+      const pts=rows.map(s=>s[tkn]);
+      if(current!=null&&current>0)pts.push(current);
+      const days=rows.length?Math.round((now-new Date(rows[0].timestamp).getTime())/864e5):0;
+      return{pts,from:days>=29?'30 DAYS AGO':days>=1?`${days}D AGO`:'START'};
+    };
+    const HoldersSpark=({pts,from,w,h,rgb,hex,fs})=>{
+      const uid=React.useId().replace(/[^a-zA-Z0-9]/g,'');
+      if(!pts||pts.length<2)return<div style={{width:w,height:h,display:'flex',alignItems:'center',justifyContent:'center',fontSize:fs+3,fontStyle:'italic',color:'rgba(255,255,255,0.4)'}}>{pts&&pts.length===1?'Trend appears as days accumulate':'History unavailable'}</div>;
+      const n=pts.length,min=Math.min(...pts),max=Math.max(...pts),range=(max-min)||1;
+      const padT=14,padB=22,padR=22;
+      const X=i=>i*(w-padR)/(n-1),Y=v=>padT+(1-(v-min)/range)*(h-padT-padB);
+      const P=pts.map((v,i)=>[X(i),Y(v)]);
+      const line=P.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+      const area=`${line} L${P[n-1][0].toFixed(1)} ${(h-padB).toFixed(1)} L${P[0][0].toFixed(1)} ${(h-padB).toFixed(1)} Z`;
+      const last=P[n-1];
+      return(
+        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{display:'block',overflow:'visible'}} aria-hidden="true">
+          <defs>
+            <linearGradient id={`hg${uid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={`rgba(${rgb},0.45)`}/><stop offset="1" stopColor={`rgba(${rgb},0)`}/></linearGradient>
+            <filter id={`hf${uid}`} x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
+          </defs>
+          {[0.25,0.5,0.75].map(f=>{const y=padT+f*(h-padT-padB);return<line key={f} x1="0" x2={w-padR} y1={y} y2={y} stroke="rgba(255,255,255,0.07)" strokeDasharray="3 6"/>;})}
+          <path d={area} fill={`url(#hg${uid})`}/>
+          <path d={line} fill="none" stroke={hex} strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" opacity="0.45" filter={`url(#hf${uid})`}/>
+          <path d={line} fill="none" stroke={hex} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+          <circle cx={last[0]} cy={last[1]} r="9" fill={`rgba(${rgb},0.25)`}/>
+          <circle cx={last[0]} cy={last[1]} r="4.5" fill={hex} stroke="#0b0f12" strokeWidth="2"/>
+          <text x="0" y={h-4} fontFamily="Rajdhani" fontWeight="600" fontSize={fs} fill="rgba(255,255,255,0.45)" letterSpacing="1">{from}</text>
+          <text x={w-padR} y={h-4} textAnchor="end" fontFamily="Rajdhani" fontWeight="600" fontSize={fs} fill="rgba(255,255,255,0.45)" letterSpacing="1">TODAY</text>
+          <text x={w-padR} y={padT-3} textAnchor="end" fontFamily="Rajdhani" fontWeight="700" fontSize={fs} fill="rgba(255,255,255,0.6)">{fmt(max)}</text>
+          <text x={w-padR} y={h-padB-3} textAnchor="end" fontFamily="Rajdhani" fontWeight="700" fontSize={fs} fill="rgba(255,255,255,0.35)">{fmt(min)}</text>
+        </svg>
+      );
+    };
+    const HoldersAliens=({h,glow})=>{
+      const w=Math.round(h*0.87),W=Math.round(h*1.32);
+      return(
+        <div aria-hidden="true" style={{position:'relative',width:W,height:h,flexShrink:0,filter:`drop-shadow(0 0 10px ${glow})`}}>
+          <img src={HOLD_ALIENS} alt="" style={{position:'absolute',left:0,top:0,width:Math.round(w*0.86),height:Math.round(h*0.86),opacity:0.9}}/>
+          <img src={HOLD_ALIENS} alt="" style={{position:'absolute',right:0,bottom:0,width:w,height:h,filter:'drop-shadow(-3px 0 0 #06111a) drop-shadow(-2px -2px 0 #06111a)'}}/>
+        </div>
+      );
+    };
+    const HoldersLogo=({src,size,rgb})=>(
+      <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
+        <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(size*0.2),borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.42) 0%, rgba(0,0,0,0) 68%)`}}></div>
+        <img src={src} alt="" style={{position:'relative',width:size,height:size,borderRadius:'50%',boxShadow:`0 0 0 3px rgba(${rgb},0.9), 0 0 0 6px rgba(${rgb},0.3), 0 0 46px rgba(${rgb},0.7)`}}/>
+      </div>
+    );
+    const HoldersTodayChip=({d,z})=>{
+      const c=d==null?'rgba(255,255,255,0.2)':d>0?'rgba(74,222,128,0.45)':d<0?'rgba(248,113,113,0.45)':'rgba(255,255,255,0.2)';
+      return<span className="tabular-nums" style={{display:'inline-flex',alignItems:'center',gap:'0.35em',borderRadius:999,fontWeight:700,letterSpacing:'0.04em',whiteSpace:'nowrap',fontSize:z.chip,padding:'0.2em 0.7em 0.15em',background:'rgba(0,0,0,0.55)',border:`1px solid ${c}`,boxShadow:`0 0 16px -4px ${c}`,color:holdCol(d)}}>{d==null?'— today':`${holdArrow(d)} ${holdSgn(d)} today`}</span>;
+    };
+    /* The three period tiles + the "today vs daily growth rate" caption. p = {current,d1Ago,d7Ago,d30Ago,d90Ago}. */
+    const HoldersPeriodTiles=({p,z,rgb})=>{
+      const cur=p&&p.current!=null?p.current:null;
+      const chg24h=cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null;
+      const rows=[['7D',p?p.d7Ago:null,7],['30D',p?p.d30Ago:null,30],['90D',p?p.d90Ago:null,90]];
+      const tileSt={borderRadius:16,position:'relative',overflow:'hidden',padding:z.tp,background:`linear-gradient(180deg,rgba(${rgb},0.10),rgba(4,7,10,0.92))`,border:`1px solid rgba(${rgb},0.35)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${rgb},0.5)`};
+      return(
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6,padding:'0 2px'}}>
+            <span style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,255,255,0.5)'}}>Today vs daily growth rate</span>
+            <span className="tabular-nums" style={{fontSize:z.tq,color:'rgba(255,255,255,0.45)',fontWeight:600}}>today <b style={{color:holdCol(chg24h)}}>{holdSgn(chg24h)}</b> {'·'} vs avg gained per day</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:z.gap}}>
+            {rows.map(([l,then,days])=>{
+              const net=cur!=null&&then!=null?cur-then:null;
+              const r=holdersRate(chg24h,net,days);
+              return(
+                <div key={l} style={tileSt}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                    <span style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,255,255,0.6)',lineHeight:1}}>{l}</span>
+                    {net!=null&&<span className="tabular-nums" style={{fontSize:z.tq,color:'rgba(255,255,255,0.5)',fontWeight:600,whiteSpace:'nowrap'}}>{fmt(then)} then</span>}
+                  </div>
+                  {net==null
+                    ?<div style={{fontSize:Math.round(z.tv*0.5),fontWeight:600,color:'rgba(255,255,255,0.4)',fontStyle:'italic',marginTop:Math.round(z.tv*0.28),lineHeight:1.1}}>{cur!=null?'Gathering…':'—'}<br/><span style={{fontSize:z.tq,fontStyle:'normal',color:'rgba(255,255,255,0.3)'}}>{cur!=null?'not enough history yet':'not available'}</span></div>
+                    :<>
+                      <div className="tabular-nums" style={{fontSize:z.tv,fontWeight:700,lineHeight:1.05,marginTop:6,color:holdCol(net),textShadow:'0 2px 10px rgba(0,0,0,0.8)'}}>{holdArrow(net)} {holdSgn(net)}</div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,paddingTop:6,borderTop:'1px solid rgba(255,255,255,0.08)'}}>
+                        <span className="tabular-nums" style={{fontSize:z.tq,fontWeight:600,color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap'}}>{r.avg>=0?'+':''}{r.avg.toFixed(1)}/day avg</span>
+                        <span className="tabular-nums" style={{fontSize:z.tq+2,fontWeight:700,whiteSpace:'nowrap',color:holdCol(r.pct)}}>{r.pct==null?'—':`${holdArrow(r.pct)} ${Math.abs(r.pct).toFixed(1)}%`}</span>
+                      </div>
+                    </>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+    /* Creature row — the emojis as they are (gotcha 9), a count beside each; unknown → "—". */
+    const HoldersTierRow=({tiers,z})=>{
+      const counts=holdersTierCounts(tiers);
+      return(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:z.gap}}>
+          {HOLD_TIERS.map(([k,e],i)=>{const c=counts?counts[i]:null;return(
+            <div key={k} style={{display:'flex',alignItems:'center',gap:Math.round(z.em*0.35)}}>
+              <span style={{fontSize:z.em,lineHeight:1,filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</span>
+              <span className="tabular-nums" style={{fontSize:z.cnt,fontWeight:700,color:c?'#fff':'rgba(255,255,255,0.35)',textShadow:'0 2px 8px rgba(0,0,0,0.8)'}}>{c==null?'—':fmt(c)}</span>
+            </div>);})}
+        </div>
+      );
+    };
+    const HoldersDualBackdrop=({W,H,tall})=>{
+      const art=React.useMemo(()=>{let s=77;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};return Array.from({length:tall?110:90},()=>({x:rnd()*W,y:rnd()*H,r:0.6+rnd()*1.9,o:0.15+rnd()*0.6}));},[W,H,tall]);
+      return(
+        <>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(180deg,#040705 0%,#050807 60%,#070a08 100%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:-260,top:-220,width:900,height:900,borderRadius:'50%',background:'radial-gradient(circle, rgba(232,192,68,0.28) 0%, rgba(232,192,68,0.08) 40%, rgba(0,0,0,0) 68%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',right:-260,bottom:-260,width:900,height:900,borderRadius:'50%',background:'radial-gradient(circle, rgba(124,252,0,0.26) 0%, rgba(124,252,0,0.07) 40%, rgba(0,0,0,0) 68%)'}}></div>
+          <svg aria-hidden="true" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{position:'absolute',inset:0}}>
+            {art.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill={`rgba(255,255,255,${p.o.toFixed(2)})`}/>)}
+          </svg>
+          <img src={COMBINED_LOGO} alt="" aria-hidden="true" style={tall?{position:'absolute',left:'50%',marginLeft:-330,top:190,width:660,height:660,opacity:0.08}:{position:'absolute',left:'50%',marginLeft:-260,top:80,width:520,height:520,opacity:0.08}}/>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:'linear-gradient(#0000,#0000) padding-box, linear-gradient(90deg,#E8C044 0%,#F5F0D8 50%,#7CFC00 100%) border-box',WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 70px -8px rgba(232,192,68,0.55), 0 0 70px -8px rgba(124,252,0,0.45)'}}></div>
+        </>
+      );
+    };
+    /* One token's panel on the combined card. d = holdersShareData[tkn] = {holders,tiers,periods} or null. */
+    const HoldersTokenPanel=({tkn,d,z,tall})=>{
+      const T=HOLD_THEME[tkn],cfg=TOKENS[tkn];
+      const holders=d&&d.holders!=null?d.holders:null;
+      const p=d?d.periods:null;
+      const chg24h=p&&p.current!=null&&p.d1Ago!=null?p.current-p.d1Ago:null;
+      const series=holdersSeries30(tkn,holders);
+      const chartW=(tall?z.W-2*z.pad:(z.W-2*z.pad-20)/2)-2*z.pp;
+      return(
+        <div style={{flex:'1 1 0',minWidth:0,position:'relative',borderRadius:22,padding:z.pp,background:'linear-gradient(180deg,rgba(10,14,18,0.82),rgba(4,7,10,0.9))',border:`1px solid rgba(${T.rgb},0.35)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 44px -12px rgba(${T.rgb},0.55)`}}>
+          <div aria-hidden="true" style={{position:'absolute',left:z.pp,right:z.pp,top:0,height:2,background:`linear-gradient(90deg,rgba(0,0,0,0),rgba(${T.rgb},0.9),rgba(0,0,0,0))`}}></div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:Math.round(z.logo*0.22)}}>
+              <HoldersLogo src={cfg.logo} size={z.logo} rgb={T.rgb}/>
+              <div className={`font-orbitron ${T.cls}`} style={{fontSize:z.tok,fontWeight:900,lineHeight:1}}>{tkn}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div className={`tabular-nums ${T.cls}`} style={{fontSize:z.big,fontWeight:700,lineHeight:0.95}}>{fmt(holders)}</div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:10,marginTop:6}}>
+                <span style={{fontSize:z.lbl,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600}}>holders</span>
+                <HoldersTodayChip d={chg24h} z={z}/>
+              </div>
+            </div>
+          </div>
+          <div style={{marginTop:z.gap}}><HoldersSpark pts={series.pts} from={series.from} w={chartW} h={z.chartH} rgb={T.rgb} hex={T.hex} fs={z.tq}/></div>
+          <div style={{marginTop:z.gap}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
+          <div style={{marginTop:z.gap+2,padding:`${Math.round(z.gap*0.7)}px ${z.gap}px`,borderRadius:14,background:'rgba(0,0,0,0.45)',border:'1px solid rgba(255,255,255,0.08)'}}><HoldersTierRow tiers={d?d.tiers:null} z={z}/></div>
+        </div>
+      );
+    };
+    const HoldersSocialCard=({data,shape='wide'})=>{
+      const z=HOLD_SHAPES[shape]||HOLD_SHAPES.wide,tall=shape==='tall';
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const P=data?data.PTGC:null,U=data?data.UFO:null;
+      const both=P&&U&&P.holders!=null&&U.holders!=null?P.holders+U.holders:null;
+      const net=(d,k)=>d&&d.periods&&d.periods.current!=null&&d.periods[k]!=null?d.periods.current-d.periods[k]:null;
+      const sum=(a,b)=>a!=null&&b!=null?a+b:null;
+      const b7=sum(net(P,'d7Ago'),net(U,'d7Ago')),b30=sum(net(P,'d30Ago'),net(U,'d30Ago'));
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
+          <HoldersAliens h={Math.round(z.title*1.15)} glow={HOLD_COMBO.glow}/>
+          <span className="gold-green-text" style={{filter:`drop-shadow(0 0 14px ${HOLD_COMBO.glow})`}}>Holders</span>
+          <span className="tabular-nums" style={{fontSize:'0.62em',fontWeight:700,letterSpacing:'0.14em',color:'#111',background:HOLD_COMBO.pill,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:`0 0 18px ${HOLD_COMBO.glow}`}}>{fmt(both)}</span>
+        </div>
+      );
+      const combined=(
+        <div className="tabular-nums" style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:tall?22:18,fontSize:tall?22:16,color:'rgba(255,255,255,0.7)',fontWeight:600,letterSpacing:'0.06em'}}>
+          <span>The Grays {'·'} both tokens</span><span style={{opacity:0.35}}>|</span>
+          <span style={{color:holdCol(b7)}}>{holdSgn(b7)} <span style={{color:'rgba(255,255,255,0.5)',fontWeight:500}}>7D</span></span>
+          <span style={{color:holdCol(b30)}}>{holdSgn(b30)} <span style={{color:'rgba(255,255,255,0.5)',fontWeight:500}}>30D</span></span>
+        </div>
+      );
+      const brand=tall
+        ?<div style={{marginTop:22,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}><span className="font-orbitron gold-green-text" style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',filter:'drop-shadow(0 2px 10px rgba(0,0,0,0.9))'}}>ptgc-ufo.com</span><span style={{color:'rgba(235,240,245,0.75)'}}>{'·'} {today}</span></div>
+        :<div style={{textAlign:'right',flexShrink:0}}><div className="font-orbitron gold-green-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div><div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>holder analytics {'·'} 30D</div><div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>{today}</div></div>;
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#040705',fontFamily:"'Rajdhani',sans-serif"}}>
+          <HoldersDualBackdrop W={z.W} H={z.H} tall={tall}/>
+          <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall
+              ?<>{title}<div style={{marginTop:14}}>{combined}</div></>
+              :<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}><div>{title}<div style={{marginTop:12}}>{combined}</div></div>{brand}</div>}
+            <div style={{flex:1,minHeight:tall?16:12}}></div>
+            <div style={{display:'flex',flexDirection:tall?'column':'row',gap:tall?18:20}}>
+              <HoldersTokenPanel tkn="PTGC" d={P} z={z} tall={tall}/>
+              <HoldersTokenPanel tkn="UFO" d={U} z={z} tall={tall}/>
+            </div>
+            {tall?brand:null}
+          </div>
+        </div>
+      );
+    };
+    /* Socials → Holders. data / loading / error are the Dashboard's holdersShareData state (loaded once per open, a18). */
+    const HoldersSocialModal=({data,loading,error,onRetry,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=HOLD_SHAPES[shape];
+      const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring="border-yellow-400/40" on="border-[#111]" onText="text-[#111]" offText="text-yellow-200/70 hover:text-white hover:bg-white/10" grad={HOLD_COMBO.pill} glow="rgba(200,220,80,0.6)"/>;
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="PTGC + UFO holders share card" filename={`ptgc-ufo-holders-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <div style={{position:'relative',width:z.W,height:z.H}}>
+            <HoldersSocialCard data={data} shape={shape}/>
+            <CardLoadState loading={loading} error={error&&!data} what="holder data" onRetry={onRetry} radius="0" font="'Rajdhani',sans-serif"/>
+          </div>
+        </ShareCardModal>
+      );
+    };
+    /* ⓘ Holder Analytics → 📷: one token, in its colour. Reads the same state the modal prints (holdersByPeriod,
+       holders, holderTiers) — nothing is fetched for it. */
+    const HoldersSingleCard=({token,holders,holdersByPeriod,tiers,shape='wide'})=>{
+      const z=HOLD1_SHAPES[shape]||HOLD1_SHAPES.wide,tall=shape==='tall';
+      const T=HOLD_THEME[token]||HOLD_THEME.PTGC,cfg=TOKENS[token];
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const hp=holdersByPeriod||{};
+      const cur=hp.current!=null?hp.current:(holders!=null?holders:null);
+      const p={current:cur,d1Ago:hp.d1Ago!=null?hp.d1Ago:null,d7Ago:hp.d7Ago!=null?hp.d7Ago:null,d30Ago:hp.d30Ago!=null?hp.d30Ago:null,d90Ago:hp.d90Ago!=null?hp.d90Ago:null};
+      const chg24h=cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null;
+      const n30=cur!=null&&p.d30Ago!=null?cur-p.d30Ago:null;
+      const pct30=n30!=null&&p.d30Ago>0?n30/p.d30Ago*100:null;
+      const series=holdersSeries30(token,cur);
+      const counts=holdersTierCounts(tiers);
+      const tokTag=<span style={{color:T.hex}}>{token}</span>;
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
+          <HoldersAliens h={Math.round(z.title*1.15)} glow={T.glow}/>
+          <span className={T.cls} style={{filter:`drop-shadow(0 0 14px ${T.glow})`}}>Holders</span>
+          <span style={{fontSize:'0.62em',fontWeight:700,letterSpacing:'0.14em',color:T.pillText,background:T.pill,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:`0 0 18px ${T.glow}`}}>30D</span>
+        </div>
+      );
+      const amount=(
+        <>
+          <div style={{fontSize:z.lbl,letterSpacing:'0.22em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,textAlign:tall?'center':'left'}}>{tokTag} {'·'} wallets holding</div>
+          <div className={`tabular-nums ${T.cls}`} style={{fontSize:z.big,fontWeight:700,lineHeight:0.95,marginTop:6,textAlign:tall?'center':'left'}}>{fmt(cur)}</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:14,marginTop:12}}>
+            <HoldersTodayChip d={chg24h} z={z}/>
+            <span className="tabular-nums" style={{fontSize:z.lbl,color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap'}}>{n30==null?'— in 30 days':<>{holdSgn(n30)} in 30 days {'·'} <span style={{color:holdCol(n30)}}>{pct30!=null?pct30.toFixed(2)+'%':'—'}</span></>}</span>
+          </div>
+        </>
+      );
+      const chart=(
+        <div style={{position:'relative',borderRadius:22,padding:`${Math.round(z.gap*1.2)}px ${Math.round(z.gap*1.4)}px ${Math.round(z.gap*0.8)}px`,background:'linear-gradient(180deg,rgba(10,14,18,0.82),rgba(4,7,10,0.9))',border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:'inset 0 1px 0 rgba(255,255,255,0.10)'}}>
+          <div style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:T.hex,marginBottom:6}}>30-day holder trend</div>
+          <HoldersSpark pts={series.pts} from={series.from} w={z.cw-Math.round(z.gap*2.8)-2} h={z.chartH} rgb={T.rgb} hex={T.hex} fs={z.tq}/>
+        </div>
+      );
+      const tierTiles=(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:z.gap}}>
+          {HOLD_TIERS.map(([k,e],i)=>{const c=counts?counts[i]:null;return(
+            <div key={k} style={{borderRadius:16,padding:`${Math.round(z.gap*0.9)}px 8px`,textAlign:'center',background:`linear-gradient(180deg,rgba(${T.rgb},0.08),rgba(4,7,10,0.92))`,border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${T.rgb},0.45)`}}>
+              <div style={{fontSize:z.em,lineHeight:1,filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</div>
+              <div className="tabular-nums" style={{fontSize:z.cnt,fontWeight:700,marginTop:6,color:c?'#fff':'rgba(255,255,255,0.35)'}}>{c==null?'—':fmt(c)}</div>
+            </div>);})}
+        </div>
+      );
+      const brandWide=<div style={{textAlign:'right',flexShrink:0}}><div className={`font-orbitron ${T.cls}`} style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div><div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{tokTag} {'·'} holder analytics</div><div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>{today}</div></div>;
+      const brandTall=<div style={{marginTop:22,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}><span className={`font-orbitron ${T.cls}`} style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',filter:'drop-shadow(0 2px 10px rgba(0,0,0,0.9))'}}>ptgc-ufo.com</span><span style={{color:'rgba(235,240,245,0.75)'}}>{'·'} {tokTag} {'·'} {today}</span></div>;
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#040705',fontFamily:"'Rajdhani',sans-serif"}}>
+          <SocialNebulaBackdrop W={z.W} H={z.H} tall={tall} logo={cfg.logo} rgb={T.rgb} edge={T.edge} seed={token==='PTGC'?5:9}/>
+          <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall?(
+              <>
+                {title}
+                <div style={{display:'flex',justifyContent:'center',marginTop:18}}><HoldersLogo src={cfg.logo} size={z.logo} rgb={T.rgb}/></div>
+                <div style={{marginTop:14}}>{amount}</div>
+                <div style={{flex:1,minHeight:18}}></div>
+                {chart}
+                <div style={{marginTop:z.gap+4}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
+                <div style={{marginTop:z.gap+4}}>{tierTiles}</div>
+                {brandTall}
+              </>
+            ):(
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}>{title}{brandWide}</div>
+                <div style={{display:'flex',alignItems:'center',gap:24,marginTop:14}}>
+                  <HoldersLogo src={cfg.logo} size={z.logo} rgb={T.rgb}/>
+                  <div style={{flex:1,minWidth:0}}>{amount}</div>
+                  <div style={{width:Math.round(z.cw*0.5),flexShrink:0}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
+                </div>
+                <div style={{flex:1,minHeight:10}}></div>
+                {chart}
+                <div style={{marginTop:z.gap}}>{tierTiles}</div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+    const HoldersSingleModal=({token,holders,holdersByPeriod,tiers,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=HOLD1_SHAPES[shape];
+      const T=HOLD_THEME[token]||HOLD_THEME.PTGC;
+      const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring={T.ring} on={T.on} onText={T.onText} offText={T.offText} grad={T.pill} glow={T.glow}/>;
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} zIndex={60} screenshot controls={controls} toolbarClass="mb-6" label={`${token} holders share card`} filename={`${token.toLowerCase()}-holders-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={tiers} shape={shape}/>
+        </ShareCardModal>
+      );
+    };
+    /* ===== END HOLDERS cards ===== */
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -8530,10 +8880,6 @@
       const[holdersShareLoading,setHoldersShareLoading]=useState(false);
       const[holdersShareError,setHoldersShareError]=useState(false);   // a18
       const[holdersShareTry,setHoldersShareTry]=useState(0);           // bump to retry the load effect
-      const ptgcShareChartRef=React.useRef(null);
-      const ufoShareChartRef=React.useRef(null);
-      const ptgcShareChartInst=React.useRef(null);
-      const ufoShareChartInst=React.useRef(null);
       const[otherTokenPairs,setOtherTokenPairs]=useState([]);
       
       const closeModalAndReturn=(setModalFn)=>{
@@ -8806,6 +9152,7 @@
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHolderModal,setShowHolderModal]=useState(false);
+      const[showHoldersSingleModal,setShowHoldersSingleModal]=useState(false);   // ⓘ Holder Analytics → 📷 (2026-09-26)
       const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
       const[showXsShareModal,setShowXsShareModal]=useState(false);
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
@@ -9031,11 +9378,13 @@
               if(!ufoTierObj&&ufoTiers)ufoTierObj={Poseidon:ufoTiers.counts.Poseidon||0,Whale:ufoTiers.counts.Whale||0,Shark:ufoTiers.counts.Shark||0,Dolphin:ufoTiers.counts.Dolphin||0,SquidAndBelow:sq(ufoTiers)};
             }
 
-            // Final defaults so the card never renders undefined tiers / a 0 count from a null.
-            ptgcTierObj=ptgcTierObj||{Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0};
-            ufoTierObj=ufoTierObj||{Poseidon:0,Whale:0,Shark:0,Dolphin:0,SquidAndBelow:0};
-            ptgcHolders=ptgcHolders||0;
-            ufoHolders=ufoHolders||0;
+            // Honest failure (gotcha 20, 2026-09-26): a tier set or a count the files and the live
+            // fallback could not supply stays null — the card prints "—" for it. It used to become
+            // {0,0,0,0,0} / 0, which the new card would print as five zeros and "0 holders".
+            ptgcTierObj=ptgcTierObj||null;
+            ufoTierObj=ufoTierObj||null;
+            ptgcHolders=ptgcHolders>0?ptgcHolders:null;
+            ufoHolders=ufoHolders>0?ufoHolders:null;
             
             // Calculate holdersByPeriod for both tokens from snapshots
             const calcPeriods=(tkn,currentCount)=>{
@@ -9076,82 +9425,6 @@
           }
         })();
       },[showHoldersShareModal,holdersShareTry]);
-
-      // Render 30D charts in the share card when data is ready
-      useEffect(()=>{
-        // Closed: tear the charts down so a reopen redraws on the fresh canvases.
-        if(!showHoldersShareModal){
-          if(ptgcShareChartInst.current){ptgcShareChartInst.current.destroy();ptgcShareChartInst.current=null;}
-          if(ufoShareChartInst.current){ufoShareChartInst.current.destroy();ufoShareChartInst.current=null;}
-          return;
-        }
-        if(!holdersShareData||!window.Chart)return;
-        const cutoff=Date.now()-(30*24*60*60*1000);
-        const _snapsFor=(k)=>snapshotsFor(k).filter(s=>new Date(s.timestamp).getTime()>=cutoff); // MIGRATION
-
-        // Returns false = canvas not mounted yet (retry); true = handled (drawn, or nothing to draw).
-        // Mirrors the dashboard holder chart: always destroy+redraw, never skip on a stale instance.
-        const makeChart=(ref,instRef,tokenKey,colorHex,currentCount)=>{
-          if(!ref.current)return false;
-          const pts=[..._snapsFor(tokenKey),{timestamp:new Date().toISOString(),[tokenKey]:currentCount}];
-          if(instRef.current){instRef.current.destroy();instRef.current=null;}
-          if(pts.length<2)return true; // mounted but not enough history yet (e.g. a brand-new token)
-          try{
-            const ctx=ref.current.getContext('2d');
-            const grad=ctx.createLinearGradient(0,0,0,120);
-            grad.addColorStop(0,colorHex+'44');
-            grad.addColorStop(1,colorHex+'00');
-            instRef.current=new window.Chart(ctx,{
-              type:'line',
-              data:{
-                labels:pts.map(d=>new Date(d.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
-                datasets:[{
-                  data:pts.map(d=>d[tokenKey]),
-                  borderColor:colorHex,
-                  backgroundColor:grad,
-                  borderWidth:2,
-                  fill:true,
-                  tension:0.35,
-                  pointRadius:0,
-                  pointHoverRadius:0
-                }]
-              },
-              options:{
-                responsive:true,
-                maintainAspectRatio:false,
-                animation:{duration:0},
-                plugins:{legend:{display:false},tooltip:{enabled:false}},
-                scales:{
-                  x:{display:false},
-                  y:{
-                    display:true,
-                    grid:{color:'rgba(255,255,255,0.05)',drawBorder:false},
-                    ticks:{color:'rgba(255,255,255,0.3)',font:{size:9},callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v,maxTicksLimit:4},
-                    suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[tokenKey]).filter(v=>v>0));return isFinite(mn)?Math.floor(mn*0.997):undefined})()   // u13: no Infinity
-                  }
-                }
-              }
-            });
-          }catch(e){console.error('Share chart error:',e);}
-          return true;
-        };
-
-        // Retry across animation frames until both canvases are mounted (replaces the fragile
-        // fixed 100ms delay). Bounded so it never spins forever.
-        let tries=0,raf=0;
-        const attempt=()=>{
-          const a=makeChart(ptgcShareChartRef,ptgcShareChartInst,'PTGC',TOKENS.PTGC.colorHex,holdersShareData.PTGC.holders);
-          const b=makeChart(ufoShareChartRef,ufoShareChartInst,'UFO',TOKENS.UFO.colorHex,holdersShareData.UFO.holders);
-          if((!a||!b)&&tries++<30)raf=requestAnimationFrame(attempt);
-        };
-        raf=requestAnimationFrame(attempt);
-
-        return()=>{
-          if(raf)cancelAnimationFrame(raf);
-          if(ptgcShareChartInst.current){ptgcShareChartInst.current.destroy();ptgcShareChartInst.current=null;}
-          if(ufoShareChartInst.current){ufoShareChartInst.current.destroy();ufoShareChartInst.current=null;}
-        };
-      },[holdersShareData,showHoldersShareModal]);
 
       useEffect(()=>{
         // Reset all state immediately when token changes
@@ -11191,7 +11464,10 @@
             holders={holders}
             holderChange={holderChange}
             holdersByPeriod={holdersByPeriod}
+            onShare={()=>setShowHoldersSingleModal(true)}
           />
+          {/* ⓘ → 📷: this token's holders card, in its colour (HoldersSingleModal, 2026-09-26). Reads the same state the modal prints. */}
+          {showHoldersSingleModal&&<HoldersSingleModal token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={holderTiers} onClose={()=>setShowHoldersSingleModal(false)}/>}
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
           {/* Burn Stats share card - fire redesign 2026-09-23 (BurnSocialCard); the 600x314 card it replaced is in git history */}
@@ -12003,179 +12279,8 @@
             />
           )}
           
-          {/* Combined Holders Share Modal */}
-          {showHoldersShareModal&&(()=>{
-            return(
-            <ShareCardModal onClose={()=>closeModalAndReturn(setShowHoldersShareModal)} width={1200} height={675} label={`${token} holders share card`} filename={`${token.toLowerCase()}-holders-${new Date().toISOString().slice(0,10)}.png`}>
-                <div
-                  id="holders-share-capture"
-                  className="relative overflow-hidden border-2 border-white/30"
-                  style={{width:'1200px',height:'675px',background:'linear-gradient(180deg,#0a0a0a 0%,#050505 100%)'}}
-                >
-                  {/* Background glows */}
-                  <div className="absolute left-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 40%, rgba(212,175,55,0.15) 0%, transparent 60%)'}}></div>
-                  <div className="absolute right-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 40%, rgba(124,252,0,0.15) 0%, transparent 60%)'}}></div>
-
-                  {/* ── OUTER CONTAINER: exact 675px, no overflow ── */}
-                  <div className="relative w-full h-full" style={{display:'flex',flexDirection:'column',padding:'24px 28px 20px 28px',boxSizing:'border-box',overflow:'hidden'}}>
-
-                    {/* ── HEADER: 60px ── */}
-                    <div style={{height:'60px',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                      <div>
-                        <div className="font-orbitron font-bold text-white" style={{fontSize:'24px',lineHeight:'1.1'}}>Holder Analytics</div>
-                        <div style={{fontSize:'15px',marginTop:'3px',color:'rgba(255,255,255,0.6)'}}>The Grays — PTGC &amp; UFO Combined</div>
-                      </div>
-                      <div style={{textAlign:'right'}}>
-                        <div style={{fontSize:'13px',color:'rgba(255,255,255,0.55)'}}>{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
-                        {holdersShareData&&(()=>{
-                          const ptgcGrowth=(holdersShareData.PTGC?.holders||0)-(holdersShareData.PTGC?.periods?.d30Ago||holdersShareData.PTGC?.holders||0);
-                          const ufoGrowth=(holdersShareData.UFO?.holders||0)-(holdersShareData.UFO?.periods?.d30Ago||holdersShareData.UFO?.holders||0);
-                          const total30dGrowth=ptgcGrowth+ufoGrowth;
-                          const hasData=holdersShareData.PTGC?.periods?.d30Ago&&holdersShareData.UFO?.periods?.d30Ago;
-                          return hasData?(
-                            <>
-                              <div className="font-extrabold" style={{fontSize:'34px',lineHeight:'1',marginTop:'1px',color:'#ffffff'}}>{total30dGrowth>=0?'+':''}{fmt(total30dGrowth)}</div>
-                              <div style={{fontSize:'11px',color:'rgba(255,255,255,0.55)'}}>new holders (30D)</div>
-                            </>
-                          ):null;
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* ── GAP: 10px ── */}
-                    <div style={{height:'10px',flexShrink:0}}></div>
-
-                    {/* ── MAIN 2-COL GRID: fills remaining space ── */}
-                    {holdersShareLoading||!holdersShareData?(
-                      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                        {holdersShareLoading?(
-                          <div style={{textAlign:'center'}}>
-                            <div className="w-12 h-12 border-4 border-t-transparent border-white/30 rounded-full animate-spin mx-auto mb-3"></div>
-                            <div className="text-white/40" style={{fontSize:'16px'}}>Loading holder data...</div>
-                          </div>
-                        ):(
-                          /* a18: failed — say so, offer a retry */
-                          <div style={{textAlign:'center'}} role="status">
-                            <div className="text-amber-300 font-semibold" style={{fontSize:'17px'}}>Couldn’t load holder data</div>
-                            <div className="text-white/45" style={{fontSize:'13px',marginTop:'4px'}}>Unknown, not zero.</div>
-                            <button type="button" onClick={()=>setHoldersShareTry(n=>n+1)} className="tap-h mt-3 px-4 rounded-lg border border-amber-300/50 text-amber-200 text-sm font-semibold hover:bg-amber-300/10 transition-colors">Retry</button>
-                          </div>
-                        )}
-                      </div>
-                    ):(
-                      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1fr',gap:'18px',minHeight:0,overflow:'hidden'}}>
-
-                        {/* Reusable column renderer */}
-                        {[
-                          {tkn:'PTGC',d:holdersShareData.PTGC,clr:'#D4AF37',bdr:'rgba(212,175,55,0.3)',bdrLight:'rgba(212,175,55,0.15)',bg:'rgba(212,175,55,0.05)',glow:'rgba(212,175,55,0.9)',chartRef:ptgcShareChartRef},
-                          {tkn:'UFO', d:holdersShareData.UFO, clr:'#7CFC00',bdr:'rgba(124,252,0,0.3)',  bdrLight:'rgba(124,252,0,0.15)',  bg:'rgba(124,252,0,0.05)',  glow:'rgba(124,252,0,0.9)',  chartRef:ufoShareChartRef}
-                        ].map(({tkn,d,clr,bdr,bdrLight,bg,glow,chartRef})=>{
-                          const p=d.periods;
-                          const chg24h=p.current!=null&&p.d1Ago!=null?p.current-p.d1Ago:null;
-                          const mkRate=(dAgo,days)=>{
-                            const net=p.current!=null&&dAgo!=null?p.current-dAgo:null;
-                            const avg=net!=null?net/days:null;
-                            const pct=chg24h!=null&&avg!=null&&avg!==0?((chg24h-avg)/Math.abs(avg))*100:null;
-                            return{avg,pct,net};
-                          };
-                          const r7=mkRate(p.d7Ago,7);
-                          const r30=mkRate(p.d30Ago,30);
-                          const r90=mkRate(p.d90Ago,90);
-                          return(
-                            <div key={tkn} style={{display:'flex',flexDirection:'column',gap:'9px',border:`1px solid ${bdr}`,borderRadius:'16px',background:'rgba(0,0,0,0.45)',padding:'14px 16px',overflow:'hidden',boxSizing:'border-box'}}>
-
-                              {/* ── TOKEN HEADER: ~76px ── */}
-                              <div style={{height:'76px',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                                <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                                  <img src={TOKENS[tkn].logo} alt={tkn} style={{width:'58px',height:'58px',filter:`drop-shadow(0 0 12px ${glow})`}}/>
-                                  <div className="font-orbitron font-bold" style={{color:clr,fontSize:'30px'}}>{tkn}</div>
-                                </div>
-                                <div style={{textAlign:'right'}}>
-                                  <div className="font-extrabold" style={{color:clr,fontSize:'40px',lineHeight:'1'}}>{fmt(d.holders)}</div>
-                                  <div className="text-white/35" style={{fontSize:'12px'}}>current holders</div>
-                                  {chg24h!=null&&(
-                                    <div className="font-bold" style={{fontSize:'14px',color:chg24h>=0?'#4ade80':'#f87171',marginTop:'2px'}}>
-                                      {chg24h>=0?'▲':'▼'} {chg24h>=0?'+':''}{fmt(chg24h)} today
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* MIGRATION: history restarted at the new contract; say so plainly */}
-                              {p.d7Ago===null&&(
-                                <div style={{flexShrink:0,fontSize:'11px',color:'rgba(255,255,255,0.45)',fontStyle:'italic',marginBottom:'2px'}}>
-                                  History restarts at the token migration — comparisons appear as days accumulate.
-                                </div>
-                              )}
-
-                              {/* ── PERIOD BOXES: ~84px ── */}
-                              <div style={{height:'84px',flexShrink:0,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px'}}>
-                                {[{l:'7D AGO',v:p.d7Ago,chg:r7.net},{l:'30D AGO',v:p.d30Ago,chg:r30.net},{l:'90D AGO',v:p.d90Ago,chg:r90.net}].map(({l,v,chg})=>(
-                                  <div key={l} style={{background:'rgba(0,0,0,0.5)',border:`1px solid ${bdrLight}`,borderRadius:'10px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'6px 4px'}}>
-                                    <div style={{fontSize:'11px',letterSpacing:'0.05em',color:'rgba(255,255,255,0.55)',textTransform:'uppercase'}}>{l}</div>
-                                    {v===null
-                                      ?<div style={{fontSize:'13px',marginTop:'3px',color:'rgba(255,255,255,0.45)',fontStyle:'italic'}}>Gathering...</div>
-                                      :<>
-                                        <div className="text-white font-bold" style={{fontSize:'26px',lineHeight:'1.1'}}>{v!=null?fmt(v):'—'}</div>
-                                        {chg!=null&&<div className="font-semibold" style={{fontSize:'14px',color:chg>=0?'#4ade80':'#f87171'}}>{chg>=0?'+':''}{fmt(chg)}</div>}
-                                      </>
-                                    }
-                                  </div>
-                                ))}
-                              </div>
-
-                              {/* ── CHART: 200px fixed ── */}
-                              <div style={{height:'200px',flexShrink:0,background:'rgba(0,0,0,0.3)',border:`1px solid ${bdrLight}`,borderRadius:'10px',padding:'8px 10px 6px',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                                <div style={{fontSize:'10px',letterSpacing:'0.08em',marginBottom:'4px',flexShrink:0,color:'rgba(255,255,255,0.5)',textTransform:'uppercase'}}>30D Holder Trend</div>
-                                <div style={{flex:1,position:'relative',minHeight:0}}>
-                                  <canvas ref={chartRef} style={{width:'100%',height:'100%',display:'block'}}></canvas>
-                                </div>
-                              </div>
-
-                              {/* ── TODAY VS DAILY RATE ── */}
-                              <div style={{flexShrink:0,background:'rgba(0,0,0,0.3)',border:`1px solid ${bdrLight}`,borderRadius:'10px',padding:'12px 14px'}}>
-                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                                  <div style={{fontSize:'11px',letterSpacing:'0.08em',fontWeight:'600',color:'rgba(255,255,255,0.6)',textTransform:'uppercase'}}>Today vs Daily Growth Rate</div>
-                                  <div style={{fontSize:'11px',color:'rgba(255,255,255,0.5)'}}>{chg24h!=null?`Today: ${chg24h>=0?'+':''}${fmt(chg24h)} holders`:'Today: —'}</div>
-                                </div>
-                                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',textAlign:'center'}}>
-                                  {[{l:'7D',r:r7,g:p.d7Ago===null},{l:'30D',r:r30,g:p.d30Ago===null},{l:'90D',r:r90,g:p.d90Ago===null}].map(({l,r,g})=>(
-                                    <div key={l} style={{background:bg,borderRadius:'8px',padding:'8px 4px'}}>
-                                      <div style={{fontSize:'13px',fontWeight:'600',color:'rgba(255,255,255,0.55)'}}>{l}</div>
-                                      {g
-                                        ?<div style={{fontSize:'13px',marginTop:'3px',color:'rgba(255,255,255,0.4)',fontStyle:'italic'}}>Gathering...</div>
-                                        :<>
-                                          {r.avg!=null&&<div style={{fontSize:'13px',fontWeight:'600',color:r.avg>=0?'rgba(74,222,128,0.7)':'rgba(248,113,113,0.7)'}}>{r.avg>=0?'+':''}{Math.abs(r.avg).toFixed(1)}/day avg</div>}
-                                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'2px',lineHeight:'1.1'}}>
-                                            <span style={{fontSize:'13px',fontWeight:'800',color:r.pct!=null?(r.pct>=0?'#4ade80':'#f87171'):'rgba(255,255,255,0.2)'}}>{r.pct!=null?(r.pct>=0?'▲':'▼'):''}</span>
-                                            <span style={{fontSize:'26px',fontWeight:'800',color:r.pct!=null?(r.pct>=0?'#4ade80':'#f87171'):'rgba(255,255,255,0.2)'}}>
-                                              {r.pct!=null?Math.abs(r.pct).toFixed(0)+'%':'—'}
-                                            </span>
-                                          </div>
-                                        </>
-                                      }
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* ── FOOTER: 22px ── */}
-                    <div style={{height:'22px',flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'flex-end',borderTop:'1px solid rgba(255,255,255,0.08)',marginTop:'10px',paddingTop:'6px'}}>
-                      <div style={{fontSize:'11px',color:'rgba(255,255,255,0.45)'}}>Data via PulseScan &amp; DexScreener</div>
-                      <div style={{fontSize:'11px',fontWeight:'500',color:'rgba(255,255,255,0.45)'}}>ptgc-ufo.com</div>
-                    </div>
-
-                  </div>
-                </div>
-            </ShareCardModal>
-          );
-          })()}
+          {/* Combined Holders Share Modal — Socials → Holders (2026-09-26 build, gotcha 31). Loader above (holdersShareData); the card draws its own SVG trend. */}
+          {showHoldersShareModal&&<HoldersSocialModal data={holdersShareData} loading={holdersShareLoading} error={holdersShareError} onRetry={()=>setHoldersShareTry(n=>n+1)} onClose={()=>closeModalAndReturn(setShowHoldersShareModal)}/>}
           
           {/* Price with RH Cores Modal */}
           {showPriceWithCoresModal&&(()=>{

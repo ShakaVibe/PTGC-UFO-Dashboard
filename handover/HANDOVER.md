@@ -17,7 +17,21 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-25)
+## Current state (end of 2026-09-26)
+
+**2026-09-26: the Holders cards redone — Socials → Holders (both tokens, gold→green) and a new 📷 in each
+dashboard's ⓘ Holder Analytics modal (one token, PTGC gold / UFO green).** Six rounds of mock-ups, then built
+on the 2026-09-23 pattern (`HoldersSocialModal` / `HoldersSingleModal`, module scope just above
+`DashboardSkeleton`, Wide/Tall, screenshot-only). The old html2canvas Holders card and its two Chart.js
+canvases are gone; the trend is an inline SVG from `snapshotsFor`. Every number is the ⓘ modal's (current, 24H,
+7D/30D/90D "then" + net, per-day avg, today-vs-avg %) plus the tier counts; a missing read is "—" /
+"Gathering…", and the loader no longer turns a failed count into 0 or a failed tier set into five zeros.
+Title icon = Shaka's two-colour alien, cropped to `logos/combined/14_Two_Color__Alien_2_head.png`, doubled.
+Harness verified (Wide/Tall, both ⓘ 📷s, loading, phone); one harness lie fixed in `run.js` (the stub's UFO
+pairs were 1062 days old, so UFO's 90D read the old contract in the harness only). **Owed: the live look on a
+phone — Socials → Holders both shapes, then PTGC ⓘ → 📷 and UFO ⓘ → 📷.** `sessions/2026-09-26.md`.
+
+### Before that (end of 2026-09-25)
 
 **2026-09-25, night: privacy scrub.** The owner's real name was in the git author field of 97 commits here and in X1-Validator-HQ's public handover; both histories were rewritten and force-pushed, so **commit IDs from 2026-09-08 on are new** (the ones in these notes were remapped). Rule: gotcha 33. **Later that night:** the Actions run records (public API, name frozen at trigger time + old SHA) were the leftover — 144 here, 896 in x1-prism, 4 in ToolBox, all deleted and re-scanned to 0 across all five repos. Details: `sessions/2026-09-25.md`, "Night" and "Night, part two".
 
@@ -141,7 +155,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 | Phase 1 — dead code (b3), html2canvas removal (b4) | **Done, live** |
 | Phase 1 — Vite build (b1, b2), icons/manifest (b5), fonts (b6), CI/CSP (b7), tests (b8), operator script (b9) | Not started — build deliberately parked by Shaka |
 | Phase 2 — all data items (d1–d12) | **Done, live** (d10 and d12 closed as won't-do, see gotchas) |
-| Phase 3 — share cards (u2) | **Done, live** |
+| Phase 3 — share cards (u2) | **Done, live.** Socials cards on the 2026-09-23 pattern: DAO Buys, Burn, DAO Treasury (09-23), Value Generated, Token Allocation, PTGC burned by UFO (09-25), **Holders + the ⓘ 📷 (09-26)** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
 | Phase 3 — loading shell (u12) | **Done, live** |
 | Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`b765a2f06`, 2026-09-09) |
@@ -459,6 +473,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    `fitFs` shrinks text to its box - keep both if a tile is added.
    2026-09-25: Value Generated (`ValueGenSocialModal`) and Token Allocation (`AllocSocialModal`) joined the pattern;
    `SocialNebulaBackdrop` (colour via `rgb` + `edge`) and `SocialShapeSwitch` are the shared pieces for the next one.
+   2026-09-26: Holders joined it twice — `HoldersSocialModal` (both tokens, `HoldersDualBackdrop` gold/green) and
+   `HoldersSingleModal` (one token, `SocialNebulaBackdrop` in `HOLD_THEME[token]`, opened from the ⓘ modal's 📷 with
+   `zIndex={60}` so it stacks). The trend is `HoldersSpark`, an inline SVG — no Chart.js canvas in a card any more; a
+   canvas needed a mount-retry loop and never survived the shape switch. Tier counts print through
+   `holdersTierCounts`: the seeded `{0,0,0,0,0}` is "unknown", never five zeros.
 32. **Home has two designs; `HOME_DESIGN` picks one** (2026-09-25). 'cosmic' (live) is `HomeCosmicView` /
    `CosmicCard` / `CosmicCardSkeleton` / `HomeSpark`, styled by the `hc-*` block at the end of the head
    `<style>`; 'classic' is the original JSX, still inside `Home` below the cosmic `return`, untouched.
@@ -618,6 +637,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-09-26.md` — Holders cards redone: six mock-up rounds (cyan → silver → gold/green; tiles without
+  accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +
+  `HoldersSingleModal` built, old html2canvas card + Chart.js canvases removed, loader honest-null, ⓘ modal 📷,
+  harness `run.js` UFO `pairCreatedAt` fix.
 - `sessions/2026-09-25.md` — new Home screen ("cosmic"): Shaka's alien art, metallic title, two glowing cards
   with a real 24 h GeckoTerminal chart and one BUY / SELL button each; classic kept behind `HOME_DESIGN`.
 - `sessions/2026-09-23.md` — Socials DAO Buys card (three rounds: period switch, All time default, Wide/Tall,
