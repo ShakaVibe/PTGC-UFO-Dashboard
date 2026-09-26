@@ -21,7 +21,7 @@ Update it at the end of every session.
 
 **2026-09-26: the Holders cards redone — Socials → Holders (both tokens, gold→green) and the ⓘ on each
 dashboard's Holders box opens the one-token card directly (PTGC gold / UFO green, 7D/30D/90D trend, Wide/Tall) —
-the 2025 in-page modal is deleted.** Six rounds of mock-ups, then built
+the 2025 in-page modal is deleted. The Socials hub has a Holders button in all three columns, on one row.** Six rounds of mock-ups, then built
 on the 2026-09-23 pattern (`HoldersSocialModal` / `HoldersSingleModal`, module scope just above
 `DashboardSkeleton`, Wide/Tall, screenshot-only). The old html2canvas Holders card and its two Chart.js
 canvases are gone; the trend is an inline SVG from `snapshotsFor`. Every number is the ⓘ modal's (current, 24H,
