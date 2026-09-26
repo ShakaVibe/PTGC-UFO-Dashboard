@@ -4521,268 +4521,10 @@
     };
     const fmtUSD2=n=>{if(n==null||isNaN(n))return'—';if(n>0&&n<0.01)return'$'+n.toFixed(3);const d=Math.floor(n),c=Math.round((n-d)*100);return'$'+d.toLocaleString('en-US')+(d<1000&&c?'.'+String(c).padStart(2,'0'):'');};
 
-    // ===== HOLDER ANALYTICS MODAL =====
-    /* u4: hoisted out of HolderAnalyticsModal — was re-declared on every render, so React remounted it each time. */
-    const PctBadge=({val})=>{
-      if(val===null||val===undefined)return<span className="text-white/30 text-sm">—</span>;
-      const pos=val>=0;
-      return<span className={`font-bold text-lg ${pos?'text-green-400':'text-red-400'}`}>{pos?'▲':'▼'} {Math.abs(val).toFixed(1)}%</span>;
-    };
-
-    const HolderAnalyticsModal=({open,close,token,cfg,theme,holders,holderChange,holdersByPeriod,onShare})=>{   /* onShare: the 📷 → HoldersSingleModal (2026-09-26) */
-      const[chartPeriod,setChartPeriod]=useState('30D');
-      const chartRef=React.useRef(null);
-      const chartInst=React.useRef(null);
-      /* u13: holder-history.json lives in a module variable, not state, so a modal opened before
-         it landed used to draw an empty chart and sit on "Loading chart data..." until the user
-         toggled the period. Now: if the cache is empty on open, fetch it and bump `histTick`,
-         which is a dep of the chart effect → redraw + the overlay clears. `histFailed` keeps the
-         overlay honest when the fetch fails instead of promising data that is not coming. */
-      const[histTick,setHistTick]=useState(0);
-      const[histFailed,setHistFailed]=useState(false);
-      useEffect(()=>{
-        if(!open||holderHistoryCacheNew?.snapshots?.length)return;
-        let dead=false;setHistFailed(false);
-        fetchHolderHistoryNew().then(()=>{if(dead)return;if(holderHistoryCacheNew?.snapshots?.length)setHistTick(t=>t+1);else setHistFailed(true);});
-        return()=>{dead=true;};
-      },[open]);
-
-      useEffect(()=>{
-        if(!open||!chartRef.current||!window.Chart)return;
-        const snapshots=snapshotsFor(token); // MIGRATION: epoch-filtered
-        const days=chartPeriod==='7D'?7:chartPeriod==='30D'?30:90;
-        const cutoff=Date.now()-(days*24*60*60*1000);
-        const filtered=snapshots.filter(s=>new Date(s.timestamp).getTime()>=cutoff);
-        // A "now" point only when the live count is known — a null (PulseScan miss) used to be
-        // appended as 0 and drew a cliff to zero at the right edge (a24, 2026-09-16).
-        const nowCount=(holdersByPeriod.current??holders);
-        const pts=(nowCount!=null&&nowCount>0)?[...filtered,{timestamp:new Date().toISOString(),[token]:nowCount}]:filtered;
-        if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}
-        try{
-          const ctx=chartRef.current.getContext('2d');
-          const grad=ctx.createLinearGradient(0,0,0,180);
-          grad.addColorStop(0,cfg.colorHex+'55');
-          grad.addColorStop(1,cfg.colorHex+'00');
-          chartInst.current=new window.Chart(ctx,{
-            type:'line',
-            data:{
-              labels:pts.map(d=>{
-                const dt=new Date(d.timestamp);
-                return chartPeriod==='7D'
-                  ?dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-                  :chartPeriod==='30D'
-                  ?dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-                  :dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-              }),
-              datasets:[{
-                data:pts.map(d=>d[token]),
-                borderColor:cfg.colorHex,
-                backgroundColor:grad,
-                borderWidth:2,
-                fill:true,
-                tension:0.35,
-                pointRadius:pts.length>15?0:3,
-                pointHoverRadius:5,
-                pointBackgroundColor:cfg.colorHex,
-                pointBorderColor:'#111',
-                pointBorderWidth:1
-              }]
-            },
-            options:{
-              responsive:true,
-              maintainAspectRatio:false,
-              plugins:{
-                legend:{display:false},
-                tooltip:{
-                  backgroundColor:'#1a1a1a',
-                  borderColor:cfg.colorHex,
-                  borderWidth:1,
-                  titleColor:'#fff',
-                  bodyColor:cfg.colorHex,
-                  padding:10,
-                  displayColors:false,
-                  callbacks:{label:c=>c.parsed.y.toLocaleString()+' holders'}
-                }
-              },
-              scales:{
-                x:{grid:{color:'#1e1e1e'},ticks:{color:'#555',maxTicksLimit:7,maxRotation:0}},
-                y:{
-                  grid:{color:'#1e1e1e'},
-                  ticks:{color:'#555',callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v},
-                  /* u13: with no history points every value is Infinity → Chart.js got suggestedMin:Infinity */
-                  suggestedMin:(()=>{const mn=Math.min(...pts.map(d=>d[token]).filter(v=>v>0));return isFinite(mn)?Math.floor(mn*0.997):undefined})(),
-                }
-              }
-            }
-          });
-        }catch(e){console.error('HolderAnalyticsModal chart error:',e);}
-        return()=>{if(chartInst.current){chartInst.current.destroy();chartInst.current=null;}};
-      },[open,chartPeriod,token,holders,holdersByPeriod&&holdersByPeriod.current,histTick]);
-
-      if(!open)return null;
-
-      const cur=holdersByPeriod.current??holders??null;   // a24: null → "—", never 0 (fmt(null) dashes; calcChange guards null)
-      const d1Ago=holdersByPeriod.d1Ago;
-      const d7Ago=holdersByPeriod.d7Ago;
-      const d30Ago=holdersByPeriod.d30Ago;
-      const d90Ago=holdersByPeriod.d90Ago;
-
-      // 24H change: use live holderChange first, fall back to snapshot diff
-      const calcChange=(a,b)=>(a!=null&&b!=null)?a-b:null;
-      const chg24h=holderChange!=null?holderChange:calcChange(cur,d1Ago);
-      const chg7d=calcChange(cur,d7Ago);
-      const chg30d=calcChange(cur,d30Ago);
-      const chg90d=calcChange(cur,d90Ago);
-
-      // Daily-rate comparison:
-      // dailyAvg = net growth over period / days
-      // pct = ((today_24h - dailyAvg) / |dailyAvg|) * 100
-      const dailyAvg7d=chg7d!=null?chg7d/7:null;
-      const dailyAvg30d=chg30d!=null?chg30d/30:null;
-      const dailyAvg90d=chg90d!=null?chg90d/90:null;
-      const calcRatePct=(today,dailyAvg)=>{
-        if(today==null||dailyAvg==null)return null;
-        if(dailyAvg===0)return today>0?100:today<0?-100:0;
-        return((today-dailyAvg)/Math.abs(dailyAvg))*100;
-      };
-      const ratePct7d=calcRatePct(chg24h,dailyAvg7d);
-      const ratePct30d=calcRatePct(chg24h,dailyAvg30d);
-      const ratePct90d=calcRatePct(chg24h,dailyAvg90d);
-
-      const fmtRate=r=>{
-        if(r===null||r===undefined)return null;
-        const abs=Math.abs(r);
-        return(r>=0?'+':'')+abs.toFixed(1)+'/day';
-      };
-
-      return(
-        <Modal className="z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClose={close} label="Holder analytics">
-          <div className={`bg-[#111] border ${theme.border} rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={e=>e.stopPropagation()}>
-            <div className="p-4 sm:p-5">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4 gap-2">
-                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                  <img src={cfg.logo} alt={token} className="w-12 h-12 sm:w-16 sm:h-16 rounded-full shrink-0"/>
-                  <div className="min-w-0">
-                    <span className={`font-orbitron text-xl sm:text-3xl font-bold ${theme.text} block truncate`}>{token}</span>
-                    <div className="text-white/50 text-xs sm:text-base mt-0.5 truncate">Holder Analytics</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {onShare&&<button type="button" onClick={onShare} aria-label="Share holder analytics as an image" className="tap text-lg opacity-60 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>}
-                  <button aria-label="Close" onClick={close} className="text-white/50 hover:text-white text-2xl">×</button>
-                </div>
-              </div>
-
-              {/* Current + 24H change hero */}
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-3 sm:p-4 mb-4 flex items-center justify-between gap-2`}>
-                <div className="min-w-0">
-                  <div className="text-white/50 text-xs uppercase mb-1">Current Holders</div>
-                  <div className={`text-2xl sm:text-4xl font-bold ${theme.text} truncate`}>{fmt(cur)}</div>
-                </div>
-                <div className="text-right min-w-0">
-                  <div className="text-white/50 text-xs uppercase mb-1">24H Change</div>
-                  <div className="text-base sm:text-2xl">
-                    {chg24h!=null
-                      ?<span className={`font-bold ${chg24h>=0?'text-green-400':'text-red-400'} truncate inline-block max-w-full`}>{chg24h>=0?'▲':'▼'} {chg24h>=0?'+':''}{fmt(chg24h)}</span>
-                      :<span className="text-white/30 text-lg">—</span>
-                    }
-                  </div>
-                </div>
-              </div>
-
-              {/* Period snapshots — larger numbers, net change below */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {[
-                  {l:'7D Ago',v:d7Ago,chg:chg7d,gather:false},
-                  {l:'30D Ago',v:d30Ago,chg:chg30d,gather:false},
-                  {l:'90D Ago',v:d90Ago,chg:chg90d,gather:d90Ago===null}
-                ].map(({l,v,chg,gather})=>(
-                  <div key={l} className={`${theme.card} border ${theme.border} rounded-xl p-2 sm:p-3 text-center min-w-0`}>
-                    <div className="text-white/40 text-[10px] sm:text-xs uppercase mb-1">{l}</div>
-                    {gather
-                      ?<div className="text-white/30 text-xs italic py-1">Gathering...</div>
-                      :<>
-                        <div className="text-white font-bold text-base sm:text-2xl truncate">{v!=null?fmt(v):'—'}</div>
-                        <div className="text-xs sm:text-base font-semibold mt-0.5 truncate">
-                          {chg!=null
-                            ?<span className={chg>=0?'text-green-400':'text-red-400'}>{chg>=0?'+':''}{fmt(chg)}</span>
-                            :<span className="text-white/25">—</span>
-                          }
-                        </div>
-                      </>
-                    }
-                  </div>
-                ))}
-              </div>
-
-              {/* Today vs Daily Growth Rate */}
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4 mb-4`}>
-                <div className="text-white/50 text-xs uppercase mb-1">Today vs Daily Growth Rate</div>
-                <div className="text-white/30 text-xs mb-3">Today: {chg24h!=null?(chg24h>=0?'+':'')+fmt(chg24h)+' holders':' —'} &nbsp;|&nbsp; Comparing to avg holders gained per day over each period</div>
-                <div className="space-y-2.5">
-                  {[
-                    {l:'vs 7D',dailyAvg:dailyAvg7d,pct:ratePct7d,days:7,total:chg7d},
-                    {l:'vs 30D',dailyAvg:dailyAvg30d,pct:ratePct30d,days:30,total:chg30d},
-                    {l:'vs 90D',dailyAvg:dailyAvg90d,pct:ratePct90d,days:90,total:chg90d,gather:d90Ago===null}
-                  ].map(({l,dailyAvg,pct,gather})=>(
-                    <div key={l} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white/60 text-sm w-12">{l}</span>
-                        {gather
-                          ?<span className="text-white/30 text-xs italic">Gathering data...</span>
-                          :dailyAvg!=null
-                            ?<span className={`text-sm font-semibold px-2 py-0.5 rounded-full ${dailyAvg>=0?'bg-green-500/10 text-green-400/70':'bg-red-500/10 text-red-400/70'}`}>{fmtRate(dailyAvg)} avg</span>
-                            :<span className="text-white/25 text-xs">—</span>
-                        }
-                      </div>
-                      {!gather&&<PctBadge val={pct}/>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Mini line chart with period toggle */}
-              <div className={`${theme.card} border ${theme.border} rounded-xl p-4`}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-white/50 text-xs uppercase">Holder Trend</div>
-                  <div className="flex gap-1">
-                    {['7D','30D','90D'].map(p=>(
-                      <button key={p} onClick={()=>setChartPeriod(p)}
-                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${chartPeriod===p?'text-black':'text-white/40 hover:text-white/70'}`}
-                        style={chartPeriod===p?{background:cfg.colorHex}:{background:'transparent'}}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{height:'140px',position:'relative'}}>
-                  {chartPeriod==='90D'&&d90Ago===null
-                    ?(
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                        <span className="text-3xl">⏳</span>
-                        <span className="text-white/40 text-sm italic">Gathering data...</span>
-                        <span className="text-white/25 text-xs">90-day history not yet available</span>
-                      </div>
-                    ):(
-                      <>
-                        <canvas ref={chartRef} style={{width:'100%',height:'100%'}}></canvas>
-                        {(!holderHistoryCacheNew?.snapshots?.length)&&(
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-white/30 text-sm">{histFailed?'History unavailable right now':'Loading chart data...'}</span>
-                          </div>
-                        )}
-                      </>
-                    )
-                  }
-                </div>
-              </div>
-            </div>
-          </div>
-        </Modal>
-      );
-    };
-
+    // ===== HOLDER ANALYTICS =====
+    // The ⓘ on the Holders box opens HoldersSingleModal (the 2026-09-26 card, with a 7D/30D/90D trend window)
+    // directly. The old in-page modal (HolderAnalyticsModal + PctBadge, 2025) was deleted 2026-09-26 — the card
+    // prints every number it did.
     const LPRow=({pair,theme,mainAddr})=>{
       const[logoErr,setLogoErr]=useState(false);
       const[det,setDet]=useState(false);
@@ -7540,12 +7282,12 @@
     const HOLD_ALIENS='logos/combined/14_Two_Color__Alien_2_head.png';   // the two-colour alien cropped to the head (the 2000² original is ¾ margin)
     const HOLD_TIERS=[['Poseidon','\u{1F531}'],['Whale','\u{1F40B}'],['Shark','\u{1F988}'],['Dolphin','\u{1F42C}'],['SquidAndBelow','\u{1F991}']];
     const HOLD_SHAPES={
-      wide:{W:1200,H:675,pad:44,top:34,bottom:30,title:40,pp:20,logo:84,tok:34,big:64,lbl:13,chip:15,chartH:170,gap:11,tp:'9px 10px 9px 14px',tl:12,tv:28,tq:12,em:22,cnt:17},
-      tall:{W:1080,H:1350,pad:52,top:52,bottom:44,title:50,pp:26,logo:118,tok:46,big:84,lbl:16,chip:20,chartH:138,gap:14,tp:'12px 14px 12px 18px',tl:14,tv:34,tq:15,em:28,cnt:22}
+      wide:{W:1200,H:675,pad:44,top:34,bottom:30,title:40,pp:20,logo:84,tok:34,big:64,lbl:13,chip:15,chartH:148,gap:11,tp:'9px 10px 9px 14px',tl:12,tv:28,tq:12,em:22,cnt:17},
+      tall:{W:1080,H:1350,pad:52,top:52,bottom:44,title:50,pp:26,logo:118,tok:46,big:84,lbl:16,chip:20,chartH:96,gap:14,tp:'12px 14px 12px 18px',tl:14,tv:34,tq:15,em:28,cnt:22}
     };
     const HOLD1_SHAPES={
-      wide:{W:1200,H:675,pad:48,top:38,bottom:34,title:40,logo:190,big:100,lbl:17,chip:18,chartH:170,gap:12,tp:'12px 14px 12px 18px',tl:14,tv:32,tq:14,em:34,cnt:26,cw:1104},
-      tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,logo:250,big:140,lbl:24,chip:26,chartH:180,gap:16,tp:'20px 22px 20px 26px',tl:20,tv:52,tq:20,em:44,cnt:34,cw:968}
+      wide:{W:1200,H:675,pad:48,top:38,bottom:34,title:40,logo:180,big:100,lbl:17,chip:18,chartH:132,gap:12,tp:'12px 14px 12px 18px',tl:14,tv:32,tq:14,em:30,cnt:24,tpad:6,cw:1104},
+      tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,logo:220,big:132,lbl:24,chip:26,chartH:140,gap:16,tp:'18px 22px 18px 26px',tl:20,tv:50,tq:20,em:40,cnt:32,tpad:9,cw:968}
     };
     const HOLD_THEME={
       PTGC:{cls:'metallic-gold',pill:'linear-gradient(180deg,#FFF8DC,#E8C044 55%,#A67C1E)',pillText:'#2a1d05',glow:'rgba(232,192,68,0.55)',rgb:'232,192,68',hex:'#E8C044',edge:['#FFF8DC','#E8C044','#6B4E0E'],
@@ -7570,14 +7312,15 @@
       const vals=HOLD_TIERS.map(([k])=>(Number.isFinite(tiers[k])?tiers[k]:null));
       return vals.every(v=>!v)?null:vals;
     };
-    /* 30-day series from the holder-history file (epoch-filtered, gotcha: MIGRATION) + today's count on the end. */
-    const holdersSeries30=(tkn,current)=>{
-      const now=Date.now(),cutoff=now-30*864e5;
+    /* Trend series from the holder-history file (epoch-filtered, gotcha: MIGRATION) over the last `days` days
+       + today's count on the end. `from` says how far back the series really reaches (a young token's 90D is shorter). */
+    const holdersSeries=(tkn,current,days=30)=>{
+      const now=Date.now(),cutoff=now-days*864e5;
       const rows=snapshotsFor(tkn).filter(s=>new Date(s.timestamp).getTime()>=cutoff);
       const pts=rows.map(s=>s[tkn]);
       if(current!=null&&current>0)pts.push(current);
-      const days=rows.length?Math.round((now-new Date(rows[0].timestamp).getTime())/864e5):0;
-      return{pts,from:days>=29?'30 DAYS AGO':days>=1?`${days}D AGO`:'START'};
+      const span=rows.length?Math.round((now-new Date(rows[0].timestamp).getTime())/864e5):0;
+      return{pts,from:span>=days-1?`${days} DAYS AGO`:span>=1?`${span}D AGO`:'START'};
     };
     const HoldersSpark=({pts,from,w,h,rgb,hex,fs})=>{
       const uid=React.useId().replace(/[^a-zA-Z0-9]/g,'');
@@ -7672,7 +7415,7 @@
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:z.gap}}>
           {HOLD_TIERS.map(([k,e],i)=>{const c=counts?counts[i]:null;return(
             <div key={k} style={{display:'flex',alignItems:'center',gap:Math.round(z.em*0.35)}}>
-              <span style={{fontSize:z.em,lineHeight:1,filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</span>
+              <span style={{fontSize:z.em,lineHeight:1,height:z.em,display:'inline-block',filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</span>
               <span className="tabular-nums" style={{fontSize:z.cnt,fontWeight:700,color:c?'#fff':'rgba(255,255,255,0.35)',textShadow:'0 2px 8px rgba(0,0,0,0.8)'}}>{c==null?'—':fmt(c)}</span>
             </div>);})}
         </div>
@@ -7700,7 +7443,7 @@
       const holders=d&&d.holders!=null?d.holders:null;
       const p=d?d.periods:null;
       const chg24h=p&&p.current!=null&&p.d1Ago!=null?p.current-p.d1Ago:null;
-      const series=holdersSeries30(tkn,holders);
+      const series=holdersSeries(tkn,holders,30);
       const chartW=(tall?z.W-2*z.pad:(z.W-2*z.pad-20)/2)-2*z.pp;
       return(
         <div style={{flex:'1 1 0',minWidth:0,position:'relative',borderRadius:22,padding:z.pp,background:'linear-gradient(180deg,rgba(10,14,18,0.82),rgba(4,7,10,0.9))',border:`1px solid rgba(${T.rgb},0.35)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 44px -12px rgba(${T.rgb},0.55)`}}>
@@ -7756,7 +7499,7 @@
             {tall
               ?<>{title}<div style={{marginTop:14}}>{combined}</div></>
               :<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}><div>{title}<div style={{marginTop:12}}>{combined}</div></div>{brand}</div>}
-            <div style={{flex:1,minHeight:tall?16:12}}></div>
+            <div style={{flex:1,minHeight:0}}></div>
             <div style={{display:'flex',flexDirection:tall?'column':'row',gap:tall?18:20}}>
               <HoldersTokenPanel tkn="PTGC" d={P} z={z} tall={tall}/>
               <HoldersTokenPanel tkn="UFO" d={U} z={z} tall={tall}/>
@@ -7782,7 +7525,7 @@
     };
     /* ⓘ Holder Analytics → 📷: one token, in its colour. Reads the same state the modal prints (holdersByPeriod,
        holders, holderTiers) — nothing is fetched for it. */
-    const HoldersSingleCard=({token,holders,holdersByPeriod,tiers,shape='wide'})=>{
+    const HoldersSingleCard=({token,holders,holdersByPeriod,tiers,shape='wide',days=30})=>{
       const z=HOLD1_SHAPES[shape]||HOLD1_SHAPES.wide,tall=shape==='tall';
       const T=HOLD_THEME[token]||HOLD_THEME.PTGC,cfg=TOKENS[token];
       const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -7790,16 +7533,17 @@
       const cur=hp.current!=null?hp.current:(holders!=null?holders:null);
       const p={current:cur,d1Ago:hp.d1Ago!=null?hp.d1Ago:null,d7Ago:hp.d7Ago!=null?hp.d7Ago:null,d30Ago:hp.d30Ago!=null?hp.d30Ago:null,d90Ago:hp.d90Ago!=null?hp.d90Ago:null};
       const chg24h=cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null;
-      const n30=cur!=null&&p.d30Ago!=null?cur-p.d30Ago:null;
-      const pct30=n30!=null&&p.d30Ago>0?n30/p.d30Ago*100:null;
-      const series=holdersSeries30(token,cur);
+      const thenWin=days===7?p.d7Ago:days===90?p.d90Ago:p.d30Ago;   // the window's own "then" for the headline line
+      const n30=cur!=null&&thenWin!=null?cur-thenWin:null;
+      const pct30=n30!=null&&thenWin>0?n30/thenWin*100:null;
+      const series=holdersSeries(token,cur,days);
       const counts=holdersTierCounts(tiers);
       const tokTag=<span style={{color:T.hex}}>{token}</span>;
       const title=(
         <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
           <HoldersAliens h={Math.round(z.title*1.15)} glow={T.glow}/>
           <span className={T.cls} style={{filter:`drop-shadow(0 0 14px ${T.glow})`}}>Holders</span>
-          <span style={{fontSize:'0.62em',fontWeight:700,letterSpacing:'0.14em',color:T.pillText,background:T.pill,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:`0 0 18px ${T.glow}`}}>30D</span>
+          <span style={{fontSize:'0.62em',fontWeight:700,letterSpacing:'0.14em',color:T.pillText,background:T.pill,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:`0 0 18px ${T.glow}`}}>{days}D</span>
         </div>
       );
       const amount=(
@@ -7808,27 +7552,27 @@
           <div className={`tabular-nums ${T.cls}`} style={{fontSize:z.big,fontWeight:700,lineHeight:0.95,marginTop:6,textAlign:tall?'center':'left'}}>{fmt(cur)}</div>
           <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:14,marginTop:12}}>
             <HoldersTodayChip d={chg24h} z={z}/>
-            <span className="tabular-nums" style={{fontSize:z.lbl,color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap'}}>{n30==null?'— in 30 days':<>{holdSgn(n30)} in 30 days {'·'} <span style={{color:holdCol(n30)}}>{pct30!=null?pct30.toFixed(2)+'%':'—'}</span></>}</span>
+            <span className="tabular-nums" style={{fontSize:z.lbl,color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap'}}>{n30==null?`— in ${days} days`:<>{holdSgn(n30)} in {days} days {'·'} <span style={{color:holdCol(n30)}}>{pct30!=null?pct30.toFixed(2)+'%':'—'}</span></>}</span>
           </div>
         </>
       );
       const chart=(
         <div style={{position:'relative',borderRadius:22,padding:`${Math.round(z.gap*1.2)}px ${Math.round(z.gap*1.4)}px ${Math.round(z.gap*0.8)}px`,background:'linear-gradient(180deg,rgba(10,14,18,0.82),rgba(4,7,10,0.9))',border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:'inset 0 1px 0 rgba(255,255,255,0.10)'}}>
-          <div style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:T.hex,marginBottom:6}}>30-day holder trend</div>
+          <div style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:T.hex,marginBottom:6}}>{days}-day holder trend</div>
           <HoldersSpark pts={series.pts} from={series.from} w={z.cw-Math.round(z.gap*2.8)-2} h={z.chartH} rgb={T.rgb} hex={T.hex} fs={z.tq}/>
         </div>
       );
       const tierTiles=(
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:z.gap}}>
           {HOLD_TIERS.map(([k,e],i)=>{const c=counts?counts[i]:null;return(
-            <div key={k} style={{borderRadius:16,padding:`${Math.round(z.gap*0.9)}px 8px`,textAlign:'center',background:`linear-gradient(180deg,rgba(${T.rgb},0.08),rgba(4,7,10,0.92))`,border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${T.rgb},0.45)`}}>
-              <div style={{fontSize:z.em,lineHeight:1,filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</div>
-              <div className="tabular-nums" style={{fontSize:z.cnt,fontWeight:700,marginTop:6,color:c?'#fff':'rgba(255,255,255,0.35)'}}>{c==null?'—':fmt(c)}</div>
+            <div key={k} style={{borderRadius:16,padding:`${z.tpad}px 8px`,textAlign:'center',background:`linear-gradient(180deg,rgba(${T.rgb},0.08),rgba(4,7,10,0.92))`,border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${T.rgb},0.45)`}}>
+              <div style={{fontSize:z.em,lineHeight:1,height:z.em,overflow:'visible',filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</div>
+              <div className="tabular-nums" style={{fontSize:z.cnt,lineHeight:1.1,fontWeight:700,marginTop:6,color:c?'#fff':'rgba(255,255,255,0.35)'}}>{c==null?'—':fmt(c)}</div>
             </div>);})}
         </div>
       );
       const brandWide=<div style={{textAlign:'right',flexShrink:0}}><div className={`font-orbitron ${T.cls}`} style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div><div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{tokTag} {'·'} holder analytics</div><div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>{today}</div></div>;
-      const brandTall=<div style={{marginTop:22,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}><span className={`font-orbitron ${T.cls}`} style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',filter:'drop-shadow(0 2px 10px rgba(0,0,0,0.9))'}}>ptgc-ufo.com</span><span style={{color:'rgba(235,240,245,0.75)'}}>{'·'} {tokTag} {'·'} {today}</span></div>;
+      const brandTall=<div style={{marginTop:16,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}><span className={`font-orbitron ${T.cls}`} style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',filter:'drop-shadow(0 2px 10px rgba(0,0,0,0.9))'}}>ptgc-ufo.com</span><span style={{color:'rgba(235,240,245,0.75)'}}>{'·'} {tokTag} {'·'} {today}</span></div>;
       return(
         <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#040705',fontFamily:"'Rajdhani',sans-serif"}}>
           <SocialNebulaBackdrop W={z.W} H={z.H} tall={tall} logo={cfg.logo} rgb={T.rgb} edge={T.edge} seed={token==='PTGC'?5:9}/>
@@ -7838,7 +7582,7 @@
                 {title}
                 <div style={{display:'flex',justifyContent:'center',marginTop:18}}><HoldersLogo src={cfg.logo} size={z.logo} rgb={T.rgb}/></div>
                 <div style={{marginTop:14}}>{amount}</div>
-                <div style={{flex:1,minHeight:18}}></div>
+                <div style={{flex:1,minHeight:0}}></div>
                 {chart}
                 <div style={{marginTop:z.gap+4}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
                 <div style={{marginTop:z.gap+4}}>{tierTiles}</div>
@@ -7852,7 +7596,7 @@
                   <div style={{flex:1,minWidth:0}}>{amount}</div>
                   <div style={{width:Math.round(z.cw*0.5),flexShrink:0}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
                 </div>
-                <div style={{flex:1,minHeight:10}}></div>
+                <div style={{flex:1,minHeight:0}}></div>
                 {chart}
                 <div style={{marginTop:z.gap}}>{tierTiles}</div>
               </>
@@ -7861,14 +7605,26 @@
         </div>
       );
     };
+    /* The ⓘ on the Holders box (both dashboards). `days` = the trend window, the old modal's 7D / 30D / 90D toggle. */
     const HoldersSingleModal=({token,holders,holdersByPeriod,tiers,onClose})=>{
       const[shape,setShape]=useState('wide');
+      const[days,setDays]=useState(30);
       const z=HOLD1_SHAPES[shape];
       const T=HOLD_THEME[token]||HOLD_THEME.PTGC;
-      const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring={T.ring} on={T.on} onText={T.onText} offText={T.offText} grad={T.pill} glow={T.glow}/>;
+      const controls=(
+        <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'10px 14px',justifyContent:'center'}}>
+          <div role="group" aria-label="Trend window" className={`inline-flex items-center gap-0.5 p-1 rounded-full border ${T.ring} bg-black/70`} style={{boxShadow:`0 0 26px -8px ${T.glow}`}}>
+            {[7,30,90].map(d=>{
+              const on=days===d;
+              return<button key={d} type="button" onClick={()=>setDays(d)} aria-pressed={on} aria-label={`${d}-day trend`} className={`tap-h px-3 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] transition-all ${on?T.onText:T.offText}`} style={on?{background:T.pill,boxShadow:`0 0 16px ${T.glow}, inset 0 1px 0 rgba(255,255,255,0.5)`}:undefined}>{d}D</button>;
+            })}
+          </div>
+          <SocialShapeSwitch shape={shape} setShape={setShape} ring={T.ring} on={T.on} onText={T.onText} offText={T.offText} grad={T.pill} glow={T.glow}/>
+        </div>
+      );
       return(
-        <ShareCardModal onClose={onClose} width={z.W} height={z.H} zIndex={60} screenshot controls={controls} toolbarClass="mb-6" label={`${token} holders share card`} filename={`${token.toLowerCase()}-holders-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
-          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={tiers} shape={shape}/>
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label={`${token} holder analytics`} filename={`${token.toLowerCase()}-holders-${days}d-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={tiers} shape={shape} days={days}/>
         </ShareCardModal>
       );
     };
@@ -9151,8 +8907,7 @@
       },[token,(data?.pairs||[]).map(p=>p.pairAddress+':'+(p.pairCreatedAt||0)).sort().join('|'),feeRetry]);
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
-      const[showHolderModal,setShowHolderModal]=useState(false);
-      const[showHoldersSingleModal,setShowHoldersSingleModal]=useState(false);   // ⓘ Holder Analytics → 📷 (2026-09-26)
+      const[showHoldersSingleModal,setShowHoldersSingleModal]=useState(false);   // the ⓘ on the Holders box → HoldersSingleModal (2026-09-26)
       const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
       const[showXsShareModal,setShowXsShareModal]=useState(false);
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
@@ -10264,7 +10019,7 @@
                 </div>
 
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors relative min-w-0">
-                  <button onClick={()=>setShowHolderModal(true)} aria-label="Holders by period" className={`tap absolute top-0 right-0 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
+                  <button onClick={()=>setShowHoldersSingleModal(true)} aria-label="Holders by period" className={`tap absolute top-0 right-0 text-[11px] ${theme.text} hover:opacity-70 transition-opacity`}>{'\u24D8'}</button>
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white mb-2 font-medium">Holders</div>
                   <div className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums leading-none truncate`}>{fmt(holdersByPeriod?.current??holders)/* MIGRATION: file-first. holdersByPeriod.current is the holder-history snapshot (our reliable file); the live PulseScan count is only used if the file has no snapshot for this token. Count moves ~1-2/day so a slightly-stale file value is fine, and it never dashes. */}</div>
                   {holderChange!==null?(holderChange===0?<div className="text-xs sm:text-sm font-medium mt-2 text-white/40">{'\u2014'} 0</div>:<div className={`text-xs sm:text-sm font-medium mt-2 ${holderChange>=0?'text-emerald-400':'text-rose-400'} truncate`}>{holderChange>=0?'\u2191':'\u2193'} {holderChange>=0?'+':''}{fmt(holderChange)}</div>):<div className="h-4 mt-2"></div>}
@@ -11454,19 +11209,7 @@
             windowState={deckWindowState}
           />
 
-          {/* Holder Analytics Modal */}
-          <HolderAnalyticsModal
-            open={showHolderModal}
-            close={()=>setShowHolderModal(false)}
-            token={token}
-            cfg={cfg}
-            theme={theme}
-            holders={holders}
-            holderChange={holderChange}
-            holdersByPeriod={holdersByPeriod}
-            onShare={()=>setShowHoldersSingleModal(true)}
-          />
-          {/* ⓘ → 📷: this token's holders card, in its colour (HoldersSingleModal, 2026-09-26). Reads the same state the modal prints. */}
+          {/* Holder Analytics — the ⓘ on the Holders box opens this token's card (HoldersSingleModal, 2026-09-26): 7D/30D/90D trend, Wide/Tall. Reads the panel's own state. */}
           {showHoldersSingleModal&&<HoldersSingleModal token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={holderTiers} onClose={()=>setShowHoldersSingleModal(false)}/>}
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
