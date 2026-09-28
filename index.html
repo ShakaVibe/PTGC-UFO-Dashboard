@@ -7673,6 +7673,116 @@
       );
     };
     /* ===== END HOLDERS cards ===== */
+    /* ---------- Socials → RH Core Liquidity (2026-09-28) ----------
+     * The card that used to be an inline ShareCardModal in Dashboard. Now: Richard Heart on stage as the
+     * plate (`logos/socials/rh-heart-stage.jpg` — Shaka's photo, the conference watermark patched out, him
+     * at 86% anchored bottom-right so the left two thirds are dark), and the ORIGINAL card's two token
+     * columns (PTGC gold / UFO green, six pair rows, no bars — Shaka) in that dark area, in the Socials
+     * language of the 2026-09-23 cards. Wide 1200x675 ONLY (Shaka: no tall for this one), screenshot-only
+     * (gotcha 30/31). Numbers: the same `liq` per core the old card read, null while a column's pairs
+     * have not arrived (a18) so fmtUSD prints "—". Core logos are CORE_LOGOS (DexScreener CDN). */
+    const RH_PLATE='logos/socials/rh-heart-stage.jpg';
+    const RH_CARD_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
+    const RH_CARD_THEME={   // flat token colours, no metallic fade on this card (Shaka, 2026-09-28)
+      PTGC:{hex:'#E8C044',rgb:'232,192,68'},
+      UFO:{hex:'#7CFC00',rgb:'124,252,0'}
+    };
+    const rhCoreLiq=(pairs,core)=>{
+      if(!pairs||!pairs.length)return null;   // a18: unknown column → "—"
+      const p=pairs.find(p=>{const q=(p.quoteToken?.symbol||'').toUpperCase(),b=(p.baseToken?.symbol||'').toUpperCase();return q===core||b===core;});
+      return p?(p.liq||0):0;
+    };
+    const rhCoreTotal=pairs=>pairs&&pairs.length?RH_CARD_CORES.reduce((s,c)=>s+(rhCoreLiq(pairs,c)||0),0):null;
+    const RhCoresColumn=({tkn,pairs})=>{
+      const T=RH_CARD_THEME[tkn],cfg=TOKENS[tkn],rgb=T.rgb;
+      const tot=fmtUSD(rhCoreTotal(pairs));   // a 7-digit total ($1,234,567) steps down so it never crowds the token name
+      return(
+        <div style={{width:352,boxSizing:'border-box',flexShrink:0,borderRadius:20,padding:15,position:'relative',background:'linear-gradient(180deg,rgba(6,9,14,0.82),rgba(3,5,9,0.9))',border:`1px solid rgba(${rgb},0.42)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.12), 0 0 48px -10px rgba(${rgb},0.6)`}}>
+          <div aria-hidden="true" style={{position:'absolute',left:20,right:20,top:0,height:2,background:`linear-gradient(90deg,rgba(0,0,0,0),rgba(${rgb},1),rgba(0,0,0,0))`}}></div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'0 2px 11px',borderBottom:`1px solid rgba(${rgb},0.25)`}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <img src={cfg.logo} alt="" style={{width:66,height:66,objectFit:'contain',filter:`drop-shadow(0 0 8px rgba(${rgb},0.9)) drop-shadow(0 0 20px rgba(${rgb},0.45))`}}/>
+              <div className="font-orbitron" style={{fontSize:30,fontWeight:900,lineHeight:1,color:T.hex,textShadow:'0 1px 6px rgba(0,0,0,0.8)'}}>{tkn}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div className="tabular-nums" style={{fontSize:tot.length>8?28:34,fontWeight:700,lineHeight:1,color:T.hex,textShadow:'0 1px 6px rgba(0,0,0,0.8)'}}>{tot}</div>
+              <div style={{fontSize:10,marginTop:4,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.45)',fontWeight:600}}>with RH cores</div>
+            </div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:11}}>
+            {RH_CARD_CORES.map(c=>(
+              <div key={c} style={{height:51,display:'flex',alignItems:'center',gap:10,padding:'0 12px 0 9px',borderRadius:12,background:'rgba(255,255,255,0.04)',border:`1px solid rgba(${rgb},0.18)`,boxShadow:`inset 3px 0 0 -1px rgba(${rgb},0.6)`}}>
+                <img src={CORE_LOGOS[c]} alt="" style={{width:36,height:36,borderRadius:'50%',flexShrink:0,boxShadow:'0 0 0 2px rgba(255,255,255,0.12), 0 4px 14px rgba(0,0,0,0.6)'}}/>
+                <span style={{fontSize:19,fontWeight:700,letterSpacing:'0.02em'}}><span style={{color:`rgba(${rgb},0.85)`}}>{tkn}/</span>{c}</span>
+                <span style={{flex:1}}></span>
+                <span className="tabular-nums" style={{fontSize:23,fontWeight:700,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,0.8)'}}>{fmtUSD(rhCoreLiq(pairs,c))}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+    const RhCoresCard=({ptgcPairs,ufoPairs})=>{
+      const W=1200,H=675,pad=44;
+      const stars=React.useMemo(()=>{let s=53;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};return Array.from({length:95},()=>({x:rnd()*W,y:rnd()*H,r:0.6+rnd()*1.9,o:0.15+rnd()*0.6}));},[]);
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const pt=rhCoreTotal(ptgcPairs),ut=rhCoreTotal(ufoPairs);
+      const all=pt!=null&&ut!=null?pt+ut:null;
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:W,height:H,background:'#040609',fontFamily:"'Rajdhani',sans-serif"}}>
+          <img src={RH_PLATE} alt="" aria-hidden="true" style={{position:'absolute',inset:0,width:W,height:H}}/>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(90deg,rgba(3,5,9,0.97) 0%,rgba(3,5,9,0.95) 50%,rgba(3,5,9,0.7) 60%,rgba(3,5,9,0.1) 74%,rgba(3,5,9,0.08) 100%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(180deg,rgba(3,5,9,0.55) 0%,rgba(3,5,9,0.05) 26%,rgba(3,5,9,0) 78%,rgba(3,5,9,0.5) 100%)'}}></div>
+          <svg aria-hidden="true" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{position:'absolute',inset:0,opacity:0.7,WebkitMask:'linear-gradient(90deg,#000 50%,transparent 66%)',mask:'linear-gradient(90deg,#000 50%,transparent 66%)'}}>
+            {stars.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill={`rgba(255,255,255,${p.o.toFixed(2)})`}/>)}
+          </svg>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:'linear-gradient(#0000,#0000) padding-box, linear-gradient(90deg,#E8C044 0%,#F5F0D8 50%,#7CFC00 100%) border-box',WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 70px -8px rgba(232,192,68,0.55), 0 0 70px -8px rgba(124,252,0,0.45)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:90,right:90,top:14,height:2,background:'linear-gradient(90deg, rgba(255,255,255,0), #F5F0D8, rgba(255,255,255,0))'}}></div>
+          {/* header: title left, combined right */}
+          <div style={{position:'absolute',left:pad,right:pad,top:32,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div style={{display:'flex',alignItems:'center',gap:14,lineHeight:1}}>
+              <img src={HOLD_ALIENS} alt="" aria-hidden="true" style={{height:44,filter:'drop-shadow(0 0 14px rgba(200,220,80,0.5))'}}/>
+              <div>
+                <div className="font-orbitron gold-green-text" style={{fontSize:30,fontWeight:900,letterSpacing:'0.1em',textTransform:'uppercase',filter:'drop-shadow(0 0 14px rgba(200,220,80,0.45))'}}>Liquidity with RH Cores</div>
+                <div style={{marginTop:8,fontSize:15,color:'rgba(255,255,255,0.7)',fontWeight:600,letterSpacing:'0.05em'}}>The Grays {'·'} proudly supporting Richard Heart &amp; the PulseChain ecosystem</div>
+              </div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:14,letterSpacing:'0.2em',textTransform:'uppercase',color:'#fff',fontWeight:600}}>Combined liquidity with RH cores</div>
+              <div className="tabular-nums" style={{fontSize:52,fontWeight:700,lineHeight:1,marginTop:6,color:'#fff',textShadow:'0 2px 8px rgba(0,0,0,0.9)'}}>{fmtUSD(all)}</div>
+            </div>
+          </div>
+          {/* columns + brand, bottom-left */}
+          <div style={{position:'absolute',left:pad,top:108,bottom:26,width:352*2+16,display:'flex',flexDirection:'column'}}>
+            <div style={{flex:1}}></div>
+            <div style={{display:'flex',gap:16}}>
+              <RhCoresColumn tkn="PTGC" pairs={ptgcPairs}/>
+              <RhCoresColumn tkn="UFO" pairs={ufoPairs}/>
+            </div>
+            <div style={{marginTop:10,display:'flex',alignItems:'baseline',gap:14}}>
+              <span className="font-orbitron gold-green-text" style={{fontSize:22,fontWeight:700}}>ptgc-ufo.com</span>
+              <span className="tabular-nums" style={{fontSize:14,letterSpacing:'0.1em',color:'rgba(255,255,255,0.8)'}}>{today}</span>
+              <span style={{fontSize:12,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(255,255,255,0.65)',fontWeight:600}}>WPLS {'·'} PLSX {'·'} INC {'·'} HEX {'·'} eHEX {'·'} PRVX</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    /* Socials → RH Core Liquidity. pairs = the open token's DexScreener pairs, otherPairs/otherStatus/onRetry =
+       the Dashboard's otherTokenPairs loader (a18/a20). */
+    const RhCoresSocialModal=({token,pairs,otherPairs,otherStatus,onRetry,onClose})=>{
+      const ptgcPairs=token==='PTGC'?pairs:otherPairs,ufoPairs=token==='UFO'?pairs:otherPairs;
+      const otherMissing=!otherPairs||otherPairs.length===0;
+      return(
+        <ShareCardModal onClose={onClose} width={1200} height={675} screenshot toolbarClass="mb-6" label="RH Cores share card" filename={`rh-cores-${new Date().toISOString().slice(0,10)}.png`}>
+          <div style={{position:'relative',width:1200,height:675}}>
+            <RhCoresCard ptgcPairs={ptgcPairs} ufoPairs={ufoPairs}/>
+            <CardLoadState loading={otherMissing&&otherStatus==='loading'} error={otherMissing&&otherStatus!=='loading'} what={`${token==='PTGC'?'UFO':'PTGC'} pairs`} onRetry={onRetry} radius="0" font={RJ}/>
+          </div>
+        </ShareCardModal>
+      );
+    };
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -11658,149 +11768,8 @@
             </Modal>
           )}
           
-          {/* RH Cores Liquidity Share Modal */}
-          {showRHCoresShareModal&&(()=>{
-            return(
-            <ShareCardModal onClose={()=>closeModalAndReturn(setShowRHCoresShareModal)} width={1200} height={675} label="RH Cores share card" filename={`rh-cores-${new Date().toISOString().slice(0,10)}.png`}>
-                <div 
-                  id="rhcores-capture"
-                  className="relative overflow-hidden border-2 border-white/30"
-                  style={{
-                    width:'1200px',height:'675px',
-                    background:'linear-gradient(180deg, #0a0a0a 0%, #050505 100%)'
-                  }}
-                >
-                  {/* Gold glow for PTGC column (left) */}
-                  <div className="absolute left-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(212,175,55,0.25) 0%, transparent 60%)'}}></div>
-                  {/* Green glow for UFO column (right) */}
-                  <div className="absolute right-0 top-0 w-1/2 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(124,252,0,0.25) 0%, transparent 60%)'}}></div>
-                  {/* a18: the other token's column is loading / failed — say so over the card */}
-                  <CardLoadState loading={otherTokenPairs.length===0&&otherPairsStatus==='loading'} error={otherTokenPairs.length===0&&otherPairsStatus!=='loading'} what={`${token==='PTGC'?'UFO':'PTGC'} pairs`} onRetry={loadOtherTokenPairs} radius="0" font={RJ}/>
-                  
-                  <div className="relative w-full h-full p-6 flex flex-col">
-                    {/* Header with Combined Total */}
-                    <div className="flex items-center justify-between mb-5">
-                      <div>
-                        <div className="text-2xl font-bold text-white">Liquidity with RH Core Tokens</div>
-                        <div className="text-white/50 text-sm mt-1">The Grays — Proudly supporting Richard Heart and the PulseChain ecosystem</div>
-                      </div>
-                      {(()=>{
-                        const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
-                        const currentPairs=data?.pairs||[];
-                        const otherPairs=otherTokenPairs||[];
-                        const ptgcPairs=token==='PTGC'?currentPairs:otherPairs;
-                        const ufoPairs=token==='UFO'?currentPairs:otherPairs;
-                        /* a18: a column whose pairs have not arrived is unknown → null → "—" */
-                        const getPairData=(pairs,core)=>{
-                          if(!pairs.length)return null;
-                          const pair=pairs.find(p=>{
-                            const qSym=(p.quoteToken?.symbol||'').toUpperCase();
-                            const bSym=(p.baseToken?.symbol||'').toUpperCase();
-                            return qSym===core||bSym===core;
-                          });
-                          return pair?.liq||0;
-                        };
-                        const ptgcTotal=ptgcPairs.length?RH_CORES.reduce((s,c)=>s+(getPairData(ptgcPairs,c)||0),0):null;
-                        const ufoTotal=ufoPairs.length?RH_CORES.reduce((s,c)=>s+(getPairData(ufoPairs,c)||0),0):null;
-                        const grandTotal=(ptgcTotal!=null&&ufoTotal!=null)?ptgcTotal+ufoTotal:null;
-                        return(
-                          <div className="flex items-center gap-4">
-                            <div className="text-white text-xl font-bold">Combined Liquidity with RH Cores →</div>
-                            <div className="text-white font-extrabold text-5xl">{fmtUSD(grandTotal)}</div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    
-                    {(()=>{
-                      const RH_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
-                      const currentPairs=data?.pairs||[];
-                      const otherPairs=otherTokenPairs||[];
-                      
-                      const ptgcPairs=token==='PTGC'?currentPairs:otherPairs;
-                      const ufoPairs=token==='UFO'?currentPairs:otherPairs;
-                      
-                      const coreLogos=CORE_LOGOS;
-                      
-                      const getPairData=(pairs,core)=>{
-                        if(!pairs.length)return null;   // a18: unknown column → "—"
-                        const pair=pairs.find(p=>{
-                          const qSym=(p.quoteToken?.symbol||'').toUpperCase();
-                          const bSym=(p.baseToken?.symbol||'').toUpperCase();
-                          return qSym===core||bSym===core;
-                        });
-                        return pair?.liq||0;
-                      };
-                      
-                      const ptgcTotal=ptgcPairs.length?RH_CORES.reduce((s,c)=>s+(getPairData(ptgcPairs,c)||0),0):null;
-                      const ufoTotal=ufoPairs.length?RH_CORES.reduce((s,c)=>s+(getPairData(ufoPairs,c)||0),0):null;
-                      
-                      return(
-                        <div className="flex-1 grid grid-cols-2 gap-6">
-                          {/* PTGC Column */}
-                          <div className="rounded-2xl border border-[#D4AF37]/30 bg-black/40 p-4 flex flex-col">
-                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#D4AF37]/20">
-                              <div className="flex items-center gap-4">
-                                <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-14 h-14" style={{filter:'drop-shadow(0 0 12px rgba(212,175,55,0.8)) drop-shadow(0 0 25px rgba(212,175,55,0.5))'}}/>
-                                <div className="text-[#D4AF37] font-bold text-2xl">PTGC</div>
-                              </div>
-                              <div className="text-[#D4AF37] font-bold text-3xl">{fmtUSD(ptgcTotal)}</div>
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              {RH_CORES.map(core=>{
-                                const liq=getPairData(ptgcPairs,core);
-                                return(
-                                  <div key={core} className="flex items-center justify-between px-4 py-3 rounded-xl border border-[#D4AF37]/20 bg-black/30">
-                                    <div className="flex items-center gap-3">
-                                      <img src={coreLogos[core]} alt={core} className="w-10 h-10 rounded-full"/>
-                                      <span className="text-[#D4AF37] font-bold text-lg">PTGC/{core}</span>
-                                    </div>
-                                    <span className="text-white font-bold text-xl">{fmtUSD(liq)}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          
-                          {/* UFO Column */}
-                          <div className="rounded-2xl border border-[#7CFC00]/30 bg-black/40 p-4 flex flex-col">
-                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#7CFC00]/20">
-                              <div className="flex items-center gap-4">
-                                <img src={TOKENS.UFO.logo} alt="UFO" className="w-14 h-14" style={{filter:'drop-shadow(0 0 12px rgba(124,252,0,0.8)) drop-shadow(0 0 25px rgba(124,252,0,0.5))'}}/>
-                                <div className="text-[#7CFC00] font-bold text-2xl">UFO</div>
-                              </div>
-                              <div className="text-[#7CFC00] font-bold text-3xl">{fmtUSD(ufoTotal)}</div>
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              {RH_CORES.map(core=>{
-                                const liq=getPairData(ufoPairs,core);
-                                return(
-                                  <div key={core} className="flex items-center justify-between px-4 py-3 rounded-xl border border-[#7CFC00]/20 bg-black/30">
-                                    <div className="flex items-center gap-3">
-                                      <img src={coreLogos[core]} alt={core} className="w-10 h-10 rounded-full"/>
-                                      <span className="text-[#7CFC00] font-bold text-lg">UFO/{core}</span>
-                                    </div>
-                                    <span className="text-white font-bold text-xl">{fmtUSD(liq)}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    
-                    {/* Footer */}
-                    <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
-                      <div className="text-white/30 text-sm">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
-                      <div className="text-white/30 text-sm font-medium">ptgc-ufo.com</div>
-                      <div className="text-white/30 text-sm">RH Cores: WPLS • PLSX • INC • HEX • EHEX • PRVX</div>
-                    </div>
-                  </div>
-                </div>
-            </ShareCardModal>
-            );
-          })()}
+          {/* RH Cores Liquidity Share Modal — 2026-09-28: RhCoresSocialModal at module scope (the RH photo card) */}
+          {showRHCoresShareModal&&<RhCoresSocialModal token={token} pairs={data?.pairs||[]} otherPairs={otherTokenPairs||[]} otherStatus={otherPairsStatus} onRetry={loadOtherTokenPairs} onClose={()=>closeModalAndReturn(setShowRHCoresShareModal)}/>}
           
           {/* PTGC Logos Modal */}
           {showPTGCLogosModal&&(

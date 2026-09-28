@@ -19,6 +19,12 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-28)
 
+**2026-09-28, afternoon: the Socials RH Core Liquidity card redone** — Richard Heart on stage as the plate
+(`logos/socials/rh-heart-stage.jpg`, watermark removed), the original two-column layout (PTGC gold / UFO green, six
+pair rows, no bars) in the dark left, combined figure in white top-right, flat token colours. `RhCoresSocialModal`
+at module scope, Wide only (Shaka), screenshot-only. Six mock-up rounds. Owed: the live look on the Mac.
+`sessions/2026-09-28.md` "Afternoon".
+
 **2026-09-28: UFO/WETH removed from the RH Cores liquidity modal (the "RH" button in the Liquidity box) and
 the RH-only switch on the pairs table.** The seeded WETH pool carried `isRHCore: true` and `resolveUfoPairs`
 stamped `true` on every constructor pool, so a chain-read UFO/WETH row (DexScreener missing it — `$0` volume
@@ -172,7 +178,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 | Phase 1 — dead code (b3), html2canvas removal (b4) | **Done, live** |
 | Phase 1 — Vite build (b1, b2), icons/manifest (b5), fonts (b6), CI/CSP (b7), tests (b8), operator script (b9) | Not started — build deliberately parked by Shaka |
 | Phase 2 — all data items (d1–d12) | **Done, live** (d10 and d12 closed as won't-do, see gotchas) |
-| Phase 3 — share cards (u2) | **Done, live.** Socials cards on the 2026-09-23 pattern: DAO Buys, Burn, DAO Treasury (09-23), Value Generated, Token Allocation, PTGC burned by UFO (09-25), **Holders + the Holders-box ⓘ (09-26)** |
+| Phase 3 — share cards (u2) | **Done, live.** Socials cards on the 2026-09-23 pattern: DAO Buys, Burn, DAO Treasury (09-23), Value Generated, Token Allocation, PTGC burned by UFO (09-25), Holders + the Holders-box ⓘ (09-26), **RH Core Liquidity (09-28, RH photo, Wide only)** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
 | Phase 3 — loading shell (u12) | **Done, live** |
 | Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`b765a2f06`, 2026-09-09) |
@@ -664,7 +670,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-09-28.md` — UFO/WETH out of the RH Cores modal + RH-only switch (seed flag + `resolveUfoPairs`).
+- `sessions/2026-09-28.md` — UFO/WETH out of the RH Cores modal + RH-only switch (seed flag + `resolveUfoPairs`); afternoon: the Socials RH Core Liquidity card redone on Richard Heart's stage photo (`RhCoresSocialModal`, Wide only).
 - `sessions/2026-09-26.md` — Holders cards redone: six mock-up rounds (cyan → silver → gold/green; tiles without
   accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +
   `HoldersSingleModal` built, old html2canvas card + Chart.js canvases removed, loader honest-null; afternoon: the ⓘ
