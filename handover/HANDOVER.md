@@ -17,7 +17,16 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-26)
+## Current state (end of 2026-09-28)
+
+**2026-09-28: UFO/WETH removed from the RH Cores liquidity modal (the "RH" button in the Liquidity box) and
+the RH-only switch on the pairs table.** The seeded WETH pool carried `isRHCore: true` and `resolveUfoPairs`
+stamped `true` on every constructor pool, so a chain-read UFO/WETH row (DexScreener missing it — `$0` volume
+is the tell) walked in through the `_rhCore` placeholder; the Socials card builds from `RH_CORES` and was
+always right. Three lines in `index.html`; before/after proven in the harness (`probes/rh-modal.js`,
+`probes/rh-toggle.js`). Owed: a 10-second live look — UFO → RH → no WETH row. `sessions/2026-09-28.md`.
+
+### Before that (end of 2026-09-26)
 
 **2026-09-26, afternoon: the Live Feed reskinned** — Shaka's painted ship-over-city art is the sky
 (`logos/livefeed/deck-bg.jpg`; UFO is the same file hue-rotated to green), glass fee boxes with icons (LP boxes carry
@@ -655,6 +664,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-09-28.md` — UFO/WETH out of the RH Cores modal + RH-only switch (seed flag + `resolveUfoPairs`).
 - `sessions/2026-09-26.md` — Holders cards redone: six mock-up rounds (cyan → silver → gold/green; tiles without
   accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +
   `HoldersSingleModal` built, old html2canvas card + Chart.js canvases removed, loader honest-null; afternoon: the ⓘ

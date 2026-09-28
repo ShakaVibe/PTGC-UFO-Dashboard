@@ -410,7 +410,7 @@
     const HARDCODED_UFO_PAIRS = [
       { address: ADDR.PAIR_UFO_WPLS, quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS',   quoteAddress: ADDR.WPLS, isRHCore: true, version: 'v2' },
       { address: ADDR.PAIR_UFO_PLSX, quoteSymbol: 'PLSX', quoteName: 'PulseX',         quoteAddress: ADDR.PLSX, isRHCore: true, version: 'v2' },
-      { address: ADDR.PAIR_UFO_WETH, quoteSymbol: 'WETH', quoteName: 'Wrapped Ether',  quoteAddress: ADDR.WETH, isRHCore: true, version: 'v2' },
+      { address: ADDR.PAIR_UFO_WETH, quoteSymbol: 'WETH', quoteName: 'Wrapped Ether',  quoteAddress: ADDR.WETH, isRHCore: false, version: 'v2' }, // WETH is a constructor pool, not an RH core — must stay out of the RH modal / RH-only filter
       { address: ADDR.PAIR_UFO_EHEX, quoteSymbol: 'EHEX', quoteName: 'eHEX',          quoteAddress: ADDR.EHEX, isRHCore: true, version: 'v2' }/* MIGRATION: DexScreener doesn't index this PulseX-V2 UFO/EHEX pool; resolved + verified on-chain (token0=UFO, token1=EHEX, ~4.7B UFO / 44.5M EHEX). Read on-chain via fetchLPFromChain like the other hardcoded pools. */
     ];
     
@@ -623,12 +623,12 @@
         if(isZeroAddress(factory))return null;
         /* The three constructor-created pools, from the same list the rest of the app uses. */
         const partners=HARDCODED_UFO_PAIRS.filter(p=>['WPLS','PLSX','WETH'].includes(p.quoteSymbol))
-          .map(p=>({quoteSymbol:p.quoteSymbol,quoteName:p.quoteName,quoteAddress:p.quoteAddress}));
+          .map(p=>({quoteSymbol:p.quoteSymbol,quoteName:p.quoteName,quoteAddress:p.quoteAddress,isRHCore:!!p.isRHCore}));
         const found=await Promise.all(partners.map(async p=>{
           const data=SEL_GETPAIR+encodeAddress(tokenAddress)+encodeAddress(p.quoteAddress);
           const addr=wordToAddress(await ethCallRead(factory,data));
           if(isZeroAddress(addr))return null;
-          return{address:addr,quoteSymbol:p.quoteSymbol,quoteName:p.quoteName,quoteAddress:p.quoteAddress,isRHCore:true,version:'v2'};
+          return{address:addr,quoteSymbol:p.quoteSymbol,quoteName:p.quoteName,quoteAddress:p.quoteAddress,isRHCore:p.isRHCore,version:'v2'}; // carry the seed's flag: WETH is a pool, not a core
         }));
         const pairs=found.filter(Boolean);
         return pairs.length?pairs:null;
