@@ -25,6 +25,14 @@ every decision Shaka made (no top nav/search bar, our solid-gold BUY/SELL + gree
 alien head placed like his reference, dark shading behind all text, fire-light coin with no second ring, sampled golds,
 bigger green change with a triangle) and what's still open (sparkline data, UFO + phone mock-ups, then the build).
 Shaka: "This is looking GREAT" — **start the next session there.**
+**UFO version:** done as a mock-up — same background art (Shaka: no teal hue-shift), everything else UFO green
+(`mockup-ufo-v1.html`). **How it goes live — agreed:** build it into `index.html` behind a **hidden preview switch**:
+a secret link (`ptgc-ufo.com/?<secret word>`) opens a password box; the right password turns the new header on for that
+device only (remembered); an "off" link turns it back off; nothing on the page hints it exists. Only a **SHA-256 hash**
+of the password goes in the code — Shaka types the password himself, it never goes in a file, commit or chat. Told
+Shaka plainly: this hides it from visitors, not from someone reading the public repo on GitHub (a server-side lock via
+the ptgcapi worker would be the stronger option, not chosen). "Flip the switch" = make the new header the default + push.
+Full plan: `design/dashboard-header/README.md` → "How it goes live".
 
 **End of day 2026-09-29 — everything is pushed; Shaka checked it live.** Affiliates unfrozen (worker v6), the
 affiliates page on iPhone/iPad, three Socials cards redone (Affiliates Report, Combined Value Generated + its data fix,
@@ -609,8 +617,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--5. **Next session, first: the PTGC dashboard header redesign** — `design/dashboard-header/README.md` ("Still open").
-   Ask Shaka what else differs from his reference, then the sparkline-data question, then UFO + phone mock-ups, then build.
+-5. **Next session, first: the dashboard header redesign** — `design/dashboard-header/README.md` ("How it goes live",
+   "Still open"). Order: (1) any last tweaks Shaka wants, (2) the sparkline-data question (only Market Cap + Holders have
+   real history), (3) phone / tablet mock-ups, (4) build it into `index.html` for PTGC and UFO behind the hidden preview
+   switch (secret link + password, hash only), (5) Shaka pushes and checks it on his devices, (6) when he says so, flip
+   the switch.
 -4. **After that: the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
    the last old-style card there. Same routine as the other redos: mock-ups first (Shaka's taste this week: "pop but
    clean", no heavy glow, no art backdrops, no rays, white titles, plain coloured moves not pills, emojis welcome but
