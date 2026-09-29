@@ -43,12 +43,20 @@ font it uses is in `assets/`. `renders/v11-final.png` is the same thing as a pic
   name 308,98 @80 px; price column 645–977; stats at 1017 / 1207 / 1400; buttons 1840, 250×72 at y 106 and 198;
   banner 336 px tall; tab row 60 px; tiles top 424, 186 px tall).
 
+## UFO version (2026-09-29, first look)
+`mockup-ufo-v1.html` (same art) and `mockup-ufo-v1b-all-green.html` (background hue-shifted green, alien kept gold) —
+renders in `renders/ufo-*.png`. Same layout and rules as PTGC, in UFO green: green coin corona
+(`assets/coin-corona-green.png`, a channel-swap of the gold one), green name/price/stat golds (`.t-gref`, `.t-gprice`,
+`.t-gref2`), **green solid BUY/SELL with the UFO coin**, **gold-edged SWITCH with the PTGC coin**, green tab underline,
+tiles and sparklines (UFO price + holder series). Live UFO numbers from 2026-09-29. Generators `source/gen12.py`,
+`gen12b.py` (they patch gen11's text). Shaka hasn't picked A or B yet.
+
 ## Still open (next session)
 1. Shaka may still tweak — ask what else differs from the reference before building.
 2. **Sparklines**: only Market Cap (price series) and Holders are real data. Volume, Liquidity, Liq/MCap, Tokens in LP,
    Txns are placeholders. `data/metrics-history.json` has daily/hourly volume/liquidity/tokensInLP but its hourly series
    stopped at 2026-09-02 — fix that pipeline first, or show sparklines only where data exists. Ask Shaka.
-3. Mock-ups still owed before building: the **UFO** version (green) and **phone / tablet** layouts.
+3. Mock-ups still owed before building: **phone / tablet** layouts (UFO first look done — pick A or B).
 4. Then build into `index.html` (the Dashboard header block; the Buy/Sell button opens `SwapModal`, Switch calls
    `onSwitch`), assets into `logos/home/` (served), honest-null "—" for anything not loaded, harness check at 1440 /
    1024 / 390, then Shaka pushes.
