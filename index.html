@@ -8215,8 +8215,10 @@
       wide:{W:1200,H:675,padX:42,top:34,bottom:24,coin:160,halo:300,px:54,chg:44,name:28,strip:58,rowLogo:42,rowName:22,rowNameW:68,rowPx:21,rowChg:21,rowPad:'0 10px 0 8px',coreHead:14,coreHead2:13,panelPad:14,foot:14},
       tall:{W:1080,H:1350,padX:42,top:44,bottom:32,coin:230,halo:420,px:68,chg:54,name:32,strip:58,rowLogo:44,rowName:23,rowNameW:70,rowPx:22,rowChg:22,rowPad:'0 14px 0 10px',coreHead:16,coreHead2:14,panelPad:16,foot:15}
     };
+    const GC_FLAT=0.005;   // |move| under half a hundredth prints as a grey 0.00% (flat), not ▲0.00%
     const GcChange=({c,size})=>{
       if(c==null||!isFinite(c))return<span style={{fontSize:size,fontWeight:800,color:'rgba(255,255,255,0.35)'}}>{'—'}</span>;
+      if(Math.abs(c)<GC_FLAT)return<span className="tabular-nums" style={{whiteSpace:'nowrap',fontSize:size,fontWeight:800,color:'rgba(255,255,255,0.45)',textShadow:'0 1px 3px rgba(0,0,0,0.7)'}}>0.00%</span>;
       const up=c>=0;
       return(
         <span className="tabular-nums" style={{display:'inline-flex',alignItems:'center',gap:'0.22em',whiteSpace:'nowrap',fontSize:size,fontWeight:800,color:up?GC_UP:GC_DN,textShadow:'0 1px 3px rgba(0,0,0,0.7)'}}>
@@ -8286,7 +8288,7 @@
               <div style={{display:'flex',alignItems:'center',gap:14,minWidth:0}}>
                 <img src={GC_LOGO} alt="" style={{height:66,width:66,margin:'-6px 0',flexShrink:0,filter:'drop-shadow(0 0 12px rgba(200,220,80,0.55))'}}/>
                 <div style={{display:'flex',alignItems:'center',gap:14,fontSize:32,fontWeight:700,letterSpacing:'0.16em',lineHeight:1,whiteSpace:'nowrap'}}>
-                  <span className="gold-green-text" style={{filter:'drop-shadow(0 0 10px rgba(200,220,80,0.3))'}}>THE GRAYS &amp; THE CORES</span>
+                  <span style={{color:'#fff',textShadow:'0 2px 10px rgba(0,0,0,0.6)'}}>THE GRAYS &amp; THE CORES</span>
                   <span style={{fontSize:'0.6em',letterSpacing:'0.14em',color:'#10160a',background:CVG_GG,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:'0 0 16px rgba(200,220,80,0.45)'}}>{win} PRICE</span>
                 </div>
               </div>
@@ -9655,11 +9657,13 @@
         let chartsP=null;
         const charts=()=>chartsP||(chartsP=fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now()).then(r=>r.json()).catch(()=>null));
 
-        // RH cores: DexScreener (deepest PulseChain pair) for price + 24h, cached coingecko file for 7d/30d/90d
+        // RH cores: DexScreener for price + 24h, cached coingecko file for 7d/30d/90d. The pair is the core's MOST-TRADED
+        // one where it is the base token — by liquidity, WPLS and eHEX landed on fake pools (NananaX, MULE: ~$1-2M
+        // "liquidity", no trades, no priceChange) and printed a wrong price and "—" (2026-09-29).
         const coreAddresses={WPLS:ADDR.WPLS,PLSX:ADDR.PLSX,INC:ADDR.INC,HEX:ADDR.HEX,EHEX:ADDR.EHEX,PRVX:ADDR.PRVX};
         Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
           try{
-            const ps=(await dsPairsFor(addr)||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
+            const ps=(await dsPairsFor(addr)||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0&&(p.baseToken?.address||'').toLowerCase()===addr.toLowerCase()).sort((a,b)=>(b.volume?.h24||0)-(a.volume?.h24||0));
             const pair=ps[0];
             return{name,price:pos(pair?.priceUsd),h24:pair?num(pair.priceChange?.h24):null};
           }catch(e){
