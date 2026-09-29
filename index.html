@@ -11531,18 +11531,25 @@
                       const otherCfg=TOKENS[otherToken];
                       Promise.all([
                         dsPairsFor(otherCfg.address).then(ps0=>({pairs:ps0}))/* MIGRATION: robust best-pair across endpoint generations */,
-                        fetchCoingeckoData().catch(()=>null)/* ensure the volume cache is loaded; reading the module var directly gave $0 when it hadn't loaded yet */
+                        fetchCoingeckoData().catch(()=>null)/* ensure the volume cache is loaded; reading the module var directly gave $0 when it hadn't loaded yet */,
+                        /* 2026-09-29: from the PTGC page, UFO's half must be what the UFO dashboard shows — fees
+                           DELIVERED on chain, from the same hourly snapshot its panel reads — not volume × fee. */
+                        otherToken==='UFO'?fetchValueGenSnapshot().catch(()=>null):Promise.resolve(null),
+                        /* …and the two LP partner prices the UFO page loads (PLSX, WETH), without which those buckets are "—" */
+                        otherToken==='UFO'?Promise.all([PLSX_ADDRESS,UFO_WETH].map(a=>dsPairsFor(a).then(ps=>{const q=(ps||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((x,y)=>(y.liquidity?.usd||0)-(x.liquidity?.usd||0));return q.length?parseFloat(q[0].priceUsd)||null:null;}).catch(()=>null))):Promise.resolve([null,null])
                       ])
-                        .then(([d,cg])=>{
+                        .then(([d,cg,snap,lpPx])=>{
                           const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
                           const best=ps[0]||null;
-                          const vol24h=best?parseFloat(best.volume?.h24)||0:0;
+                          /* 2026-09-29: every pair's 24h volume, the way fetchDex sums it for the dashboard (was the best pair's only) */
+                          const vol24h=(d.pairs||[]).filter(p=>p.chainId==='pulsechain').reduce((s,p)=>s+(parseFloat(p.volume?.h24)||0),0);
                           const price=best?parseFloat(best.priceUsd)||0:0;
                           const ov=(cg||coingeckoDataCache)?.[otherToken]?.volume||{};
                           const otherVol7d=ov.vol7d||0;
                           const otherVol30d=ov.vol30d||0;
                           const otherVol90d=ov.vol90d||0;
-                          setCombinedValueGenOtherData({vol24h,vol7d:otherVol7d,vol30d:otherVol30d,vol90d:otherVol90d,price});
+                          const ufoSnap=snap&&snap.valid&&snap.ageMs<VALUE_GEN_INTERIM_MS?{delivered:snap.json.delivered,realizedFees:snap.json.realizedFees,at:Date.now()-snap.ageMs}:null;
+                          setCombinedValueGenOtherData({vol24h,vol7d:otherVol7d,vol30d:otherVol30d,vol90d:otherVol90d,price,ufoSnap,plsxPx:lpPx[0],wethPx:lpPx[1]});
                           setCombinedValueGenLoading(false);
                         })
                         .catch(()=>setCombinedValueGenLoading(false));
@@ -11906,16 +11913,22 @@
                dash while reading, exactly like the panel); from the PTGC page there is no chain
                read for UFO, so its half is volume × fee and the block is labelled "est.". A window
                with no volume prints "—", not $0. */
+            /* the other token's price fills the page's price map, so both panels can print token amounts */
+            const otherTkn=isPTGCActive?'UFO':'PTGC';
+            const otherPx=combinedValueGenOtherData?.price>0?combinedValueGenOtherData.price:null;
+            const cvgPrices={...vgPricesNow,[otherTkn]:vgPricesNow[otherTkn]||otherPx,PLSX:vgPricesNow.PLSX||combinedValueGenOtherData?.plsxPx||null,WETH:vgPricesNow.WETH||combinedValueGenOtherData?.wethPx||null};
             const ptgcVg=computeValueGen({token:'PTGC',cfg:ptgcCfg,period:combinedValueGenPeriod,periodVol:ptgcVol>0?ptgcVol:null,prices:{}});
+            /* 2026-09-29: UFO = the UFO dashboard's own figure. On the UFO page that is valueGenFor (live chain read or
+               its snapshot); on the PTGC page it is the same hourly snapshot the UFO panel reads (value-generated.json),
+               through the same computeValueGen call. Only when that file is missing or > 48 h old does it fall back to
+               volume × fee, labelled "est." as before. */
+            const ufoSnap=combinedValueGenOtherData?.ufoSnap||null;
             const ufoVg=(token==='UFO')?valueGenFor(combinedValueGenPeriod)
+              :ufoSnap?computeValueGen({token:'UFO',cfg:ufoCfg,period:combinedValueGenPeriod,periodVol:ufoVol>0?ufoVol:null,delivered:ufoSnap.delivered,realizedFees:ufoSnap.realizedFees,prices:cvgPrices})
               :computeValueGen({token:'UFO',cfg:ufoCfg,period:combinedValueGenPeriod,periodVol:ufoVol>0?ufoVol:null,delivered:null,realizedFees:null,prices:{},estimate:true});
             const combinedTotal=(ptgcVg.total==null&&ufoVg.total==null)?null:(ptgcVg.total||0)+(ufoVg.total||0);
             const combinedPartial=combinedTotal!=null&&(ptgcVg.total==null||ufoVg.total==null);
 
-            /* the other token's price fills the page's price map, so both panels can print token amounts */
-            const otherTkn=isPTGCActive?'UFO':'PTGC';
-            const otherPx=combinedValueGenOtherData?.price>0?combinedValueGenOtherData.price:null;
-            const cvgPrices={...vgPricesNow,[otherTkn]:vgPricesNow[otherTkn]||otherPx};
             return(
               <CombinedVgSocialModal
                 ptgc={{vg:ptgcVg,vol:ptgcVol,items:buildValueGenItems('PTGC',ptgcCfg)}}

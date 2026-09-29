@@ -33,7 +33,8 @@ the 31 within a minute of the deploy.**
 **2026-09-29, late evening: the Combined Value Generated card redone** — `CombinedVgSocialModal` (module scope, Wide/Tall,
 24H–90D): white combined total + per day + volume, PTGC and UFO panels built from the stand-alone Value Generated tile, and a
 "where it went" strip (DAO / holders & stakers / liquidity / burned across both tokens; a group is "—" unless every bucket is
-known). Same u5 numbers as before. **Owed: the live look.** `sessions/2026-09-29.md` "Late evening".
+known). **Night fix:** the UFO half now uses the UFO dashboard's delivered figure from the PTGC page too (it was volume × fee,
+"est."), and the other token's 24H volume sums every pair. **Owed: the live look.** `sessions/2026-09-29.md` "Late evening" + "Night".
 
 **2026-09-29, evening: the Socials Affiliates Report card redone** — `AffiliateSocialModal` (module scope, Wide/Tall,
 screenshot-only, month picker on top): the month's totals, its top 5 referrers with share bars, and a clean gold
