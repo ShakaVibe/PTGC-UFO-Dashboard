@@ -30,6 +30,11 @@ ToolBox, then check ptgc-ufo.com → Affiliates. ToolBox's Sync now waits for th
 `sessions/2026-09-29.md`. **Deployed 13:26 UTC — verified: 171 September buys on the live endpoint, the retry queue landed
 the 31 within a minute of the deploy.**
 
+**2026-09-29, late evening: the Combined Value Generated card redone** — `CombinedVgSocialModal` (module scope, Wide/Tall,
+24H–90D): white combined total + per day + volume, PTGC and UFO panels built from the stand-alone Value Generated tile, and a
+"where it went" strip (DAO / holders & stakers / liquidity / burned across both tokens; a group is "—" unless every bucket is
+known). Same u5 numbers as before. **Owed: the live look.** `sessions/2026-09-29.md` "Late evening".
+
 **2026-09-29, evening: the Socials Affiliates Report card redone** — `AffiliateSocialModal` (module scope, Wide/Tall,
 screenshot-only, month picker on top): the month's totals, its top 5 referrers with share bars, and a clean gold
 All-Time bar (solid gold edge, 🏆 pill + creatures, emoji labels, white numbers — Shaka: "pop but clean"). Month
@@ -204,7 +209,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 | Phase 1 — dead code (b3), html2canvas removal (b4) | **Done, live** |
 | Phase 1 — Vite build (b1, b2), icons/manifest (b5), fonts (b6), CI/CSP (b7), tests (b8), operator script (b9) | Not started — build deliberately parked by Shaka |
 | Phase 2 — all data items (d1–d12) | **Done, live** (d10 and d12 closed as won't-do, see gotchas) |
-| Phase 3 — share cards (u2) | **Done, live.** Socials cards on the 2026-09-23 pattern: DAO Buys, Burn, DAO Treasury (09-23), Value Generated, Token Allocation, PTGC burned by UFO (09-25), Holders + the Holders-box ⓘ (09-26), RH Core Liquidity (09-28, RH photo, Wide only), **Affiliates Report (09-29, leaderboard + clean All-Time bar)** |
+| Phase 3 — share cards (u2) | **Done, live.** Socials cards on the 2026-09-23 pattern: DAO Buys, Burn, DAO Treasury (09-23), Value Generated, Token Allocation, PTGC burned by UFO (09-25), Holders + the Holders-box ⓘ (09-26), RH Core Liquidity (09-28, RH photo, Wide only), **Affiliates Report (09-29, leaderboard + clean All-Time bar), Combined Value Generated (09-29)** |
 | Phase 3 — clarity + mobile (u7, u8) | **Done, live.** Tier labels under the creature emojis deliberately NOT done (Shaka) |
 | Phase 3 — loading shell (u12) | **Done, live** |
 | Phase 3 — Modal wrapper (u1), a11y (u9) | **Done, live** (`b765a2f06`, 2026-09-09) |
@@ -701,6 +706,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   Afternoon: the affiliates page on iPhone / iPad — unpinned header, two-line Recent Activity, Registry + Commission
   Log as phone cards, tablet min-width tables, modals wrap; harness `AFFIL_DATA=real`.
   Evening: Socials Affiliates Report card redone (`AffiliateSocialModal`, mock-up B + clean gold All-Time bar).
+  Late evening: Combined Value Generated card redone (`CombinedVgSocialModal`, twin panels + "where it went").
 - `sessions/2026-09-28.md` — UFO/WETH out of the RH Cores modal + RH-only switch (seed flag + `resolveUfoPairs`); afternoon: the Socials RH Core Liquidity card redone on Richard Heart's stage photo (`RhCoresSocialModal`, Wide only).
 - `sessions/2026-09-26.md` — Holders cards redone: six mock-up rounds (cyan → silver → gold/green; tiles without
   accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +

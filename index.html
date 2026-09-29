@@ -7994,6 +7994,212 @@
         </ShareCardModal>
       );
     };
+    /* ---------- Combined Value Generated (2026-09-29) ----------
+       Socials → Combined → 💰 Combined Value Generated. Shaka picked mock-up "G" (twin columns) and then tuned it:
+       the combined total in plain white, centred between the title and the panels, "≈ per day" and "volume" as a
+       matching stat pair beside it (no PTGC/UFO share bar), bigger coins. Each token panel is the stand-alone
+       Value Generated card in miniature — same bucket colours (vgColor), same tile, same token amounts
+       (valueGenParts) — and a "Where it went" strip totals both tokens by what the fees did.
+       Numbers: both halves come from the ONE model (computeValueGen, gotcha 16) exactly as the old 600×610 card
+       computed them; a bucket with no figure is "—", and a "where it went" group is "—" unless every bucket in it
+       is known (never a partial sum presented as the total). Screenshot-only (gotcha 30/31). */
+    const CVG_SHAPES={
+      wide:{W:1200,H:675,padX:40,top:32,bottom:28,title:34,heroL:15,hero:68,statV:29,statL:13,heroM:'20px 0 18px',coin:100,feeL:15,tot:50,basis:15,
+            barH:9,tl:12,tv:25,tq:13,tp:'7px 10px 7px 15px',gap:8,sE:30,sL:12,sV:24,sS:13,colGap:16,colPad:'13px 16px'},
+      tall:{W:1080,H:1350,padX:52,top:44,bottom:32,title:42,heroL:17,hero:76,statV:30,statL:14,heroM:'16px 0 16px',coin:90,feeL:17,tot:52,basis:17,
+            barH:10,tl:13,tv:25,tq:14,tp:'8px 10px 8px 16px',gap:9,sE:34,sL:14,sV:28,sS:15,colGap:14,colPad:'14px 18px'}
+    };
+    const CVG_WIN={'24h':['24H','PAST 24 HOURS',1],'7d':['7D','PAST 7 DAYS',7],'30d':['30D','PAST 30 DAYS',30],'90d':['90D','PAST 90 DAYS',90]};
+    const CVG_GG='linear-gradient(90deg,#FFF3C4,#E8C044 40%,#A8FF4A 75%,#7CFC00)';
+    const cvgBasis=(tkn,vg,vol)=>{
+      if(!vg)return'—';
+      if(vg.pending)return'reading fees from the chain…';
+      if(vg.basis==='delivered')return<>from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume {'·'} measured on chain</>;
+      if(vg.basis==='accrued')return'accrued on chain — delivery still being read';
+      if(vg.basis==='volume')return<>from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume{tkn==='UFO'?<> {'·'} est.</>:null}</>;
+      return vg.error?'chain read failed':'—';
+    };
+    /* The combined family's frame (the RH Cores card's): gold glow top-left, green bottom-right, a gold → green edge. */
+    const CvgBackdrop=({W,H,tall})=>{
+      const stars=React.useMemo(()=>{let s=5;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};return Array.from({length:tall?110:90},()=>({x:rnd()*W,y:rnd()*H,r:0.6+rnd()*1.9,o:0.15+rnd()*0.6}));},[W,H,tall]);
+      return(
+        <>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:'linear-gradient(180deg,#050704 0%,#060806 60%,#080a07 100%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:-220,top:-260,width:760,height:760,borderRadius:'50%',background:'radial-gradient(circle, rgba(232,192,68,0.26) 0%, rgba(232,192,68,0.07) 40%, rgba(0,0,0,0) 68%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',right:-220,bottom:-300,width:800,height:800,borderRadius:'50%',background:'radial-gradient(circle, rgba(124,252,0,0.22) 0%, rgba(124,252,0,0.06) 42%, rgba(0,0,0,0) 68%)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:'radial-gradient(120% 70% at 50% 118%, rgba(52,211,153,0.22) 0%, rgba(0,0,0,0) 70%)'}}></div>
+          <svg aria-hidden="true" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{position:'absolute',inset:0}}>
+            {stars.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill={`rgba(255,255,255,${p.o.toFixed(2)})`}/>)}
+          </svg>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:'linear-gradient(#0000,#0000) padding-box, linear-gradient(90deg,#E8C044 0%,#F5F0D8 50%,#7CFC00 100%) border-box',WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:'0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 70px -8px rgba(232,192,68,0.5), 0 0 70px -8px rgba(124,252,0,0.42)'}}></div>
+          <div aria-hidden="true" style={{position:'absolute',left:90,right:90,top:14,height:2,background:'linear-gradient(90deg, rgba(255,255,255,0), #F5F0D8, rgba(255,255,255,0))'}}></div>
+        </>
+      );
+    };
+    const CvgTile=({z,item,usd,parts,qcol})=>{
+      const c=vgColor(item),known=usd!=null;
+      const qty=parts?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + '):null;
+      return(
+        <div style={{minWidth:0,position:'relative',borderRadius:14,padding:z.tp,overflow:'hidden',background:'linear-gradient(180deg,rgba(8,30,20,0.9),rgba(4,16,11,0.93))',border:item.isTotal?'1px solid rgba(167,243,208,0.7)':'1px solid rgba(110,231,183,0.30)',boxShadow:'inset 0 1px 0 rgba(200,255,230,0.12), 0 0 20px -10px rgba(52,211,153,0.6)'}}>
+          <div aria-hidden="true" style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:c,boxShadow:`0 0 14px ${c}`}}></div>
+          <div style={{display:'flex',alignItems:'center',gap:6,fontSize:z.tl,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'#A7F3D0',whiteSpace:'nowrap',lineHeight:1.1}}>
+            {item.isLP&&bucketLogoSrc(item.priceKey)?<PairLogo priceKey={item.priceKey} size={Math.round(z.tl*1.4)}/>:<span style={{fontSize:item.isTotal?'0.95em':'1.25em',letterSpacing:0,lineHeight:1}}>{item.emoji}</span>}
+            <span>{item.name}</span>
+          </div>
+          <div className="tabular-nums" style={{fontSize:z.tv,fontWeight:700,lineHeight:1.05,marginTop:4,color:'#fff',whiteSpace:'nowrap',textShadow:'0 2px 10px rgba(0,0,0,0.8)'}}>{known?fmtUSD(usd):'—'}</div>
+          <div className="tabular-nums" style={{fontSize:z.tq,fontWeight:600,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',color:known&&qty?qcol:'rgba(255,255,255,0.35)'}}>{known&&qty?qty:'—'}</div>
+        </div>
+      );
+    };
+    const CvgPanel=({z,tkn,side,share,prices})=>{
+      const cfg=TOKENS[tkn],gold=tkn==='PTGC',rgb=gold?'232,192,68':'124,252,0',col=gold?'#E8C044':'#9DFF3A';
+      const tiles=side.items.map(it=>{const usd=valueGenBucketUsd(side.vg,it);return{it,usd,parts:usd==null?null:valueGenParts(tkn,it,usd,prices)};});
+      const bar=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0),barSum=bar.reduce((s,t)=>s+t.usd,0);
+      const total=side.vg?side.vg.total:null;
+      return(
+        <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',borderRadius:20,padding:z.colPad,background:`linear-gradient(180deg,rgba(${rgb},0.10),rgba(${rgb},0.02))`,border:`1px solid rgba(${rgb},0.5)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.08), 0 0 40px -14px rgba(${rgb},0.8)`}}>
+          <div style={{display:'flex',alignItems:'center',gap:20}}>
+            <div style={{position:'relative',width:z.coin,height:z.coin,flexShrink:0}}>
+              <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(z.coin*0.22),borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.45) 0%, rgba(0,0,0,0) 68%)`}}></div>
+              <img src={cfg.logo} alt="" style={{position:'relative',width:z.coin,height:z.coin,borderRadius:'50%',objectFit:'contain',boxShadow:`0 0 0 3px ${gold?'rgba(250,234,160,0.9)':'rgba(190,255,130,0.9)'}, 0 0 0 6px rgba(${rgb},0.25), 0 0 40px rgba(${rgb},0.7)`}}/>
+            </div>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
+                <span style={{fontSize:z.feeL,letterSpacing:'0.24em',fontWeight:700,color:col,whiteSpace:'nowrap'}}>{tkn} {'·'} {+(cfg.feeRate*100).toFixed(2)}% FEE</span>
+                {share!=null&&<span className="tabular-nums" style={{fontSize:z.feeL,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{share.toFixed(0)}% of total</span>}
+              </div>
+              <div className={`${gold?'metallic-gold':'metallic-green'} tabular-nums`} style={{fontSize:z.tot,fontWeight:700,lineHeight:1}}>{total==null?'—':fmtUSD(total)}</div>
+              <div style={{fontSize:z.basis,color:'rgba(255,255,255,0.62)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cvgBasis(tkn,side.vg,side.vol)}</div>
+            </div>
+          </div>
+          <div style={{flex:1,minHeight:10}}></div>
+          <div style={{display:'flex',height:z.barH,borderRadius:99,overflow:'hidden',background:'rgba(255,255,255,0.07)',border:`1px solid rgba(${rgb},0.3)`}}>
+            {barSum>0&&bar.map(t=><div key={t.it.key||t.it.name} style={{width:`${(t.usd/barSum*100).toFixed(2)}%`,background:vgColor(t.it),boxShadow:`0 0 12px ${vgColor(t.it)}`}}></div>)}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:z.gap,marginTop:10}}>
+            {tiles.map(t=><CvgTile key={t.it.key||t.it.name} z={z} item={t.it} usd={t.usd} parts={t.parts} qcol={col}/>)}
+          </div>
+        </div>
+      );
+    };
+    /* "Where it went": both tokens by destination. A group prints only when every bucket in it is known. */
+    const cvgWhere=(ptgc,ufo,prices)=>{
+      const b=(side,tkn,k)=>{const it=side.items.find(i=>(i.key||i.name)===k);if(!it)return{usd:0,it:null,tkn};const usd=valueGenBucketUsd(side.vg,it);return{usd,it,tkn};};
+      const sum=parts=>parts.some(p=>p.usd==null)?null:parts.reduce((s,p)=>s+p.usd,0);
+      const split=(p,u)=>{const a=sum(p),c=sum(u);return a==null||c==null?null:`PTGC ${fmtUSD(a)} · UFO ${fmtUSD(c)}`;};
+      const qty=(p,sym)=>{let t=0;for(const x of p){if(x.usd==null||!x.it)return null;const pr=valueGenParts(x.tkn,x.it,x.usd,prices);if(!pr)return null;pr.forEach(q=>{if(q.symbol===sym)t+=q.qty;});}return t;};
+      const dao=[b(ptgc,'PTGC','DAO')];
+      const hsP=[b(ptgc,'PTGC','Holders'),b(ptgc,'PTGC','Stakers')],hsU=[b(ufo,'UFO','reflection')];
+      const lpP=[b(ptgc,'PTGC','Add LP')],lpU=[b(ufo,'UFO','plsLP'),b(ufo,'UFO','plsxLP'),b(ufo,'UFO','wethLP')];
+      const brP=[b(ptgc,'PTGC','Buy & Burn'),b(ufo,'UFO','ptgcBurn')],brU=[b(ufo,'UFO','ufoBurn')];
+      const daoPls=qty(dao,'PLS'),burnPtgc=qty(brP,'PTGC'),burnUfo=qty(brU,'UFO');
+      return[
+        {e:'\u{1F3DB}\u{FE0F}',l:'DAO treasury',c:'#E8C044',v:sum(dao),s:daoPls!=null?`${fmtTokenQty(daoPls)} PLS`:null},
+        {e:'\u{1F48E}',l:'Holders & stakers',c:'#34D399',v:sum([...hsP,...hsU]),s:split(hsP,hsU)},
+        {e:'\u{1F4A7}',l:'Liquidity added',c:'#60A5FA',v:sum([...lpP,...lpU]),s:split(lpP,lpU)},
+        {e:'\u{1F525}',l:'Burned',c:'#FB923C',v:sum([...brP,...brU]),s:burnPtgc!=null&&burnUfo!=null?`${fmtTokenQty(burnPtgc)} PTGC · ${fmtTokenQty(burnUfo)} UFO`:split(brP,brU)}
+      ];
+    };
+    const CombinedVgSocialCard=({ptgc,ufo,prices,period,shape='wide'})=>{
+      const z=CVG_SHAPES[shape]||CVG_SHAPES.wide,tall=shape==='tall';
+      const [win,winLong,days]=CVG_WIN[period]||CVG_WIN['7d'];
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const pt=ptgc.vg?ptgc.vg.total:null,ut=ufo.vg?ufo.vg.total:null;
+      const total=pt==null&&ut==null?null:(pt||0)+(ut||0);
+      const partial=total!=null&&(pt==null||ut==null);
+      const vol=ptgc.vol>0&&ufo.vol>0?ptgc.vol+ufo.vol:null;
+      const shareP=pt!=null&&ut!=null&&total>0?pt/total*100:null;
+      const where=cvgWhere(ptgc,ufo,prices);
+      const title=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1,whiteSpace:'nowrap'}}>
+          <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F4B0}'}</span>
+          <span className="vg-green-text" style={{filter:'drop-shadow(0 0 14px rgba(52,211,153,0.5))'}}>Value generated</span>
+          <span style={{fontSize:'0.6em',letterSpacing:'0.14em',color:'#10160a',background:CVG_GG,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:'0 0 18px rgba(200,220,80,0.5)'}}>{win}</span>
+        </div>
+      );
+      const site=(
+        <div style={{textAlign:'right'}}>
+          <div className="font-orbitron gold-green-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+          <div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}><span style={{color:'#E8C044'}}>PTGC</span> + <span style={{color:'#9DFF3A'}}>UFO</span> {'·'} fees, {win}</div>
+          <div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>{today}</div>
+        </div>
+      );
+      const stat=(v,l)=>(
+        <div style={{display:'flex',flexDirection:'column',justifyContent:'center',padding:tall?'0 26px':'0 22px'}}>
+          <div className="tabular-nums" style={{fontSize:z.statV,fontWeight:700,lineHeight:1,color:'#fff',whiteSpace:'nowrap'}}>{v}</div>
+          <div style={{fontSize:z.statL,letterSpacing:'0.2em',fontWeight:700,color:'rgba(255,255,255,0.5)',marginTop:6}}>{l}</div>
+        </div>
+      );
+      const hero=(
+        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',flexDirection:tall?'column':'row',margin:z.heroM}}>
+          <div style={{textAlign:tall?'center':'left'}}>
+            <div style={{fontSize:z.heroL,letterSpacing:'0.24em',color:'rgba(255,255,255,0.55)',fontWeight:700}}><span style={{color:'#E8C044'}}>PTGC</span> + <span style={{color:'#9DFF3A'}}>UFO</span> {'·'} COMBINED {'·'} {winLong}{partial&&<span style={{color:'#FCD34D'}}> {'·'} {pt==null?'PTGC':'UFO'} STILL READING</span>}</div>
+            <div className="tabular-nums" style={{fontSize:z.hero,fontWeight:700,lineHeight:0.95,marginTop:4,color:'#fff',textShadow:'0 2px 12px rgba(0,0,0,0.85)'}}>{total==null?'—':fmtUSD(total)}</div>
+          </div>
+          <div style={{display:'flex',alignSelf:tall?'center':'flex-end',marginLeft:tall?0:30,marginTop:tall?16:0,marginBottom:tall?0:4,borderLeft:tall?'none':'1px solid rgba(255,255,255,0.18)'}}>
+            {stat(total!=null&&!partial?'≈ '+fmtUSD(total/days):'—','PER DAY')}
+            <div style={{width:1,background:'rgba(255,255,255,0.18)'}}></div>
+            {stat(vol!=null?fmtUSD(vol):'—','VOLUME')}
+          </div>
+        </div>
+      );
+      const strip=(
+        <div style={{display:tall?'grid':'flex',gridTemplateColumns:tall?'1fr 1fr':undefined,rowGap:tall?14:undefined,alignItems:'center',padding:tall?'14px 0':'7px 0',borderRadius:16,border:'1.5px solid transparent',background:'linear-gradient(180deg,#0c120a,#070a06) padding-box, linear-gradient(90deg,#E8C044,#F5F0D8,#7CFC00) border-box',boxShadow:'0 0 24px -10px rgba(200,220,80,0.7)'}}>
+          {!tall&&<div style={{padding:'0 16px',alignSelf:'stretch',display:'flex',alignItems:'center',borderRight:'1px solid rgba(255,255,255,0.12)'}}><span className="gold-green-text" style={{fontSize:14,fontWeight:700,letterSpacing:'0.18em',lineHeight:1.2}}>WHERE<br/>IT WENT</span></div>}
+          {where.map((w,i)=>(
+            <div key={w.l} style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:10,padding:tall?'0 22px':'0 14px',borderLeft:(tall?i%2===1:i>0)?'1px solid rgba(255,255,255,0.12)':'none'}}>
+              <span style={{fontSize:z.sE,lineHeight:1}}>{w.e}</span>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:z.sL,letterSpacing:'0.14em',textTransform:'uppercase',fontWeight:700,color:w.c,whiteSpace:'nowrap'}}>{w.l}</div>
+                <div className="tabular-nums" style={{fontSize:z.sV,fontWeight:700,lineHeight:1.1,whiteSpace:'nowrap',color:'#fff'}}>{w.v==null?'—':fmtUSD(w.v)}</div>
+                <div className="tabular-nums" style={{fontSize:z.sS,color:'rgba(255,255,255,0.58)',fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{w.v==null?' ':(w.s||' ')}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#050704',fontFamily:"'Rajdhani',sans-serif"}}>
+          <CvgBackdrop W={z.W} H={z.H} tall={tall}/>
+          <div style={{position:'absolute',left:z.padX,right:z.padX,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {tall?<>{title}<div style={{marginTop:14,textAlign:'center',fontSize:16,letterSpacing:'0.2em',textTransform:'uppercase',color:'rgba(240,255,230,0.6)'}}><span className="font-orbitron gold-green-text" style={{fontSize:22,fontWeight:700,letterSpacing:0,textTransform:'none'}}>ptgc-ufo.com</span> {'·'} {today}</div></>
+              :<div style={{position:'relative'}}>{title}<div style={{position:'absolute',right:0,top:0}}>{site}</div></div>}
+            {hero}
+            <div style={{flex:1,display:'flex',flexDirection:tall?'column':'row',gap:z.colGap,minHeight:0}}>
+              <CvgPanel z={z} tkn="PTGC" side={ptgc} share={shareP} prices={prices}/>
+              <CvgPanel z={z} tkn="UFO" side={ufo} share={shareP==null?null:100-shareP} prices={prices}/>
+            </div>
+            <div style={{marginTop:tall?z.colGap:10}}>{strip}</div>
+
+          </div>
+        </div>
+      );
+    };
+    /* ptgc / ufo = {vg, vol, items}; prices = vgPriceMap for the page's token with the other token's price filled in. */
+    const CombinedVgSocialModal=({ptgc,ufo,prices,period,setPeriod,loading,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=CVG_SHAPES[shape];
+      const controls=(
+        <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'10px 14px',justifyContent:'center'}}>
+          <div role="group" aria-label="Window" className="inline-flex items-center gap-0.5 p-1 rounded-full border border-lime-300/40 bg-black/70" style={{boxShadow:'0 0 26px -8px rgba(200,220,80,0.6)'}}>
+            {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([pv,pl])=>{
+              const on=period===pv;
+              return<button key={pv} type="button" onClick={()=>setPeriod(pv)} aria-pressed={on} className={`tap-h px-3 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] transition-all ${on?'text-[#10160a]':'text-lime-100/70 hover:text-lime-50 hover:bg-lime-500/10'}`} style={on?{background:CVG_GG,boxShadow:'0 0 16px rgba(200,220,80,0.55), inset 0 1px 0 rgba(255,255,255,0.45)'}:undefined}>{pl}</button>;
+            })}
+          </div>
+          <SocialShapeSwitch shape={shape} setShape={setShape} ring="border-lime-300/40" on="border-[#10160a]" onText="text-[#10160a]" offText="text-lime-100/70 hover:text-lime-50 hover:bg-lime-500/10" grad={CVG_GG} glow="rgba(200,220,80,0.6)"/>
+        </div>
+      );
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="Combined value generated share card" filename={`combined-value-generated-${period}-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <div style={{position:'relative',width:z.W,height:z.H}}>
+            <CombinedVgSocialCard ptgc={ptgc} ufo={ufo} prices={prices} period={period} shape={shape}/>
+            <CardLoadState loading={loading} error={false} what="the other token" radius="0" font="'Rajdhani',sans-serif"/>
+          </div>
+        </ShareCardModal>
+      );
+    };
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -11658,6 +11864,7 @@
 
 
           {/* Combined Value Generated Modal */}
+          {/* Combined Value Generated — 2026-09-29: CombinedVgSocialModal at module scope (twin columns + "where it went"). The numbers below are the same u5 computation as before. */}
           {showCombinedValueGenModal&&(()=>{
             const isPTGCActive=token==='PTGC';
             /* OB / RJ (share-card fonts) are module-level now — see the u4 block above Dashboard. */
@@ -11705,70 +11912,17 @@
             const combinedTotal=(ptgcVg.total==null&&ufoVg.total==null)?null:(ptgcVg.total||0)+(ufoVg.total||0);
             const combinedPartial=combinedTotal!=null&&(ptgcVg.total==null||ufoVg.total==null);
 
-            const periodTitles={'24h':'Past 24 Hours','7d':'Past 7 Days','30d':'Past 30 Days','90d':'Past 90 Days'};
-
-            /* Period pill selector — toolbar, outside the image */
-            const periodControls=(
-                  <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                    <span style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',color:'rgba(255,255,255,0.4)',fontWeight:600,marginRight:'4px'}}>Period:</span>
-                    <div style={{display:'flex',gap:'4px',background:'rgba(0,0,0,0.5)',borderRadius:'20px',padding:'3px',border:'1px solid rgba(255,255,255,0.1)'}}>
-                      {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([val,label])=>(
-                        <button key={val} onClick={()=>setCombinedValueGenPeriod(val)} style={{fontFamily:"'Rajdhani',sans-serif",fontSize:'13px',fontWeight:700,padding:'5px 14px',borderRadius:'16px',border:'none',cursor:'pointer',transition:'all 0.18s',background:combinedValueGenPeriod===val?'linear-gradient(135deg,rgba(212,175,55,0.45),rgba(124,252,0,0.45))':'transparent',color:combinedValueGenPeriod===val?'#fff':'rgba(255,255,255,0.4)',boxShadow:combinedValueGenPeriod===val?'0 0 12px rgba(124,252,0,0.2)':'none',outline:'none'}}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-            );
+            /* the other token's price fills the page's price map, so both panels can print token amounts */
+            const otherTkn=isPTGCActive?'UFO':'PTGC';
+            const otherPx=combinedValueGenOtherData?.price>0?combinedValueGenOtherData.price:null;
+            const cvgPrices={...vgPricesNow,[otherTkn]:vgPricesNow[otherTkn]||otherPx};
             return(
-              <ShareCardModal onClose={()=>closeModalAndReturn(setShowCombinedValueGenModal)} width={600} height={610} label="Combined value generated share card" filename={`combined-value-generated-${combinedValueGenPeriod}-${new Date().toISOString().slice(0,10)}.png`} controls={periodControls}>
-                  {/* 600×610: two full fee blocks (5 + 6 tiles) plus the total bar need ~600px; the old
-                      540 frame clipped the total bar off the bottom once UFO's six buckets were live. */}
-                  <div id="combined-valuegen-card" style={{position:'relative',width:'600px',height:'610px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
-                    <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
-                    <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
-                    <div style={{position:'absolute',inset:0,borderRadius:'16px',border:'2px solid transparent',backgroundImage:'linear-gradient(#0a0900,#0a0900),linear-gradient(135deg,#D4AF37,#7CFC00)',backgroundOrigin:'border-box',backgroundClip:'padding-box,border-box',pointerEvents:'none'}}/>
-
-                    <div style={{position:'relative',display:'flex',flexDirection:'column',justifyContent:'space-between',padding:'16px 20px',gap:'10px',boxSizing:'border-box',height:'100%'}}>
-
-                      {/* Header — dynamic title, no period selector */}
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                          <span style={{fontFamily:OB,fontWeight:700,fontSize:'17px',color:'rgba(255,255,255,0.9)',whiteSpace:'nowrap'}}>PTGC + UFO</span>
-                          <span style={{width:'1px',height:'20px',background:'rgba(255,255,255,0.15)',flexShrink:0}}/>
-                          <span style={{fontFamily:RJ,fontSize:'21px',fontWeight:700,color:'#4ade80',letterSpacing:'0.3px',whiteSpace:'nowrap'}}>{'\u{1F4B0}'} Value Generated — {periodTitles[combinedValueGenPeriod]}</span>
-                        </div>
-                        <span style={{fontFamily:RJ,fontSize:'13px',color:'rgba(255,255,255,0.35)',fontWeight:600,flexShrink:0,marginLeft:'10px'}}>{today}</span>
-                      </div>
-
-                      {/* PTGC Block */}
-                      <FeeBlock tokenCfg={ptgcCfg} vol={ptgcVol} accent="#D4AF37" rgb="212,175,55" vg={ptgcVg}/>
-
-                      {/* UFO Block */}
-                      <FeeBlock tokenCfg={ufoCfg} vol={ufoVol} accent="#7CFC00" rgb="124,252,0" vg={ufoVg}/>
-
-                      {/* Combined total bar */}
-                      <div style={{borderRadius:'12px',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(110deg,rgba(212,175,55,0.1),rgba(124,252,0,0.1))',border:'1px solid rgba(255,255,255,0.15)'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                          <span style={{fontSize:'24px'}}>{'\u{1F4B0}'}</span>
-                          <div>
-                            <div style={{fontFamily:OB,fontSize:'11px',fontWeight:700,letterSpacing:'1.5px',color:'rgba(255,255,255,0.7)',textTransform:'uppercase'}}>Total Value Generated</div>
-                            <div style={{fontFamily:RJ,fontSize:'13px',color:'rgba(255,255,255,0.35)',marginTop:'1px',fontWeight:600}}>PTGC + UFO Combined</div>
-                          </div>
-                        </div>
-                        <span style={{fontFamily:RJ,fontWeight:700,fontSize:'40px',background:'linear-gradient(90deg,#D4AF37,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}} title={combinedPartial?'one token has no figure for this window yet':undefined}>{combinedTotal==null?'\u2014':fmtUSD(combinedTotal)}{combinedPartial?<span style={{fontSize:'16px',WebkitTextFillColor:'rgba(255,255,255,0.45)',marginLeft:'4px'}}>+</span>:null}</span>
-                        <span style={{fontFamily:OB,fontSize:'11px',fontWeight:600,color:'rgba(255,255,255,0.55)'}}>ptgc-ufo.com</span>
-                      </div>
-
-                    </div>
-
-                    {combinedValueGenLoading&&(
-                      <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.75)',borderRadius:'16px'}}>
-                        <span style={{fontFamily:RJ,color:'rgba(255,255,255,0.6)',fontSize:'18px',fontWeight:600}}>Loading data...</span>
-                      </div>
-                    )}
-                  </div>
-              </ShareCardModal>
+              <CombinedVgSocialModal
+                ptgc={{vg:ptgcVg,vol:ptgcVol,items:buildValueGenItems('PTGC',ptgcCfg)}}
+                ufo={{vg:ufoVg,vol:ufoVol,items:buildValueGenItems('UFO',ufoCfg)}}
+                prices={cvgPrices} period={combinedValueGenPeriod} setPeriod={setCombinedValueGenPeriod}
+                loading={combinedValueGenLoading&&!combinedValueGenOtherData}
+                onClose={()=>closeModalAndReturn(setShowCombinedValueGenModal)}/>
             );
           })()}
 
