@@ -8200,6 +8200,135 @@
         </ShareCardModal>
       );
     };
+    /* ===== The Grays & The Cores — price share card (2026-09-29, Shaka) =====
+       Today's layout kept (RH cores down the left, PTGC + UFO side by side), restyled in the combined family:
+       combined PTGC/UFO logo, glass-strip Grays headers, glowing coins, core rows tinted in each token's own colour,
+       the move as plain coloured text (no pills). Wide 1200×675 / Tall 1080×1350 (Grays on top, cores 2-up below);
+       24H–90D. Gotcha 20: a price or change that did not load is "—", never $0 / 0%. */
+    const GC_CORES=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
+    const GC_BRAND={WPLS:'140,70,255',PLSX:'40,220,110',INC:'0,235,120',HEX:'255,90,150',EHEX:'120,150,255',PRVX:'200,80,200'};
+    const GC_UP='#1FE56B',GC_DN='#FF3B5C';
+    const GC_KEY={'24h':'h24','7d':'d7','30d':'d30','90d':'d90'};
+    const GC_WIN={'24h':'24H','7d':'7D','30d':'30D','90d':'90D'};
+    const GC_LOGO='logos/combined/07_Combined_PTGC_UFO_crop.png';
+    const GC_SHAPES={
+      wide:{W:1200,H:675,padX:42,top:34,bottom:24,coin:160,halo:300,px:54,chg:44,name:28,strip:58,rowLogo:42,rowName:22,rowNameW:68,rowPx:21,rowChg:21,rowPad:'0 10px 0 8px',coreHead:14,coreHead2:13,panelPad:14,foot:14},
+      tall:{W:1080,H:1350,padX:42,top:44,bottom:32,coin:230,halo:420,px:68,chg:54,name:32,strip:58,rowLogo:44,rowName:23,rowNameW:70,rowPx:22,rowChg:22,rowPad:'0 14px 0 10px',coreHead:16,coreHead2:14,panelPad:16,foot:15}
+    };
+    const GcChange=({c,size})=>{
+      if(c==null||!isFinite(c))return<span style={{fontSize:size,fontWeight:800,color:'rgba(255,255,255,0.35)'}}>{'—'}</span>;
+      const up=c>=0;
+      return(
+        <span className="tabular-nums" style={{display:'inline-flex',alignItems:'center',gap:'0.22em',whiteSpace:'nowrap',fontSize:size,fontWeight:800,color:up?GC_UP:GC_DN,textShadow:'0 1px 3px rgba(0,0,0,0.7)'}}>
+          <span style={{fontSize:'1.2em',lineHeight:1}}>{up?'▲':'▼'}</span>{Math.abs(c).toFixed(2)}%
+        </span>
+      );
+    };
+    const GcPrice=({p})=>p>0?<Price p={p}/>:<span style={{color:'rgba(255,255,255,0.35)'}}>{'—'}</span>;
+    const GcMetalEdge=({r,grad,w})=>(
+      <div aria-hidden="true" style={{position:'absolute',inset:0,borderRadius:r,border:`${w}px solid transparent`,background:`linear-gradient(#0000,#0000) padding-box, ${grad} border-box`,WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude',pointerEvents:'none'}}></div>
+    );
+    const GcCoreRow=({z,name,d,k})=>{
+      const b=GC_BRAND[name];
+      return(
+        <div style={{position:'relative',display:'flex',alignItems:'center',gap:12,minHeight:0,padding:z.rowPad,borderRadius:14,background:`linear-gradient(90deg,rgba(${b},0.22) 0%,rgba(${b},0.06) 38%,rgba(255,255,255,0.03) 100%)`,border:'1px solid rgba(255,255,255,0.09)'}}>
+          <img src={CORE_LOGOS[name]} alt="" style={{width:z.rowLogo,height:z.rowLogo,borderRadius:'50%',objectFit:'cover',flexShrink:0,boxShadow:`0 0 0 2px rgba(${b},0.85), 0 0 20px 4px rgba(${b},0.8)`}}/>
+          <span style={{fontSize:z.rowName,fontWeight:700,width:z.rowNameW,flexShrink:0,color:'#fff'}}>{name}</span>
+          <span className="tabular-nums" style={{flex:1,minWidth:0,fontSize:z.rowPx,fontWeight:600,color:'rgba(255,255,255,0.92)',whiteSpace:'nowrap'}}><GcPrice p={d?.price}/></span>
+          <GcChange c={d?.changes?.[k]} size={z.rowChg}/>
+        </div>
+      );
+    };
+    const GcCores=({z,cores,k,win,tall})=>(
+      <div style={{position:'relative',display:'flex',flexDirection:'column',flexShrink:0,width:tall?'auto':392,borderRadius:22,padding:z.panelPad,background:'linear-gradient(180deg,rgba(12,14,10,0.88),rgba(6,8,6,0.92))',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.1), 0 18px 40px -18px rgba(0,0,0,0.9)'}}>
+        <GcMetalEdge r={22} w={1} grad="linear-gradient(180deg,rgba(255,255,255,0.3),rgba(255,255,255,0.06) 60%,rgba(255,255,255,0.16))"/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:tall?'0 4px 12px':'0 4px 10px'}}>
+          <span style={{fontSize:z.coreHead,letterSpacing:'0.2em',fontWeight:700,color:'rgba(255,255,255,0.78)'}}>{'\u{1F48E}'} RH CORE TOKENS</span>
+          <span style={{fontSize:z.coreHead2,letterSpacing:'0.14em',fontWeight:700,color:'rgba(255,255,255,0.4)'}}>PRICE {'·'} {win}</span>
+        </div>
+        <div style={tall?{display:'grid',gridTemplateColumns:'1fr 1fr',gridAutoRows:92,gap:10}:{flex:1,display:'grid',gridTemplateRows:'repeat(6,1fr)',gap:8,minHeight:0}}>
+          {GC_CORES.map(n=><GcCoreRow key={n} z={z} name={n} d={cores?.[n]} k={k}/>)}
+        </div>
+      </div>
+    );
+    const GcGray=({z,sym,d,k})=>{
+      const gold=sym==='PTGC',rgb=gold?'232,192,68':'124,252,0';
+      const edge=gold?'linear-gradient(160deg,#FFF3C4,#E8C044 35%,#8a6418 65%,#F5D97A)':'linear-gradient(160deg,#EFFFD8,#9DFF3A 35%,#357a12 65%,#B8FF6A)';
+      const line=gold?'linear-gradient(90deg,rgba(0,0,0,0),#F5D97A,rgba(0,0,0,0))':'linear-gradient(90deg,rgba(0,0,0,0),#B8FF6A,rgba(0,0,0,0))';
+      return(
+        <div style={{position:'relative',overflow:'hidden',flex:1,minWidth:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',paddingTop:z.strip,textAlign:'center',borderRadius:22,background:`linear-gradient(180deg,rgba(${rgb},0.22) 0%,rgba(${rgb},0.08) 40%,rgba(4,6,4,0.9) 100%)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.2), 0 16px 40px -16px rgba(0,0,0,0.95), 0 0 40px -18px rgba(${rgb},0.9)`}}>
+          <GcMetalEdge r={22} w={2} grad={edge}/>
+          <div style={{position:'absolute',left:0,right:0,top:0,height:z.strip,display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(180deg,rgba(255,255,255,0.07),rgba(0,0,0,0.35))'}}>
+            <span className={`font-orbitron ${gold?'metallic-gold':'metallic-green'}`} style={{fontSize:z.name,fontWeight:900,letterSpacing:'0.24em',lineHeight:1,paddingLeft:'0.24em'}}>{sym}</span>
+            <div aria-hidden="true" style={{position:'absolute',left:0,right:0,bottom:0,height:2,background:line,boxShadow:`0 0 12px rgba(${rgb},0.9)`}}></div>
+          </div>
+          <div style={{position:'relative'}}>
+            <div aria-hidden="true" style={{position:'absolute',left:'50%',top:'50%',width:z.halo,height:z.halo,margin:`${-z.halo/2}px 0 0 ${-z.halo/2}px`,borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.7) 0%, rgba(${rgb},0.25) 45%, rgba(0,0,0,0) 68%)`}}></div>
+            <div style={{position:'relative',width:z.coin,height:z.coin,filter:`drop-shadow(0 0 18px rgba(${rgb},0.95)) drop-shadow(0 0 44px rgba(${rgb},0.55))`}}>
+              <img src={TOKENS[sym].logo} alt={sym} style={{width:z.coin,height:z.coin,borderRadius:'50%',objectFit:'contain',boxShadow:`0 0 0 3px rgba(255,255,255,0.9), 0 0 0 6px rgba(${rgb},0.25), 0 0 40px rgba(${rgb},0.7)`}}/>
+            </div>
+          </div>
+          <div className="tabular-nums" style={{position:'relative',maxWidth:'94%',overflow:'hidden',textOverflow:'ellipsis',fontSize:z.px,fontWeight:700,color:'#fff',lineHeight:1.05,marginTop:22,whiteSpace:'nowrap',textShadow:'0 2px 12px rgba(0,0,0,0.9)'}}><GcPrice p={d?.price}/></div>
+          <div style={{position:'relative',marginTop:16}}><GcChange c={d?.changes?.[k]} size={z.chg}/></div>
+        </div>
+      );
+    };
+    const GraysCoresSocialCard=({cores,grays,period,shape='wide'})=>{
+      const z=GC_SHAPES[shape]||GC_SHAPES.wide,tall=shape==='tall';
+      const k=GC_KEY[period]||'h24',win=GC_WIN[period]||'24H';
+      const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const grayRow=<><GcGray z={z} sym="PTGC" d={grays?.ptgc} k={k}/><GcGray z={z} sym="UFO" d={grays?.ufo} k={k}/></>;
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#050704',fontFamily:"'Rajdhani',sans-serif"}}>
+          <CvgBackdrop W={z.W} H={z.H} tall={tall}/>
+          <div style={{position:'absolute',left:z.padX,right:z.padX,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:14,minWidth:0}}>
+                <img src={GC_LOGO} alt="" style={{height:66,width:66,margin:'-6px 0',flexShrink:0,filter:'drop-shadow(0 0 12px rgba(200,220,80,0.55))'}}/>
+                <div style={{display:'flex',alignItems:'center',gap:14,fontSize:32,fontWeight:700,letterSpacing:'0.16em',lineHeight:1,whiteSpace:'nowrap'}}>
+                  <span className="gold-green-text" style={{filter:'drop-shadow(0 0 10px rgba(200,220,80,0.3))'}}>THE GRAYS &amp; THE CORES</span>
+                  <span style={{fontSize:'0.6em',letterSpacing:'0.14em',color:'#10160a',background:CVG_GG,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:'0 0 16px rgba(200,220,80,0.45)'}}>{win} PRICE</span>
+                </div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                <div className="font-orbitron gold-green-text" style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div>
+                <div className="tabular-nums" style={{marginTop:8,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.78)'}}>{today}</div>
+              </div>
+            </div>
+            {tall?<>
+              <div style={{flex:1,display:'flex',gap:18,marginTop:24,minHeight:0}}>{grayRow}</div>
+              <div style={{marginTop:20}}><GcCores z={z} cores={cores} k={k} win={win} tall/></div>
+            </>:
+              <div style={{flex:1,display:'flex',gap:18,marginTop:18,minHeight:0}}><GcCores z={z} cores={cores} k={k} win={win}/>{grayRow}</div>}
+            <div style={{marginTop:tall?14:12,textAlign:'center',fontSize:z.foot,letterSpacing:'0.2em',fontWeight:700,color:'rgba(255,255,255,0.5)'}}>RH CORES {'·'} WPLS {'·'} PLSX {'·'} INC {'·'} HEX {'·'} eHEX {'·'} PRVX</div>
+          </div>
+        </div>
+      );
+    };
+    const GraysCoresSocialModal=({cores,grays,period,setPeriod,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=GC_SHAPES[shape];
+      const controls=(
+        <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'10px 14px',justifyContent:'center'}}>
+          <div role="group" aria-label="Window" className="inline-flex items-center gap-0.5 p-1 rounded-full border border-lime-300/40 bg-black/70" style={{boxShadow:'0 0 26px -8px rgba(200,220,80,0.6)'}}>
+            {[['24h','24H'],['7d','7D'],['30d','30D'],['90d','90D']].map(([pv,pl])=>{
+              const on=period===pv;
+              return<button key={pv} type="button" onClick={()=>setPeriod(pv)} aria-pressed={on} className={`tap-h px-3 sm:px-3.5 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] transition-all ${on?'text-[#10160a]':'text-lime-100/70 hover:text-lime-50 hover:bg-lime-500/10'}`} style={on?{background:CVG_GG,boxShadow:'0 0 16px rgba(200,220,80,0.55), inset 0 1px 0 rgba(255,255,255,0.45)'}:undefined}>{pl}</button>;
+            })}
+          </div>
+          <SocialShapeSwitch shape={shape} setShape={setShape} ring="border-lime-300/40" on="border-[#10160a]" onText="text-[#10160a]" offText="text-lime-100/70 hover:text-lime-50 hover:bg-lime-500/10" grad={CVG_GG} glow="rgba(200,220,80,0.6)"/>
+        </div>
+      );
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="Grays & Cores price share card" filename={`grays-cores-price-${period}-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
+          <div style={{position:'relative',width:z.W,height:z.H}}>
+            <GraysCoresSocialCard cores={cores} grays={grays} period={period} shape={shape}/>
+            <CardLoadState loading={!cores||!grays} error={false} what="prices" radius="0" font="'Rajdhani',sans-serif"/>
+          </div>
+        </ShareCardModal>
+      );
+    };
+
     const DashboardSkeleton=({token})=>(
       <div aria-busy="true" aria-label={`Loading ${token}`}>
         <div className="border-b border-white/[0.06]">
@@ -9190,7 +9319,6 @@
       const[showUFOLogosModal,setShowUFOLogosModal]=useState(false);
       const[showCombinedLogosModal,setShowCombinedLogosModal]=useState(false);
       const[showPriceWithCoresModal,setShowPriceWithCoresModal]=useState(false);
-      const[priceModalMobileMode,setPriceModalMobileMode]=useState(false);
       const[priceModalPeriod,setPriceModalPeriod]=useState('24h');
       const[corePrices,setCorePrices]=useState(null);
       const[showCombinedKPI,setShowCombinedKPI]=useState(false);
@@ -9507,142 +9635,79 @@
         if(showRHCoresShareModal&&otherTokenPairs.length===0&&otherPairsStatus!=='loading')loadOtherTokenPairs();   // a18/a20
       },[showRHCoresShareModal]);
       
-      // Load RH Core prices when Price with Cores modal opens
-      const[grayPrices,setGrayPrices]=useState({
-        ptgc:{price:0,changes:{h24:0,d7:null,d30:null,d90:null}},
-        ufo:{price:0,changes:{h24:0,d7:null,d30:null,d90:null}}
-      });
+      // Load RH Core + Grays prices when the Grays & Cores card opens.
+      // 2026-09-29: null = "didn't load" (the card prints —); it used to be 0, which printed $0 / ▲0.0%.
+      const[grayPrices,setGrayPrices]=useState(null);
       useEffect(()=>{
-        if(showPriceWithCoresModal){
-          // Contract addresses for DexScreener (current prices + 24h)
-          const coreAddresses={WPLS:ADDR.WPLS,PLSX:ADDR.PLSX,INC:ADDR.INC,HEX:ADDR.HEX,EHEX:ADDR.EHEX,PRVX:ADDR.PRVX};
-          
-          // Fetch DexScreener data for current prices and 24h change
-          // Then use cached coingeckoDataCache for 7d, 30d, 90d changes
-          Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
-            try{
-              const dexData={ pairs: await dsPairsFor(addr) };
-              const pair=dexData?.pairs?.find(p=>p.chainId==='pulsechain');
-              return{
-                name,
-                price:parseFloat(pair?.priceUsd||0),
-                h24:parseFloat(pair?.priceChange?.h24||0)
-              };
-            }catch(e){
-              return{name,price:0,h24:0};
-            }
-          })).then(async dexResults=>{
-            // Use cached data for 7d, 30d, 90d changes
-            const cachedCores=coingeckoDataCache?.rhCores||{};
-            
-            const prices={};
-            dexResults.forEach(r=>{
-              const cached=cachedCores[r.name]?.priceChanges;
-              prices[r.name]={
-                price:r.price,
-                changes:{
-                  h24:r.h24,
-                  d7:cached?.d7??null,
-                  d30:cached?.d30??null,
-                  d90:cached?.d90??null
-                }
-              };
-            });
-            
-            // MIGRATION: some cores (e.g. PRVX) are missing from the prebuilt rhCores cache,
-            // so their 7d/30d/90d showed no indicator. Backfill from the charts daily series
-            // (same repo) for any core still missing d7. Periods longer than a token's history
-            // clamp to its earliest point.
-            const _needCoreFb=Object.keys(prices).filter(n=>prices[n].changes.d7==null);
-            if(_needCoreFb.length){
-              try{
-                const _cr=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now());
-                const _cj=await _cr.json();
-                const _chgAt=(series,days)=>{
-                  if(!series||series.length<2)return null;
-                  const nowP=series[series.length-1][1];
-                  const target=Date.now()-days*86400000;
-                  let base=series[0];
-                  for(const p of series){ if(p[0]<=target) base=p; else break; }
-                  const p0=base[1];
-                  return (p0>0&&nowP>0)?((nowP-p0)/p0)*100:null;
-                };
-                _needCoreFb.forEach(n=>{
-                  const s=_cj?.tokens?.[n]?.series;
-                  const c=prices[n].changes;
-                  if(c.d7==null)c.d7=_chgAt(s,7);
-                  if(c.d30==null)c.d30=_chgAt(s,30);
-                  if(c.d90==null)c.d90=_chgAt(s,90);
-                });
-              }catch(e){ console.log('core priceChanges fallback failed:',e.message); }
-            }
-            
-            console.log('Core prices (DexScreener + cached):', prices);
-            setCorePrices(prices);
-          });
-          
-          // Fetch PTGC and UFO prices from DexScreener, use cache for 7d/30d/90d
-          Promise.all([
-            dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`),
-            dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`)
-          ]).then(async ([ptgcDexRaw,ufoDexRaw])=>{
-            const _pP=dsOnePair(ptgcDexRaw), _uP=dsOnePair(ufoDexRaw);
-            let ptgcPrice=parseFloat(_pP?.priceUsd||0);
-            let ufoPrice=parseFloat(_uP?.priceUsd||0);
-            if(!ptgcPrice)ptgcPrice=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
-            if(!ufoPrice)ufoPrice=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);   // fallback only
-            const ptgc24h=parseFloat(_pP?.priceChange?.h24||0);
-            const ufo24h=parseFloat(_uP?.priceChange?.h24||0);
-            
-            // Use cached price changes from coingeckoDataCache
-            const ptgcCached=coingeckoDataCache?.PTGC?.priceChanges;
-            let ufoCached=coingeckoDataCache?.UFO?.priceChanges;
+        if(!showPriceWithCoresModal)return;
+        const num=v=>{const n=parseFloat(v);return isFinite(n)?n:null;};
+        const pos=v=>{const n=num(v);return n>0?n:null;};
+        const chgAt=(series,days)=>{
+          if(!series||series.length<2)return null;
+          const nowP=series[series.length-1][1];
+          const target=Date.now()-days*86400000;
+          let base=series[0];
+          for(const p of series){ if(p[0]<=target) base=p; else break; }
+          const p0=base[1];
+          return (p0>0&&nowP>0)?((nowP-p0)/p0)*100:null;
+        };
+        // the charts daily file backs up 7d/30d/90d for anything the prebuilt cache is missing (PRVX, the new UFO)
+        let chartsP=null;
+        const charts=()=>chartsP||(chartsP=fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now()).then(r=>r.json()).catch(()=>null));
 
-            // MIGRATION: the prebuilt coingecko file currently has UFO.priceChanges=null
-            // (pipeline gap), so 7d/30d/90d rendered "N/A". The charts daily file in the same
-            // repo DOES carry the new UFO's price series — compute the changes from it in-page
-            // as a fallback. Periods longer than the token's age clamp to the launch price.
-            if(!ufoCached||ufoCached.d7==null){
-              try{
-                const cr=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now());
-                const cj=await cr.json();
-                const series=cj?.tokens?.UFO?.series||[];
-                const chgAt=(days)=>{
-                  if(series.length<2)return null;
-                  const nowP=series[series.length-1][1];
-                  const target=Date.now()-days*86400000;
-                  let base=series[0];
-                  for(const p of series){ if(p[0]<=target) base=p; else break; }
-                  const p0=base[1];
-                  return (p0>0&&nowP>0)?((nowP-p0)/p0)*100:null;
-                };
-                ufoCached={d7:chgAt(7),d30:chgAt(30),d90:chgAt(90)};
-                console.log('UFO priceChanges computed from charts series:', ufoCached);
-              }catch(e){ console.log('UFO priceChanges fallback failed:', e.message); }
-            }
-            
-            setGrayPrices({
-              ptgc:{
-                price:ptgcPrice,
-                changes:{
-                  h24:ptgc24h,
-                  d7:ptgcCached?.d7??null,
-                  d30:ptgcCached?.d30??null,
-                  d90:ptgcCached?.d90??null
-                }
-              },
-              ufo:{
-                price:ufoPrice,
-                changes:{
-                  h24:ufo24h,
-                  d7:ufoCached?.d7??null,
-                  d30:ufoCached?.d30??null,
-                  d90:ufoCached?.d90??null
-                }
-              }
-            });
+        // RH cores: DexScreener (deepest PulseChain pair) for price + 24h, cached coingecko file for 7d/30d/90d
+        const coreAddresses={WPLS:ADDR.WPLS,PLSX:ADDR.PLSX,INC:ADDR.INC,HEX:ADDR.HEX,EHEX:ADDR.EHEX,PRVX:ADDR.PRVX};
+        Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
+          try{
+            const ps=(await dsPairsFor(addr)||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
+            const pair=ps[0];
+            return{name,price:pos(pair?.priceUsd),h24:pair?num(pair.priceChange?.h24):null};
+          }catch(e){
+            return{name,price:null,h24:null};
+          }
+        })).then(async dexResults=>{
+          const cachedCores=coingeckoDataCache?.rhCores||{};
+          const prices={};
+          dexResults.forEach(r=>{
+            const cached=cachedCores[r.name]?.priceChanges;
+            prices[r.name]={price:r.price,changes:{h24:r.h24,d7:cached?.d7??null,d30:cached?.d30??null,d90:cached?.d90??null}};
           });
-        }
+          const need=Object.keys(prices).filter(n=>prices[n].changes.d7==null||prices[n].changes.d30==null||prices[n].changes.d90==null);
+          if(need.length){
+            const cj=await charts();
+            need.forEach(n=>{
+              const sr=cj?.tokens?.[n]?.series,c=prices[n].changes;
+              if(c.d7==null)c.d7=chgAt(sr,7);
+              if(c.d30==null)c.d30=chgAt(sr,30);
+              if(c.d90==null)c.d90=chgAt(sr,90);
+            });
+          }
+          setCorePrices(prices);
+        }).catch(()=>setCorePrices({}));
+
+        // PTGC + UFO: main pair on DexScreener (chain read if that has no price), cached/charts 7d/30d/90d
+        Promise.all([
+          dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.PTGC.mainPair}`).catch(()=>null),
+          dsGet(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${TOKENS.UFO.mainPair}`).catch(()=>null)
+        ]).then(async([ptgcDexRaw,ufoDexRaw])=>{
+          const _pP=ptgcDexRaw?dsOnePair(ptgcDexRaw):null,_uP=ufoDexRaw?dsOnePair(ufoDexRaw):null;
+          let ptgcPrice=pos(_pP?.priceUsd),ufoPrice=pos(_uP?.priceUsd);
+          if(!ptgcPrice)ptgcPrice=pos(await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address).catch(()=>null));
+          if(!ufoPrice)ufoPrice=pos(await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address).catch(()=>null));
+          const one=async(sym,pair,price)=>{
+            const cached=coingeckoDataCache?.[sym]?.priceChanges;
+            const ch={h24:pair?num(pair.priceChange?.h24):null,d7:cached?.d7??null,d30:cached?.d30??null,d90:cached?.d90??null};
+            if(ch.d7==null||ch.d30==null||ch.d90==null){
+              const sr=(await charts())?.tokens?.[sym]?.series;
+              if(ch.d7==null)ch.d7=chgAt(sr,7);
+              if(ch.d30==null)ch.d30=chgAt(sr,30);
+              if(ch.d90==null)ch.d90=chgAt(sr,90);
+            }
+            return{price,changes:ch};
+          };
+          const[ptgc,ufo]=await Promise.all([one('PTGC',_pP,ptgcPrice),one('UFO',_uP,ufoPrice)]);
+          setGrayPrices({ptgc,ufo});
+        }).catch(()=>setGrayPrices({ptgc:null,ufo:null}));
       },[showPriceWithCoresModal]);
       
       // Load holder data for both tokens when Holders share modal opens
@@ -12236,198 +12301,9 @@
           {/* Combined Holders Share Modal — Socials → Holders (2026-09-26 build, gotcha 31). Loader above (holdersShareData); the card draws its own SVG trend. */}
           {showHoldersShareModal&&<HoldersSocialModal data={holdersShareData} loading={holdersShareLoading} error={holdersShareError} onRetry={()=>setHoldersShareTry(n=>n+1)} onClose={()=>closeModalAndReturn(setShowHoldersShareModal)}/>}
           
-          {/* Price with RH Cores Modal */}
-          {showPriceWithCoresModal&&(()=>{
-            const cardW=priceModalMobileMode?640:960;
-            const cardH=priceModalMobileMode?360:540;
-            /* Desktop/Mobile toggle + period selector — toolbar, outside the image */
-            const priceControls=(
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Desktop/Mobile Toggle */}
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={()=>setPriceModalMobileMode(false)}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${!priceModalMobileMode ? 'bg-white text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                    >
-                      Desktop
-                    </button>
-                    <button 
-                      onClick={()=>setPriceModalMobileMode(true)}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalMobileMode ? 'bg-white text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                    >
-                      Mobile
-                    </button>
-                  </div>
-                  {/* Time Period Selector */}
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={()=>setPriceModalPeriod('24h')}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '24h' ? 'bg-gradient-to-r from-[#D4AF37] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                    >
-                      24 Hr
-                    </button>
-                    <button 
-                      onClick={()=>setPriceModalPeriod('7d')}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '7d' ? 'bg-gradient-to-r from-[#D4AF37] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                    >
-                      7 Day
-                    </button>
-                    <button 
-                      onClick={()=>setPriceModalPeriod('30d')}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '30d' ? 'bg-gradient-to-r from-[#D4AF37] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                    >
-                      30 Day
-                    </button>
-                    <button 
-                      onClick={()=>setPriceModalPeriod('90d')}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${priceModalPeriod === '90d' ? 'bg-gradient-to-r from-[#D4AF37] to-[#7CFC00] text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}
-                    >
-                      90 Day
-                    </button>
-                  </div>
-                </div>
-            );
-            return(
-            <ShareCardModal onClose={()=>closeModalAndReturn(setShowPriceWithCoresModal)} width={cardW} height={cardH} label="Grays & Cores price share card" filename={`grays-cores-price-${priceModalPeriod}-${priceModalMobileMode?'mobile':'desktop'}-${new Date().toISOString().slice(0,10)}.png`} controls={priceControls}>
-                <div 
-                  id="price-cores-capture"
-                  className="relative overflow-hidden border-2 border-white/30"
-                  style={{
-                    width: priceModalMobileMode ? '640px' : '960px',
-                    height: priceModalMobileMode ? '360px' : '540px',
-                    background:'linear-gradient(180deg, #0a0a0a 0%, #050505 100%)'
-                  }}
-                >
-                  {/* Subtle glows */}
-                  <div className="absolute left-0 top-0 w-1/3 h-full" style={{background:'radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.08) 0%, transparent 60%)'}}></div>
-                  <div className="absolute right-0 top-0 w-1/3 h-full" style={{background:'radial-gradient(ellipse at 30% 50%, rgba(212,175,55,0.2) 0%, transparent 50%)'}}></div>
-                  <div className="absolute right-0 top-0 w-1/3 h-full" style={{background:'radial-gradient(ellipse at 70% 50%, rgba(124,252,0,0.2) 0%, transparent 50%)'}}></div>
-                  
-                  <div 
-                    className="relative flex flex-col"
-                    style={{
-                      width: '960px',
-                      height: '540px',
-                      padding: '20px',
-                      transform: priceModalMobileMode ? 'scale(0.6667)' : 'scale(1)',
-                      transformOrigin: 'top left'
-                    }}
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <div className="text-xl font-bold text-white">The Grays & The Cores - {priceModalPeriod==='24h'?'24Hr':priceModalPeriod==='7d'?'7 Day':priceModalPeriod==='30d'?'30 Day':'90 Day'} Price</div>
-                        <div className="text-white/50 text-xs mt-1">The Grays — Proudly supporting Richard Heart and the PulseChain ecosystem</div>
-                      </div>
-                    </div>
-                    
-                    {/* Main Content */}
-                    <div className="flex-1 flex gap-6">
-                      {/* Left: RH Core Prices */}
-                      <div className="w-1/3 rounded-2xl border border-white/20 bg-black/40 p-3 flex flex-col">
-                        <div className="text-white/60 text-xs font-medium mb-2 uppercase tracking-wider">RH Core Tokens</div>
-                        <div className="flex-1 flex flex-col justify-between">
-                          {(()=>{
-                            const coreLogos=CORE_LOGOS;
-                            const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
-                            const cores=['WPLS','PLSX','INC','HEX','EHEX','PRVX'];
-                            return cores.map(core=>{
-                              const p=corePrices?.[core];
-                              const price=p?.price||0;
-                              const change=p?.changes?.[periodKey];
-                              const hasChange=change!==null&&change!==undefined;
-                              const isUp=hasChange&&change>=0;
-                              return(
-                                <div key={core} className="flex items-center justify-between px-2 py-2 rounded-lg border border-white/10 bg-black/30">
-                                  <div className="flex items-center gap-2">
-                                    <img src={coreLogos[core]} alt={core} className="w-10 h-10 rounded-full"/>
-                                    <span className="text-white font-bold text-xl">{core}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-white font-bold text-xl"><Price p={price}/></span>
-                                    {hasChange?(
-                                      <span className={`text-xl font-bold ${isUp?'text-green-400':'text-red-400'}`}>
-                                        {isUp?'▲':'▼'}{Math.abs(change).toFixed(1)}%
-                                      </span>
-                                    ):(
-                                      <span className="text-xl font-bold text-white/30">—</span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            });
-                          })()}
-                        </div>
-                      </div>
-                      
-                      {/* Right: PTGC & UFO Prices */}
-                      <div className="flex-1 flex gap-4">
-                        {/* PTGC */}
-                        <div className="flex-1 rounded-2xl border border-[#D4AF37]/30 bg-black/40 p-4 flex flex-col items-center justify-center">
-                          <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-40 h-40 mb-2" style={{filter:'drop-shadow(0 0 32px rgba(212,175,55,1)) drop-shadow(0 0 64px rgba(212,175,55,0.7))'}}/>
-                          <div className="text-[#D4AF37] font-bold text-2xl mb-1">PTGC</div>
-                          <div className="text-white font-extrabold text-5xl mb-3">
-                            <Price p={grayPrices.ptgc.price}/>
-                          </div>
-                          {(()=>{
-                            const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
-                            const periodLabel=priceModalPeriod==='24h'?'24h':priceModalPeriod==='7d'?'7d':priceModalPeriod==='30d'?'30d':'90d';
-                            const change=grayPrices.ptgc.changes?.[periodKey];
-                            const hasChange=change!==null&&change!==undefined;
-                            const isUp=hasChange&&change>=0;
-                            return hasChange?(
-                              <div className={`flex items-center gap-2 text-5xl font-extrabold ${isUp?'text-green-400':'text-red-400'}`}>
-                                {isUp?'▲':'▼'}{Math.abs(change).toFixed(2)}%
-                                <span className="text-white/40 text-lg font-normal ml-1">{periodLabel}</span>
-                              </div>
-                            ):(
-                              <div className="flex items-center gap-2 text-3xl font-medium text-white/30">
-                                — <span className="text-lg font-normal ml-1">{periodLabel} N/A</span>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                        
-                        {/* UFO */}
-                        <div className="flex-1 rounded-2xl border border-[#7CFC00]/30 bg-black/40 p-4 flex flex-col items-center justify-center">
-                          <img src={TOKENS.UFO.logo} alt="UFO" className="w-40 h-40 mb-2" style={{filter:'drop-shadow(0 0 32px rgba(124,252,0,1)) drop-shadow(0 0 64px rgba(124,252,0,0.7))'}}/>
-                          <div className="text-[#7CFC00] font-bold text-2xl mb-1">UFO</div>
-                          <div className="text-white font-extrabold text-5xl mb-3">
-                            <Price p={grayPrices.ufo.price}/>
-                          </div>
-                          {(()=>{
-                            const periodKey=priceModalPeriod==='24h'?'h24':priceModalPeriod==='7d'?'d7':priceModalPeriod==='30d'?'d30':'d90';
-                            const periodLabel=priceModalPeriod==='24h'?'24h':priceModalPeriod==='7d'?'7d':priceModalPeriod==='30d'?'30d':'90d';
-                            const change=grayPrices.ufo.changes?.[periodKey];
-                            const hasChange=change!==null&&change!==undefined;
-                            const isUp=hasChange&&change>=0;
-                            return hasChange?(
-                              <div className={`flex items-center gap-2 text-5xl font-extrabold ${isUp?'text-green-400':'text-red-400'}`}>
-                                {isUp?'▲':'▼'}{Math.abs(change).toFixed(2)}%
-                                <span className="text-white/40 text-lg font-normal ml-1">{periodLabel}</span>
-                              </div>
-                            ):(
-                              <div className="flex items-center gap-2 text-3xl font-medium text-white/30">
-                                — <span className="text-lg font-normal ml-1">{periodLabel} N/A</span>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Footer */}
-                    <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
-                      <div className="text-white/30 text-xs">{new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
-                      <div className="text-white/30 text-xs font-medium">ptgc-ufo.com</div>
-                      <div className="text-white/30 text-xs">RH Cores: WPLS • PLSX • INC • HEX • EHEX • PRVX</div>
-                    </div>
-                  </div>
-                </div>
-            </ShareCardModal>
-            );
-          })()}
-          
+          {/* The Grays & The Cores price card — 2026-09-29: GraysCoresSocialModal at module scope (Wide/Tall, 24H-90D). Loader above (corePrices, grayPrices). */}
+          {showPriceWithCoresModal&&<GraysCoresSocialModal cores={corePrices} grays={grayPrices} period={priceModalPeriod} setPeriod={setPriceModalPeriod} onClose={()=>closeModalAndReturn(setShowPriceWithCoresModal)}/>}
+
           <MaintenanceNotice open={showMaintNotice} onClose={()=>setShowMaintNotice(false)}/>{/* MAINT-MIGRATION */}
           <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
           
