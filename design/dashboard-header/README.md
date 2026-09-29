@@ -51,6 +51,17 @@ renders in `renders/ufo-*.png`. Same layout and rules as PTGC, in UFO green: gre
 tiles and sparklines (UFO price + holder series). Live UFO numbers from 2026-09-29. Generators `source/gen12.py`,
 `gen12b.py` (they patch gen11's text). **Shaka picked A: the background art stays the same on UFO — no hue shift** (B's teal was rejected; `mockup-ufo-v1b-all-green.html` kept only as a record).
 
+## How it goes live (Shaka, 2026-09-29): a hidden preview switch
+Build the new header into `index.html` behind a switch; everyone else keeps today's header. Shaka turns it on for his own
+devices with a secret link **plus a password**: `ptgc-ufo.com/?<secret word>` opens a small password box; the right
+password turns the new header on for that device (remembered in localStorage); a matching "off" link turns it back off.
+Nothing on the page hints the switch exists (no button, no text, no console log).
+- Store only a **SHA-256 hash** of the password in the code, never the password itself; Shaka chooses it and never types
+  it into a file, commit or chat that lands in the repo (gotcha 33 spirit — the repo is public).
+- Be honest with Shaka: GitHub Pages is static and the repo is public, so this hides it from visitors, not from someone
+  reading the code on GitHub. Real secrecy would need a server-side gate (e.g. the ptgcapi worker serving the assets).
+- "Flip the switch" = make the new header the default (one line) + push. Roll back the same way.
+
 ## Still open (next session)
 1. Shaka may still tweak — ask what else differs from the reference before building.
 2. **Sparklines**: only Market Cap (price series) and Holders are real data. Volume, Liquidity, Liq/MCap, Tokens in LP,

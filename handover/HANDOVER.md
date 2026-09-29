@@ -619,7 +619,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 -5. **Next session, first: the dashboard header redesign** — `design/dashboard-header/README.md` ("How it goes live",
    "Still open"). Order: (1) any last tweaks Shaka wants, (2) the sparkline-data question (only Market Cap + Holders have
-   real history), (3) phone / tablet mock-ups, (4) build it into `index.html` for PTGC and UFO behind the hidden preview
+   real history), (3) phone mock-up done 2026-09-29 (Shaka: "looks cool" — `mockup-phone-*-v1.html`); tablet can follow the desktop layout scaled, check with Shaka, (4) build it into `index.html` for PTGC and UFO behind the hidden preview
    switch (secret link + password, hash only), (5) Shaka pushes and checks it on his devices, (6) when he says so, flip
    the switch.
 -4. **After that: the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
