@@ -19,6 +19,13 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-29)
 
+**IN PROGRESS — PTGC dashboard header redesign (mock-up only, NOT live, `index.html` untouched).** Everything is in
+`design/dashboard-header/` (outside the deployed site): open `mockup-ptgc-v11.html` in a browser; `README.md` there lists
+every decision Shaka made (no top nav/search bar, our solid-gold BUY/SELL + green SWITCH, his background band + his
+alien head placed like his reference, dark shading behind all text, fire-light coin with no second ring, sampled golds,
+bigger green change with a triangle) and what's still open (sparkline data, UFO + phone mock-ups, then the build).
+Shaka: "This is looking GREAT" — **start the next session there.**
+
 **End of day 2026-09-29 — everything is pushed; Shaka checked it live.** Affiliates unfrozen (worker v6), the
 affiliates page on iPhone/iPad, three Socials cards redone (Affiliates Report, Combined Value Generated + its data fix,
 Grays & Cores + its pair fix), white titles on Holders (combined) and RH Core Liquidity, and one rule for which
@@ -602,7 +609,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--4. **Next session (Shaka, 2026-09-29): the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
+-5. **Next session, first: the PTGC dashboard header redesign** — `design/dashboard-header/README.md` ("Still open").
+   Ask Shaka what else differs from his reference, then the sparkline-data question, then UFO + phone mock-ups, then build.
+-4. **After that: the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
    the last old-style card there. Same routine as the other redos: mock-ups first (Shaka's taste this week: "pop but
    clean", no heavy glow, no art backdrops, no rays, white titles, plain coloured moves not pills, emojis welcome but
    not beside the token names), then module-scope modal, Wide/Tall, screenshot-only, honest-null loader, and its
