@@ -37,6 +37,8 @@ const UFO_ADDRESS_NEW = '0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6';
 // LP Pairs (for identifying automated buyback burns)
 const PTGC_LP_PAIR = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11';
 const UFO_LP_PAIR = '0xbea0e55b82eb975280041f3b49c4d0bd937b72d5';
+// Dashboard main pairs (PTGC/WPLS, UFO/WPLS): the price source when present, so data files match the dashboard.
+const PRICE_MAIN_PAIRS = new Set(['0xf5a89a6487d62df5308cdda89c566c5b5ef94c11', '0xe221e6fc30e5787f0d551f980b4da1055d832a03']);
 
 const PTGC_DECIMALS = 18;
 const UFO_DECIMALS = 18;
@@ -129,9 +131,17 @@ function fetchDexAggregated(tokenAddress) {
       const pairs = (json.pairs || []).filter(p => !p.chainId || p.chainId === 'pulsechain');
       if (!pairs.length) return empty;
 
-      // Deepest-liquidity pair drives price + price change.
-      pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-      const main = pairs[0];
+      // The pair that drives price + price change (2026-09-29, same rule as index.html's dsPricePair): only pairs
+      // where this token is the BASE (UFO also sits as the QUOTE in INC/UFO and pTGC/UFO — their priceUsd is the
+      // other token's), only pairs that trade (fake pools claim big "liquidity" with no volume), deepest of those;
+      // the dashboard main pair first when present. Totals below still sum every pair.
+      const vol = p => parseFloat(p.volume?.h24) || 0, liq = p => parseFloat(p.liquidity?.usd) || 0;
+      const based = pairs.filter(p => parseFloat(p.priceUsd) > 0 && (p.baseToken?.address || '').toLowerCase() === key);
+      const floor = Math.max(100, 0.02 * Math.max(0, ...based.map(vol)));
+      const live = based.filter(p => vol(p) >= floor);
+      const main = based.find(p => PRICE_MAIN_PAIRS.has((p.pairAddress || '').toLowerCase()))
+        || (live.length ? [...live].sort((a, b) => liq(b) - liq(a))[0] : [...based].sort((a, b) => vol(b) - vol(a))[0]);
+      if (!main) return empty;
 
       let totalLiquidity = 0, totalVolume = 0, totalTokensInLP = 0;
       for (const p of pairs) {

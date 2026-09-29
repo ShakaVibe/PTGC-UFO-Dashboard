@@ -98,17 +98,31 @@
     const getLogo=a=>a?`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`:null;
     const WPLS_ADDR='0xA1077a294dDE1B09bB078844df40758a5D0f9a27';
     // Robust USD price: read the /tokens/{addr} `.pairs` array (the path index.html uses), pick the
-    // most-liquid live pair. Returns null on failure/empty — NEVER a fake 0, so a failed lookup renders
+    // pair per pricePair below. Returns null on failure/empty — NEVER a fake 0, so a failed lookup renders
     // as "—" instead of masquerading as a real $0. (The old /pairs/{pair} `.pair?.priceUsd` read is being
     // retired by DexScreener.)
+    /* 2026-09-29: which pair prices a token — the same rule as index.html's dsPricePair. Only pairs where the token is
+       the BASE (a quote-side priceUsd is the other token's price), only pairs that trade (fake pools such as
+       WPLS/NananaX claim ~$2M "liquidity" with no volume and a stale price — it put PLS ~4% high here), deepest of
+       those; PTGC and UFO use their dashboard main pair so the portfolio matches the dashboard. */
+    const PRICE_MAIN_PAIRS={'0x94534eeee131840b1c0f61847c572228bdfdde93':'0xf5a89a6487d62df5308cdda89c566c5b5ef94c11','0x49ed499433bee42dd34c169470fef2c8f9fae6e6':'0xe221e6fc30e5787f0d551f980b4da1055d832a03'};
+    const pricePair=(pairs,addr)=>{
+      const a=String(addr||'').toLowerCase();
+      const ps=(pairs||[]).filter(p=>p&&p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0&&String(p.baseToken?.address||'').toLowerCase()===a);
+      if(!ps.length)return null;
+      const mp=PRICE_MAIN_PAIRS[a]&&ps.find(p=>String(p.pairAddress||'').toLowerCase()===PRICE_MAIN_PAIRS[a]);
+      if(mp)return mp;
+      const vol=p=>parseFloat(p.volume?.h24)||0,liq=p=>parseFloat(p.liquidity?.usd)||0;
+      const floor=Math.max(100,0.02*Math.max(...ps.map(vol)));
+      const live=ps.filter(p=>vol(p)>=floor);
+      return live.length?live.sort((x,y)=>liq(y)-liq(x))[0]:ps.sort((x,y)=>vol(y)-vol(x))[0];
+    };
     const usdOf=async(addr)=>{
       try{
         const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
         const d=await r.json();
-        const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0);
-        if(!ps.length)return null;
-        ps.sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
-        return parseFloat(ps[0].priceUsd)||null;
+        const pp=pricePair(d.pairs,addr);
+        return pp?(parseFloat(pp.priceUsd)||null):null;
       }catch{return null;}
     };
     const fetchPLS=()=>usdOf(WPLS_ADDR);

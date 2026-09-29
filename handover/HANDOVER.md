@@ -30,6 +30,12 @@ ToolBox, then check ptgc-ufo.com → Affiliates. ToolBox's Sync now waits for th
 `sessions/2026-09-29.md`. **Deployed 13:26 UTC — verified: 171 September buys on the live endpoint, the retry queue landed
 the 31 within a minute of the deploy.**
 
+**2026-09-29, later still: one rule for which DexScreener pair prices a token** — gotcha 35. Live before the fix:
+the portfolio priced PLS ~4 % high (WPLS/NananaX) and UFO ~6 % off the dashboard (UFO/HEX, not the UFO/WPLS main
+pair); the DAO treasury priced eHEX ~4 % high (eHEX/NananaX); the combined cards' UFO price was UFO/HEX. Now
+`dsPricePair` everywhere in index.html, `pricePair` in portfolio.html, and the same rule in
+`scripts/fetch-burn-history.js`. Harness stub: `baseToken.address` is now the requested token's address.
+
 **2026-09-29, later: the Grays & Cores price card restyled** — `GraysCoresSocialModal` (module scope, Wide/Tall,
 24H–90D). Shaka kept today's layout (cores left, PTGC + UFO right); dressed with the combined logo, glass-strip headers,
 glowing coins, brand-tinted core rows and plain coloured moves (no pills, no art backdrop). Tall is new (Grays on top,
@@ -552,6 +558,15 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (gotcha 11); it reuses the card's own classes so that is usually automatic. Harness: `GT_CANDLES=1`. Layout maths: `--bgw` (painted art width, `max(window width, height x 1.3196)`)
    and `--oy` (art shifted up by up to the 140px headroom band on short windows) — every vertical position
    in the `hc-*` block is `fraction * --bgw + --oy`; the art is 1536x1164 and the fractions assume it.
+
+35. **Price a token with `dsPricePair`, never "the deepest pair" (2026-09-29).** DexScreener lists a token's pairs on
+   BOTH sides — when the token is the quote (INC/UFO, pTGC/UFO) `priceUsd` is the OTHER token's price — and PulseChain
+   has fake pools (WPLS/NananaX, WPLS/MULE, eHEX/NananaX, PLSX/MULE) claiming $1-2M "liquidity" with ~$0 volume, no
+   `priceChange` and a stale price, which outrank the real pools. `dsPricePair(pairs, addr)` / `dsPriceOf` (next to
+   `dsPairsFor`): base side only, pairs with real 24h volume (≥ $100 and ≥ 2 % of the busiest), deepest of those;
+   PTGC / UFO take their dashboard main pair first, so every card shows the dashboard's price. `portfolio.html`
+   (`pricePair`) and `scripts/fetch-burn-history.js` carry the same rule. Summing liquidity / volume over every pair
+   is a different job and still sums them all.
 
 34. **The Live Feed is a skin over the deck (2026-09-26).** `AbductionDeckModal`'s animations find their targets by
    class and ref — `.deck-pod` (via `podRefs`), `.deck-ship`, `.deck-gen`, `.deck-cell[data-k] .deck-a`, `.deck-links`,

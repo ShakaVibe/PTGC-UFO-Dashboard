@@ -2333,6 +2333,27 @@
       if(legacy&&Array.isArray(legacy.pairs))add(legacy.pairs);
       return out;
     };
+    /* The pair to PRICE a token from (2026-09-29). "Deepest pair" was wrong twice over:
+       - DexScreener lists a token's pairs on both sides; when the token is the QUOTE (INC/UFO, pTGC/UFO), priceUsd is
+         the OTHER token's price. Only pairs where the token is the BASE count.
+       - Fake pools (WPLS/NananaX, WPLS/MULE, eHEX/NananaX, PLSX/MULE) claim $1-2M "liquidity" with ~$0 volume, an empty
+         priceChange and a stale price, and outranked the real pools. Only pairs that trade count: 24h volume at least
+         $100 and 2% of the busiest pair's. The deepest of those wins; if nothing trades, the busiest.
+       PTGC and UFO use their dashboard main pair when it is in the list, so every card matches the dashboard's price.
+       Returns the pair object (priceUsd, priceChange, …) or null. */
+    const dsPricePair=(pairs,addr)=>{
+      const a=String(addr||'').toLowerCase();
+      const ps=(pairs||[]).filter(p=>p&&(!p.chainId||p.chainId==='pulsechain')&&parseFloat(p.priceUsd)>0&&String(p.baseToken?.address||'').toLowerCase()===a);
+      if(!ps.length)return null;
+      const main=Object.values(TOKENS).find(t=>String(t.address).toLowerCase()===a)?.mainPair;
+      const mp=main&&ps.find(p=>String(p.pairAddress||'').toLowerCase()===String(main).toLowerCase());
+      if(mp)return mp;
+      const vol=p=>parseFloat(p.volume?.h24)||0,liq=p=>parseFloat(p.liquidity?.usd)||0;
+      const floor=Math.max(100,0.02*Math.max(...ps.map(vol)));
+      const live=ps.filter(p=>vol(p)>=floor);
+      return live.length?live.sort((x,y)=>liq(y)-liq(x))[0]:ps.sort((x,y)=>vol(y)-vol(x))[0];
+    };
+    const dsPriceOf=(pairs,addr)=>{const pp=dsPricePair(pairs,addr);const v=pp?parseFloat(pp.priceUsd):NaN;return v>0?v:null;};
     /* Reads a PulseX pair's reserves directly. No DexScreener involved. Returns USD price
        of `token` given the pair's other side is WPLS and we know PLS/USD. */
     const WPLS_ADDR=ADDR.WPLS.toLowerCase();
@@ -3283,16 +3304,8 @@
     const fetchTokenPrice = async (tokenAddress) => {
       try {
         const data = { pairs: await dsPairsFor(tokenAddress) };
-        if (data.pairs && data.pairs.length > 0) {
-          // Find the pair with highest liquidity for most accurate price
-          const sortedPairs = data.pairs
-            .filter(p => p.chainId === 'pulsechain' && parseFloat(p.priceUsd) > 0)
-            .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-          if (sortedPairs.length > 0) {
-            return parseFloat(sortedPairs[0].priceUsd) || 0;
-          }
-        }
-        return 0;
+        // 2026-09-29: dsPricePair (base side, traded pools only) — the deepest pair was a fake eHEX pool
+        return dsPriceOf(data.pairs, tokenAddress) || 0;
       } catch (e) {
         console.error(`Error fetching price for ${tokenAddress}:`, e);
         return 0;
@@ -9361,7 +9374,7 @@
         const otherCfg=TOKENS[otherToken];
         Promise.all([
           fetchBurn(otherCfg.address,otherCfg.decimals),
-          dsPairsFor(otherCfg.address).then(ps0=>({pairs:ps0})).then(d=>{const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));return ps.length?parseFloat(ps[0].priceUsd)||0:0}).catch(()=>0)/* MIGRATION: was fragile /pairs/{mainPair} .pair?.priceUsd — hardened to robust /tokens/ best-pair (matches usdOf) */
+          dsPairsFor(otherCfg.address).then(ps0=>dsPriceOf(ps0,otherCfg.address)||0).catch(()=>0)/* 2026-09-29: dsPricePair — the dashboard's main pair *//* MIGRATION: was fragile /pairs/{mainPair} .pair?.priceUsd — hardened to robust /tokens/ best-pair (matches usdOf) */
         ]).then(([burnData,price])=>{
           if(tokenRef.current!==t)return;   // a20: switched away while this was in flight
           if(!(burnData&&burnData.supply>0)){setCombinedBurnError(true);setCombinedBurnLoading(false);return;}   // fetchBurn null = RPC miss → say so
@@ -9657,14 +9670,13 @@
         let chartsP=null;
         const charts=()=>chartsP||(chartsP=fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json?t='+Date.now()).then(r=>r.json()).catch(()=>null));
 
-        // RH cores: DexScreener for price + 24h, cached coingecko file for 7d/30d/90d. The pair is the core's MOST-TRADED
-        // one where it is the base token — by liquidity, WPLS and eHEX landed on fake pools (NananaX, MULE: ~$1-2M
+        // RH cores: DexScreener for price + 24h, cached coingecko file for 7d/30d/90d. The pair comes from dsPricePair
+        // (base side, traded pools only) — by liquidity alone, WPLS and eHEX landed on fake pools (NananaX, MULE: ~$1-2M
         // "liquidity", no trades, no priceChange) and printed a wrong price and "—" (2026-09-29).
         const coreAddresses={WPLS:ADDR.WPLS,PLSX:ADDR.PLSX,INC:ADDR.INC,HEX:ADDR.HEX,EHEX:ADDR.EHEX,PRVX:ADDR.PRVX};
         Promise.all(Object.entries(coreAddresses).map(async([name,addr])=>{
           try{
-            const ps=(await dsPairsFor(addr)||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0&&(p.baseToken?.address||'').toLowerCase()===addr.toLowerCase()).sort((a,b)=>(b.volume?.h24||0)-(a.volume?.h24||0));
-            const pair=ps[0];
+            const pair=dsPricePair(await dsPairsFor(addr),addr);   // base side, traded pools only (the shared rule)
             return{name,price:pos(pair?.priceUsd),h24:pair?num(pair.priceChange?.h24):null};
           }catch(e){
             return{name,price:null,h24:null};
@@ -10067,11 +10079,7 @@
                so a missing field would silently zero every PTGC USD on the page. */
             const usdOf=async(addr)=>{
               try{
-                const d={pairs:await dsPairsFor(addr)};
-                const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0);
-                if(!ps.length)return 0;
-                ps.sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
-                return parseFloat(ps[0].priceUsd)||0;
+                return dsPriceOf(await dsPairsFor(addr),addr)||0;   // 2026-09-29: dsPricePair (base side, traded, main pair for PTGC)
               }catch{return 0;}
             };
             // A failed/empty lookup returns 0; don't let it overwrite a good PTGC price.
@@ -11605,11 +11613,10 @@
                            DELIVERED on chain, from the same hourly snapshot its panel reads — not volume × fee. */
                         otherToken==='UFO'?fetchValueGenSnapshot().catch(()=>null):Promise.resolve(null),
                         /* …and the two LP partner prices the UFO page loads (PLSX, WETH), without which those buckets are "—" */
-                        otherToken==='UFO'?Promise.all([PLSX_ADDRESS,UFO_WETH].map(a=>dsPairsFor(a).then(ps=>{const q=(ps||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((x,y)=>(y.liquidity?.usd||0)-(x.liquidity?.usd||0));return q.length?parseFloat(q[0].priceUsd)||null:null;}).catch(()=>null))):Promise.resolve([null,null])
+                        otherToken==='UFO'?Promise.all([PLSX_ADDRESS,UFO_WETH].map(a=>dsPairsFor(a).then(ps=>dsPriceOf(ps,a)).catch(()=>null))):Promise.resolve([null,null])
                       ])
                         .then(([d,cg,snap,lpPx])=>{
-                          const ps=(d.pairs||[]).filter(p=>p.chainId==='pulsechain'&&parseFloat(p.priceUsd)>0).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0));
-                          const best=ps[0]||null;
+                          const best=dsPricePair(d.pairs,otherCfg.address);   // 2026-09-29: the dashboard's main pair, not the deepest
                           /* 2026-09-29: every pair's 24h volume, the way fetchDex sums it for the dashboard (was the best pair's only) */
                           const vol24h=(d.pairs||[]).filter(p=>p.chainId==='pulsechain').reduce((s,p)=>s+(parseFloat(p.volume?.h24)||0),0);
                           const price=best?parseFloat(best.priceUsd)||0:0;

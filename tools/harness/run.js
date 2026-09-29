@@ -106,6 +106,12 @@ const dsAnswer=(url)=>{
   /* UFO's pairs are born at the migration (2026-09-26): index.html learns ufoLaunchMs from the youngest pairCreatedAt,
      and a 1062-day-old UFO pair let the OLD contract's holder-history rows into every UFO 90D figure in here (6,597 "then"). */
   if(isUFO)pairs.forEach(pr=>{pr.pairCreatedAt=Date.parse('2026-07-08T00:00:00Z');});
+  /* 2026-09-29: the base token is the token the URL asks about (a main-pair URL → that token), so index.html's
+     dsPricePair (base side only) finds a pair here. It used to be the symbol ('PTGC'), which no address matches. */
+  const ids=url.match(/0x[0-9a-fA-F]{40}/g)||[];
+  const MAIN={'0xf5a89a6487d62df5308cdda89c566c5b5ef94c11':'0x94534EeEe131840b1c0F61847c572228bdfDDE93','0xe221e6fc30e5787f0d551f980b4da1055d832a03':'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
+  const tok=ids.length?(MAIN[ids[ids.length-1].toLowerCase()]||ids[ids.length-1]):B;
+  pairs.forEach(pr=>{pr.baseToken.address=tok;});
   return {schemaVersion:'1.0.0',pairs};
 };
 
