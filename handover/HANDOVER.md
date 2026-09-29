@@ -27,7 +27,15 @@ compatibility date made `btoa()` strict. The referral API had 31 newer buys the 
 Complete!" because it showed the modal before the (queued) write ran. **Worker v6** = `handover/ptgcapi-worker-v6.js`
 (UTF-8-safe base64, `toBase64Utf8`), **not deployed yet — Shaka pastes it into the Cloudflare editor**, then Sync in
 ToolBox, then check ptgc-ufo.com → Affiliates. ToolBox's Sync now waits for the real write (`saveDataImmediate`).
-`sessions/2026-09-29.md`.
+`sessions/2026-09-29.md`. **Deployed 13:26 UTC — verified: 171 September buys on the live endpoint, the retry queue landed
+the 31 within a minute of the deploy.**
+
+**2026-09-29, afternoon: the affiliates page rebuilt for iPhone and iPad.** Header no longer pinned under 640 px (it
+was a third of the screen), Recent Activity rows are two lines on phones, the Referrers Registry and the Commission
+Log are one card per referrer under 640 px (with a phone-only Sort select) and `min-w` tables that scroll sideways
+on a tablet, the referrer card / Payment Receipts modals wrap instead of colliding; stats bars 4-up on tablets.
+Desktop byte-identical. Harness `AFFIL_DATA=real`. **Owed: the live look on Shaka's iPhone and iPad.**
+`sessions/2026-09-29.md` "Afternoon".
 
 ### Before that (end of 2026-09-28)
 
@@ -552,7 +560,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--2. **Affiliates (2026-09-29): worker v6 owed a deploy** — Cloudflare editor ← `handover/ptgcapi-worker-v6.js`, then ToolBox → Sync → green "Saved", then the live page shows September through today (`sessions/2026-09-29.md`). Before that, 2026-09-22: closed. The referrer will not answer; nothing more to chase. Worker **v5 deployed 2026-09-23** (`handover/ptgcapi-worker-v5.js`,
+-2. **Affiliates (2026-09-29): worker v6 deployed and verified live** (171 September buys, retry queue landed the 31). Owed: the phone/tablet layout pass on a real iPhone + iPad (`sessions/2026-09-29.md` "Afternoon"). Before that, 2026-09-22: closed. The referrer will not answer; nothing more to chase. Worker **v5 deployed 2026-09-23** (`handover/ptgcapi-worker-v5.js`,
    v4 + `'Cache-Control': 'no-store'` in `jsonResponse`); verified live with `curl -sI … | grep -i cache-control`
    -> `cache-control: no-store`. v5 is now the only copy outside the Cloudflare editor.
 
@@ -683,7 +691,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
 - `sessions/2026-09-29.md` — affiliates frozen at Sep 23: the worker's `btoa()` write path threw on four em-dashes
-  after the v5 redeploy; worker v6 (`toBase64Utf8`), ToolBox Sync made honest (`saveDataImmediate`); deploy owed.
+  after the v5 redeploy; worker v6 (`toBase64Utf8`) deployed + verified, ToolBox Sync made honest (`saveDataImmediate`).
+  Afternoon: the affiliates page on iPhone / iPad — unpinned header, two-line Recent Activity, Registry + Commission
+  Log as phone cards, tablet min-width tables, modals wrap; harness `AFFIL_DATA=real`.
 - `sessions/2026-09-28.md` — UFO/WETH out of the RH Cores modal + RH-only switch (seed flag + `resolveUfoPairs`); afternoon: the Socials RH Core Liquidity card redone on Richard Heart's stage photo (`RhCoresSocialModal`, Wide only).
 - `sessions/2026-09-26.md` — Holders cards redone: six mock-up rounds (cyan → silver → gold/green; tiles without
   accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +

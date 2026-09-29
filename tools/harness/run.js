@@ -162,6 +162,35 @@ const dsAnswer=(url)=>{
       if(!process.env.AFFIL_DATA)return r.fulfill({status:200,contentType:'application/json',body:'{"referrers":{},"monthlyLogs":{},"receipts":[]}'});
       const month=new Date().toISOString().slice(0,7);
       const sync=process.env.AFFIL_SYNC||new Date(Date.now()-90*60000).toISOString();
+      /* AFFIL_DATA=real (2026-09-29, the phone/tablet layout pass): the live September 2026
+         program in miniature — the twelve real usernames (the long ones are the point:
+         "tommyjane056@gmail", "@ptgcofficialonboard", "getrichdiefinessing"), real month totals,
+         two buys each, one BELOW MIN entry, a paid previous month and three receipts. For judging
+         layout, not numbers. AFFIL_DATA=1 stays the a54 fixture. */
+      if(process.env.AFFIL_DATA==='real'){
+        const prev=(()=>{const d=new Date(month+'-01T00:00:00Z');d.setUTCMonth(d.getUTCMonth()-1);return d.toISOString().slice(0,7);})();
+        const W=(s)=>('0x'+s.replace(/[^a-f0-9]/gi,'').padEnd(40,'a')).slice(0,42);
+        const H=(s,i)=>('0x'+(s+i).replace(/[^a-f0-9]/gi,'').padEnd(64,'b')).slice(0,66);
+        const mk=(m,u,buys,usd,ptgc,meets,paid,rate)=>{const per=Math.max(1,buys-1);const b=[0,1].slice(0,Math.min(2,buys)).map(i=>({date:`${m}-${String(2+i*9).padStart(2,'0')} 0${4+i}:1${i}:25`,buyerWallet:W('c'+u+i),usdAmount:+(usd/per).toFixed(2),ptgcAmount:ptgc/per,txHash:H('a'+u,i),paid,paidTxHash:paid?H('p'+u,0):null,paidDate:paid?`${m}-28T16:26:29.137Z`:null}));
+          return {id:`${m}-${u}`,username:u,wallet:W('e'+u),buysCount:buys,usdAmount:usd,ptgcAmount:ptgc,commissionRate:rate||2,commissionUsd:0,commissionPtgc:meets?ptgc*((rate||2)/100):0,meetsThreshold:meets,status:paid?'paid':'unpaid',paidTxHash:paid?H('p'+u,0):null,paidDate:paid?`${m}-28T16:26:29.137Z`:null,buys:b,addedDate:sync,lastSyncDate:sync};};
+        const sep=[['tommyjane056@gmail',8,1647.39,39431553],['@ptgcofficialonboard',18,67937.54,1418924089],['DomDoos',79,9341.02,196948231],['getrichdiefinessing',12,5451.79,126141305],['DeFiMission',14,2783.97,70411618],['@Subtle_Craft',10,532.00,11751357],['McCloud',15,1817.62,41030494],['PLTGC',4,327.18,7712784],['PTGC',1,617.93,13778209],['lakers',5,828.65,15096657],['Baba',4,592.44,14749020],['PrairieBanana',1,56.87,1236182]];
+        const aug=[['PLTGC',6,933.57,12058323,true],['@ptgcofficialonboard',23,1514.54,18754278,true],['DomDoos',20,2574.20,34219807,true],['Rico',7,1647.56,20399278,true],['TPB',1,9.93,140073,false],['@moonbag',2,1949.30,27063614,true]];
+        const referrers={};[...sep,...aug].forEach(([u])=>{referrers[u]={wallet:W('e'+u),addedDate:'2026-02-11T08:00:33.672Z'};});
+        ['StakerSlade','GraysCrypto','@GRAYZLEGION369','paulegon369','CryptoV1','@CryptoSeven','noRAGRETS','LevelUpOnCrypto','VibraFinance','AlienMan'].forEach(u=>{referrers[u]={wallet:W('e'+u),addedDate:'2026-03-01T08:00:45.888Z'};});
+        const settings={commissionRate:2,tokenThreshold:0,threshold:250};
+        return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+          referrers,
+          monthlyLogs:{
+            [month]:{settings,lastSyncDate:sync,entries:sep.map(([u,b,usd,p])=>mk(month,u,b,usd,p,usd>=250,false))},
+            [prev]:{settings,lastSyncDate:prev+'-31T08:00:14.807Z',entries:aug.map(([u,b,usd,p,paid])=>mk(prev,u,b,usd,p,usd>=250,paid))}
+          },
+          receipts:[
+            {id:'r-rico',date:`${month}-04T21:41:50.183Z`,username:'Rico',wallet:W('eRico'),amount:429458.49,rate:2,txCount:7,txHash:H('pRico',0),month:prev,ptgcPrice:0.00004887,usdValue:20.99,feeCovered:true},
+            {id:'r-c7',date:`${month}-09T18:09:30.398Z`,username:'@CryptoSeven',wallet:W('e@CryptoSeven'),amount:129880.99,rate:2,txCount:1,txHash:H('pc7',0),month:prev,ptgcPrice:0.00005158,usdValue:6.70,feeCovered:true},
+            {id:'r-dom',date:`${prev}-01T15:27:00.037Z`,username:'DomDoos',wallet:W('eDomDoos'),amount:8981935.07,rate:2,txCount:18,txHash:H('pdom',0),month:'2026-02',ptgcPrice:0.0000954,usdValue:856.88,feeCovered:true}
+          ]
+        })});
+      }
       /* Three referrers on purpose (a54): alice clears the minimum on the month's total, bob does
          not (meetsThreshold:false, commissionPtgc:0 — the case the "Commissions" tile used to bill
          for anyway), carol has her own commissionRate. thresholdType is deliberately "USD" in the
