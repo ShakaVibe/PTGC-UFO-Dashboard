@@ -75,6 +75,7 @@
     .burn-fire-text{background:linear-gradient(180deg,#FFF6D5 0%,#FFE08A 16%,#FFB23E 36%,#FF7A1A 56%,#E8420F 78%,#9E1B05 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .metallic-green{background:linear-gradient(180deg,#F4FFE6 0%,#D9FFA6 20%,#A8FF4A 42%,#7CFC00 62%,#4CB800 82%,#276600 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
+    .affil-purple-text{background:linear-gradient(180deg,#FBF4FF 0%,#E9D5FF 18%,#C084FC 42%,#A855F7 62%,#7E22CE 82%,#4C1D95 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     .gold-green-text{background:linear-gradient(90deg,#FFF3C4 0%,#E8C044 30%,#C9D96A 50%,#A8FF4A 70%,#7CFC00 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-track{background:#1a1a1a}
@@ -6901,22 +6902,22 @@
      * buildValueGenItems (PTGC keeps its synthetic "Total H&S" tile, which stays out of the bar).
      * Token Allocation (violet): `chartData` / `chartColors` as the panel builds them (a15: any unknown slice →
      * the ring stays empty and that row is "—"), holder tiers via tierCountLabel (u6), USD at today's price. */
-    const SocialNebulaBackdrop=({W,H,tall,logo,rgb,edge,seed=11})=>{
+    const SocialNebulaBackdrop=({W,H,tall,logo,rgb,edge,seed=11,bg='linear-gradient(180deg,#040705 0%,#050807 60%,#070a08 100%)'})=>{   // bg + a logo-less call: 2026-09-29, the Affiliates Report card
       const art=React.useMemo(()=>{
         let s=seed;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647;};
         return Array.from({length:tall?110:90},()=>({x:rnd()*W,y:rnd()*H,r:0.6+rnd()*1.9,o:0.15+rnd()*0.6}));
       },[W,H,tall,seed]);
       return(
         <>
-          <div aria-hidden="true" style={{position:'absolute',inset:0,background:`radial-gradient(120% 80% at 50% 115%, rgba(${rgb},0.30) 0%, rgba(${rgb},0.12) 40%, rgba(0,0,0,0) 72%), linear-gradient(180deg,#040705 0%,#050807 60%,#070a08 100%)`}}></div>
+          <div aria-hidden="true" style={{position:'absolute',inset:0,background:`radial-gradient(120% 80% at 50% 115%, rgba(${rgb},0.30) 0%, rgba(${rgb},0.12) 40%, rgba(0,0,0,0) 72%), ${bg}`}}></div>
           <div aria-hidden="true" style={{position:'absolute',right:-200,top:-260,width:720,height:720,borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.30) 0%, rgba(${rgb},0.08) 40%, rgba(0,0,0,0) 68%)`}}></div>
           <div aria-hidden="true" style={{position:'absolute',left:-220,bottom:-300,width:760,height:760,borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.22) 0%, rgba(${rgb},0.06) 42%, rgba(0,0,0,0) 68%)`}}></div>
           <svg aria-hidden="true" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{position:'absolute',inset:0}}>
             {art.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill={`rgba(255,255,255,${p.o.toFixed(2)})`}/>)}
           </svg>
-          <img src={logo} alt="" aria-hidden="true" style={tall
+          {logo&&<img src={logo} alt="" aria-hidden="true" style={tall
             ?{position:'absolute',left:'50%',marginLeft:-330,top:190,width:660,height:660,opacity:0.09}
-            :{position:'absolute',right:-50,top:30,width:420,height:420,opacity:0.09}}/>
+            :{position:'absolute',right:-50,top:30,width:420,height:420,opacity:0.09}}/>}
           <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,border:'2px solid transparent',background:`linear-gradient(#0000,#0000) padding-box, linear-gradient(180deg,${edge[0]} 0%,${edge[1]} 50%,${edge[2]} 100%) border-box`,WebkitMask:'linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0)',WebkitMaskComposite:'xor',maskComposite:'exclude'}}></div>
           <div aria-hidden="true" style={{position:'absolute',inset:14,borderRadius:26,boxShadow:`0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 70px -8px rgba(${rgb},0.75), 0 0 24px -4px rgba(${rgb},0.5)`}}></div>
           <div aria-hidden="true" style={{position:'absolute',left:90,right:90,top:14,height:2,background:`linear-gradient(90deg, rgba(255,255,255,0), ${edge[0]}, rgba(255,255,255,0))`}}></div>
@@ -7787,6 +7788,208 @@
           <div style={{position:'relative',width:1200,height:675}}>
             <RhCoresCard ptgcPairs={ptgcPairs} ufoPairs={ufoPairs}/>
             <CardLoadState loading={otherMissing&&otherStatus==='loading'} error={otherMissing&&otherStatus!=='loading'} what={`${token==='PTGC'?'UFO':'PTGC'} pairs`} onRetry={onRetry} radius="0" font={RJ}/>
+          </div>
+        </ShareCardModal>
+      );
+    };
+    /* ---------- Affiliates Report (2026-09-29) ----------
+       Socials → 🤝 Affiliates Report. Shaka picked mock-up "B" (leaderboard) with the clean All-Time bar:
+       the chosen month's totals on the left, its top five referrers on the right (each bar = that referrer's
+       share of the month's PTGC, linear), all-time in a dark bar with a solid gold edge underneath. Purple =
+       the Affiliates page's colour; the numbers under ALL-TIME are plain white on purpose (Shaka: "pop but
+       clean" — the glowing version was hard to read). Screenshot-only like every card on this pattern (gotcha 30/31).
+       Numbers follow the Affiliates page exactly: a month's commission respects the worker's verdict — an
+       entry below the monthly minimum owes 0 (affilEntryComm; the old card used `commissionPtgc||…` and billed
+       those, 39.14M vs the real 39.12M for Sep 2026) — and "Paid out" is the page's Commissions Paid.
+       Nothing reads referrers[x].total* (gotcha 29). */
+    const affilEntryComm=(e,fallbackRate)=>{
+      if(!e||e.meetsThreshold===false)return 0;
+      if(typeof e.commissionPtgc==='number'&&isFinite(e.commissionPtgc))return e.commissionPtgc;
+      return(e.ptgcAmount||0)*((e.commissionRate||fallbackRate)/100);
+    };
+    const affilEntryPaid=e=>{
+      if(!e.buys?.length)return e.status==='paid';
+      const qualify=e.buys.filter(b=>b.ptgcAmount>0&&b.meetsThreshold!==false);
+      if(!qualify.length)return false;
+      return qualify.filter(b=>b.paid).length===qualify.length;
+    };
+    const affilMonthLabel=(m,opts)=>new Date(m+'-01T12:00:00Z').toLocaleDateString('en-US',{...opts,timeZone:'UTC'});   // month keys are UTC calendar months (a54)
+    const affilCreatures=ptgc=>{const pct=SUPPLY.PTGC>0?(ptgc||0)/SUPPLY.PTGC*100:0;return getBurnC(pct).slice(0,3);};
+    /* Pure: everything the card prints for one month. `ad` is the /public/commissions payload. */
+    const computeAffiliateSocialView=(ad,month)=>{
+      const logs=ad?.monthlyLogs||{};
+      const months=Object.keys(logs).sort().reverse();
+      const cm=new Date().toISOString().slice(0,7);
+      const m=month&&logs[month]?month:(months.includes(cm)?cm:months[0])||cm;
+      const log=logs[m]||{},entries=log.entries||[],rate=log.settings?.commissionRate||2;
+      const sum=(arr,f)=>arr.reduce((s,e)=>s+(f(e)||0),0);
+      const mo={referrers:entries.length,buys:sum(entries,e=>e.buysCount),ptgc:sum(entries,e=>e.ptgcAmount),usd:sum(entries,e=>e.usdAmount),comm:sum(entries,e=>affilEntryComm(e,rate))};
+      mo.creatures=affilCreatures(mo.ptgc);
+      const top=entries.filter(e=>(e.ptgcAmount||0)>0).sort((a,b)=>(b.ptgcAmount||0)-(a.ptgcAmount||0)).slice(0,5)
+        .map(e=>({name:e.username,ptgc:e.ptgcAmount||0,usd:e.usdAmount||0,share:mo.ptgc>0?(e.ptgcAmount||0)/mo.ptgc*100:0}));
+      const at={referrers:Object.keys(ad?.referrers||{}).length,buys:0,ptgc:0,usd:0,paid:0};
+      Object.values(logs).forEach(l=>{const r=l.settings?.commissionRate||2;(l.entries||[]).forEach(e=>{
+        at.buys+=e.buysCount||0;at.ptgc+=e.ptgcAmount||0;at.usd+=e.usdAmount||0;if(affilEntryPaid(e))at.paid+=affilEntryComm(e,r);});});
+      at.creatures=affilCreatures(at.ptgc);
+      return{month:m,months,mo,top,at,
+        long:affilMonthLabel(m,{month:'long',year:'numeric'}).toUpperCase(),
+        short:affilMonthLabel(m,{month:'short'}).toUpperCase()+" '"+m.slice(2,4)};
+    };
+    const AFFIL_SOCIAL_SHAPES={
+      wide:{W:1200,H:675,pad:48,top:40,bottom:20,logo:96,brand:44,sub:24,mBoxL:13,mBoxV:26,leftW:440,gap:32,sec:16,lbl:14,big:34,val:28,rowPad:5,cE:28,cN:18,
+            topPad:'12px 22px 6px',rowH:50,medal:24,name:21,tp:19,tq:16,barH:8,atH:98,atE:20,atL:13,atV:28,pillE:18,pillT:15,pcE:20,pcN:15,foot:15,midTop:22},
+      tall:{W:1080,H:1350,pad:56,top:50,bottom:30,logo:124,brand:58,sub:30,mBoxL:15,mBoxV:32,leftW:0,gap:20,sec:20,lbl:18,big:50,val:42,rowPad:7,cE:40,cN:24,
+            topPad:'16px 28px 10px',rowH:58,medal:32,name:27,tp:25,tq:20,barH:11,atH:0,atE:26,atL:16,atV:34,pillE:22,pillT:19,pcE:26,pcN:19,foot:19,midTop:20}
+    };
+    const AFFIL_PURPLE='168,85,247';
+    const AFFIL_GOLD='#E8C044';
+    const AffilCreatureRow=({list,e,n,color})=>list&&list.length?(
+      <span style={{whiteSpace:'nowrap'}}>{list.map((c,i)=><span key={i} style={{display:'inline-flex',alignItems:'center',gap:3,marginRight:Math.round(e*0.45)}}><span style={{fontSize:e,lineHeight:1}}>{c.e}</span><b style={{fontSize:n,color}}>x{c.cnt}</b></span>)}</span>
+    ):<span style={{fontSize:n,color:'rgba(255,255,255,0.4)'}}>—</span>;
+    const AffiliateSocialCard=({view,shape='wide'})=>{
+      const z=AFFIL_SOCIAL_SHAPES[shape]||AFFIL_SOCIAL_SHAPES.wide,tall=shape==='tall';
+      const {mo,top,at}=view;
+      const lbl={fontSize:z.lbl,letterSpacing:'0.18em',textTransform:'uppercase',fontWeight:700,color:'rgba(233,213,255,0.62)'};
+      const glass={background:'linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))',border:'1px solid rgba(255,255,255,0.10)',borderRadius:18,boxShadow:'inset 0 1px 0 rgba(255,255,255,0.08)'};
+      const secTitle={fontSize:z.sec,fontWeight:700,letterSpacing:'0.2em',color:'rgba(233,213,255,0.8)'};
+      const monthBox=(
+        <div style={{...glass,padding:tall?'12px 24px':'10px 22px',textAlign:'center',flexShrink:0}}>
+          <div style={{...lbl,fontSize:z.mBoxL}}>Report month</div>
+          <div className="font-orbitron affil-purple-text" style={{fontSize:z.mBoxV,fontWeight:900,letterSpacing:'0.04em',whiteSpace:'nowrap',lineHeight:1.15}}>{view.long}</div>
+        </div>
+      );
+      const header=(
+        <div style={{display:'flex',alignItems:'center',gap:tall?22:20}}>
+          <img src={TOKENS.PTGC.logo} alt="" style={{width:z.logo,height:z.logo,flexShrink:0,filter:'drop-shadow(0 0 18px rgba(232,192,68,0.45))'}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="font-orbitron metallic-gold" style={{fontSize:z.brand,fontWeight:900,lineHeight:1}}>PTGC</div>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginTop:tall?8:6,whiteSpace:'nowrap'}}>
+              <span style={{fontSize:z.sub,lineHeight:1}}>{'\u{1F91D}'}</span>
+              <span className="font-orbitron affil-purple-text" style={{fontSize:z.sub,fontWeight:700,letterSpacing:'0.22em'}}>AFFILIATE REPORT</span>
+            </div>
+          </div>
+          {!tall&&monthBox}
+        </div>
+      );
+      const rows=[['PTGC referred',fmtAbbr(mo.ptgc),z.big],['USD value',fmtUSD(mo.usd),z.big],['Buys',fmt(mo.buys),z.val],['Referrers',fmt(mo.referrers),z.val],['Commissions (PTGC)',fmtAbbr(mo.comm),z.val]];
+      const monthBlock=(
+        <div style={{width:tall?'auto':z.leftW,flexShrink:0}}>
+          <div className="font-orbitron" style={{...secTitle,marginBottom:6}}>THIS MONTH</div>
+          <div style={tall?{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:40}:undefined}>
+            {rows.map(([l,v,s],i)=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:12,padding:`${z.rowPad}px 0`,borderBottom:'1px solid rgba(255,255,255,0.07)',gridColumn:tall&&i===4?'1 / span 2':undefined}}>
+                <span style={{...lbl,whiteSpace:'nowrap'}}>{l}</span>
+                <span className="font-orbitron affil-purple-text tabular-nums" style={{fontSize:s,fontWeight:900,whiteSpace:'nowrap',lineHeight:1.12}}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:tall?14:8}}><AffilCreatureRow list={mo.creatures} e={z.cE} n={z.cN} color="rgba(233,213,255,0.7)"/></div>
+        </div>
+      );
+      const medals=['\u{1F947}','\u{1F948}','\u{1F949}'];
+      const topBox=(
+        <div style={{...glass,flex:1,minWidth:0,padding:z.topPad}}>
+          <div className="font-orbitron" style={{...secTitle,marginBottom:4}}>TOP REFERRERS {'·'} {view.short}</div>
+          {top.length===0?<div style={{fontSize:z.name,color:'rgba(255,255,255,0.45)',padding:'18px 0'}}>No referred buys in this month yet.</div>:top.map((t,i)=>(
+            <div key={t.name} style={{display:'flex',alignItems:'center',gap:12,height:z.rowH}}>
+              <div style={{width:z.medal+6,textAlign:'center',flexShrink:0}}>{i<3?<span style={{fontSize:z.medal,lineHeight:1}}>{medals[i]}</span>:<span className="font-orbitron" style={{fontSize:Math.round(z.medal*0.66),fontWeight:700,color:'rgba(233,213,255,0.6)'}}>{i+1}</span>}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:12}}>
+                  <span style={{fontSize:z.name,fontWeight:700,color:'#F3E8FF',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{t.name}</span>
+                  <span className="tabular-nums" style={{fontSize:z.tp,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}><span className="metallic-gold">{fmtAbbr(t.ptgc)}</span> <span style={{color:'rgba(255,255,255,0.55)',fontSize:z.tq}}>{fmtUSD(t.usd)} {'·'} {t.share>=1?t.share.toFixed(0):'<1'}%</span></span>
+                </div>
+                <div style={{height:z.barH,borderRadius:9,background:'rgba(255,255,255,0.07)',marginTop:5}}>
+                  <div style={{height:'100%',width:`${Math.max(2.5,Math.min(100,t.share)).toFixed(2)}%`,borderRadius:9,background:'linear-gradient(90deg,#7E22CE,#C084FC 70%,#F5E9FF)',boxShadow:'0 0 12px rgba(192,132,252,0.6)'}}></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+      const atItems=[['\u{1F91D}','Referrers',fmt(at.referrers)],['\u{1F6D2}','Buys',fmt(at.buys)],['\u{1FA99}','PTGC referred',fmtAbbr(at.ptgc)],['\u{1F4B5}','USD value',fmtUSD(at.usd)],['\u{1F4B8}','Paid out',fmtAbbr(at.paid)]];
+      const pill=(
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:7,background:AFFIL_GOLD,borderRadius:99,padding:'5px 13px 4px 9px'}}>
+            <span style={{fontSize:z.pillE,lineHeight:1}}>{'\u{1F3C6}'}</span>
+            <span className="font-orbitron" style={{fontSize:z.pillT,fontWeight:900,letterSpacing:'0.14em',color:'#1a1203'}}>ALL-TIME</span>
+          </div>
+          <AffilCreatureRow list={at.creatures} e={z.pcE} n={z.pcN} color="#F0DC78"/>
+        </div>
+      );
+      const cells=atItems.map(([e,l,v],i)=>(
+        <div key={l} style={{flex:1,minWidth:0,textAlign:'center',borderLeft:i?'1px solid rgba(232,192,68,0.25)':'none'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,whiteSpace:'nowrap'}}>
+            <span style={{fontSize:z.atE,lineHeight:1}}>{e}</span>
+            <span style={{fontSize:z.atL,letterSpacing:'0.14em',textTransform:'uppercase',fontWeight:700,color:AFFIL_GOLD}}>{l}</span>
+          </div>
+          <div className="font-orbitron tabular-nums" style={{fontSize:z.atV,fontWeight:700,marginTop:5,whiteSpace:'nowrap',color:'#fff'}}>{v}</div>
+        </div>
+      ));
+      const atBox={borderRadius:18,border:`2px solid ${AFFIL_GOLD}`,background:'linear-gradient(180deg,#1a1405 0%,#0d0a03 100%)',boxShadow:'0 0 28px -10px rgba(232,192,68,0.7), inset 0 1px 0 rgba(255,240,180,0.25)'};
+      const allTime=tall?(
+        <div style={{...atBox,padding:'16px 14px 18px'}}>
+          <div style={{display:'flex',justifyContent:'center',marginBottom:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <div style={{display:'flex',alignItems:'center',gap:7,background:AFFIL_GOLD,borderRadius:99,padding:'6px 16px 5px 11px'}}>
+                <span style={{fontSize:z.pillE,lineHeight:1}}>{'\u{1F3C6}'}</span>
+                <span className="font-orbitron" style={{fontSize:z.pillT,fontWeight:900,letterSpacing:'0.14em',color:'#1a1203'}}>ALL-TIME</span>
+              </div>
+              <AffilCreatureRow list={at.creatures} e={z.pcE} n={z.pcN} color="#F0DC78"/>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',rowGap:12}}>
+            {cells.map((c,i)=><div key={i} style={{gridColumn:i<3?`${i*2+1} / span 2`:`${(i-3)*3+1} / span 3`,display:'flex'}}>{React.cloneElement(c,{style:{...c.props.style,borderLeft:(i===0||i===3)?'none':'1px solid rgba(232,192,68,0.25)'}})}</div>)}
+          </div>
+        </div>
+      ):(
+        <div style={{...atBox,height:z.atH,display:'flex',alignItems:'center',gap:4,padding:'0 18px 0 16px'}}>
+          <div style={{paddingRight:16,marginRight:4,borderRight:'1px solid rgba(232,192,68,0.35)',alignSelf:'stretch',display:'flex',alignItems:'center'}}>{pill}</div>
+          {cells}
+        </div>
+      );
+      return(
+        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#07040b',fontFamily:"'Rajdhani',sans-serif"}}>
+          <SocialNebulaBackdrop W={z.W} H={z.H} tall={tall} rgb={AFFIL_PURPLE} edge={['#EBD9FF','#A855F7','#4B1F9E']} seed={21} bg="linear-gradient(180deg,#07040b 0%,#08050c 60%,#0a070d 100%)"/>
+          <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
+            {header}
+            {tall&&<div style={{marginTop:16}}>{monthBox}</div>}
+            <div style={{display:'flex',flexDirection:tall?'column':'row',gap:z.gap,marginTop:z.midTop}}>{monthBlock}{topBox}</div>
+            <div style={{flex:1,minHeight:12}}></div>
+            {allTime}
+            <div style={{display:'flex',justifyContent:'space-between',marginTop:tall?16:10,fontSize:z.foot,fontWeight:600}}>
+              <span style={{color:'rgba(216,180,254,0.75)'}}>Join: goptgc.com/#/ptgc-onboarding</span>
+              <span style={{color:'rgba(255,255,255,0.5)'}}>ptgc-ufo.com</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    /* The month picker sits at the top, outside the image (Shaka: "keep the option of choosing the month at
+       the top"), next to the Wide/Tall switch. data/loading/error/onRetry = the Dashboard's affiliate loader. */
+    const AffiliateSocialModal=({data,loading,error,onRetry,month,setMonth,onClose})=>{
+      const[shape,setShape]=useState('wide');
+      const z=AFFIL_SOCIAL_SHAPES[shape];
+      const view=data?computeAffiliateSocialView(data,month):null;
+      const controls=(
+        <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'10px 14px',justifyContent:'center'}}>
+          {view&&view.months.length>0&&(
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-purple-200/80">
+              <span>Month shown on card:</span>
+              <select value={view.month} onChange={e=>setMonth(e.target.value)} aria-label="Month shown on card"
+                className="tap-h rounded-full border border-purple-400/50 bg-black/80 text-white text-sm font-bold px-4 cursor-pointer focus:outline-none focus:border-purple-300"
+                style={{boxShadow:`0 0 26px -8px rgba(${AFFIL_PURPLE},0.8)`}}>
+                {view.months.map(m=><option key={m} value={m} className="bg-gray-900">{affilMonthLabel(m,{month:'long',year:'numeric'})}</option>)}
+              </select>
+            </label>
+          )}
+          <SocialShapeSwitch shape={shape} setShape={setShape} ring="border-purple-400/40" on="border-[#1c0633]" onText="text-[#1c0633]" offText="text-purple-200/70 hover:text-purple-100 hover:bg-purple-500/10" grad="linear-gradient(180deg,#F5E9FF 0%,#C084FC 50%,#7E22CE 100%)" glow={`rgba(${AFFIL_PURPLE},0.6)`}/>
+        </div>
+      );
+      return(
+        <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="PTGC affiliate report share card" filename={`ptgc-affiliate-${view?view.month:'report'}-${shape}.png`}>
+          <div style={{position:'relative',width:z.W,height:z.H}}>
+            {view?<AffiliateSocialCard view={view} shape={shape}/>:<div style={{width:z.W,height:z.H,background:'#07040b'}}></div>}
+            <CardLoadState loading={loading&&!data} error={error&&!data} what="affiliate data" onRetry={onRetry} radius="0" font="'Rajdhani',sans-serif"/>
           </div>
         </ShareCardModal>
       );
@@ -9084,9 +9287,9 @@
       const loadAffiliateShare=()=>{
         if(affiliateShareData||affiliateShareLoading)return;
         setAffiliateShareLoading(true);setAffiliateShareError(false);
-        fetch('https://ptgcapi.ptgctools.workers.dev/public/commissions')
+        fetch(`https://ptgcapi.ptgctools.workers.dev/public/commissions?t=${Date.now()}`,{cache:'no-store'})
           .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-          .then(d=>{if(!d||typeof d!=='object')throw new Error('bad payload');setAffiliateShareData(d);setAffiliateShareLoading(false);})
+          .then(d=>{if(!d||typeof d!=='object'||!d.referrers||typeof d.referrers!=='object'||!d.monthlyLogs||typeof d.monthlyLogs!=='object')throw new Error('bad payload');setAffiliateShareData(d);setAffiliateShareLoading(false);})   // gotcha 28: an empty answer is not an empty program
           .catch(()=>{setAffiliateShareError(true);setAffiliateShareLoading(false);});
       };
       const[txnChange24h,setTxnChange24h]=useState(null);
@@ -11047,7 +11250,7 @@
                     loadAffiliateShare();   // a18
                   }} className="w-full px-4 py-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-all text-left">
                     <div className="font-bold">🤝 Affiliates Report</div>
-                    <div className="text-xs text-white/50">Monthly & all-time totals</div>
+                    <div className="text-xs text-white/50">Month leaderboard & all-time totals</div>
                   </button>
                 </div>
                 
@@ -11583,199 +11786,9 @@
               numbers as the panel: computePtgcBurnedByUfo (old + new contract, a17) at today's PTGC price. */}
           {showDAOShareModal&&!cfg.hasDAO&&<PtgcByUfoSocialModal p={computePtgcBurnedByUfo(delivered,ptgcByUfoLive,burnHistoryCache,data)} price={ptgcPrice} onClose={()=>closeModalAndReturn(setShowDAOShareModal)}/>}
           
-          {/* Affiliate Program Share Modal - Twitter optimized */}
-          {showAffiliateShareModal&&(()=>{
-            /* shared shell props: the loading placeholder and the real card render into the same shell */
-            const shellProps={onClose:()=>closeModalAndReturn(setShowAffiliateShareModal),width:900,height:471,zIndex:80,label:'PTGC affiliate program share card',filename:`ptgc-affiliate-${affiliateShareMonth||new Date().toISOString().slice(0,7)}.png`};
-            return(
-                affiliateShareLoading||!affiliateShareData?(
-                <ShareCardModal {...shellProps}>
-                  <div className="w-[900px] h-[471px] rounded-xl bg-[#111] border-2 border-[#D4AF37]/30 flex items-center justify-center">
-                    {affiliateShareLoading?(
-                      <div className="text-center">
-                        <div className="w-14 h-14 border-4 border-[#D4AF37]/30 border-t-[#D4AF37] rounded-full animate-spin mx-auto mb-3"></div>
-                        <p className="text-[#D4AF37] font-orbitron text-base">Loading Affiliate Data...</p>
-                      </div>
-                    ):(
-                      /* a18: the fetch failed — say so instead of spinning forever */
-                      <div className="text-center" role="status">
-                        <p className="text-amber-300 font-orbitron text-base">Couldn’t load affiliate data</p>
-                        <p className="text-white/45 text-sm mt-1">The commissions API did not answer.</p>
-                        <button type="button" onClick={loadAffiliateShare} className="tap-h mt-4 px-4 rounded-lg border border-amber-300/50 text-amber-200 text-sm font-semibold hover:bg-amber-300/10 transition-colors">Retry</button>
-                      </div>
-                    )}
-                  </div>
-                </ShareCardModal>
-                ):(()=>{
-                  const ad=affiliateShareData;
-                  const cm=new Date().toISOString().slice(0,7);
-                  const shareMonths=ad.monthlyLogs?Object.keys(ad.monthlyLogs).sort().reverse():[];
-                  const selectedShareMonth=affiliateShareMonth||(shareMonths.includes(cm)?cm:shareMonths[0])||cm;
-                  const referrers=Object.entries(ad.referrers||{});
-                  const totalReferrers=referrers.length;
-                  let allTimeBuys=0,allTimeUsd=0,allTimePtgc=0,allTimeCommission=0;
-                  if(ad.monthlyLogs){
-                    Object.values(ad.monthlyLogs).forEach(month=>{
-                      const entries=month.entries||[];
-                      const rate=month.settings?.commissionRate||2;
-                      allTimeBuys+=entries.reduce((s,e)=>s+(e.buysCount||0),0);
-                      allTimeUsd+=entries.reduce((s,e)=>s+(e.usdAmount||0),0);
-                      allTimePtgc+=entries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
-                      allTimeCommission+=entries.reduce((s,e)=>s+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||rate)/100)),0);
-                    });
-                  }
-                  const selectedMonthLog=ad.monthlyLogs?.[selectedShareMonth];
-                  const selectedEntries=selectedMonthLog?.entries||[];
-                  const selectedRate=selectedMonthLog?.settings?.commissionRate||2;
-                  const moBuys=selectedEntries.reduce((s,e)=>s+(e.buysCount||0),0);
-                  const moUsd=selectedEntries.reduce((s,e)=>s+(e.usdAmount||0),0);
-                  const moPtgc=selectedEntries.reduce((s,e)=>s+(e.ptgcAmount||0),0);
-                  const moCommission=selectedEntries.reduce((s,e)=>s+(e.commissionPtgc||(e.ptgcAmount||0)*((e.commissionRate||selectedRate)/100)),0);
-                  const moReferrers=selectedEntries.length;
-                  const moLabel=new Date(selectedShareMonth+'-01T12:00:00').toLocaleDateString('en-US',{month:'short'})+" '"+selectedShareMonth.slice(2,4);
-                  
-                  /* Month Selector Dropdown — toolbar, outside the image */
-                  const monthControls=(
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/60 text-sm font-medium">Month shown on card:</span>
-                      <select value={selectedShareMonth} onChange={e=>setAffiliateShareMonth(e.target.value)} className="bg-gray-800 border border-purple-500/50 text-white rounded-lg px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-purple-400" style={{minWidth:'160px'}}>
-                        {shareMonths.map(month=>(
-                          <option key={month} value={month}>{new Date(month+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'})}</option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                  return(
-                    <ShareCardModal {...shellProps} filename={`ptgc-affiliate-${selectedShareMonth}.png`} controls={monthControls}>
-                <div id="affiliate-share-card" className="w-[900px] h-[471px] rounded-xl overflow-hidden" style={{background:'linear-gradient(135deg, #0a0a0a 0%, #1a0a2a 40%, #0a0a0a 100%)'}}>
-                      {(()=>{
-                        const PSUPPLY=SUPPLY.PTGC;
-                        const moPct=PSUPPLY>0?((moPtgc||0)/PSUPPLY)*100:0;
-                        const moCreatures=getBurnC(moPct).slice(0,3);
-                        const atPct=PSUPPLY>0?((allTimePtgc||0)/PSUPPLY)*100:0;
-                        const atCreatures=getBurnC(atPct).slice(0,3);
-                        return(
-                      <div className="h-full border-2 border-purple-500/50 rounded-xl p-6 flex flex-col">
-                        
-                        {/* Header row */}
-                        <div className="flex items-center gap-4 mb-4">
-                          <img src="06_PTGC_V1_transparent_bg.png" alt="PTGC" className="w-20 h-20 rounded-full"/>
-                          <div className="flex-1">
-                            <div className="font-orbitron text-3xl font-bold text-[#D4AF37]">PTGC</div>
-                            <div className="text-purple-400 text-xl font-bold">🤝 Affiliate Program</div>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-white/50 text-base">{new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
-                            <div className="text-purple-400/80 text-base font-bold mt-0.5">{totalReferrers} referrers</div>
-                          </div>
-                        </div>
-                        
-                        {/* Two rows: Monthly + All-Time */}
-                        <div className="flex-1 flex flex-col gap-3">
-                          
-                          {/* Monthly Row */}
-                          <div className="flex-1 bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/40 rounded-lg px-4 flex flex-col justify-center py-2">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="text-lg">📅</span>
-                              <span className="text-green-400 font-bold text-lg font-orbitron tracking-wide">{moLabel}</span>
-                              <span className="text-green-400/50 text-base ml-1">MONTHLY</span>
-                            </div>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.6fr 2.2fr 1.4fr 1.3fr',gap:'8px'}}>
-                              <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">Referrers</div>
-                                <div className="text-3xl font-bold text-green-400">{moReferrers}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">Buys</div>
-                                <div className="text-3xl font-bold text-green-400">{fmt(moBuys)}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">PTGC Referred</div>
-                                <div className="text-3xl font-bold text-green-400">{fmtAbbr(moPtgc)}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">Sea Creatures</div>
-                                <div className="text-3xl font-bold flex items-center justify-center gap-1.5">{moCreatures.length>0?moCreatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span className="text-2xl">{c.e}</span><span className="text-base font-bold text-green-400/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">USD Value</div>
-                                <div className="text-3xl font-bold text-green-400">{fmtUSD(moUsd)}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-green-400/50 text-base uppercase">Commissions</div>
-                                <div className="text-3xl font-bold text-green-400">{fmtAbbr(moCommission)}</div>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* All-Time Row */}
-                          <div className="flex-1 bg-gradient-to-r from-[#D4AF37]/10 to-[#D4AF37]/5 border border-[#D4AF37]/40 rounded-lg px-4 flex flex-col justify-center py-2">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="text-lg">📊</span>
-                              <span className="text-[#D4AF37] font-bold text-lg font-orbitron tracking-wide">ALL-TIME</span>
-                              <span className="text-[#D4AF37]/50 text-base ml-1">GRAND TOTALS</span>
-                            </div>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1.6fr 2.2fr 1.4fr 1.3fr',gap:'8px'}}>
-                              <div className="text-center">
-                                <div className="text-[#D4AF37]/50 text-base uppercase">Referrers</div>
-                                <div className="text-3xl font-bold text-[#D4AF37]">{totalReferrers}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[#D4AF37]/50 text-base uppercase">Buys</div>
-                                <div className="text-3xl font-bold text-[#D4AF37]">{fmt(allTimeBuys)}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[#D4AF37]/50 text-base uppercase">PTGC Referred</div>
-                                <div className="text-3xl font-bold text-[#D4AF37]">{fmtAbbr(allTimePtgc)}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[#D4AF37]/50 text-base uppercase">Sea Creatures</div>
-                                <div className="text-3xl font-bold flex items-center justify-center gap-1.5">{atCreatures.length>0?atCreatures.map((c,i)=><span key={i} className="inline-flex items-center gap-0.5"><span className="text-2xl">{c.e}</span><span className="text-base font-bold text-[#D4AF37]/60">x{c.cnt}</span></span>):<span className="text-gray-600">—</span>}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[#D4AF37]/50 text-base uppercase">USD Value</div>
-                                <div className="text-3xl font-bold text-[#D4AF37]">{fmtUSD(allTimeUsd)}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[#D4AF37]/50 text-base uppercase">Commissions</div>
-                                <div className="text-3xl font-bold text-[#D4AF37]">{fmtAbbr(allTimeCommission)}</div>
-                              </div>
-                            </div>
-                          </div>
-                          
-                        </div>
-                        
-                        {/* Footer */}
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-purple-300/70 text-sm">goptgc.com/#/ptgc-onboarding</span>
-                          <span className="text-white/50 text-sm">ptgc-ufo.com</span>
-                        </div>
-                      </div>
-                        );
-                      })()}
-                    </div>
-                    </ShareCardModal>
-                  );
-                })()
-          );
-          })()}
-          
-          {/* Combined KPI Modal - triggers Twitter mode */}
-          {showCombinedKPI&&(
-            <Modal className="z-50 flex items-center justify-center p-4 overflow-auto" onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} label="Combined KPI report">
-              <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
-              <button aria-label="Close" 
-                onClick={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} 
-                className="fixed top-8 right-20 w-10 h-10 rounded-full bg-gray-800/90 hover:bg-gray-700 flex items-center justify-center text-white text-xl font-bold transition-colors z-[60] border border-gray-600"
-              >
-                ✕
-              </button>
-              <div className="relative z-10 w-full max-w-5xl flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d}/>
-              </div>
-            </Modal>
-          )}
-          
+          {/* Affiliates Report share card — 2026-09-29: AffiliateSocialModal at module scope (leaderboard + clean All-Time bar) */}
+          {showAffiliateShareModal&&<AffiliateSocialModal data={affiliateShareData} loading={affiliateShareLoading} error={affiliateShareError} onRetry={loadAffiliateShare} month={affiliateShareMonth} setMonth={setAffiliateShareMonth} onClose={()=>closeModalAndReturn(setShowAffiliateShareModal)}/>}
+
           {/* RH Cores Liquidity Share Modal — 2026-09-28: RhCoresSocialModal at module scope (the RH photo card) */}
           {showRHCoresShareModal&&<RhCoresSocialModal token={token} pairs={data?.pairs||[]} otherPairs={otherTokenPairs||[]} otherStatus={otherPairsStatus} onRetry={loadOtherTokenPairs} onClose={()=>closeModalAndReturn(setShowRHCoresShareModal)}/>}
           
