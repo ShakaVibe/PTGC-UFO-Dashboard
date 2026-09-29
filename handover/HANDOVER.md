@@ -19,6 +19,15 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-29)
 
+**End of day 2026-09-29 — everything is pushed; Shaka checked it live.** Affiliates unfrozen (worker v6), the
+affiliates page on iPhone/iPad, three Socials cards redone (Affiliates Report, Combined Value Generated + its data fix,
+Grays & Cores + its pair fix), white titles on Holders (combined) and RH Core Liquidity, and one rule for which
+DexScreener pair prices a token (gotcha 35). Shaka confirmed live: the affiliates page on phone/tablet, the Affiliates
+Report and Combined Value Generated cards, the combined card's UFO half matching the UFO dashboard at 90D, and the
+Grays & Cores card with real WPLS / eHEX moves. **Only open look:** the portfolio page after the price-pair push
+(5075cb8a9) — PLS should read ~4 % lower than before, UFO should equal the UFO dashboard. **Next session:** the
+Combined Burn Stats card (the last old-style card under Socials → Combined; mock-ups first) — see "Next up".
+
 **2026-09-29: the affiliates page frozen at Sep 23 — the `ptgcapi` worker's WRITE path, not this repo.** Since
 the v5 redeploy on 2026-09-23 every write to `data/affiliate-commissions.json` (the 08:00 UTC cron and ToolBox's
 Sync button alike) answered `500 {"error":"btoa() can only operate on characters in the Latin1 (ISO/IEC 8859-1)
@@ -34,30 +43,31 @@ the 31 within a minute of the deploy.**
 the portfolio priced PLS ~4 % high (WPLS/NananaX) and UFO ~6 % off the dashboard (UFO/HEX, not the UFO/WPLS main
 pair); the DAO treasury priced eHEX ~4 % high (eHEX/NananaX); the combined cards' UFO price was UFO/HEX. Now
 `dsPricePair` everywhere in index.html, `pricePair` in portfolio.html, and the same rule in
-`scripts/fetch-burn-history.js`. Harness stub: `baseToken.address` is now the requested token's address.
+`scripts/fetch-burn-history.js`. Harness stub: `baseToken.address` is now the requested token's address. Pushed as
+5075cb8a9. **Owed: the portfolio look** (PLS ~4 % lower, UFO = the UFO dashboard).
 
 **2026-09-29, later: the Grays & Cores price card restyled** — `GraysCoresSocialModal` (module scope, Wide/Tall,
 24H–90D). Shaka kept today's layout (cores left, PTGC + UFO right); dressed with the combined logo, glass-strip headers,
 glowing coins, brand-tinted core rows and plain coloured moves (no pills, no art backdrop). Tall is new (Grays on top,
-cores 2-up). Loader honest-null: "—", never $0. **Owed: the live look.** `sessions/2026-09-29.md` "Later".
+cores 2-up). Loader honest-null: "—", never $0. **Seen live by Shaka ✓.** `sessions/2026-09-29.md` "Later".
 
 **2026-09-29, late evening: the Combined Value Generated card redone** — `CombinedVgSocialModal` (module scope, Wide/Tall,
 24H–90D): white combined total + per day + volume, PTGC and UFO panels built from the stand-alone Value Generated tile, and a
 "where it went" strip (DAO / holders & stakers / liquidity / burned across both tokens; a group is "—" unless every bucket is
 known). **Night fix:** the UFO half now uses the UFO dashboard's delivered figure from the PTGC page too (it was volume × fee,
-"est."), and the other token's 24H volume sums every pair. **Owed: the live look.** `sessions/2026-09-29.md` "Late evening" + "Night".
+"est."), and the other token's 24H volume sums every pair. **Seen live by Shaka ✓.** `sessions/2026-09-29.md` "Late evening" + "Night".
 
 **2026-09-29, evening: the Socials Affiliates Report card redone** — `AffiliateSocialModal` (module scope, Wide/Tall,
 screenshot-only, month picker on top): the month's totals, its top 5 referrers with share bars, and a clean gold
 All-Time bar (solid gold edge, 🏆 pill + creatures, emoji labels, white numbers — Shaka: "pop but clean"). Month
-commission no longer bills below-minimum entries (39.14M → 39.12M for Sep). **Owed: the live look.**
+commission no longer bills below-minimum entries (39.14M → 39.12M for Sep). **Seen live by Shaka ✓.**
 `sessions/2026-09-29.md` "Evening".
 
 **2026-09-29, afternoon: the affiliates page rebuilt for iPhone and iPad.** Header no longer pinned under 640 px (it
 was a third of the screen), Recent Activity rows are two lines on phones, the Referrers Registry and the Commission
 Log are one card per referrer under 640 px (with a phone-only Sort select) and `min-w` tables that scroll sideways
 on a tablet, the referrer card / Payment Receipts modals wrap instead of colliding; stats bars 4-up on tablets.
-Desktop byte-identical. Harness `AFFIL_DATA=real`. **Owed: the live look on Shaka's iPhone and iPad.**
+Desktop byte-identical. Harness `AFFIL_DATA=real`. **Seen live by Shaka ✓.**
 `sessions/2026-09-29.md` "Afternoon".
 
 ### Before that (end of 2026-09-28)
@@ -592,7 +602,15 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--2. **Affiliates (2026-09-29): worker v6 deployed and verified live** (171 September buys, retry queue landed the 31). Owed: the phone/tablet layout pass on a real iPhone + iPad (`sessions/2026-09-29.md` "Afternoon"). Before that, 2026-09-22: closed. The referrer will not answer; nothing more to chase. Worker **v5 deployed 2026-09-23** (`handover/ptgcapi-worker-v5.js`,
+-4. **Next session (Shaka, 2026-09-29): the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
+   the last old-style card there. Same routine as the other redos: mock-ups first (Shaka's taste this week: "pop but
+   clean", no heavy glow, no art backdrops, no rays, white titles, plain coloured moves not pills, emojis welcome but
+   not beside the token names), then module-scope modal, Wide/Tall, screenshot-only, honest-null loader, and its
+   other-token price through `dsPricePair` (already wired). Before building, a 10-second look at the portfolio page
+   (PLS ~4 % lower than before the 5075cb8a9 push, UFO = the UFO dashboard).
+-3. **2026-10-06 — UFO day 90** (item 5 below): check the UFO dashboard and the combined cards' 90D once UFO has a
+   full 90-day window.
+-2. **Affiliates (2026-09-29): worker v6 deployed and verified live** (171 September buys, retry queue landed the 31). The phone/tablet layout pass was seen live by Shaka the same day ✓ (`sessions/2026-09-29.md` "Afternoon"). Before that, 2026-09-22: closed. The referrer will not answer; nothing more to chase. Worker **v5 deployed 2026-09-23** (`handover/ptgcapi-worker-v5.js`,
    v4 + `'Cache-Control': 'no-store'` in `jsonResponse`); verified live with `curl -sI … | grep -i cache-control`
    -> `cache-control: no-store`. v5 is now the only copy outside the Cloudflare editor.
 
@@ -729,6 +747,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   Evening: Socials Affiliates Report card redone (`AffiliateSocialModal`, mock-up B + clean gold All-Time bar).
   Late evening: Combined Value Generated card redone (`CombinedVgSocialModal`, twin panels + "where it went").
   Later: Grays & Cores price card restyled (`GraysCoresSocialModal`, today's layout, glass-strip headers, Wide/Tall).
+  Then: WPLS/eHEX pair fix + grey 0.00%, white titles (Holders combined, RH Core Liquidity), and one price-pair
+  rule for the whole site (`dsPricePair`, gotcha 35). All pushed and checked live except the portfolio look.
 - `sessions/2026-09-28.md` — UFO/WETH out of the RH Cores modal + RH-only switch (seed flag + `resolveUfoPairs`); afternoon: the Socials RH Core Liquidity card redone on Richard Heart's stage photo (`RhCoresSocialModal`, Wide only).
 - `sessions/2026-09-26.md` — Holders cards redone: six mock-up rounds (cyan → silver → gold/green; tiles without
   accent bars; growth-rate data restored; Shaka's two-colour alien as the icon), then `HoldersSocialModal` +
