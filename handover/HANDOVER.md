@@ -36,8 +36,11 @@ the alien head clear of the stats, stats centred, taller tiles). **Afternoon: th
 Value Generated / Token Allocation / DAO Treasury) and UFO's "PTGC Burned by UFO" redesigned too — five mock-ups
 approved one by one (`design/dashboard-panels/README.md`), then built as a SKIN over the classic markup (`p2-*` CSS,
 `P2Art` / `P2Icon` / `P2Bar` / `AllocRingV2` / `CreatureStripV2`, hook classes), assets in `logos/panels/`; same
-switch, same numbers and modals as today. Owed: his live look at the panels.** "Flip the switch" =
-`HEADER_DESIGN='v2'` + push, header and panels together. Gotcha 36. `sessions/2026-09-30.md`.
+switch, same numbers and modals as today. Seen live by Shaka through seven tweak rounds the same evening (pop-ups,
+heights, titles, as-of labels, WETH mark, backdrop, and the Market Cap / Liq-MCap sparklines that stayed blank after
+one GeckoTerminal miss — they retry and refresh now).** "Flip the switch" = `HEADER_DESIGN='v2'` + push, header and
+panels together. **Next session: the LP Pairs section** (restyled rows only so far; Shaka's call on what it should
+become). Gotcha 36. `sessions/2026-09-30.md`.
 **Before that (2026-09-29):** the mock-ups — `design/dashboard-header/` (`mockup-ptgc-v11.html`, `mockup-ufo-v1.html`,
 the phone pair; `README.md` = every decision: no top nav/search bar, our solid-gold BUY/SELL + green SWITCH, his
 background band + alien head placed like his reference, dark shading behind all text, fire-light coin with no second
@@ -645,12 +648,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--5. **Next session, first: the dashboard header v2 — Shaka's live look.** Built 2026-09-30 (`sessions/2026-09-30.md`).
-   (1) hashes are in (Shaka chose one secret for word and password), (2) he pushes and opens `ptgc-ufo.com/?<word>` on the Mac, iPhone and iPad, PTGC and
-   UFO, scrolled and not, (3) his tweaks (candidates: the 1024–1279 px sizes, the tablet scale, the alien head's
-   darkness, all-white tabs), (4) when he says so, `HEADER_DESIGN='v2'` + push = live for everyone; the classic branches
-   can be deleted once he has lived with it. Optional later: a slim `data/kpi-history.json` from the pipeline instead of
-   the 370 KB `lv-snapshots.json` for two sparklines.
+-5. **Next session, first: the LP Pairs section under v2** (Shaka, end of 2026-09-30). Today it is the classic rows
+   with the v2 frame (`p2-lprow`, `p2-lp`); the header (logo · LP PAIRS · n active · Volume · Liquidity · All/RH Cores
+   switch · Sort) and `LPRow` itself are untouched. Ask what he wants first (he declined rank numbers / compact table
+   rows / per-pair mini-curves on 2026-09-30 and wants no Buy/Sell column; mock-up first as with the panels). Then the
+   still-open header/panels items: (a) his phone + iPad look at the panels (only the Mac has been seen), (b) the DAO
+   Treasury's fourth tile repeats the headline total — keep or replace, (c) when he says so `HEADER_DESIGN='v2'` + push
+   = live for everyone, and the classic branches can be deleted once he has lived with it. Optional: a slim
+   `data/kpi-history.json` from the pipeline instead of the 370 KB `lv-snapshots.json` for two sparklines.
 -4. **After that: the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
    the last old-style card there. Same routine as the other redos: mock-ups first (Shaka's taste this week: "pop but
    clean", no heavy glow, no art backdrops, no rays, white titles, plain coloured moves not pills, emojis welcome but
