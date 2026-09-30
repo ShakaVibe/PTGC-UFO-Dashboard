@@ -17,22 +17,26 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-29)
+## Current state (end of 2026-09-30)
 
-**IN PROGRESS — PTGC dashboard header redesign (mock-up only, NOT live, `index.html` untouched).** Everything is in
-`design/dashboard-header/` (outside the deployed site): open `mockup-ptgc-v11.html` in a browser; `README.md` there lists
-every decision Shaka made (no top nav/search bar, our solid-gold BUY/SELL + green SWITCH, his background band + his
-alien head placed like his reference, dark shading behind all text, fire-light coin with no second ring, sampled golds,
-bigger green change with a triangle) and what's still open (sparkline data, UFO + phone mock-ups, then the build).
-Shaka: "This is looking GREAT" — **start the next session there.**
-**UFO version:** done as a mock-up — same background art (Shaka: no teal hue-shift), everything else UFO green
-(`mockup-ufo-v1.html`). **How it goes live — agreed:** build it into `index.html` behind a **hidden preview switch**:
-a secret link (`ptgc-ufo.com/?<secret word>`) opens a password box; the right password turns the new header on for that
-device only (remembered); an "off" link turns it back off; nothing on the page hints it exists. Only a **SHA-256 hash**
-of the password goes in the code — Shaka types the password himself, it never goes in a file, commit or chat. Told
-Shaka plainly: this hides it from visitors, not from someone reading the public repo on GitHub (a server-side lock via
-the ptgcapi worker would be the stronger option, not chosen). "Flip the switch" = make the new header the default + push.
-Full plan: `design/dashboard-header/README.md` → "How it goes live".
+**2026-09-30: the dashboard header redesign is BUILT into `index.html` — behind the hidden preview switch, classic
+still the default.** `HEADER_DESIGN='classic'` (next to `HOME_DESIGN`); `'v2'` = Shaka's mock-up: the art banner
+(`DashHeaderV2` — desktop ≥ 1024 px and a phone/tablet layout), a sticky tab row that grows a token · price line once
+the banner scrolls away, and the seven KPI tiles with **7-day sparklines from real data on every tile** (`KpiTilesV2`,
+`useH2Series`: GeckoTerminal hourly candles for Market Cap, `lv-snapshots.json` for Volume / Liquidity — fetched only
+when v2 is on —, holder / tokensInLP / transaction history for the rest; a missing series is a dashed flat line, never a
+fake shape). Same numbers, same modals, same loaders as the classic header; the classic blocks are untouched and the
+classic render is byte-identical with the switch off. Assets under `logos/header/` (jpg/webp, 480 KB for all four).
+**The switch:** `ptgc-ufo.com/?<word>` → password box → v2 on for that device (`LS.HDR_PREVIEW`); the same link
+shows "Turn off" afterwards. Only SHA-256 hashes go in the code (`HEADER_PREVIEW_GATE_HASH` for the word,
+`HEADER_PREVIEW_PASS_HASH` for the password) — **Shaka's hashes are in (2026-09-30, one secret for both, his
+call)**; an empty hash would mean the switch does not exist. Reminded Shaka: hides it from visitors, not from someone
+reading the public repo. **Owed: Shaka's live look on Mac / iPhone / iPad with the switch on, then his tweaks, then
+"flip the switch" = `HEADER_DESIGN='v2'` + push.** Gotcha 36. `sessions/2026-09-30.md`.
+**Before that (2026-09-29):** the mock-ups — `design/dashboard-header/` (`mockup-ptgc-v11.html`, `mockup-ufo-v1.html`,
+the phone pair; `README.md` = every decision: no top nav/search bar, our solid-gold BUY/SELL + green SWITCH, his
+background band + alien head placed like his reference, dark shading behind all text, fire-light coin with no second
+ring, sampled golds, green change with a triangle; UFO = same art, no hue shift).
 
 **End of day 2026-09-29 — everything is pushed; Shaka checked it live.** Affiliates unfrozen (worker v6), the
 affiliates page on iPhone/iPad, three Socials cards redone (Affiliates Report, Combined Value Generated + its data fix,
@@ -593,6 +597,19 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (`pricePair`) and `scripts/fetch-burn-history.js` carry the same rule. Summing liquidity / volume over every pair
    is a different job and still sums them all.
 
+36. **The dashboard header has two designs; `HEADER_DESIGN` picks one (2026-09-30).** 'classic' is the header +
+   KPI strip JSX inside `Dashboard` (the `!hdrV2&&(<>…</>)` branches); 'v2' is `DashHeaderV2` + `KpiTilesV2` at module
+   scope (above `DashboardSkeleton`), styled by the `h2-*` block at the end of the head `<style>`. Both read the SAME
+   variables in Dashboard's render and call the SAME setters — a data fix goes in one place and reaches both; never
+   copy a loader into the v2 components. Every v2 size is `calc(N*var(--u))`, N being the pixel measured on the
+   2166-px-wide reference mock-up (`--u` = width/2166 rem-scaled, floor .47 at 1024 px; the phone layout under 1024 px
+   uses width/390, cap 1.3) — change a size by changing N, not by adding a px value. The sticky tab row must stay a
+   SIBLING of the banner wrapper (`position:sticky` ends with its parent). Sparklines are `H2Spark` on `useH2Series`
+   (7 days; null → dashed flat line + "history unavailable" label — don't seed a shape). `lv-snapshots.json` (~370 KB)
+   is read only under v2. The preview switch: `LS.HDR_PREVIEW`, `HeaderPreviewGate`, hashes only in the code, empty
+   hashes = no switch; strip nothing else from the URL there (`?home=`, `?debug=1` must survive). Flip = one constant.
+   Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns v2 on for a run.
+
 34. **The Live Feed is a skin over the deck (2026-09-26).** `AbductionDeckModal`'s animations find their targets by
    class and ref — `.deck-pod` (via `podRefs`), `.deck-ship`, `.deck-gen`, `.deck-cell[data-k] .deck-a`, `.deck-links`,
    `.deck-beamclip` — so restyle freely but keep those names and the `data-k`/`data-id` attributes. The sky is
@@ -617,11 +634,12 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--5. **Next session, first: the dashboard header redesign** — `design/dashboard-header/README.md` ("How it goes live",
-   "Still open"). Order: (1) any last tweaks Shaka wants, (2) the sparkline-data question (only Market Cap + Holders have
-   real history), (3) phone mock-up done 2026-09-29 (Shaka: "looks cool" — `mockup-phone-*-v1.html`); tablet can follow the desktop layout scaled, check with Shaka, (4) build it into `index.html` for PTGC and UFO behind the hidden preview
-   switch (secret link + password, hash only), (5) Shaka pushes and checks it on his devices, (6) when he says so, flip
-   the switch.
+-5. **Next session, first: the dashboard header v2 — Shaka's live look.** Built 2026-09-30 (`sessions/2026-09-30.md`).
+   (1) hashes are in (Shaka chose one secret for word and password), (2) he pushes and opens `ptgc-ufo.com/?<word>` on the Mac, iPhone and iPad, PTGC and
+   UFO, scrolled and not, (3) his tweaks (candidates: the 1024–1279 px sizes, the tablet scale, the alien head's
+   darkness, all-white tabs), (4) when he says so, `HEADER_DESIGN='v2'` + push = live for everyone; the classic branches
+   can be deleted once he has lived with it. Optional later: a slim `data/kpi-history.json` from the pipeline instead of
+   the 370 KB `lv-snapshots.json` for two sparklines.
 -4. **After that: the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
    the last old-style card there. Same routine as the other redos: mock-ups first (Shaka's taste this week: "pop but
    clean", no heavy glow, no art backdrops, no rays, white titles, plain coloured moves not pills, emojis welcome but
@@ -760,6 +778,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-09-30.md` — the dashboard header v2 built into index.html: `DashHeaderV2` / `KpiTilesV2` / `H2Spark` /
+  `useH2Series` (7-day real-data sparklines on all seven tiles), the `--u` reference-pixel CSS, `logos/header/` assets,
+  `HEADER_DESIGN` + the hidden preview switch (`HeaderPreviewGate`, hashes only, empty until Shaka's); harness at
+  1440 / 1024 / 768 / 390 / 375, loading shell, DS down, the walk, classic proven unchanged.
 - `sessions/2026-09-29.md` — affiliates frozen at Sep 23: the worker's `btoa()` write path threw on four em-dashes
   after the v5 redeploy; worker v6 (`toBase64Utf8`) deployed + verified, ToolBox Sync made honest (`saveDataImmediate`).
   Afternoon: the affiliates page on iPhone / iPad — unpinned header, two-line Recent Activity, Registry + Commission

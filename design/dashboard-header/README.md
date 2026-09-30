@@ -1,9 +1,11 @@
-# Dashboard header redesign — PTGC (work in progress, NOT live)
+# Dashboard header redesign — PTGC + UFO
 
-Started 2026-09-29 with Shaka. Goal: the top of the PTGC dashboard (hero banner + tab row + KPI tiles) rebuilt to match
-Shaka's reference mock-up (`reference/shaka-reference-mockup.png`). **Approved so far as a mock-up only — nothing in
-`index.html` has changed.** This folder is outside the deployed site (deploy.yml copies only root `*.html`/`*.png`,
-`logos/`, `data/*.json`), so it is safe in the repo.
+Started 2026-09-29 with Shaka. Goal: the top of the dashboard (hero banner + tab row + KPI tiles) rebuilt to match
+Shaka's reference mock-up (`reference/shaka-reference-mockup.png`). **2026-09-30: BUILT into `index.html`**
+(`DashHeaderV2` / `KpiTilesV2`, CSS block `h2-*`, assets in `logos/header/`) behind `HEADER_DESIGN` + the hidden
+preview switch — see `handover/sessions/2026-09-30.md` and gotcha 36. The mock-ups below are the record of what was
+agreed. This folder is outside the deployed site (deploy.yml copies only root `*.html`/`*.png`, `logos/`,
+`data/*.json`), so it is safe in the repo.
 
 ## Open it
 Open `mockup-ptgc-v11.html` in a browser (1:1 at 2166×636 — the reference's size). It is self-contained: every image and
@@ -62,12 +64,15 @@ Nothing on the page hints the switch exists (no button, no text, no console log)
   reading the code on GitHub. Real secrecy would need a server-side gate (e.g. the ptgcapi worker serving the assets).
 - "Flip the switch" = make the new header the default (one line) + push. Roll back the same way.
 
-## Still open (next session)
-1. Shaka may still tweak — ask what else differs from the reference before building.
-2. **Sparklines**: only Market Cap (price series) and Holders are real data. Volume, Liquidity, Liq/MCap, Tokens in LP,
-   Txns are placeholders. `data/metrics-history.json` has daily/hourly volume/liquidity/tokensInLP but its hourly series
-   stopped at 2026-09-02 — fix that pipeline first, or show sparklines only where data exists. Ask Shaka.
-3. Mock-ups still owed before building: **phone / tablet** layouts (UFO done: version A, same art).
-4. Then build into `index.html` (the Dashboard header block; the Buy/Sell button opens `SwapModal`, Switch calls
-   `onSwitch`), assets into `logos/home/` (served), honest-null "—" for anything not loaded, harness check at 1440 /
-   1024 / 390, then Shaka pushes.
+## Built 2026-09-30 — what differs from the mock-ups
+- Sparklines are real 7-day data on all seven tiles (Shaka's pick): Market Cap from GeckoTerminal hourly candles,
+  Volume + Liquidity from `data/lv-snapshots.json`, Liq/MCap derived, Holders / Tokens in LP / Txns from the history
+  files. A missing series is a dashed flat line, not a placeholder shape.
+- Sizes scale with the window: the mock-up's pixels × (width / 2166), 1:1 at 2166 px, .665 at 1440, floor .47 at
+  1024; under 1024 px the phone layout (× width/390, cap 1.3 on tablets).
+- All tabs white (as the mock-up) — the classic header's Portfolio gradient / Affiliates purple are not carried over.
+- The tab row is sticky and grows a logo · token · price line once the banner scrolls away.
+
+## Still open
+1. Shaka's live look with the switch on (Mac, iPhone, iPad) and his tweaks.
+2. Flip: `HEADER_DESIGN='v2'`.
