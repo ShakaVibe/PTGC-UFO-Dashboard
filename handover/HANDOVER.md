@@ -31,8 +31,13 @@ classic render is byte-identical with the switch off. Assets under `logos/header
 shows "Turn off" afterwards. Only SHA-256 hashes go in the code (`HEADER_PREVIEW_GATE_HASH` for the word,
 `HEADER_PREVIEW_PASS_HASH` for the password) — **Shaka's hashes are in (2026-09-30, one secret for both, his
 call)**; an empty hash would mean the switch does not exist. Reminded Shaka: hides it from visitors, not from someone
-reading the public repo. **Owed: Shaka's live look on Mac / iPhone / iPad with the switch on, then his tweaks, then
-"flip the switch" = `HEADER_DESIGN='v2'` + push.** Gotcha 36. `sessions/2026-09-30.md`.
+reading the public repo. Header seen live by Shaka the same day (three tweak rounds: the art images un-squeezed — Tailwind's preflight —,
+the alien head clear of the stats, stats centred, taller tiles). **Afternoon: the four panels under the tiles (Burn /
+Value Generated / Token Allocation / DAO Treasury) and UFO's "PTGC Burned by UFO" redesigned too — five mock-ups
+approved one by one (`design/dashboard-panels/README.md`), then built as a SKIN over the classic markup (`p2-*` CSS,
+`P2Art` / `P2Icon` / `P2Bar` / `AllocRingV2` / `CreatureStripV2`, hook classes), assets in `logos/panels/`; same
+switch, same numbers and modals as today. Owed: his live look at the panels.** "Flip the switch" =
+`HEADER_DESIGN='v2'` + push, header and panels together. Gotcha 36. `sessions/2026-09-30.md`.
 **Before that (2026-09-29):** the mock-ups — `design/dashboard-header/` (`mockup-ptgc-v11.html`, `mockup-ufo-v1.html`,
 the phone pair; `README.md` = every decision: no top nav/search bar, our solid-gold BUY/SELL + green SWITCH, his
 background band + alien head placed like his reference, dark shading behind all text, fire-light coin with no second
@@ -609,7 +614,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    is read only under v2. The preview switch: `LS.HDR_PREVIEW`, `HeaderPreviewGate`, hashes only in the code, empty
    hashes = no switch; strip nothing else from the URL there (`?home=`, `?debug=1` must survive). Flip = one constant.
    `.h2 img{max-width:none}` stays: Tailwind's preflight caps every img at its box width, which squeezed the corona
-   and the band copy (found live). Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns
+   and the band copy (found live). **The panels under the tiles are a SKIN** (2026-09-30 afternoon): the classic
+   `<section>`s stay and carry `p2` + `data-c` + hook classes only when `hdrV2`; `{hdrV2?<P2Bar/>:…}`-style swaps are
+   the only markup forks. Style a v2 panel in the `p2-*` block, never by editing the classic Tailwind classes; a new
+   number goes into the classic JSX once and reaches both. `AllocRingV2` must stay grey when any slice is null (a15).
+   Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns
    v2 on for a run; `probes/h2-imgs.js` measures the art images.
 
 34. **The Live Feed is a skin over the deck (2026-09-26).** `AbductionDeckModal`'s animations find their targets by
