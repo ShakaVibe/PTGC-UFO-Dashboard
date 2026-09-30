@@ -8775,19 +8775,23 @@
     };
     const useH2Series=(token,data,loading)=>{
       const[st,setSt]=useState({});
-      const price=data?.price,mcap=data?.mcap;
+      const priceRef=useRef(null);priceRef.current={price:data?.price,mcap:data?.mcap};   // the latest banner price, read when a fetch lands (not the one at effect time)
       useEffect(()=>{
-        let live=true;
+        let live=true;const timers=[];
         if(loading){setSt({});return;}
         const since=Date.now()-7*86400000;
-        const base={
+        setSt({
           hold:h2FromSnaps(snapshotsFor(token),s=>s[token],since),
           lp:h2FromSnaps(tokensInLPHistoryCache?.snapshots,s=>s[token],since),
           tx:h2FromSnaps(transactionHistoryCache?.snapshots,s=>s[token]?.total,since),
-        };
-        setSt(base);
-        Promise.all([fetchH2Price7d(token),fetchH2Lv()]).then(([px,lv])=>{
+        });
+        /* The two remote series (GeckoTerminal candles, lv-snapshots) can miss on a first try — a slow
+           answer past the 8 s abort, a 429, a hiccup — and used to stay blank until a reload (Shaka,
+           2026-09-30). Now: retry 4 s / 12 s / 30 s after a miss, and refresh every 10 minutes and
+           whenever the tab comes back into view, like the Home chart. */
+        const go=(attempt)=>Promise.all([fetchH2Price7d(token),fetchH2Lv()]).then(([px,lv])=>{
           if(!live)return;
+          const{price,mcap}=priceRef.current;
           /* the candles must end near the price the banner prints (a pool read from the wrong side
              would draw a confident, wrong line) — else no price line at all */
           let pr=(px&&(!(price>0)||Math.abs(px[px.length-1].v/price-1)<0.25))?px:null;
@@ -8800,10 +8804,15 @@
             ratio=liq.map(q=>{const p=h2PriceAt(pr,q.t);return p>0?{t:q.t,v:q.v/(p*circ)*100}:null;}).filter(Boolean);
             if(ratio.length<3)ratio=null;
           }
-          setSt(s=>({...s,mcap:pr,vol,liq,ratio}));
+          setSt(s=>({...s,mcap:pr||s.mcap||null,vol:vol||s.vol||null,liq:liq||s.liq||null,ratio:ratio||s.ratio||null}));   // a miss never blanks a series that was already drawn
+          if((!pr||!vol)&&attempt<3)timers.push(setTimeout(()=>go(attempt+1),[4000,12000,30000][attempt]));
         });
-        return()=>{live=false;};
-      },[token,loading]);   // eslint-disable-line — price/mcap are read once per load on purpose
+        go(0);
+        const id=setInterval(()=>{if(!document.hidden)go(0);},H2_TTL+5000);
+        const onVis=()=>{if(!document.hidden)go(0);};
+        document.addEventListener('visibilitychange',onVis);
+        return()=>{live=false;clearInterval(id);timers.forEach(clearTimeout);document.removeEventListener('visibilitychange',onVis);};
+      },[token,loading]);
       return st;
     };
     const H2Spark=({pts,color,id,label})=>{

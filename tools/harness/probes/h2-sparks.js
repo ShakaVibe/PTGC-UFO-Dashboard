@@ -1,0 +1,1 @@
+JSON.stringify([...document.querySelectorAll('.h2-tile')].map(t=>[t.querySelector('.h2-tl').textContent.trim(),t.querySelector('.h2-sp svg').getAttribute('aria-label').includes('unavailable')?'FLAT':'line']))

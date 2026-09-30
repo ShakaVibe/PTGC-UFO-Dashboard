@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -53,6 +53,7 @@ const server=http.createServer((req,res)=>{
 // ---- stubs
 const hex=n=>'0x'+BigInt(n).toString(16);
 const pad=(n)=>'0x'+BigInt(n).toString(16).padStart(64,'0');
+let gtCalls=0;
 const HEAD=+process.env.HEAD_BLOCK||24_000_000;   // HEAD_BLOCK=n: raise the stub chain head (e.g. 27100000 so portfolio's UFO log scan, which starts at the launch block 26989200, has a window to walk — a12)
 const rpcAnswer=(body)=>{
   const one=(q)=>{
@@ -224,6 +225,7 @@ const dsAnswer=(url)=>{
     if(/api\.geckoterminal\.com/.test(u)){
       const gc=process.env.GT_CANDLES;if(!gc)return r.fulfill({status:404,body:''});
       if(/^slow:/.test(gc))await sleep(+gc.slice(5));
+      if(gc==='flaky'){gtCalls++;if(gtCalls<=2)return r.fulfill({status:429,body:''});}   // GT_CANDLES=flaky: the first two answers are 429s, then normal — the dashboard's sparkline retry must recover
       const isUfo=UFO_ADDR.test(u),now=Math.floor(Date.now()/1000),base=isUfo?1.47e-4:1.36e-4;let p=base,s=isUfo?7:3;const list=[];
       for(let i=95;i>=0;i--){s=(s*9301+49297)%233280;p=p*(1+(s/233280-0.5)*0.02+(isUfo?-0.0004:0.0005));list.push([now-i*900,p,p,p,p,1000]);}
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});
