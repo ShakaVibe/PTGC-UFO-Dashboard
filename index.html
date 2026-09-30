@@ -668,12 +668,10 @@
     .p2-lpch{font-size:19px;font-weight:700}.p2-lpch.up{color:#4ADE80}.p2-lpch.dn{color:#F87171}.p2-lpch.na{color:rgba(255,255,255,.35)}
     .p2-lptx{font-size:19px;font-weight:700;display:flex;gap:10px}.p2-lptx b{color:#4ADE80;font-weight:700}.p2-lptx i{font-style:normal;color:#F87171}
     .p2-lpac{display:flex;justify-content:flex-end;gap:8px;padding-right:8px!important}
-    .p2-lpac a,.p2-lpac button{width:34px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none}
-    .p2-lpac .info{background:linear-gradient(180deg,#5AA9FF,#1B6FE8);box-shadow:0 0 10px -3px rgba(80,160,255,.9)}
-    .p2-lpac .info[aria-expanded="true"]{box-shadow:0 0 0 2px rgba(255,255,255,.35),0 0 10px -3px rgba(80,160,255,.9)}
-    .p2-lpac .chart{background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.14)}
-    .p2-lpac .tools{background:linear-gradient(180deg,#3FD0C9,#1D8F97);box-shadow:0 0 10px -3px rgba(63,208,201,.9)}
-    .p2-lpac a:hover,.p2-lpac button:hover{transform:scale(1.08)}
+    .p2-lpac a,.p2-lpac button{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);transition:background .15s,border-color .15s}
+    .p2-lpac .info{color:#8FC6FF}.p2-lpac .chart{color:#F3C64C}.p2-lpac .tools{color:#6FE3DC}
+    .p2-lpac .info[aria-expanded="true"]{background:rgba(143,198,255,.18);border-color:rgba(143,198,255,.45)}
+    .p2-lpac a:hover,.p2-lpac button:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22)}
     .p2-lpdet{padding:14px 20px 18px 116px;border-bottom:1px solid rgba(255,255,255,.05);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 20px;font-size:18px;line-height:1.3;background:rgba(0,0,0,.3)}
     .p2-lpdet>div{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
     .p2-lpdet .text-gray-400{color:rgba(255,255,255,.55)!important;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
@@ -9267,6 +9265,35 @@
       _lpChain=p.then(()=>_lpSleep(LP_GAP_MS),()=>_lpSleep(LP_GAP_MS));
       return p;
     };
+    /* The pipeline's file comes FIRST (2026-09-30 night, Shaka: "come up with a better plan so they load
+       instantly"): scripts/build-pair-volume.mjs writes data/pair-volume-7d.json — every PTGC and UFO pool's 28
+       six-hour bins, read from GeckoTerminal once per pipeline run instead of once per visitor. One ~6 KB
+       request draws every curve at once. The per-pool live read above is only for a pool the file does not
+       carry (a new pair) or a file older than PAIR_VOL_MAX_AGE. A pool the file marks null (GeckoTerminal does
+       not list it) is dashed without a live try. */
+    const PAIR_VOL_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/pair-volume-7d.json';
+    const PAIR_VOL_MAX_AGE=36*3600*1000,PAIR_VOL_TTL=10*60*1000;
+    let _pvFile=null,_pvAt=0,_pvP=null;
+    const fetchPairVolFile=()=>{
+      if(_pvAt&&Date.now()-_pvAt<PAIR_VOL_TTL)return Promise.resolve(_pvFile);
+      if(_pvP)return _pvP;
+      _pvP=fetch(PAIR_VOL_URL+'?t='+Date.now()).then(r=>r.ok?r.json():null).then(j=>{
+        _pvP=null;_pvAt=Date.now();
+        const t=j&&Date.parse(j.generatedAt);
+        _pvFile=(j&&j.schema===1&&j.pools&&typeof j.pools==='object'&&isFinite(t)&&Date.now()-t<PAIR_VOL_MAX_AGE&&isFinite(Number(j.binStart)))?j:null;
+        return _pvFile;
+      }).catch(()=>{_pvP=null;_pvAt=Date.now();_pvFile=null;return null;});
+      return _pvP;
+    };
+    const pairVolFromFile=(file,key)=>{   // undefined = the file has no entry (read it live), null = not listed, else pts
+      if(!file)return undefined;
+      const e=file.pools[key];
+      if(e===undefined)return undefined;
+      if(e===null)return null;
+      if(!Array.isArray(e.v))return undefined;
+      const B=Number(file.binMs)||6*3600000,start=Number(file.binStart);
+      return e.v.map((v,i)=>({t:start+i*B,v:Number(v)||0}));
+    };
     /* pairs: the rows on screen (null when v2 is off) → {pairAddressLower: pts | null | undefined(loading)} */
     const useLpVolSeries=(pairs)=>{
       const[st,setSt]=useState({});
@@ -9275,9 +9302,13 @@
         if(!keys)return;
         let live=true,rounds=0,timer=null;
         const fresh=k=>{const h=_lpVol[k];return h&&!h.soft&&h.pts!==undefined&&Date.now()-h.at<LP_SERIES_TTL;};
-        const go=()=>{
-          const list=keys.split(',');
-          setSt(s=>{const n={...s};list.forEach(k=>{if(fresh(k))n[k]=_lpVol[k].pts;});return n;});   // cached answers paint at once
+        const go=async()=>{
+          const all=keys.split(',');
+          const file=await fetchPairVolFile();
+          if(!live)return;
+          const fromFile={};all.forEach(k=>{const p=pairVolFromFile(file,k);if(p!==undefined)fromFile[k]=p;});
+          setSt(s=>{const n={...s};all.forEach(k=>{if(k in fromFile)n[k]=fromFile[k];else if(fresh(k))n[k]=_lpVol[k].pts;});return n;});   // the file and cached live answers paint at once
+          const list=all.filter(k=>!(k in fromFile));
           let soft=false;
           Promise.all(list.map(k=>fresh(k)?null:fetchPoolVol7d(k).then(pts=>{
             if(!live)return;
@@ -9342,9 +9373,10 @@
             <div className="p2-lptx tabular-nums c-tx"><b>{buys??'\u2014'}</b><i>{sells??'\u2014'}</i></div>
             <div className="p2-lpv m tabular-nums c-vl">{ratio}</div>
             <div className="p2-lpac">
-              <button onClick={()=>setDet(!det)} aria-label="Pool details" aria-expanded={det} className="info"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.2" r="1.3" fill="#fff"/><rect x="6.9" y="6.6" width="2.2" height="6" rx="1" fill="#fff"/></svg></button>
-              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DexScreener" className="chart"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="9" width="3" height="7" rx=".8" fill="#F3C64C"/><rect x="7.5" y="4" width="3" height="12" rx=".8" fill="#4ADE80"/><rect x="13" y="7" width="3" height="9" rx=".8" fill="#F87171"/></svg></a>
-              <a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DEXTools" className="tools"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E9F4FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-5.9 5.7L3.5 17.3a1.8 1.8 0 0 0 2.5 2.5l5.3-5.3a4.5 4.5 0 0 0 5.7-5.9l-2.6 2.6-2.4-.6-.6-2.4 2.6-2.6z"/></svg></a>
+              {/* option C (Shaka, 2026-09-30 night): 28 px dark glass squares, one soft tint per glyph — blue ⓘ, gold bars for DexScreener, a teal line graph for DEXTools (a wrench read as "settings") */}
+              <button onClick={()=>setDet(!det)} aria-label="Pool details" aria-expanded={det} className="info"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="4.2" r="1.3"/><rect x="6.9" y="6.6" width="2.2" height="6" rx="1"/></svg></button>
+              <a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DexScreener" className="chart"><svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><rect x="2" y="9" width="3" height="7" rx=".8"/><rect x="7.5" y="4" width="3" height="12" rx=".8"/><rect x="13" y="7" width="3" height="9" rx=".8"/></svg></a>
+              <a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DEXTools" className="tools"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 13.5l4-5 3 3 3.5-5.5L16 4"/><circle cx="16" cy="4" r="1.3" fill="currentColor" stroke="none"/></svg></a>
             </div>
           </div>
           {det&&(

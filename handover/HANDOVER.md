@@ -34,8 +34,11 @@ asks done too: larger type throughout the table, a wrench for DEXTools, a bigger
 STILL dashed for quiet pools — GeckoTerminal's candles are sparse (only hours that traded) and the parser wanted 12 of
 them; now the week is binned with real zeros (`GT_SPARSE=1`); the Burn panel's USD/TOK toggle was being covered by the
 "as of" label when the title row wrapped at ≤ 1250 px (label `pointer-events:none`, titles shrink under 1280); and the
-action icons are "too loud" — four quieter options drawn (`mock-lp-actions-v1.html`), his pick pending. Owed: the
-live look after round 3 (every row a curve or the floor line, none dashed), then phone + iPad** — the harness fakes
+action icons were "too loud" — option C built (dark glass squares, line-graph glyph for DEXTools). **Round 4: the
+curves now come from the PIPELINE** — `scripts/build-pair-volume.mjs` → `data/pair-volume-7d.json` (hourly step
+`pair-volume`), read first by `useLpVolSeries`; the live per-pool read is only the fallback (a pool the file lacks, or
+a file > 36 h old). **The file is born on the first run: after pushing, Actions → Data Pipeline → Run workflow →
+`only=pair-volume`.** Owed: the live look with the file in place (every row instantly), then phone + iPad** — the harness fakes
 the DexScreener logos and the GeckoTerminal answers. Found on the way, classic, live today:
 the phone All/RH Cores switch draws its knob at the "on" end while All is selected (one line if he wants it fixed).
 `sessions/2026-09-30.md` "Night". **Flip = `HEADER_DESIGN='v2'` + push: header, panels and LP Pairs together.**
@@ -345,6 +348,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   (PLS/USD via `PAIR_WPLS_DAI`, PTGC via `PAIR_PTGC_WPLS`). Price line = same reserves on a
   block grid, extended backwards when an older wallet appears. No third-party API anywhere in it.
   Run the generator locally with `NODE_USE_ENV_PROXY=1` (Node's fetch ignores the VM proxy).
+- **LP Pairs 7-day volume curves**: `data/pair-volume-7d.json` (hourly, the pair-volume step; generator
+  `scripts/build-pair-volume.mjs` — GeckoTerminal hourly candles per pool, 28 six-hour bins, `binStart` shared). A
+  pool the file has no entry for is read live by the browser; a file older than 36 h is ignored. GeckoTerminal's
+  candles are sparse (only hours that traded) — a bin nobody traded in is a real zero, never "unavailable".
 - **PTGC burned by UFO** — always OLD + NEW contract, headline and period boxes alike (Shaka's
   explicit intent). Three sources, combined in `computePtgcBurnedByUfo` in `index.html`:
   v1 (retired contract) lifetime from `data/ufo-ptgc-burns.json` → `byContract.v1`;
@@ -650,8 +657,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    hook classes added as `${hdrV2?' p2-x':''}` — keep that form, a `${hdrV2?'p2-x':''}` with a space before it leaves a
    trailing space in the classic class string. Columns: to drop one under a breakpoint, hide the CELL and remove the
    column from `grid-template-columns` together — a hidden grid item takes no slot, so a `0` column shifts every cell
-   after it one column left (found at 768). The curves come from `useLpVolSeries` → `fetchPoolVol7d`: one GeckoTerminal
-   hourly-candle call per pool through ONE queue at `LP_GAP_MS` (1.1 s — GeckoTerminal refused a 150 ms burst live:
+   after it one column left (found at 768). The curves come from `useLpVolSeries`: FIRST the pipeline's
+   `data/pair-volume-7d.json` (`fetchPairVolFile`, `scripts/build-pair-volume.mjs`, hourly `pair-volume` step — one
+   ~6 KB read draws every row at once; ignored past 36 h; a pool marked null there is dashed without a live try), and
+   only for a pool the file lacks, `fetchPoolVol7d`: one GeckoTerminal hourly-candle call per pool through ONE queue at `LP_GAP_MS` (1.1 s — GeckoTerminal refused a 150 ms burst live:
    four rows, then 429s; 20 rows now fill in ~22 s, top first), cached 30 min per pool in `_lpVol` (module level) AND
    in localStorage (`LS.LP_VOL`), so a token switch or a reload draws every curve at once; 6-hour buckets, colour =
    second half of the week vs the first. `undefined` = loading dots, `null` = dashed "history unavailable" — a pool

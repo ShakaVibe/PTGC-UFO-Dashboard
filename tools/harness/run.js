@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, GT_SPARSE=1, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, GT_SPARSE=1, PAIRVOL=1|old, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -154,6 +154,16 @@ const dsAnswer=(url)=>{
     if(/api\.scan\.pulsechain\.com.*counters/.test(u)&&process.env.PS_COUNTERS_DOWN)return r.fulfill({status:500,body:'counters down'});
     if(/api\.scan\.pulsechain\.com.*counters/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token_holders_count:'4321',transfers_count:'100000'})});
     if(/api\.scan\.pulsechain\.com.*holders/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:[],next_page_params:null})});
+    /* PAIRVOL=1 (2026-09-30 night): serve a synthetic data/pair-volume-7d.json — the pipeline file the LP Pairs curves
+       read first — built from the DS_PAIRS=burn pair list with the same seeded bins the GT stub uses (every third
+       pool null = "not listed", every seventh left out = the browser must read it live). PAIRVOL=old: the same file
+       stamped 40 h ago, which the page must ignore (PAIR_VOL_MAX_AGE 36 h) and read every pool live. */
+    if(process.env.PAIRVOL&&/main\/data\/pair-volume-7d\.json/.test(u)){
+      const bp=burnPairs()||[],B=6*3600000,now=Date.now(),binStart=Math.floor((now-7*86400000)/B)*B,pools={};
+      bp.forEach((p,i)=>{const k=String(p.pairAddress).toLowerCase();if(i%7===6)return;if(i%3===2){pools[k]=null;return;}let sd=0;for(const ch of k)sd=(sd*31+ch.charCodeAt(0))>>>0;const up=sd%2===0;let x=sd||1,v=500+(sd%1000);const arr=[];for(let j=0;j<28;j++){x=(x*9301+49297)%233280;v=Math.max(0,v*(1+(x/233280-0.5)*0.5+(up?0.02:-0.02)));arr.push(Math.round(v));}pools[k]={n:`${p.baseToken.symbol}/${p.quoteToken.symbol}`,v:arr};});
+      const gen=process.env.PAIRVOL==='old'?now-40*3600000:now;
+      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({schema:1,generatedAt:new Date(gen).toISOString(),binMs:B,bins:28,binStart,pools})});
+    }
     if(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/.*)/.test(u)){const f=u.match(/main\/(data\/[^?]*)/)[1];const p=path.join(REPO,f);if(fs.existsSync(p))return r.fulfill({status:200,contentType:'application/json',body:fs.readFileSync(p)});return r.fulfill({status:404,body:''});}
     /* AFFIL_DATA=1 serves a shaped /public/commissions body (one referrer, one buy, one
        receipt) instead of the empty default, so the affiliates page renders with data — the
