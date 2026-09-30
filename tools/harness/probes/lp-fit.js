@@ -1,0 +1,2 @@
+/* LP Pairs v2: does the last row's actions cell sit inside the panel, and is there no horizontal page scroll? */
+(()=>{const p=document.querySelector('.p2-lppn'),a=[...document.querySelectorAll('.p2-lpac')].pop();if(!p||!a)return 'no table';return JSON.stringify({actionsRight:Math.round(a.getBoundingClientRect().right),panelRight:Math.round(p.getBoundingClientRect().right),pageScroll:document.documentElement.scrollWidth-window.innerWidth});})()
