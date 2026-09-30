@@ -19,7 +19,9 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-09-30, night)
 
-**2026-09-30, night: the LP Pairs section is BUILT under v2 — the whole preview design is now complete.** Shaka
+**2026-09-30, night: the LP Pairs section is BUILT under v2 — the whole preview design is now complete — and its curves
+come from the pipeline (`data/pair-volume-7d.json`, `scripts/build-pair-volume.mjs`, hourly `pair-volume` step; first run
+#73 landed). Tomorrow: Shaka's small clean-ups on the page, then phone + iPad, then the flip.** Shaka
 brought his own mock-up (saved: `design/dashboard-panels/reference/shaka-lp-pairs-mockup.png`) and reversed three of
 his morning calls: rank numbers, one line per pair and a 7-day volume curve per pair are IN; the Buy/Sell column and
 the eye icon are out. One mock-up round (`design/dashboard-panels/mock-lp-v1.html`, "okay. looks good."), then built:
@@ -699,10 +701,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--5. **The v2 design is complete (header 09-30 morning, panels 09-30 afternoon, LP Pairs 09-30 night).** Open before
-   the flip: (a) Shaka's live look at the LP Pairs table on the Mac (real logos, real GeckoTerminal curves — do the
-   bottom rows fill within ~5 s? does any listed pool come back dashed?), then phone + iPad for the panels AND the
-   pairs (only the Mac has seen the panels; nothing has seen the pairs), (b) the DAO Treasury's fourth tile repeats the
+-5. **Tomorrow first (Shaka, end of 2026-09-30): "cleaning up a few little things on the page"** — his list, ask for
+   it at the start; the dashboard page under v2 (header, tiles, panels, LP Pairs). Six live rounds on the LP Pairs
+   table today ended "sweet"; the pipeline file feeds its curves. Then, before the flip: (a) phone + iPad for the
+   panels AND the pairs (only the Mac has seen either), (b) the DAO Treasury's fourth tile repeats the
    headline total — keep or replace, (c) the classic phone All/RH Cores knob sits at the "on" end (live today, one
    line), (d) when he says so `HEADER_DESIGN='v2'` + push = live for everyone; the classic branches can be deleted
    once he has lived with it. Optional: a slim `data/kpi-history.json` from the pipeline instead of the 370 KB
