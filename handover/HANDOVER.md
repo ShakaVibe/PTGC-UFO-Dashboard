@@ -40,7 +40,7 @@ curves now come from the PIPELINE** — `scripts/build-pair-volume.mjs` → `dat
 a file > 36 h old). **The file exists (run #73, 2026-09-30 22:04 UTC: 47 pools read, 0 refused, 8.6 KB; the step takes ~9 min on
 GitHub's runners because GeckoTerminal answers them slowly — the hourly job is ~23 min now, still well inside its
 50-min timeout; gate it to every 3 h if cadence ever suffers). Verified live from the Mac: 20 of 20 rows drawn from
-the file, zero per-pool calls.** Round 5: curve moved next to the Volume figure, the three right-hand columns centred, regular weights throughout. Owed: phone + iPad** — the harness fakes
+the file, zero per-pool calls.** Round 5: curve moved next to the Volume figure, the three right-hand columns centred, regular weights throughout; round 6: 50 px rows. Owed: phone + iPad** — the harness fakes
 the DexScreener logos and the GeckoTerminal answers. Found on the way, classic, live today:
 the phone All/RH Cores switch draws its knob at the "on" end while All is selected (one line if he wants it fixed).
 `sessions/2026-09-30.md` "Night". **Flip = `HEADER_DESIGN='v2'` + push: header, panels and LP Pairs together.**
