@@ -17,7 +17,20 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-30)
+## Current state (end of 2026-09-30, night)
+
+**2026-09-30, night: the LP Pairs section is BUILT under v2 — the whole preview design is now complete.** Shaka
+brought his own mock-up (saved: `design/dashboard-panels/reference/shaka-lp-pairs-mockup.png`) and reversed three of
+his morning calls: rank numbers, one line per pair and a 7-day volume curve per pair are IN; the Buy/Sell column and
+the eye icon are out. One mock-up round (`design/dashboard-panels/mock-lp-v1.html`, "okay. looks good."), then built:
+`LpPanelV2` / `LpTableV2` / `LpRowV2` / `LpSpark` + `useLpVolSeries` / `fetchPoolVol7d` (module scope, above
+`DashboardSkeleton`), the `p2-lp*` CSS block, hook classes on the section header; the curve is REAL per-pool hourly
+volume from GeckoTerminal (queued, cached 30 min, dashed when a pool is not listed — never a seeded shape); table from
+640 px up (curve column leaves under 1024, Txns + Vol/Liq under 900), the stacked cards stay on phones. Classic proven
+byte-identical with the switch off (`probes/lp-dom.js`). Gotcha 37. **Owed: the live look on Shaka's Mac, phone and
+iPad** — the harness fakes the DexScreener logos and the GeckoTerminal answers. Found on the way, classic, live today:
+the phone All/RH Cores switch draws its knob at the "on" end while All is selected (one line if he wants it fixed).
+`sessions/2026-09-30.md` "Night". **Flip = `HEADER_DESIGN='v2'` + push: header, panels and LP Pairs together.**
 
 **2026-09-30: the dashboard header redesign is BUILT into `index.html` — behind the hidden preview switch, classic
 still the default.** `HEADER_DESIGN='classic'` (next to `HOME_DESIGN`); `'v2'` = Shaka's mock-up: the art banner
@@ -39,8 +52,7 @@ approved one by one (`design/dashboard-panels/README.md`), then built as a SKIN 
 switch, same numbers and modals as today. Seen live by Shaka through seven tweak rounds the same evening (pop-ups,
 heights, titles, as-of labels, WETH mark, backdrop, and the Market Cap / Liq-MCap sparklines that stayed blank after
 one GeckoTerminal miss — they retry and refresh now).** "Flip the switch" = `HEADER_DESIGN='v2'` + push, header and
-panels together. **Next session: the LP Pairs section** (restyled rows only so far; Shaka's call on what it should
-become). Gotcha 36. `sessions/2026-09-30.md`.
+panels together. **LP Pairs done the same night (above).** Gotcha 36. `sessions/2026-09-30.md`.
 **Before that (2026-09-29):** the mock-ups — `design/dashboard-header/` (`mockup-ptgc-v11.html`, `mockup-ufo-v1.html`,
 the phone pair; `README.md` = every decision: no top nav/search bar, our solid-gold BUY/SELL + green SWITCH, his
 background band + alien head placed like his reference, dark shading behind all text, fire-light coin with no second
@@ -624,6 +636,22 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns
    v2 on for a run; `probes/h2-imgs.js` measures the art images.
 
+37. **LP Pairs under v2 is a TABLE with real per-pool curves (2026-09-30 night).** From 640 px up `LpTableV2`
+   replaces the `LPRow` list (phones keep `LPRow` in the `p2-lprow` skin); classic is the untouched `else` branch and
+   must stay byte-identical (`probes/lp-dom.js` on two builds, `cmp`). The section header is the classic markup with
+   hook classes added as `${hdrV2?' p2-x':''}` — keep that form, a `${hdrV2?'p2-x':''}` with a space before it leaves a
+   trailing space in the classic class string. Columns: to drop one under a breakpoint, hide the CELL and remove the
+   column from `grid-template-columns` together — a hidden grid item takes no slot, so a `0` column shifts every cell
+   after it one column left (found at 768). The curves come from `useLpVolSeries` → `fetchPoolVol7d`: one GeckoTerminal
+   hourly-candle call per pool through a 150 ms queue (the free tier is ~30 calls/min — 20 rows fill in ~4 s), cached
+   30 min per pool address in `_lpVol` (module level, survives a token switch), 6-hour buckets, colour = second half of
+   the week vs the first. `undefined` = loading dots, `null` = dashed "history unavailable" — a pool GeckoTerminal
+   does not list (404) is null for the TTL, a 429 / 5xx / timeout is `soft` and retried (10 s inside the fetch, then
+   20 s from the hook, twice). Never seed a shape. The rows print "—" for a missing read (a14); the ranks follow the
+   sort and the under-$1K table continues them (`rankStart`). Harness: `DS_PAIRS=burn` (real 30-pair list),
+   `GT_CANDLES=1` + `GT_POOLS=miss:<n>`, probes `lp-rows` / `lp-curves` / `lp-dom`. When the CSP (b7) lands,
+   `connect-src https://api.geckoterminal.com` covers this too.
+
 34. **The Live Feed is a skin over the deck (2026-09-26).** `AbductionDeckModal`'s animations find their targets by
    class and ref — `.deck-pod` (via `podRefs`), `.deck-ship`, `.deck-gen`, `.deck-cell[data-k] .deck-a`, `.deck-links`,
    `.deck-beamclip` — so restyle freely but keep those names and the `data-k`/`data-id` attributes. The sky is
@@ -648,14 +676,15 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--5. **Next session, first: the LP Pairs section under v2** (Shaka, end of 2026-09-30). Today it is the classic rows
-   with the v2 frame (`p2-lprow`, `p2-lp`); the header (logo · LP PAIRS · n active · Volume · Liquidity · All/RH Cores
-   switch · Sort) and `LPRow` itself are untouched. Ask what he wants first (he declined rank numbers / compact table
-   rows / per-pair mini-curves on 2026-09-30 and wants no Buy/Sell column; mock-up first as with the panels). Then the
-   still-open header/panels items: (a) his phone + iPad look at the panels (only the Mac has been seen), (b) the DAO
-   Treasury's fourth tile repeats the headline total — keep or replace, (c) when he says so `HEADER_DESIGN='v2'` + push
-   = live for everyone, and the classic branches can be deleted once he has lived with it. Optional: a slim
-   `data/kpi-history.json` from the pipeline instead of the 370 KB `lv-snapshots.json` for two sparklines.
+-5. **The v2 design is complete (header 09-30 morning, panels 09-30 afternoon, LP Pairs 09-30 night).** Open before
+   the flip: (a) Shaka's live look at the LP Pairs table on the Mac (real logos, real GeckoTerminal curves — do the
+   bottom rows fill within ~5 s? does any listed pool come back dashed?), then phone + iPad for the panels AND the
+   pairs (only the Mac has seen the panels; nothing has seen the pairs), (b) the DAO Treasury's fourth tile repeats the
+   headline total — keep or replace, (c) the classic phone All/RH Cores knob sits at the "on" end (live today, one
+   line), (d) when he says so `HEADER_DESIGN='v2'` + push = live for everyone; the classic branches can be deleted
+   once he has lived with it. Optional: a slim `data/kpi-history.json` from the pipeline instead of the 370 KB
+   `lv-snapshots.json` for two sparklines; a `data/pair-history.json` would let the LP curves paint at once instead of
+   over ~5 s (Shaka chose the live GeckoTerminal read for now).
 -4. **After that: the Combined Burn Stats card** — Socials → Combined → 🔥 Combined Burn Stats,
    the last old-style card there. Same routine as the other redos: mock-ups first (Shaka's taste this week: "pop but
    clean", no heavy glow, no art backdrops, no rays, white titles, plain coloured moves not pills, emojis welcome but
@@ -797,7 +826,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 - `sessions/2026-09-30.md` — the dashboard header v2 built into index.html: `DashHeaderV2` / `KpiTilesV2` / `H2Spark` /
   `useH2Series` (7-day real-data sparklines on all seven tiles), the `--u` reference-pixel CSS, `logos/header/` assets,
   `HEADER_DESIGN` + the hidden preview switch (`HeaderPreviewGate`, hashes only, empty until Shaka's); harness at
-  1440 / 1024 / 768 / 390 / 375, loading shell, DS down, the walk, classic proven unchanged.
+  1440 / 1024 / 768 / 390 / 375, loading shell, DS down, the walk, classic proven unchanged. Afternoon: the four panels
+  + PTGC Burned by UFO as a skin (seven tweak rounds). Night: the LP Pairs table (`LpTableV2`, real per-pool 7-day
+  volume curves, `DS_PAIRS=burn` harness, classic byte-identical).
 - `sessions/2026-09-29.md` — affiliates frozen at Sep 23: the worker's `btoa()` write path threw on four em-dashes
   after the v5 redeploy; worker v6 (`toBase64Utf8`) deployed + verified, ToolBox Sync made honest (`saveDataImmediate`).
   Afternoon: the affiliates page on iPhone / iPad — unpinned header, two-line Recent Activity, Registry + Commission

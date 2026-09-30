@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -98,8 +98,12 @@ const dsPair=(base,quote,price,liq,vol0)=>({chainId:'pulsechain',dexId:'pulsex',
   volume:(v=>({h24:v,h6:v/4,h1:v/24,m5:v/288}))(volDrift(vol0)),priceChange:{h24:3.21,h6:1,h1:0.2,m5:0},liquidity:{usd:liq,base:1e9,quote:1e9},fdv:price*3e11,marketCap:price*3e11,pairCreatedAt:Date.now()-1062*86400000,
   info:{imageUrl:''}});
 const UFO_ADDR=/49eD499433Bee42DD34C169470feF2C8f9fAe6e6|E221e6fC30e5787F0d551f980B4da1055D832A03/i;   // TOKENS.UFO.address | TOKENS.UFO.mainPair
+/* DS_PAIRS=burn (2026-10-01): the PTGC /tokens/ answer is the REAL pair list captured in data/burn-summary.json
+   (30 pairs, as DexScreener sent them) — the four synthetic pairs are too few to judge the LP Pairs table. */
+const burnPairs=()=>{try{const j=JSON.parse(fs.readFileSync(path.join(REPO,'data/burn-summary.json'),'utf8'));return j.PTGC&&j.PTGC.pairs&&j.PTGC.pairs.pairs||null;}catch(e){return null;}};
 const dsAnswer=(url)=>{
   if(process.env.DS_VOL_DRIFT&&/tokens\//.test(url))dsCalls++;
+  if(process.env.DS_PAIRS==='burn'&&/tokens\/0x94534EeEe131840b1c0F61847c572228bdfDDE93/i.test(url)){const bp=burnPairs();if(bp)return {schemaVersion:'1.0.0',pairs:bp};}
   const isUFO=UFO_ADDR.test(url);   // the UFO token or its main pair in the URL
   const P=isUFO&&process.env.DS_UFO_PRICE?+process.env.DS_UFO_PRICE:(+process.env.DS_PRICE||0.000142);   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48); DS_UFO_PRICE=n: a DIFFERENT price for UFO calls, so a token-switch race is visible (a7)
   const B=isUFO&&process.env.DS_UFO_PRICE?'UFO':'PTGC';
@@ -226,6 +230,16 @@ const dsAnswer=(url)=>{
       const gc=process.env.GT_CANDLES;if(!gc)return r.fulfill({status:404,body:''});
       if(/^slow:/.test(gc))await sleep(+gc.slice(5));
       if(gc==='flaky'){gtCalls++;if(gtCalls<=2)return r.fulfill({status:429,body:''});}   // GT_CANDLES=flaky: the first two answers are 429s, then normal — the dashboard's sparkline retry must recover
+      /* per-pool hourly candles (the LP Pairs table's 7-day volume curves, 2026-10-01): 168 hourly rows with a
+         volume (column 5) seeded from the pool address — half the pools trend up, half down; GT_POOLS=miss:<n>
+         404s every n-th pool so the dashed "unavailable" line shows too */
+      if(/\/ohlcv\/hour\b/.test(u)){
+        const pool=(u.match(/pools\/(0x[0-9a-fA-F]{40})/)||[])[1]||'';let seed=0;for(const ch of pool)seed=(seed*31+ch.charCodeAt(0))>>>0;
+        const miss=(process.env.GT_POOLS||'').match(/^miss:(\d+)$/);if(miss&&seed%+miss[1]===0)return r.fulfill({status:404,body:''});
+        const now=Math.floor(Date.now()/3600)*3600,up=seed%2===0,list=[];let s=seed||1,v=500+(seed%1000);
+        for(let i=167;i>=0;i--){s=(s*9301+49297)%233280;v=Math.max(0,v*(1+(s/233280-0.5)*0.5+(up?0.004:-0.004)));list.push([now-i*3600,1e-4,1e-4,1e-4,1e-4,Math.round(v)]);}
+        return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});
+      }
       const isUfo=UFO_ADDR.test(u),now=Math.floor(Date.now()/1000),base=isUfo?1.47e-4:1.36e-4;let p=base,s=isUfo?7:3;const list=[];
       for(let i=95;i>=0;i--){s=(s*9301+49297)%233280;p=p*(1+(s/233280-0.5)*0.02+(isUfo?-0.0004:0.0005));list.push([now-i*900,p,p,p,p,1000]);}
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});

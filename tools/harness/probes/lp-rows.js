@@ -1,0 +1,2 @@
+/* LP Pairs v2: what the table shows — rank, name, volume, curve state, liquidity, change, txns, ratio per row */
+(()=>[...document.querySelectorAll('.p2-lprs')].map(r=>{const c=[...r.querySelectorAll('.p2-lpr>div')];const svg=r.querySelector('.p2-lpsp svg');return[c[0].textContent,r.querySelector('.p2-lpnm .p').textContent,c[3].textContent,svg?(svg.getAttribute('aria-label').replace(/^[^:]*: /,'')):'-',c[5].textContent,c[6].textContent,c[7].textContent.replace(/(\d)(\d)/,'$1/$2'),c[8].textContent]}))()
