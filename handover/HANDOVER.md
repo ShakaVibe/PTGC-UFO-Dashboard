@@ -30,8 +30,12 @@ volume from GeckoTerminal (queued, cached 30 min, dashed when a pool is not list
 byte-identical with the switch off (`probes/lp-dom.js`). Gotcha 37. **Shaka's first live look (Mac): GeckoTerminal
 refused the burst — four curves then dashes — fixed the same night (round 2: ~1 call/s, a 429 pauses the queue and the
 pool is retried, refused = "loading" not dashed, answers cached in localStorage `LS.LP_VOL` for 30 min); his other
-asks done too: larger type throughout the table, a wrench for DEXTools, a bigger ⓘ drawer. Owed: the second live
-look (do all rows fill within ~25 s on a cold cache, instantly on a reload?), then phone + iPad** — the harness fakes
+asks done too: larger type throughout the table, a wrench for DEXTools, a bigger ⓘ drawer. Round 3: the curves were
+STILL dashed for quiet pools — GeckoTerminal's candles are sparse (only hours that traded) and the parser wanted 12 of
+them; now the week is binned with real zeros (`GT_SPARSE=1`); the Burn panel's USD/TOK toggle was being covered by the
+"as of" label when the title row wrapped at ≤ 1250 px (label `pointer-events:none`, titles shrink under 1280); and the
+action icons are "too loud" — four quieter options drawn (`mock-lp-actions-v1.html`), his pick pending. Owed: the
+live look after round 3 (every row a curve or the floor line, none dashed), then phone + iPad** — the harness fakes
 the DexScreener logos and the GeckoTerminal answers. Found on the way, classic, live today:
 the phone All/RH Cores switch draws its knob at the "on" end while All is selected (one line if he wants it fixed).
 `sessions/2026-09-30.md` "Night". **Flip = `HEADER_DESIGN='v2'` + push: header, panels and LP Pairs together.**
@@ -651,7 +655,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    four rows, then 429s; 20 rows now fill in ~22 s, top first), cached 30 min per pool in `_lpVol` (module level) AND
    in localStorage (`LS.LP_VOL`), so a token switch or a reload draws every curve at once; 6-hour buckets, colour =
    second half of the week vs the first. `undefined` = loading dots, `null` = dashed "history unavailable" — a pool
-   GeckoTerminal does not list (404) is null for the TTL; a 429 / 5xx / timeout pauses the WHOLE queue (`_lpPauseUntil`)
+   GeckoTerminal does not list (404) is null for the TTL — and GeckoTerminal's candles are SPARSE (only the hours
+   that traded), so `_lpParse` bins the week itself with real zeros and never demands a minimum count (a week with no
+   trade is the solid floor line, not dashed); a 429 / 5xx / timeout pauses the WHOLE queue (`_lpPauseUntil`)
    and the same pool is retried (`LP_MAX_TRIES`), staying "loading" until three 20 s hook rounds have failed. Never
    seed a shape, and never turn a refusal into a dash early — that is what Shaka saw. The rows print "—" for a missing read (a14); the ranks follow the
    sort and the under-$1K table continues them (`rankStart`). Harness: `DS_PAIRS=burn` (real 30-pair list),

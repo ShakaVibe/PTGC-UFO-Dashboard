@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, GT_SPARSE=1, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -236,8 +236,12 @@ const dsAnswer=(url)=>{
       if(/\/ohlcv\/hour\b/.test(u)){
         const pool=(u.match(/pools\/(0x[0-9a-fA-F]{40})/)||[])[1]||'';let seed=0;for(const ch of pool)seed=(seed*31+ch.charCodeAt(0))>>>0;
         const miss=(process.env.GT_POOLS||'').match(/^miss:(\d+)$/);if(miss&&seed%+miss[1]===0)return r.fulfill({status:404,body:''});
-        const now=Math.floor(Date.now()/3600)*3600,up=seed%2===0,list=[];let s=seed||1,v=500+(seed%1000);
-        for(let i=167;i>=0;i--){s=(s*9301+49297)%233280;v=Math.max(0,v*(1+(s/233280-0.5)*0.5+(up?0.004:-0.004)));list.push([now-i*3600,1e-4,1e-4,1e-4,1e-4,Math.round(v)]);}
+        const now=Math.floor(Date.now()/3600000)*3600,up=seed%2===0,list=[];let s=seed||1,v=500+(seed%1000);   // `now` in seconds, on the hour
+        /* GT_SPARSE=1: GeckoTerminal only returns hours that traded — a quiet pool answers a handful of candles
+           spread over weeks (live 2026-09-30: pTGC/UFO = 39 candles over 3 weeks). Keep every (seed%9+2)-th hour
+           and reach 500 hours back, so most pools have < 12 candles inside the week and some have none. */
+        const sparse=process.env.GT_SPARSE?(seed%9+2):1,span=process.env.GT_SPARSE?500:168;
+        for(let i=0;i<span;i++){s=(s*9301+49297)%233280;v=Math.max(0,v*(1+(s/233280-0.5)*0.5+(up?-0.004:0.004)));if(i%sparse)continue;list.push([now-i*3600,1e-4,1e-4,1e-4,1e-4,Math.round(v)]);if(list.length>=168)break;}   // newest first, as GeckoTerminal sends them
         return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});
       }
       const isUfo=UFO_ADDR.test(u),now=Math.floor(Date.now()/1000),base=isUfo?1.47e-4:1.36e-4;let p=base,s=isUfo?7:3;const list=[];
