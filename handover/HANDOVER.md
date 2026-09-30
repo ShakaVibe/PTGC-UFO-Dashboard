@@ -608,7 +608,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (7 days; null → dashed flat line + "history unavailable" label — don't seed a shape). `lv-snapshots.json` (~370 KB)
    is read only under v2. The preview switch: `LS.HDR_PREVIEW`, `HeaderPreviewGate`, hashes only in the code, empty
    hashes = no switch; strip nothing else from the URL there (`?home=`, `?debug=1` must survive). Flip = one constant.
-   Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns v2 on for a run.
+   `.h2 img{max-width:none}` stays: Tailwind's preflight caps every img at its box width, which squeezed the corona
+   and the band copy (found live). Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns
+   v2 on for a run; `probes/h2-imgs.js` measures the art images.
 
 34. **The Live Feed is a skin over the deck (2026-09-26).** `AbductionDeckModal`'s animations find their targets by
    class and ref — `.deck-pod` (via `podRefs`), `.deck-ship`, `.deck-gen`, `.deck-cell[data-k] .deck-a`, `.deck-links`,

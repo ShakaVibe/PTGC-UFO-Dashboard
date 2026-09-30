@@ -1,0 +1,1 @@
+JSON.stringify([...document.querySelectorAll('.h2-desk img')].map(i=>{const c=getComputedStyle(i);const r=i.getBoundingClientRect();return[i.className,c.maxWidth,c.height,Math.round(r.left),Math.round(r.width),Math.round(r.height)]}))
