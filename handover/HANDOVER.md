@@ -37,8 +37,10 @@ them; now the week is binned with real zeros (`GT_SPARSE=1`); the Burn panel's U
 action icons were "too loud" — option C built (dark glass squares, line-graph glyph for DEXTools). **Round 4: the
 curves now come from the PIPELINE** — `scripts/build-pair-volume.mjs` → `data/pair-volume-7d.json` (hourly step
 `pair-volume`), read first by `useLpVolSeries`; the live per-pool read is only the fallback (a pool the file lacks, or
-a file > 36 h old). **The file is born on the first run: after pushing, Actions → Data Pipeline → Run workflow →
-`only=pair-volume`.** Owed: the live look with the file in place (every row instantly), then phone + iPad** — the harness fakes
+a file > 36 h old). **The file exists (run #73, 2026-09-30 22:04 UTC: 47 pools read, 0 refused, 8.6 KB; the step takes ~9 min on
+GitHub's runners because GeckoTerminal answers them slowly — the hourly job is ~23 min now, still well inside its
+50-min timeout; gate it to every 3 h if cadence ever suffers). Verified live from the Mac: 20 of 20 rows drawn from
+the file, zero per-pool calls.** Round 5: curve moved next to the Volume figure, the three right-hand columns centred, regular weights throughout. Owed: phone + iPad** — the harness fakes
 the DexScreener logos and the GeckoTerminal answers. Found on the way, classic, live today:
 the phone All/RH Cores switch draws its knob at the "on" end while All is selected (one line if he wants it fixed).
 `sessions/2026-09-30.md` "Night". **Flip = `HEADER_DESIGN='v2'` + push: header, panels and LP Pairs together.**
