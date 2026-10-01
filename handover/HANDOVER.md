@@ -39,7 +39,7 @@ per-slice radial gradients, top-left light, bloom, underside, rims, `P2_TONES`; 
 order, size, logo. **Round 8–9:** the sticky tab row is a black wrapper around a gold-bordered band on Shaka's art
 (`logos/header/tabs-bg.jpg`, `.h2-tabband`; dark where the tabs are, the planet bright at the right) with a glowing gold
 pill for the active tab and no "Updated" dot/text (refresh button kept); VG's "from … vol" line hidden under v2 (both top panels 366 px); DAO buttons' pool darker; the DAO Treasury's emoji replaced by Shaka's gold icons
-(`logos/panels/dao-*.webp`, `P2_DAO_ICONS`, v2 only). The remaining angularity is the
+(`logos/panels/dao-*.webp`, `P2_DAO_ICONS`, v2 only) and Value Generated's by his (`vg-*.webp`, `P2_VG_ICONS` by tile name). The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
