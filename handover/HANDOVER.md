@@ -31,7 +31,9 @@ light under the 2–4 most prominent peaks only (`h2Peaks`) — after he called 
 between fuzzier). **Round 3:** the window is **30 days** (`H2_DAYS`, 720 GeckoTerminal candles for Market Cap, ~150
 pipeline samples for the rest — the cure for the angular lines), a "30D" tag on every tile, ONE line colour per token
 (gold / green — green means UFO, never "up"), the figures 38 → 46 u with `H2Val` shrinking a figure that would overrun
-(never an ellipsis on a number). The remaining angularity is the
+(never an ellipsis on a number). **Round 4:** the panel toggles are option A of `design/dashboard-panels/mock-toggles-v1.html`
+(dark glass, lit translucent pane, gold `--tg`) via `.p2 [role="group"]:not(.p2-pill)`, and Value Generated's two toggles are
+stacked (`.p2-ctl` column). The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**

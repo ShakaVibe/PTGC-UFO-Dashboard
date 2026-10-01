@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Panel toggles — 10 options (2026-10-01)</title>
+<link rel="stylesheet" href="../../tools/harness/node_modules/@fontsource/orbitron/700.css">
+<link rel="stylesheet" href="../../tools/harness/node_modules/@fontsource/orbitron/900.css">
+<link rel="stylesheet" href="../../tools/harness/node_modules/@fontsource/rajdhani/500.css">
+<link rel="stylesheet" href="../../tools/harness/node_modules/@fontsource/rajdhani/600.css">
+<link rel="stylesheet" href="../../tools/harness/node_modules/@fontsource/rajdhani/700.css">
+<style>
+/* The USD / TOK and 24H / 7D / 30D / 90D switches on the v2 panels, ten ways. Every option is drawn on the Value
+   Generated backdrop (gold accent, as every panel uses) and once more with the UFO green accent, at the real size the
+   panel header uses (36 px tall controls, 11–12 px Orbitron). Pick one letter; the build is the `.p2 [role="group"]`
+   block in index.html — markup unchanged. */
+:root{--g1:#F8DB7C;--g2:#DDA932;--g3:#B8841C;--gl:rgba(240,190,70,.55)}
+body{margin:0;background:#0a0a0a;color:#fff;font-family:'Rajdhani',sans-serif;padding:28px}
+h1{font:900 18px/1 'Orbitron',monospace;letter-spacing:.08em;color:#F1C552;margin:0 0 6px}
+p.sub{margin:0 0 22px;color:rgba(255,255,255,.55);font-size:16px}
+.opt{display:grid;grid-template-columns:48px 1fr;gap:18px;align-items:center;margin-bottom:16px}
+.ltr{font:900 26px/1 'Orbitron',monospace;color:#F1C552;text-align:center}
+.ltr small{display:block;font:600 11px/1.3 'Rajdhani',sans-serif;letter-spacing:.06em;color:rgba(255,255,255,.5);margin-top:6px;text-transform:uppercase}
+.strip{position:relative;height:84px;border-radius:14px;overflow:hidden;border:1.5px solid rgba(80,200,80,.5);box-shadow:0 0 28px -8px rgba(80,220,80,.6);background:#06100a}
+.strip::before{content:'';position:absolute;inset:0;background:url(assets/bg-vg.jpg) center/cover;opacity:.62}
+.strip::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.25),rgba(0,0,0,.55))}
+.strip .in{position:absolute;inset:0;display:flex;align-items:center;gap:22px;padding:0 22px}
+.strip .ttl{white-space:nowrap;font:700 15px/1 'Orbitron',monospace;letter-spacing:.14em;color:#fff;margin-right:auto;text-shadow:0 1px 3px #000}
+.strip .desc{position:absolute;left:22px;bottom:9px;font:500 13px/1 'Rajdhani',sans-serif;color:rgba(255,255,255,.5);letter-spacing:.02em}
+.ufo{--g1:#D9FFB0;--g2:#8DFF3A;--g3:#4EC21A;--gl:rgba(140,255,60,.55)}
+/* --- shared option bones --- */
+.tg{display:flex;align-items:center;height:36px;font:700 11px/1 'Orbitron',monospace;letter-spacing:.14em;white-space:nowrap;box-sizing:border-box}
+.tg button{appearance:none;border:0;background:none;color:rgba(255,255,255,.5);font:inherit;letter-spacing:inherit;height:100%;padding:0 12px;cursor:pointer;position:relative;box-sizing:border-box;transition:color .2s}
+.tg button:hover{color:#fff}
+/* A — dark glass track, lit glass thumb */
+.A{background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:3px;backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.A button{border-radius:7px}
+.A button.on{color:#fff;background:linear-gradient(180deg,rgba(var(--rgb),.32),rgba(var(--rgb),.14));box-shadow:inset 0 0 0 1px rgba(var(--rgb),.6),inset 0 1px 0 rgba(255,255,255,.18),0 0 14px -2px var(--gl);text-shadow:0 0 8px var(--gl)}
+/* B — text only, glowing underline */
+.B{gap:4px}
+.B button{padding:0 8px;color:rgba(255,255,255,.42)}
+.B button.on{color:var(--g1);text-shadow:0 0 10px var(--gl)}
+.B button.on::after{content:'';position:absolute;left:8px;right:8px;bottom:5px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--g1),var(--g2));box-shadow:0 0 10px var(--gl),0 0 2px var(--g1)}
+/* C — iOS segmented: raised glass thumb, white text */
+.C{background:rgba(0,0,0,.55);border-radius:999px;padding:3px;border:1px solid rgba(255,255,255,.08)}
+.C button{border-radius:999px;padding:0 13px}
+.C button.on{color:#fff;background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.06));box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 2px 8px rgba(0,0,0,.6),0 0 0 1px rgba(var(--rgb),.45)}
+/* D — outline only */
+.D{border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:2px;background:rgba(0,0,0,.3)}
+.D button{border-radius:7px;color:rgba(255,255,255,.42)}
+.D button.on{color:var(--g1);box-shadow:inset 0 0 0 1px rgba(var(--rgb),.85);background:rgba(var(--rgb),.08)}
+/* E — minimal: a lit dot marks the active option */
+.E{gap:2px}
+.E button{padding:0 10px 0 18px;color:rgba(255,255,255,.4)}
+.E button::before{content:'';position:absolute;left:5px;top:50%;width:5px;height:5px;margin-top:-2.5px;border-radius:50%;background:rgba(255,255,255,.14)}
+.E button.on{color:#fff}
+.E button.on::before{background:var(--g1);box-shadow:0 0 8px 1px var(--gl)}
+/* F — the metallic pill, refined (today's idea, done properly) */
+.F{background:rgba(0,0,0,.55);border-radius:999px;padding:3px;border:1px solid rgba(255,255,255,.08)}
+.F button{border-radius:999px;padding:0 13px}
+.F button.on{color:#241802;background:linear-gradient(180deg,#FFF1C4 0%,var(--g1) 30%,var(--g2) 70%,var(--g3) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -1px 0 rgba(0,0,0,.25),0 0 14px -2px var(--gl)}
+.ufo .F button.on{color:#0b2a00}
+/* G — hairline track, metallic TEXT */
+.G{border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(0,0,0,.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.G button{padding:0 13px;color:rgba(255,255,255,.4)}
+.G button+button::before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:1px;background:rgba(255,255,255,.1)}
+.G button.on{background:linear-gradient(180deg,#FFF1C4,var(--g1) 40%,var(--g2) 80%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 6px var(--gl))}
+/* H — separate chips */
+.H{gap:6px}
+.H button{border-radius:8px;background:rgba(0,0,0,.45);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);padding:0 11px;color:rgba(255,255,255,.45);height:30px}
+.H button.on{color:#fff;background:linear-gradient(180deg,rgba(var(--rgb),.3),rgba(var(--rgb),.1));box-shadow:inset 0 0 0 1px rgba(var(--rgb),.7),0 0 12px -2px var(--gl)}
+/* I — backlit key: pressed-in track, the active key glows from below */
+.I{background:#050505;border-radius:10px;padding:3px;box-shadow:inset 0 2px 6px rgba(0,0,0,.9),inset 0 0 0 1px rgba(255,255,255,.06)}
+.I button{border-radius:7px;color:rgba(255,255,255,.35)}
+.I button.on{color:var(--g1);background:linear-gradient(180deg,rgba(var(--rgb),.04),rgba(var(--rgb),.22));box-shadow:inset 0 -1px 0 rgba(var(--rgb),.9),inset 0 -8px 14px -8px var(--gl);text-shadow:0 0 8px var(--gl)}
+/* J — accent bar: thin, a gold edge on the active option */
+.J{background:rgba(0,0,0,.45);border-radius:6px;border:1px solid rgba(255,255,255,.08);height:32px}
+.J button{padding:0 12px;color:rgba(255,255,255,.4)}
+.J button.on{color:#fff;background:rgba(var(--rgb),.1)}
+.J button.on::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;background:linear-gradient(180deg,var(--g1),var(--g2));box-shadow:0 0 8px var(--gl)}
+.J button:first-child.on::after{border-radius:5px 0 0 5px}
+</style></head><body>
+<h1>PANEL TOGGLES — TEN OPTIONS</h1>
+<p class="sub">USD / TOK and the 24H · 7D · 30D · 90D period switch, as they would sit in the Value Generated header. Gold accent on the left strip (every PTGC panel), the UFO green accent on the right. Letters are the names to pick by.</p>
+<div id="rows"></div>
+<script>
+const OPTS=[
+ ['A','Lit glass','Dark glass track; the active option is a translucent gold pane with a gold edge and a soft outer glow'],
+ ['B','Underline','No box at all — the active word turns gold with a glowing underline, like a tab'],
+ ['C','Segmented','Rounded track, a raised frosted-glass thumb slides under the active option; white text, thin gold ring'],
+ ['D','Outline','Hairline track; the active option is a gold outline with a faint gold wash and gold text'],
+ ['E','Dot','Minimal: words only, a small lit gold dot marks the active one'],
+ ['F','Metallic pill','Today’s idea done properly: a fully rounded track and a real metallic gold thumb with a highlight edge'],
+ ['G','Metallic text','Hairline track with dividers; the active word itself is metallic gold with a soft glow'],
+ ['H','Chips','Each option is its own small chip; the active chip fills with gold-tinted glass and glows'],
+ ['I','Backlit key','Pressed-in black track; the active key is lit from below with a gold base line'],
+ ['J','Accent bar','Thin and quiet: the active option carries a gold edge on its left and a faint gold wash']
+];
+const seg=(cls,items,on)=>`<div class="tg ${cls}" role="group">${items.map((t,i)=>`<button class="${i===on?'on':''}">${t}</button>`).join('')}</div>`;
+const strip=(cls,acc)=>`<div class="strip ${acc}" style="--rgb:${acc==='ufo'?'141,255,58':'240,196,90'}"><div class="in"><span class="ttl">VALUE GENERATED</span>${seg(cls,['USD','TOK'],0)}${seg(cls,['24H','7D','30D','90D'],1)}</div></div>`;
+document.getElementById('rows').innerHTML=OPTS.map(([l,n,d])=>`<div class="opt"><div class="ltr">${l}<small>${n}</small></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${strip(l,'')}${strip(l,'ufo')}</div><div></div><div style="font-size:15px;color:rgba(255,255,255,.6);margin:-8px 0 4px">${d}</div></div>`).join('');
+</script>
+</body></html>
