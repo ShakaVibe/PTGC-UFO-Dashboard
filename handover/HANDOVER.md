@@ -17,16 +17,30 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (2026-10-01, afternoon session)
+## Current state (end of 2026-10-01 — two sessions)
 
-**2026-10-01, afternoon (a second session): the Value Generated tiles are rebuilt to Shaka's layout** — big icon | thin
-divider | name / quiet % / figure, no bars, no % at the foot, his new three-diamond cluster on Total H&S
-(`logos/panels/vg-diamonds3-v2.webp`). Mock-up A/B first (`design/dashboard-panels/mock-vg-tiles-v1.html`; "the bottom
-one, but not that loud — no pill"), then built as a CSS grid over the classic tile markup (`.p2-vgt`, v2 only, classic
-byte-identical); part two after his live look: names 12.5 px (measured — 6 px of slack on "BUY & BURN", never a second
-line at ≥ 1280), figures 31 px through `H2Val` (shrink, never overrun); UFO's burn tiles stack the 36 px coin on the flame like the LP pair discs. **Then the LP Pairs header** (round 17, his mock-up): one framed band — logo in a ring, LP PAIRS, Volume 24h / Liquidity glass tiles with his bar icons and a change line (volume = the KPI tile's "vs 7d avg", liquidity = vs the lv-snapshot 24 h ago; All only), All / RH Cores + SORT as the panels' glass toggles (Ratio dropped, his mock) — `LpHeaderV2`, a `{hdrV2?…:…}` fork over the classic desktop header (classic DOM hash equal); squeeze in three tiers (one row to 1110 px, then the controls drop). **Then the LP Pairs rows** (round 18, his mock-up + sparkline brief): 30 px rank rings, volume change vs the day before under the figure, the sparkline as layered light on a square-root height (`LpSpark`, coloured by that volume change — his pick over price), 24h % as a badge, Txns total over buys | sells. Harness 1440 / 1280 / 1100 / 1024 / 390, USD + TOK, PTGC + UFO. **Not pushed yet at the time of writing —
-Shaka's live look is owed**, then the rest of the pre-flip list (-5 below), then the sibling pages' headers (-6, same push
-as the flip). Round 16 in `sessions/2026-10-01.md`.
+**2026-10-01, afternoon session, closed by Shaka ("call it a day"): six rounds, all pushed by him as they landed (last:
+`c34383fa2`, "sparkline colour = the volume change vs the day before"), each seen live on his Mac. Nothing half-done.
+NEXT SESSION STARTS WITH: whatever he brings — the LP Pairs section is where he was working (header done, rows done; the
+drawer, the "< $1K" button and the phone cards are untouched), then the rest of the pre-flip list (-5 below), then the
+sibling pages' headers (-6, same push as the flip).** The afternoon, in order — detail in `sessions/2026-10-01.md`,
+rounds 16–18:
+1. **Value Generated tiles** rebuilt to his layout (mock-up A/B, "B, not that loud — no pill"): icon | thin divider |
+   name / quiet % / figure, no bars, his three-diamond cluster (`vg-diamonds3-v2.webp`); then names 12.5 px (measured —
+   never a second line at ≥ 1280) and figures 31 px through `H2Val`; then UFO's burn tiles stack the 36 px coin on the
+   flame like the LP pair discs. `.p2-vgt` = a CSS grid over the classic markup; classic byte-identical.
+2. **LP Pairs header** = his band (`LpHeaderV2`, a `{hdrV2?…:…}` fork, classic DOM hash equal): ring logo, LP PAIRS +
+   count, Volume 24h / Liquidity glass tiles with his bar icons (`lp-bars-gold/blue.webp`) and a change line (volume = the
+   KPI tile's "vs 7d avg", liquidity = vs the lv-snapshot 24 h ago; All only, both vanish under RH Cores), All / RH Cores
+   + SORT as the panels' glass toggles, Ratio sort dropped (his mock). Squeeze in three tiers (one compact row to
+   1110 px, then the controls drop, tiles never stretched) after his live look at ~1265 px.
+3. **LP Pairs rows** = his mock-up + his sparkline brief: 30 px rank rings, the volume's change vs the day before under
+   it (DexScreener 24 h vs the curve's previous 24 h; no line without a curve), the sparkline as layered light on a
+   SQUARE-ROOT height (`LpSpark` — one outlier bin used to flatten the week; data untouched), 24h % as a badge in their
+   red, Txns total over buys | sells; the curve's colour = that volume change (his pick over price; red `#FF2E3B`).
+**Owed from the afternoon (all built in the harness, all seen live by Shaka except where noted):** the LP header's two
+% lines on real data over a few days (if the liquidity one reads a few % off every day, compare snapshot-to-snapshot —
+round 17 notes); the UFO page's LP rows and header (he looked at PTGC); phone + iPad for everything v2 (unchanged owe).
 
 **Earlier the same day: fifteen rounds of v2 clean-ups, all pushed by Shaka through the morning (last: `494f6e1d8`, "dark
 pools behind the creature row and the bar-end whale"), every one seen live on his Mac as it landed. Nothing half-done.**
@@ -771,8 +785,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    the fire-light pill on the active tab, no "Updated" badge) and the same token · price line — or a visitor steps from
    the new dashboard into the 2025 header on every Calculators / Charts click. Do it in the same push as the flip, or
    the flip waits. Not started; parked by Shaka until go-live.
--5. **Next session first (Shaka, end of 2026-10-01): the Value Generated box — "how those six boxes are displayed".**
-   Ask for his list before building (he usually has a screenshot). Then the rest of this item, which is where
+-5. **DONE 2026-10-01 afternoon: the Value Generated tiles, the LP Pairs header and rows (rounds 16–18).** Next session:
+   whatever Shaka brings (he usually has a mock-up — ask), then the rest of this item, which is where
    2026-09-30 left it: the dashboard page under v2 (header, tiles, panels, LP Pairs) — clean-ups were the whole of
    2026-10-01 (`sessions/2026-10-01.md`), the LP Pairs table has not been touched since 09-30. Six live rounds on the LP Pairs
    table today ended "sweet"; the pipeline file feeds its curves. Then, before the flip: (a) phone + iPad for the
@@ -920,7 +934,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-10-01.md` — fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
+- `sessions/2026-10-01.md` — morning: fifteen rounds of v2 clean-ups; **afternoon (rounds 16–18): the Value Generated tiles to
+  Shaka's layout (`.p2-vgt`, `H2Val` figures, coin-on-flame), the LP Pairs header band (`LpHeaderV2`, change lines, glass
+  toggles, three-tier squeeze), the LP Pairs rows (rank rings, volume change, illuminated sqrt-height `LpSpark` coloured by
+  that change, 24h % badge, stacked Txns)** — morning: fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
   (`H2Val`), `PTGC IN LP`, sparklines to Shaka's spec (`h2Peaks`, `H2_DAYS` 30, one colour per token), option-A toggles,
   the tab band on his art, the SVG donut (`AllocRingV2`), his icons on every panel (`SeaIcon`, `SEA_ART_V`), dark pools,
   UFO burn windows from the snapshot at once; the flip checklist (-6); harness 1440 / 1024 / 390, classic unchanged.
