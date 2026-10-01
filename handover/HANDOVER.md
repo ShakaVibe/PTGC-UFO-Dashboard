@@ -40,7 +40,8 @@ order, size, logo. **Round 8–9:** the sticky tab row is a black wrapper around
 (`logos/header/tabs-bg.jpg`, `.h2-tabband`; dark where the tabs are, the planet bright at the right) with a glowing gold
 pill for the active tab and no "Updated" dot/text (refresh button kept); VG's "from … vol" line hidden under v2 (both top panels 366 px); DAO buttons' pool darker; the DAO Treasury's emoji replaced by Shaka's gold icons
 (`logos/panels/dao-*.webp`, `P2_DAO_ICONS`, v2 only) and Value Generated's by his (`vg-*.webp`, `P2_VG_ICONS` by tile name); flame on both burn titles + the creature row,
-his purple pie on Token Allocation (`alloc-pie.webp`). The remaining angularity is the
+his purple pie on Token Allocation (`alloc-pie.webp`); **his sea-creature art replaces the creature emoji on the v2 panels**
+(`logos/panels/sea-*.webp`, `SEA_ART` + `SeaIcon` — emoji stay the data and stay everywhere else); title icons 44 px. The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
