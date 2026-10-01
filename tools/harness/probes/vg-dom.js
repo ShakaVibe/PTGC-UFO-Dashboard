@@ -1,0 +1,1 @@
+(()=>{const p=[...document.querySelectorAll('section')].find(s=>/VALUE GENERATED/i.test(s.textContent)&&s.querySelector('h3'));return p?p.outerHTML.replace(/\s+/g,' ').length+':'+p.outerHTML.replace(/\s+/g,' ').slice(0,200)+'|'+(p.querySelector('.p2-vgt')?'HAS p2-vgt':'no p2-vgt')+'|pct='+(p.textContent.match(/\(2%\)/)?'parens':'plain'):'none'})()

@@ -638,6 +638,25 @@
     .p2 .p2-vgn .tabular-nums{display:block;font-size:10px;letter-spacing:.06em;margin-top:1px}   /* the (2%) on its own line in EVERY tile, so the names line up (Shaka) */
     .p2 img.p2-vgi[src$="vg-diamond.webp"]{max-height:32px}   /* the single diamond a little smaller (Shaka) */
     .p2 img.p2-vgi{width:auto;height:auto;max-height:40px;max-width:62px;object-fit:contain;flex:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.8))}   /* Value Generated tile icons: 40 px tall, but a wide one (the diamond rows) stops at 62 px wide so the tile name is not squeezed */
+    /* Value Generated tiles, Shaka's layout (2026-10-01 afternoon, design/dashboard-panels/mock-vg-tiles-v1.html, option B with a quiet %):
+       big icon | thin divider | name / % / figure — a GRID over the classic markup. The label row becomes `display:contents`
+       so the icon span lands in column 1 (both rows), the name in column 3 row 1 and the figure (the next sibling) in
+       column 3 row 2; the divider is the tile's ::before in column 2. No bar, no % at the foot; the % is plain small text. */
+    .p2 .p2-vgt{position:relative;display:grid!important;grid-template-columns:minmax(44px,max-content) 1px minmax(0,1fr);grid-template-rows:auto auto;align-items:center;align-content:center;column-gap:9px;row-gap:3px;padding:10px 8px 10px 10px!important;min-height:100px}   /* the mock-up's tile height — without it the row shrinks to the Burn panel's and the tiles lose their air */
+    .p2 .p2-vgt::before{content:'';grid-column:2;grid-row:1/3;align-self:stretch;margin:2px 0;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.22) 25%,rgba(255,255,255,.22) 75%,rgba(255,255,255,0))}
+    .p2 .p2-vgt>div:first-child{display:contents}
+    .p2 .p2-vgt>div:first-child>span:first-child{grid-column:1;grid-row:1/3;justify-self:center;max-width:62px;display:inline-flex;align-items:center;justify-content:center}   /* the icon (or the LP pair logo, or flame + token logo on UFO) */
+    .p2 .p2-vgt img.p2-vgi{max-height:48px;max-width:58px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.85))}
+    .p2 .p2-vgt img.p2-vgi[src$="vg-diamond.webp"]{max-height:40px}
+    .p2 .p2-vgt img.p2-vgi+img{width:22px!important;height:22px!important}   /* UFO's burn tiles: flame + token logo side by side */
+    .p2 .p2-vgt img.p2-vgi:has(+img){max-height:38px}
+    .p2 .p2-vgt .p2-vgn{grid-column:3;grid-row:1;align-self:end;font-size:10.5px!important;letter-spacing:.06em;color:rgba(255,255,255,.88)!important;line-height:1.2;white-space:normal}   /* wraps to a second line only when the tile is too narrow for it (1024-1279 px, phones) */
+    .p2 .p2-vgt .p2-vgn .tabular-nums{font-size:10px;letter-spacing:.06em;color:rgba(255,255,255,.42);margin-top:3px}   /* the fee % — plain, quiet, no pill (Shaka) */
+    .p2 .p2-vgt>div:first-child>span:not(:first-child):not(.p2-vgn){position:absolute;top:5px;right:8px}   /* "instant" / ⚠ badges in the tile's top-right corner, clear of the name */
+    .p2 .p2-vgt>div:not(:first-child){grid-column:3;grid-row:2;align-self:start;text-align:left!important;font-size:25px!important;line-height:1!important;overflow:visible;white-space:nowrap}   /* the figure */
+    .p2 .p2-vgt>div.text-base{font-size:15px!important;line-height:1.2!important;white-space:normal;overflow:visible;text-overflow:clip}   /* the TOK line ("1.2M PTGC + 300 PLS") wraps instead of truncating */
+    @media(max-width:1279.98px){.p2 .p2-vgt{column-gap:7px;padding:8px 6px 8px 8px!important}.p2 .p2-vgt>div:first-child>span:first-child{max-width:48px}.p2 .p2-vgt img.p2-vgi{max-height:42px;max-width:48px}.p2 .p2-vgt>div:not(:first-child){font-size:20px!important}.p2 .p2-vgt .p2-vgn{font-size:9.5px!important;letter-spacing:.03em}}   /* 1024-1279: the panel is 476 px, a tile 135 — smaller icon and figure, tighter name */
+    @media(max-width:639.98px){.p2 .p2-vgt{column-gap:8px;padding:9px 6px 9px 9px!important}.p2 .p2-vgt .p2-vgn{font-size:10px!important;letter-spacing:.03em}.p2 .p2-vgt>div:not(:first-child){font-size:23px!important}}   /* phones: two tiles of 158 px */
     .p2[data-c="blue"] .p2-btn{font-family:'Orbitron',monospace;font-size:9px!important;letter-spacing:.12em;padding:7px 9px!important;border-radius:8px!important;gap:6px!important}
     .p2[data-c="blue"] .p2-btn .font-orbitron{font-size:7px!important;padding:2px 5px!important}
     .p2[data-c="blue"] h3{gap:8px!important;font-size:16px!important}
@@ -9276,7 +9295,7 @@
      * icon square, the fire/green progress bar, the allocation ring and the creature strip. */
     const P2Art=()=><div className="p2-art" aria-hidden="true"><div className="p2-veil"></div></div>;
     const P2Icon=({e,svg})=><span className="p2-ic" aria-hidden="true">{svg||e}</span>;
-    const P2_VG_ICONS={'DAO':'logos/panels/dao-building.webp','Add LP':'logos/panels/vg-droplet.webp','Buy & Burn':'logos/panels/vg-flame.webp','Holders':'logos/panels/vg-diamond.webp','Stakers':'logos/panels/vg-diamonds2.webp','Total H&S':'logos/panels/vg-diamonds3.webp','Burn UFO':'logos/panels/vg-flame.webp','Burn PTGC':'logos/panels/vg-flame.webp'};   // Shaka's Value Generated icons by tile name (UFO's two burn tiles take the flame too, beside their token logo) (2026-10-01, value_generated_icons.zip); DAO = the Treasury's building, his call; a name not here keeps its emoji
+    const P2_VG_ICONS={'DAO':'logos/panels/dao-building.webp','Add LP':'logos/panels/vg-droplet.webp','Buy & Burn':'logos/panels/vg-flame.webp','Holders':'logos/panels/vg-diamond.webp','Stakers':'logos/panels/vg-diamonds2.webp','Total H&S':'logos/panels/vg-diamonds3-v2.webp','Burn UFO':'logos/panels/vg-flame.webp','Burn PTGC':'logos/panels/vg-flame.webp'};   // Shaka's Value Generated icons by tile name (UFO's two burn tiles take the flame too, beside their token logo) (2026-10-01, value_generated_icons.zip); DAO = the Treasury's building, his call; a name not here keeps its emoji
     const P2_DAO_ICONS={building:'logos/panels/dao-building.webp',coins:'logos/panels/dao-coins.webp',hourglass:'logos/panels/dao-hourglass.webp',rocket:'logos/panels/dao-rocket.webp',total:'logos/panels/dao-total.webp'};   // Shaka's DAO Treasury icons (2026-10-01, dao_dashboard_icons.zip) — v2 only, the classic keeps its emoji
     const P2Bar=({pct,green})=>{const w=Math.max(0,Math.min(100,pct||0));return(
       <div className={`p2-bar ${green?'green':''}`} role="presentation">
@@ -12341,16 +12360,16 @@
                               stuck?`Accrued but never delivered — no Mint was emitted for this pool. ${fmtAbbr(Math.round(item.accruedUfo))} UFO accrued.`:null
                             ].filter(Boolean).join('\n'):undefined;
                             return(
-                              <div key={i} className={`bg-white/[0.04] border ${stuck?'border-red-400/40':item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-3 sm:py-4 min-w-0 h-full flex flex-col justify-between gap-2`}>
+                              <div key={i} className={`bg-white/[0.04] border ${stuck?'border-red-400/40':item.isTotal?'border-emerald-400/40':'border-white/[0.08]'} rounded-lg px-3 py-3 sm:py-4 min-w-0 h-full flex flex-col justify-between gap-2${hdrV2?' p2-vgt':''}`}>
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   {item.isLP&&bucketLogoSrc(item.priceKey)
-                                    ?<PairLogo priceKey={item.priceKey} size={26}/>
+                                    ?<PairLogo priceKey={item.priceKey} size={hdrV2?36:26}/>
                                     :<span className="flex items-center gap-1 shrink-0">
                                        {hdrV2&&P2_VG_ICONS[item.name]?<img src={P2_VG_ICONS[item.name]} alt="" className="p2-vgi"/>:<span className="text-base leading-none">{item.emoji}</span>}
                                        {item.key==='ufoBurn'&&<img src={TOKENS.UFO.logo} alt="UFO" className="w-6 h-6 rounded-full object-contain shrink-0"/>}
                                        {item.key==='ptgcBurn'&&<img src={TOKENS.PTGC.logo} alt="PTGC" className="w-6 h-6 rounded-full object-contain shrink-0"/>}
                                      </span>}
-                                  <span className={`text-white/55 text-xs sm:text-sm truncate${hdrV2?' p2-vgn':''}`}>{item.name} <span className="text-white/35 tabular-nums">({item.pct}%)</span></span>
+                                  <span className={`text-white/55 text-xs sm:text-sm truncate${hdrV2?' p2-vgn':''}`}>{item.name} <span className="text-white/35 tabular-nums">{hdrV2?`${item.pct}%`:`(${item.pct}%)`}</span></span>
                                   {showLive&&item.instant&&<span className="text-emerald-300/50 text-[9px] shrink-0 uppercase tracking-wider" title="reflections shift an index rather than transfer tokens — holders are paid the instant the fee is taken, with nothing to queue and no event to measure">instant</span>}
                                   {stuck&&<span className="text-red-400 text-[10px] shrink-0" title="accrued but never delivered — no Mint was emitted for this pool">⚠</span>}
                                 </div>

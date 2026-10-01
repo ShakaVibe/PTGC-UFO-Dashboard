@@ -17,13 +17,18 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-10-01)
+## Current state (2026-10-01, afternoon session)
 
-**2026-10-01, end of day: fifteen rounds of v2 clean-ups, all pushed by Shaka through the day (last: `494f6e1d8`, "dark
-pools behind the creature row and the bar-end whale"), every one seen live on his Mac as it landed. Nothing half-done.
-NEXT SESSION STARTS WITH: the Value Generated box — "how those six boxes are displayed" (his words at close; ask what he
-has in mind before touching anything: layout of the six tiles, their size, the two rows, the icon + name + % stack, the
-figures). Then the rest of the pre-flip list (-5 below), then the sibling pages' headers (-6, same push as the flip).**
+**2026-10-01, afternoon (a second session): the Value Generated tiles are rebuilt to Shaka's layout** — big icon | thin
+divider | name / quiet % / figure, no bars, no % at the foot, his new three-diamond cluster on Total H&S
+(`logos/panels/vg-diamonds3-v2.webp`). Mock-up A/B first (`design/dashboard-panels/mock-vg-tiles-v1.html`; "the bottom
+one, but not that loud — no pill"), then built as a CSS grid over the classic tile markup (`.p2-vgt`, v2 only, classic
+byte-identical). Harness 1440 / 1280 / 1100 / 1024 / 390, USD + TOK, PTGC + UFO. **Not pushed yet at the time of writing —
+Shaka's live look is owed**, then the rest of the pre-flip list (-5 below), then the sibling pages' headers (-6, same push
+as the flip). Round 16 in `sessions/2026-10-01.md`.
+
+**Earlier the same day: fifteen rounds of v2 clean-ups, all pushed by Shaka through the morning (last: `494f6e1d8`, "dark
+pools behind the creature row and the bar-end whale"), every one seen live on his Mac as it landed. Nothing half-done.**
 The day, in order — the detail is `sessions/2026-10-01.md`, rounds 1–15:
 header buttons centred + address right-justified + bigger tile figures (`H2Val` shrinks, never ellipses) · `PTGC IN LP` /
 `UFO IN LP` · the sparklines rebuilt three times to his spec (thin crisp line, peak lighting by `h2Peaks`, 30-day window
