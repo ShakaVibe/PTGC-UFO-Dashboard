@@ -38,7 +38,8 @@ radial pools behind the VG headline, the stack and the DAO Treasury's PTGC Buys 
 per-slice radial gradients, top-left light, bloom, underside, rims, `P2_TONES`; the `.p2-rg` conic div is gone) — same data,
 order, size, logo. **Round 8–9:** the sticky tab row is a black wrapper around a gold-bordered band on Shaka's art
 (`logos/header/tabs-bg.jpg`, `.h2-tabband`; dark where the tabs are, the planet bright at the right) with a glowing gold
-pill for the active tab and no "Updated" dot/text (refresh button kept); VG's "from … vol" line hidden under v2 (both top panels 366 px); DAO buttons' pool darker. The remaining angularity is the
+pill for the active tab and no "Updated" dot/text (refresh button kept); VG's "from … vol" line hidden under v2 (both top panels 366 px); DAO buttons' pool darker; the DAO Treasury's emoji replaced by Shaka's gold icons
+(`logos/panels/dao-*.webp`, `P2_DAO_ICONS`, v2 only). The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
@@ -356,8 +357,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   The burn archive behind it is `data/ptgc-burns-<year>-h1|h2.json`, half-years derived from the date (a30) —
   never add a period to a list; a file past 80 MB logs a warning, GitHub refuses 100 MB.
   Shown with an amber "as of" label after 8 h, as "—" after 7 days.
-- **UFO burn windows**: `data/value-generated.json` → `burnPeriods.UFO` when <6 h old, otherwise a
-  live chain scan. `burn-summary.json`'s UFO section still describes the OLD contract
+- **UFO burn windows**: `data/value-generated.json` → `burnPeriods.UFO`, painted at once when under 7 d old
+  ("as of" label, amber past 6 h); past 6 h a live chain scan runs behind them and replaces them (2026-10-01 —
+  before that the file was used only under 6 h and the boxes sat blank through the ~55-call scan on most visits). `burn-summary.json`'s UFO section still describes the OLD contract
   (`fetch-burn-history.js` line 31) — never use it for UFO.
 - **ufo-ptgc-burns.json** (a32): summaries + `byContract` + `rows` (v1 rows, last 91 days) — ~300 KB.
   The generator's full caches are `ufo-ptgc-burns-cache.json`; nothing on the site reads that.
@@ -726,6 +728,13 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-6. **FLIP CHECKLIST — the sibling pages still wear the OLD header (Shaka, 2026-10-01: "make sure you make a note").**
+   `calculators.html` and `charts.html` (and `portfolio.html`; `ledger.html` has its own bar) carry the classic sticky
+   header + nav from before v2. When `HEADER_DESIGN='v2'` goes live, those pages must get the v2 look too — the art
+   banner is index.html's, but at minimum the black-framed gold tab band (`.h2-tabband`, `logos/header/tabs-bg.jpg`,
+   the fire-light pill on the active tab, no "Updated" badge) and the same token · price line — or a visitor steps from
+   the new dashboard into the 2025 header on every Calculators / Charts click. Do it in the same push as the flip, or
+   the flip waits. Not started; parked by Shaka until go-live.
 -5. **Tomorrow first (Shaka, end of 2026-09-30): "cleaning up a few little things on the page"** — his list, ask for
    it at the start; the dashboard page under v2 (header, tiles, panels, LP Pairs). Six live rounds on the LP Pairs
    table today ended "sweet"; the pipeline file feeds its curves. Then, before the flip: (a) phone + iPad for the

@@ -581,7 +581,7 @@
     .p2 .p2-bar .p2-fl::after{content:'';position:absolute;left:0;right:0;top:0;height:40%;background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0))}
     .p2 .p2-bar .p2-tip{position:absolute;top:50%;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:radial-gradient(circle,#FFFFFF 0%,var(--tip1) 22%,var(--tip2) 42%,rgba(var(--tip3),.55) 60%,rgba(var(--tip3),0) 74%);box-shadow:0 0 14px 4px rgba(var(--tip3),.45)}
     .p2 .p2-bar .p2-end{position:absolute;right:3px;top:50%;width:11px;height:11px;margin-top:-5.5px;border-radius:50%;background:radial-gradient(circle,#FFFFFF 0%,#FFFFFF 30%,var(--end1) 55%,var(--end2) 100%);box-shadow:0 0 5px 2px rgba(var(--end3),1),0 0 14px 5px rgba(var(--end4),.9),0 0 28px 10px rgba(var(--g),.5)}
-    .p2 .p2-pct{font-size:16px!important;font-weight:700;color:#FF9A3C!important}
+    .p2 .p2-pct{font-size:19px!important;width:auto!important;min-width:3.5rem;font-weight:700;color:#FF9A3C!important}   /* 16 → 19 px (Shaka, 2026-10-01); width free so "100.0%" never overruns its old w-14 */
     .p2[data-c="blue"] .p2-pct{color:#9DFF3A!important}
     .p2 .p2-cre>span{font-size:26px!important}
     .p2 .p2-cre>span>span:first-child{font-size:26px!important}
@@ -618,6 +618,8 @@
     .p2 .p2-e{position:absolute;left:14px;top:50%;width:48px;height:48px;margin-top:-24px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;
       background:radial-gradient(circle at 50% 30%,rgba(var(--pc),.28),rgba(var(--pc),.08) 70%);border:1px solid rgba(var(--pc),.28);box-shadow:0 0 12px -4px rgba(var(--pc),.6)}
     .p2[data-c="blue"] .p2-tile .p2-gold{font-size:24px!important;font-weight:700!important}
+    .p2 .p2-e img{width:42px;height:42px;object-fit:contain;filter:drop-shadow(0 2px 4px rgba(0,0,0,.7))}   /* Shaka's gold icons in the lit squares */
+    .p2[data-c="blue"] .p2-ic img{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.7))}
     .p2[data-c="blue"] .p2-btn{font-family:'Orbitron',monospace;font-size:9px!important;letter-spacing:.12em;padding:7px 9px!important;border-radius:8px!important;gap:6px!important}
     .p2[data-c="blue"] .p2-btn .font-orbitron{font-size:7px!important;padding:2px 5px!important}
     .p2[data-c="blue"] h3{gap:8px!important;font-size:16px!important}
@@ -9256,6 +9258,7 @@
      * icon square, the fire/green progress bar, the allocation ring and the creature strip. */
     const P2Art=()=><div className="p2-art" aria-hidden="true"><div className="p2-veil"></div></div>;
     const P2Icon=({e,svg})=><span className="p2-ic" aria-hidden="true">{svg||e}</span>;
+    const P2_DAO_ICONS={building:'logos/panels/dao-building.webp',coins:'logos/panels/dao-coins.webp',hourglass:'logos/panels/dao-hourglass.webp',rocket:'logos/panels/dao-rocket.webp',total:'logos/panels/dao-total.webp'};   // Shaka's DAO Treasury icons (2026-10-01, dao_dashboard_icons.zip) — v2 only, the classic keeps its emoji
     const P2Bar=({pct,green})=>{const w=Math.max(0,Math.min(100,pct||0));return(
       <div className={`p2-bar ${green?'green':''}`} role="presentation">
         <div className="p2-fl" style={{width:`${w}%`}}></div>
@@ -11120,23 +11123,30 @@
                and was scanned this run (not carried forward from a failed run); otherwise read
                the chain as before. null means unknown — never zeros. */
             (async()=>{
+              /* 2026-10-01 (Shaka: "why do the UFO boxes take so long?"): the file is only FRESH (< 6 h) right after a
+                 pipeline run, and GitHub runs it ~5×/day — so most visits used to skip the file and wait ~55 eth_getLogs
+                 for four numbers. Now the file's windows are painted AT ONCE whenever they are usable and under a week
+                 old (labelled "as of …", amber past 6 h), and the chain scan runs behind them only when they are stale,
+                 replacing them when it lands. Same numbers as before in the end; the wait is just no longer blank. */
+              let painted=false;
               try{
                 const snap=await fetchValueGenSnapshot();
                 if(loadCancelled)return;
-                const bp=snap.valid&&snap.ageMs<VALUE_GEN_STALE_MS&&snap.json.burnPeriods&&snap.json.burnPeriods.UFO;
+                const bp=snap.valid&&snap.ageMs<BURN_HISTORY_MAX_AGE_MS&&snap.json.burnPeriods&&snap.json.burnPeriods.UFO;
                 if(bp&&!bp.carriedForward&&typeof bp.h24==='number'&&typeof bp.d90==='number'){
                   setBurnPeriods({h12:bp.h12||0,h24:bp.h24,d7:bp.d7,d30:bp.d30,d90:bp.d90,sinceLaunch:!!bp.sinceLaunch,burnTxs:bp.burnTxs});
                   setLive24hBurn(bp.h24);
                   setBurnPeriodsSource({at:Date.now()-snap.ageMs});   // a52
-                  return;
+                  painted=true;
+                  if(snap.ageMs<VALUE_GEN_STALE_MS)return;   // fresh: done
                 }
               }catch(e){}
               if(loadCancelled)return;
-              setBurnPeriodsSource(null);
+              if(!painted)setBurnPeriodsSource(null);
               const bp=await fetchBurnPeriodsOnChain(cfg.address,cfg.decimals,firstPoolMs||UFO_LAUNCH_FALLBACK_MS).catch(()=>null);
               if(loadCancelled)return;
-              setBurnPeriods(bp||null);
-              setLive24hBurn(bp?bp.h24:null);   // same scan — it used to be launched a second time just for this number
+              if(bp){setBurnPeriods(bp);setLive24hBurn(bp.h24);setBurnPeriodsSource(null);}   // live now — the "as of" label goes
+              else if(!painted){setBurnPeriods(null);setLive24hBurn(null);}   // nothing from either source: unknown, never zeros; stale file figures stay up, labelled
             })();
             /* fetchPtgcBurnedByUfo issued three log scans that fetchDeliveredValue already
                performs, and the PTGC panel now prefers the delivered figures anyway (they
@@ -11988,7 +11998,8 @@
                       /* windows from the hourly snapshot: label them once they are more than an hour old */
                       const a=burnPeriodsSource&&burnPeriodsSource.at!=null?Date.now()-burnPeriodsSource.at:null;   // a52: live age
                       if(a==null||a<60*60*1000)return null;
-                      return <div className="text-[10px] uppercase tracking-[0.14em] text-white/35 text-right mb-1 p2-asof" title="These windows come from the hourly on-chain snapshot.">as of {fmtSnapshotAge(a)}</div>;
+                      const stale=a>=VALUE_GEN_STALE_MS;   // past 6 h the chain scan is running behind these figures
+                      return <div className={`text-[10px] uppercase tracking-[0.14em] ${stale?'text-amber-300/70':'text-white/35'} text-right mb-1 p2-asof`} title={stale?'These windows come from the on-chain snapshot and are being refreshed from the chain right now.':'These windows come from the hourly on-chain snapshot.'}>as of {fmtSnapshotAge(a)}</div>;
                     }
                     const age=burnHistoryAgeMs();
                     if(age==null||age<BURN_HISTORY_STALE_MS)return null;
@@ -12408,7 +12419,7 @@
                   <div className="p-5 sm:p-6">
                     <div className="flex justify-between items-center mb-5 gap-3 flex-wrap">{/* wraps on phones: "PTGC Buys" + "Ledger" no longer fit beside the title */}
                       <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
-                        {hdrV2?<P2Icon e={'\u{1F3DB}\uFE0F'}/>:<span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>}
+                        {hdrV2?<P2Icon svg={<img src={P2_DAO_ICONS.building} alt=""/>}/>:<span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>}
                         DAO Treasury
                         <img src={TOKENS[token].logo} alt={token} title={token} className="w-5 h-5 sm:w-6 sm:h-6 -my-1 rounded-full object-contain shrink-0"/>
                         <button onClick={()=>setShowDAOShareModal(true)} aria-label="Share the DAO Treasury panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
@@ -12429,19 +12440,19 @@
                         {hdrV2&&<div className="p2-hero"><span className="p2-hl tabular-nums">{daoData?fmtUSD(daoData.totalValue||0):'\u2014'}</span><span className="l">Total DAO Value</span></div>}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 min-w-0 ${hdrV2?'p2-tile':''}`}>
-                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e">{'\u{1F4B0}'}</span>:'\u{1F4B0}'} Available for Proposals</div>
+                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e"><img src={P2_DAO_ICONS.coins} alt=""/></span>:'\u{1F4B0}'} Available for Proposals</div>
                             <div className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate ${hdrV2?'p2-gold':''}`}>{daoData?fmtUSD(daoData.availableUSD||0):'\u2014'}</div>
                             <div className="text-white/45 text-xs tabular-nums mt-1 truncate">{daoData?`${fmtAbbr(daoData.availablePLS||0)} PLS`:'\u00a0'}</div>
                           </div>
                           <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 min-w-0 ${hdrV2?'p2-tile':''}`}>
-                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e">{'\u{23F3}'}</span>:'\u{23F3}'} Pending in Live{daoData?` (${daoData.pendingCount||0})`:''}</div>
+                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e"><img src={P2_DAO_ICONS.hourglass} alt=""/></span>:'\u{23F3}'} Pending in Live{daoData?` (${daoData.pendingCount||0})`:''}</div>
                             <div className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate ${hdrV2?'p2-gold':''}`}>{daoData?fmtUSD(daoData.pendingUSD||0):'\u2014'}</div>
                             <div className="text-white/45 text-xs tabular-nums mt-1 truncate">{daoData?`${fmtAbbr(daoData.pendingPLS||0)} PLS`:'\u00a0'}</div>
                           </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 relative min-w-0 ${hdrV2?'p2-tile':''}`}>
-                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e">{'\u{1F3E6}'}</span>:'\u{1F3E6}'} Ready to Deploy</div>
+                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e"><img src={P2_DAO_ICONS.rocket} alt=""/></span>:'\u{1F3E6}'} Ready to Deploy</div>
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate ${hdrV2?'p2-gold':''}`}>{daoData?fmtUSD(daoData.managementValue||0):'\u2014'}</span>
                               <button onClick={()=>setShowMgmtTokens(!showMgmtTokens)} aria-label="Token breakdown" aria-expanded={showMgmtTokens} className="tap -my-2 text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
@@ -12476,7 +12487,7 @@
                             )}
                           </div>
                           <div className={`bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 relative min-w-0 ${hdrV2?'p2-tile':''}`}>
-                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e">{'\u{1F4CA}'}</span>:'\u{1F4CA}'} Total DAO Value</div>
+                            <div className="text-white/55 text-xs sm:text-sm uppercase tracking-[0.18em] font-semibold flex items-center gap-1 mb-1.5">{hdrV2?<span className="p2-e"><img src={P2_DAO_ICONS.total} alt=""/></span>:'\u{1F4CA}'} Total DAO Value</div>
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`text-lg sm:text-xl font-medium tabular-nums leading-none ${theme.text} truncate ${hdrV2?'p2-gold':''}`}>{daoData?fmtUSD(daoData.totalValue||0):'\u2014'}</span>
                               <button onClick={()=>setShowTotalBreakdown(!showTotalBreakdown)} aria-label="Total value breakdown" aria-expanded={showTotalBreakdown} className="tap -my-2 text-white/35 hover:text-white/70 transition-colors text-xs shrink-0">{'\u{24D8}'}</button>
