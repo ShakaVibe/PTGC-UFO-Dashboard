@@ -17,7 +17,18 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-10-01 — two sessions)
+## Current state (end of 2026-10-01 — three sessions)
+
+**2026-10-01, evening session (round 19, `sessions/2026-10-01.md`): two asks from Shaka, both built in the harness and written to
+his Mac, NOT YET PUSHED or seen live when this was written** — (1) the Live Feed tab's NEW badge: seven mock-ups
+(`design/dashboard-panels/mock-tabbadge-v1.html`, render `renders/tabbadge-v1.png`), **B picked "with a slight glow"** → a
+1 px gold hairline pill, gold caps, soft glow, one rule for both tokens (`.h2-tabs .h2-new`, the UFO override line gone);
+(2) **Value Generated's "from $X of volume" is back under v2, to the RIGHT of the total on its baseline** (`.p2-vgfrom`, a
+`{hdrV2?…:…}` fork; UFO gets the line too), following the 24H / 7D / 30D / 90D switch — and the blanket rule that hid every
+line under the figure is gone, so UFO's "as of" and the amber price notes show again as one quiet line (told Shaka; one rule
+to hide the as-of if he minds). Classic byte-identical on both tokens (`probes/vg-classic.js` vs HEAD). Owed: his live look.
+NEXT: whatever he brings, then the pre-flip list (-5), then the sibling headers (-6).
+
 
 **2026-10-01, afternoon session, closed by Shaka ("call it a day"): six rounds, all pushed by him as they landed (last:
 `c34383fa2`, "sparkline colour = the volume change vs the day before"), each seen live on his Mac. Nothing half-done.
@@ -785,7 +796,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    the fire-light pill on the active tab, no "Updated" badge) and the same token · price line — or a visitor steps from
    the new dashboard into the 2025 header on every Calculators / Charts click. Do it in the same push as the flip, or
    the flip waits. Not started; parked by Shaka until go-live.
--5. **DONE 2026-10-01 afternoon: the Value Generated tiles, the LP Pairs header and rows (rounds 16–18).** Next session:
+-5. **DONE 2026-10-01 afternoon: the Value Generated tiles, the LP Pairs header and rows (rounds 16–18); evening: the Live Feed badge (B) + the volume line beside the Value Generated total (round 19).** Next session:
    whatever Shaka brings (he usually has a mock-up — ask), then the rest of this item, which is where
    2026-09-30 left it: the dashboard page under v2 (header, tiles, panels, LP Pairs) — clean-ups were the whole of
    2026-10-01 (`sessions/2026-10-01.md`), the LP Pairs table has not been touched since 09-30. Six live rounds on the LP Pairs
@@ -934,7 +945,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-10-01.md` — morning: fifteen rounds of v2 clean-ups; **afternoon (rounds 16–18): the Value Generated tiles to
+- `sessions/2026-10-01.md` — **evening (round 19): the Live Feed NEW badge redrawn (seven mock-ups, B hairline + glow) and the
+  "from $X of volume" line back beside the Value Generated total under v2, per window, UFO too; classic proven identical.** Morning: fifteen rounds of v2 clean-ups; **afternoon (rounds 16–18): the Value Generated tiles to
   Shaka's layout (`.p2-vgt`, `H2Val` figures, coin-on-flame), the LP Pairs header band (`LpHeaderV2`, change lines, glass
   toggles, three-tier squeeze), the LP Pairs rows (rank rings, volume change, illuminated sqrt-height `LpSpark` coloured by
   that change, 24h % badge, stacked Txns)** — morning: fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
