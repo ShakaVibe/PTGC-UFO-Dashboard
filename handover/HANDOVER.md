@@ -26,7 +26,9 @@ widest line), and the tiles' change line 21 → 26 u with the tile 214 → 236 u
 (phone tiles 14 → 17 u). **Round 2:** the LP tile reads `PTGC IN LP` / `UFO IN LP` (which also ends the 1024 badge
 overlap), and the tile sparklines are Shaka's spec now — one crisp 1.6 px vivid line (`#FFD24D` / `#8DFF3A`), a 2 px
 half-alpha drop-shadow as the only glow, a .16 → 0 fill, each series on its own Y range in a taller box (70 u, tile
-250 u) — after he called the old ones fuzzy (and a neon pass in between fuzzier). The remaining angularity is the
+250 u), then **layered light on the same geometry**: .9 px pale core, 1 px near-white core + bloom + a clipped pool of
+light under the 2–4 most prominent peaks only (`h2Peaks`) — after he called the old ones fuzzy (and a neon pass in
+between fuzzier). The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
@@ -861,7 +863,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
 - `sessions/2026-10-01.md` — v2 clean-ups: BUY/SELL + SWITCH labels centred, address right-justified, bigger change
-  line on taller tiles, `PTGC IN LP` / `UFO IN LP`, crisp thin sparklines (`h2Alpha`); harness 1440 / 1024 / 390, classic unchanged.
+  line on taller tiles, `PTGC IN LP` / `UFO IN LP`, crisp thin sparklines with peak lighting (`h2Peaks`, `h2Tint`, `h2Alpha`); harness 1440 / 1024 / 390, classic unchanged.
 - `sessions/2026-09-30.md` — the dashboard header v2 built into index.html: `DashHeaderV2` / `KpiTilesV2` / `H2Spark` /
   `useH2Series` (7-day real-data sparklines on all seven tiles), the `--u` reference-pixel CSS, `logos/header/` assets,
   `HEADER_DESIGN` + the hidden preview switch (`HeaderPreviewGate`, hashes only, empty until Shaka's); harness at
