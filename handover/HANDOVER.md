@@ -28,7 +28,10 @@ overlap), and the tile sparklines are Shaka's spec now — one crisp 1.6 px vivi
 half-alpha drop-shadow as the only glow, a .16 → 0 fill, each series on its own Y range in a taller box (70 u, tile
 250 u), then **layered light on the same geometry**: .9 px pale core, 1 px near-white core + bloom + a clipped pool of
 light under the 2–4 most prominent peaks only (`h2Peaks`) — after he called the old ones fuzzy (and a neon pass in
-between fuzzier). The remaining angularity is the
+between fuzzier). **Round 3:** the window is **30 days** (`H2_DAYS`, 720 GeckoTerminal candles for Market Cap, ~150
+pipeline samples for the rest — the cure for the angular lines), a "30D" tag on every tile, ONE line colour per token
+(gold / green — green means UFO, never "up"), the figures 38 → 46 u with `H2Val` shrinking a figure that would overrun
+(never an ellipsis on a number). The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
@@ -658,7 +661,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    2166-px-wide reference mock-up (`--u` = width/2166 rem-scaled, floor .47 at 1024 px; the phone layout under 1024 px
    uses width/390, cap 1.3) — change a size by changing N, not by adding a px value. The sticky tab row must stay a
    SIBLING of the banner wrapper (`position:sticky` ends with its parent). Sparklines are `H2Spark` on `useH2Series`
-   (7 days; null → dashed flat line + "history unavailable" label — don't seed a shape). `lv-snapshots.json` (~370 KB)
+   (`H2_DAYS` = 30 days since 2026-10-01, one colour per token, peak lighting by `h2Peaks`; null → dashed flat line +
+   "history unavailable" label — don't seed a shape; the figure is `H2Val`, which shrinks rather than ellipses). `lv-snapshots.json` (~370 KB)
    is read only under v2. The preview switch: `LS.HDR_PREVIEW`, `HeaderPreviewGate`, hashes only in the code, empty
    hashes = no switch; strip nothing else from the URL there (`?home=`, `?debug=1` must survive). Flip = one constant.
    `.h2 img{max-width:none}` stays: Tailwind's preflight caps every img at its box width, which squeezed the corona
@@ -863,7 +867,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
 - `sessions/2026-10-01.md` — v2 clean-ups: BUY/SELL + SWITCH labels centred, address right-justified, bigger change
-  line on taller tiles, `PTGC IN LP` / `UFO IN LP`, crisp thin sparklines with peak lighting (`h2Peaks`, `h2Tint`, `h2Alpha`); harness 1440 / 1024 / 390, classic unchanged.
+  line on taller tiles, `PTGC IN LP` / `UFO IN LP`, crisp thin sparklines with peak lighting (`h2Peaks`, `h2Tint`, `h2Alpha`), 30-day window (`H2_DAYS`) + "30D" tag, one
+  line colour per token, bigger fitted figures (`H2Val`); harness 1440 / 1024 / 390, classic unchanged.
 - `sessions/2026-09-30.md` — the dashboard header v2 built into index.html: `DashHeaderV2` / `KpiTilesV2` / `H2Spark` /
   `useH2Series` (7-day real-data sparklines on all seven tiles), the `--u` reference-pixel CSS, `logos/header/` assets,
   `HEADER_DESIGN` + the hidden preview switch (`HeaderPreviewGate`, hashes only, empty until Shaka's); harness at
