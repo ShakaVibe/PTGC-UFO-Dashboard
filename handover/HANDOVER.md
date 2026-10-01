@@ -36,7 +36,8 @@ pipeline samples for the rest — the cure for the angular lines), a "30D" tag o
 stacked (`.p2-ctl` column up on the title row, level with Burn's; a row under the title on phones), 28 px tall; soft dark
 radial pools behind the VG headline, the stack and the DAO Treasury's PTGC Buys + Ledger (`p2-daobtns`); the tab row's type 24 u. **Round 6:** the Token Allocation donut is pure SVG (`AllocRingV2`:
 per-slice radial gradients, top-left light, bloom, underside, rims, `P2_TONES`; the `.p2-rg` conic div is gone) — same data,
-order, size, logo. The remaining angularity is the
+order, size, logo. **Round 8:** the sticky tab row sits on Shaka's gold band (`logos/header/tabs-bg.jpg`) with a glowing gold
+pill for the active tab; VG's "from … vol" line hidden under v2 (both top panels 366 px); DAO buttons' pool darker. The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
