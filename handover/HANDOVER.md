@@ -19,8 +19,10 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-01 — three sessions)
 
-**2026-10-01, evening session (round 19 + 19b, `sessions/2026-10-01.md`): two asks from Shaka, built in the harness, written to
-his Mac, pushed and seen live** — (1) the Live Feed tab's NEW badge: seven mock-ups
+**2026-10-01, evening session, closed by Shaka ("call it a day"): rounds 19–21, all pushed by him as they landed (last
+`63f6e1ae4`, "v2 LP Pairs band: three tiles one width…"), each seen live on his Mac. Nothing half-done. NEXT SESSION STARTS
+WITH: whatever he brings (ask — he usually has a screenshot or a mock-up), then the pre-flip list (-5), then the sibling
+headers (-6).** The evening (`sessions/2026-10-01.md`, rounds 19–21) — (1) the Live Feed tab's NEW badge: seven mock-ups
 (`design/dashboard-panels/mock-tabbadge-v1.html`, render `renders/tabbadge-v1.png`), **B picked "with a slight glow"** → a
 1 px gold hairline pill, gold caps, soft glow, one rule for both tokens (`.h2-tabs .h2-new`, the UFO override line gone);
 (2) **Value Generated's "from $X of volume" is back under v2, to the RIGHT of the total on its baseline** (`.p2-vgfrom`, a
@@ -33,8 +35,10 @@ volume × fee between Volume and Liquidity; a "Value Gen" column after the curve
 contract fee, "—" when unknown); the 24h % heading is "Price 24h" (Shaka had read the badge as the liquidity's move — it is
 DexScreener's price change). Grid tiers re-cut (curve leaves under 1120, Value Gen under 950). Classic LP identical both tokens.
 Pushed `f91cbb1fe`, seen live. **Round 21:** the band's three tiles one width (222 / 198 px), further from the title, labels
-centred over their figures; the title-row tier for tablets moved 760 → 980 px — written to his Mac, owed his look.** Then:
-whatever he brings, the pre-flip list (-5), the sibling headers (-6).
+centred over their figures; the title-row tier for tablets moved 760 → 980 px — pushed `63f6e1ae4`, seen live.**
+**Owed from the evening:** the band's 980–1110 and under-980 tiers and the sort arrows at 1120–1280 on a real tablet / narrow
+window (only the Mac at full width has seen any of it); the Value Gen tile + column on UFO at the live 6 % fee (the harness
+reads 0 bps → "—"); phone + iPad for everything v2 (unchanged owe).
 
 
 **2026-10-01, afternoon session, closed by Shaka ("call it a day"): six rounds, all pushed by him as they landed (last:
@@ -956,8 +960,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-10-01.md` — **evening (round 19): the Live Feed NEW badge redrawn (seven mock-ups, B hairline + glow) and the
-  "from $X of volume" line back beside the Value Generated total under v2, per window, UFO too; classic proven identical.** Morning: fifteen rounds of v2 clean-ups; **afternoon (rounds 16–18): the Value Generated tiles to
+- `sessions/2026-10-01.md` — **evening (rounds 19–21): the Live Feed NEW badge redrawn (seven mock-ups, B hairline + glow); the
+  "from $X of volume" line back beside the Value Generated total under v2, per window, UFO too (no "as of" under it); LP Pairs:
+  sorting on the column headings (`LpTh`, SORT toggle gone), the Value Gen 24h tile + Value Gen column (volume × fee), "Price
+  24h", the band's tiles one width with centred labels; classic proven identical throughout.** Morning: fifteen rounds of v2 clean-ups; **afternoon (rounds 16–18): the Value Generated tiles to
   Shaka's layout (`.p2-vgt`, `H2Val` figures, coin-on-flame), the LP Pairs header band (`LpHeaderV2`, change lines, glass
   toggles, three-tier squeeze), the LP Pairs rows (rank rings, volume change, illuminated sqrt-height `LpSpark` coloured by
   that change, 24h % badge, stacked Txns); round 20: column sorting (`LpTh`), the Value Gen tile + column, "Price 24h"** — morning: fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
