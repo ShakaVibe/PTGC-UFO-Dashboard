@@ -17,7 +17,15 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-09-30, night)
+## Current state (2026-10-01, morning)
+
+**2026-10-01: v2 clean-ups, round 1 — Shaka's first three asks, CSS only in the `h2-*` block:** BUY/SELL + SWITCH
+labels centred between the logo and the button's right edge (desktop), the contract address + copy button
+right-justified under the title (`align-self:flex-end`; visible on PTGC, a no-op on UFO where the address is the
+widest line), and the tiles' change line 21 → 26 u with the tile 214 → 236 u so the sparkline keeps its room
+(phone tiles 14 → 17 u). Harness at 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0).
+Seen on the way: at 1024 the TOKENS IN LP badge overlaps its title (one line, not done). `sessions/2026-10-01.md`.
+**Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**
 
 **2026-09-30, night: the LP Pairs section is BUILT under v2 — the whole preview design is now complete — and its curves
 come from the pipeline (`data/pair-volume-7d.json`, `scripts/build-pair-volume.mjs`, hourly `pair-volume` step; first run
@@ -848,6 +856,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-10-01.md` — v2 clean-ups round 1: BUY/SELL + SWITCH labels centred, address right-justified, bigger
+  change line on taller tiles; harness 1440 / 1024 / 390, classic unchanged.
 - `sessions/2026-09-30.md` — the dashboard header v2 built into index.html: `DashHeaderV2` / `KpiTilesV2` / `H2Spark` /
   `useH2Series` (7-day real-data sparklines on all seven tiles), the `--u` reference-pixel CSS, `logos/header/` assets,
   `HEADER_DESIGN` + the hidden preview switch (`HeaderPreviewGate`, hashes only, empty until Shaka's); harness at
