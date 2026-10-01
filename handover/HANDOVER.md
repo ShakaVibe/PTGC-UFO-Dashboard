@@ -23,7 +23,8 @@ Update it at the end of every session.
 divider | name / quiet % / figure, no bars, no % at the foot, his new three-diamond cluster on Total H&S
 (`logos/panels/vg-diamonds3-v2.webp`). Mock-up A/B first (`design/dashboard-panels/mock-vg-tiles-v1.html`; "the bottom
 one, but not that loud — no pill"), then built as a CSS grid over the classic tile markup (`.p2-vgt`, v2 only, classic
-byte-identical). Harness 1440 / 1280 / 1100 / 1024 / 390, USD + TOK, PTGC + UFO. **Not pushed yet at the time of writing —
+byte-identical); part two after his live look: names 12.5 px (measured — 6 px of slack on "BUY & BURN", never a second
+line at ≥ 1280), figures 31 px through `H2Val` (shrink, never overrun). Harness 1440 / 1280 / 1100 / 1024 / 390, USD + TOK, PTGC + UFO. **Not pushed yet at the time of writing —
 Shaka's live look is owed**, then the rest of the pre-flip list (-5 below), then the sibling pages' headers (-6, same push
 as the flip). Round 16 in `sessions/2026-10-01.md`.
 
