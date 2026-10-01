@@ -34,7 +34,9 @@ pipeline samples for the rest — the cure for the angular lines), a "30D" tag o
 (never an ellipsis on a number). **Round 4:** the panel toggles are option A of `design/dashboard-panels/mock-toggles-v1.html`
 (dark glass, lit translucent pane, gold `--tg`) via `.p2 [role="group"]:not(.p2-pill)`, and Value Generated's two toggles are
 stacked (`.p2-ctl` column, beside the headline; a row under the title on phones), 32 px tall; soft dark radial pools behind the VG
-headline and the stack; the tab row's type 24 u. The remaining angularity is the
+headline and the stack; the tab row's type 24 u. **Round 6:** the Token Allocation donut is pure SVG (`AllocRingV2`:
+per-slice radial gradients, top-left light, bloom, underside, rims, `P2_TONES`; the `.p2-rg` conic div is gone) — same data,
+order, size, logo. The remaining angularity is the
 pipeline's ~5 samples/day, not the drawing. Harness at
 1440 / 1024 / 390, both tokens; classic byte-identical (script block diff 0). `sessions/2026-10-01.md`.
 **Owed: his live look, then the rest of his clean-up list, then phone + iPad, then the flip.**

@@ -579,9 +579,8 @@
     .p2 .p2-cre .animate-fire{filter:drop-shadow(0 0 8px rgba(var(--pc),.8))}
     /* Token Allocation: the ring, the legend beads, the creature strip */
     .p2 .p2-ring{position:relative;width:196px;height:196px;flex:none}
-    .p2 .p2-ring .p2-rg{position:absolute;inset:0;border-radius:50%;background:var(--conic);-webkit-mask:radial-gradient(circle closest-side,transparent 55.5%,#000 56%,#000 91.5%,transparent 92%);mask:radial-gradient(circle closest-side,transparent 55.5%,#000 56%,#000 91.5%,transparent 92%)}
     .p2 .p2-ring svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 6px 12px rgba(0,0,0,.6))}
-    .p2 .p2-ring img{position:absolute;left:50%;top:50%;width:96px;height:96px;margin:-48px 0 0 -48px;border-radius:50%;box-shadow:0 0 0 4px rgba(7,5,16,.9),0 0 22px rgba(255,200,90,.45)}
+    .p2 .p2-ring img{position:absolute;left:50%;top:50%;width:96px;height:96px;margin:-48px 0 0 -48px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,226,150,.95),0 0 0 4.5px rgba(7,5,16,.96),0 7px 14px 2px rgba(0,0,0,.72),0 0 26px 4px rgba(255,200,90,.3)}   /* medallion: crisp gold edge, dark gap, a shadow onto the ring, a restrained halo (2026-10-01) */
     .p2 .p2-legend>div{font-size:18px!important;gap:12px!important}
     .p2 .p2-legend .text-white\/55{color:rgba(255,255,255,.85)!important}
     .p2 .p2-dot{width:13px!important;height:13px!important;background:radial-gradient(circle at 35% 28%,rgba(255,255,255,.9) 0%,rgba(255,255,255,.35) 12%,currentColor 40%,color-mix(in srgb,currentColor 65%,#000) 100%)!important;box-shadow:0 0 9px currentColor,inset 0 -1px 2px rgba(0,0,0,.5)}
@@ -9255,26 +9254,53 @@
     /* The allocation ring: a CSS conic-gradient masked to a ring (flat, saturated slices — Shaka's reference),
        an SVG overlay for the seams, rim lines and the dark glossy hole, the real logo in the middle.
        A slice whose value is unknown (a15: null) leaves the whole ring grey — never a guessed split. */
+    /* The Token Allocation donut under v2 — pure SVG since 2026-10-01 (Shaka: "premium illuminated sci-fi", same data,
+       same order, same diameter, same logo). Each slice is an annular sector filled with its own radial gradient (dark at
+       the inner edge → the colour → a brighter outer band → a near-white rim), under one soft top-left light (`p2lit`),
+       with a blurred copy of the outer band behind the ring for the bloom, a 2.4 u darker underside for depth, a bright
+       outer rim, a subtler inner rim, dark seams (+ a thin light seam on the lit side). The legend keeps the base colours;
+       P2_TONES maps a base colour to the ring's richer tone + highlight; gold / green (the token colour) get a champagne
+       highlight. Null anywhere → one grey ring (a15), never a guessed slice. */
+    const P2_TONES={'#f97316':['#FF7A1A','#FFD36B'],'#3b82f6':['#2F7BFF','#7AD7FF'],'#a855f7':['#9B4DFF','#D9A0FF'],'#ec4899':['#FF2E9A','#FF8AD0'],'#d4af37':['#F0B82C','#FFE9A0'],'#7cfc00':['#7CFC00','#E4FFC0']};   // base (legend) → [ring tone, highlight]: metallic gold with champagne, PTGC; UFO green with a pale-lime highlight
+    const p2Mix=(hex,to,t)=>{const n=parseInt(hex.slice(1),16),m=parseInt(to.slice(1),16);if(Number.isNaN(n)||Number.isNaN(m))return hex;const c=sh=>Math.round(((n>>sh)&255)*(1-t)+((m>>sh)&255)*t);return`rgb(${c(16)},${c(8)},${c(0)})`;};
+    const p2Tone=hex=>{const k=String(hex).toLowerCase();if(P2_TONES[k])return P2_TONES[k];return[hex,p2Mix(hex,'#FFF6D5',.55)];};
     const AllocRingV2=({data,colors,logo})=>{
       const known=data.every(d=>d.value!=null);
       const vals=known?data.map(d=>Math.max(0,d.value)):[];const total=vals.reduce((a,b)=>a+b,0);
-      const stops=[];let ang=0;const seams=[];
-      const pt=(rad,a)=>{const r=(a-90)*Math.PI/180;return[50+rad*Math.cos(r),50+rad*Math.sin(r)];};
-      if(known&&total>0){data.forEach((d,i)=>{const a0=ang,a1=ang+vals[i]/total*360;ang=a1;stops.push(`${colors[i]} ${a0.toFixed(2)}deg ${a1.toFixed(2)}deg`);const[x0,y0]=pt(46,a0),[x1,y1]=pt(28,a0);seams.push(<line key={i} x1={x0.toFixed(2)} y1={y0.toFixed(2)} x2={x1.toFixed(2)} y2={y1.toFixed(2)} stroke="rgba(7,5,16,.55)" strokeWidth=".5"/>);});}
-      const conic=known&&total>0?`conic-gradient(from 0deg, ${stops.join(', ')})`:'conic-gradient(rgba(255,255,255,.12) 0deg 360deg)';
+      const R0=28,R1=46,uid='p2r'+React.useId().replace(/[^a-zA-Z0-9]/g,'');   // gradient ids are document-global — two rings on one page must not share them
+      const pt=(rad,a)=>{const r=(a-90)*Math.PI/180;return[+(50+rad*Math.cos(r)).toFixed(3),+(50+rad*Math.sin(r)).toFixed(3)];};
+      const arc=(r0,r1,a0,a1)=>{   // annular sector, clockwise from 12 o'clock (the old conic-gradient's `from 0deg`)
+        if(a1-a0>=359.99)return`M50,${50-r1} A${r1},${r1} 0 1 1 49.99,${50-r1} L49.99,${50-r0} A${r0},${r0} 0 1 0 50,${50-r0} Z`;
+        const big=(a1-a0)>180?1:0,[x0,y0]=pt(r1,a0),[x1,y1]=pt(r1,a1),[x2,y2]=pt(r0,a1),[x3,y3]=pt(r0,a0);
+        return`M${x0},${y0} A${r1},${r1} 0 ${big} 1 ${x1},${y1} L${x2},${y2} A${r0},${r0} 0 ${big} 0 ${x3},${y3} Z`;
+      };
+      const segs=[];let ang=0;
+      if(known&&total>0)data.forEach((d,i)=>{const a0=ang,a1=ang+vals[i]/total*360;ang=a1;if(a1-a0>0)segs.push({i,a0,a1,tone:p2Tone(colors[i])});});
+      const seams=segs.length>1?segs.map(s=>{const lit=s.a0>=250||s.a0<=70;const[x0,y0]=pt(R1,s.a0),[x1,y1]=pt(R0,s.a0),[lx0,ly0]=pt(R1,s.a0+.8),[lx1,ly1]=pt(R0,s.a0+.8);
+        return(<g key={s.i}><line x1={x0} y1={y0} x2={x1} y2={y1} stroke="rgba(7,5,16,.6)" strokeWidth=".55"/>{lit&&<line x1={lx0} y1={ly0} x2={lx1} y2={ly1} stroke="rgba(255,255,255,.4)" strokeWidth=".35"/>}</g>);}):null;
+      const ring=arc(R0,R1,0,360);
       return(
         <div className="p2-ring" role="img" aria-label={known?data.map(d=>`${d.label} ${d.value.toFixed(2)}%`).join(', '):'Allocation not read yet'}>
-          <div className="p2-rg" style={{'--conic':conic}}></div>
           <svg viewBox="0 0 100 100" aria-hidden="true">
             <defs>
-              <radialGradient id="p2depth" cx="50" cy="50" r="46" gradientUnits="userSpaceOnUse"><stop offset=".6" stopColor="#000" stopOpacity=".18"/><stop offset=".72" stopColor="#000" stopOpacity="0"/><stop offset=".93" stopColor="#fff" stopOpacity="0"/><stop offset="1" stopColor="#fff" stopOpacity=".22"/></radialGradient>
-              <radialGradient id="p2ball" cx="40" cy="36" r="30" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#2b3038"/><stop offset=".45" stopColor="#101318"/><stop offset="1" stopColor="#05060a"/></radialGradient>
+              {segs.map(s=>{const[b,h]=s.tone;return(<radialGradient key={s.i} id={`${uid}s${s.i}`} cx="50" cy="50" r={R1} gradientUnits="userSpaceOnUse">
+                <stop offset={(R0/R1).toFixed(3)} stopColor={p2Mix(b,'#000000',.4)}/><stop offset=".7" stopColor={p2Mix(b,'#000000',.14)}/><stop offset=".83" stopColor={b}/><stop offset=".92" stopColor={p2Mix(b,h,.5)}/><stop offset=".975" stopColor={h}/><stop offset="1" stopColor={p2Mix(b,h,.4)}/></radialGradient>);})}
+              <linearGradient id={uid+"p2lit"} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".26"/><stop offset=".22" stopColor="#fff" stopOpacity=".1"/><stop offset=".48" stopColor="#fff" stopOpacity="0"/><stop offset=".62" stopColor="#000" stopOpacity="0"/><stop offset="1" stopColor="#000" stopOpacity=".3"/></linearGradient>
+              <linearGradient id={uid+"p2rim"} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".95"/><stop offset=".45" stopColor="#fff" stopOpacity=".4"/><stop offset="1" stopColor="#fff" stopOpacity=".12"/></linearGradient>
+              <linearGradient id={uid+"p2rimi"} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".5"/><stop offset="1" stopColor="#fff" stopOpacity=".1"/></linearGradient>
+              <filter id={uid+"p2bloom"} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter>
+              <radialGradient id={uid+"p2ball"} cx="40" cy="36" r="30" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#2b3038"/><stop offset=".45" stopColor="#101318"/><stop offset="1" stopColor="#05060a"/></radialGradient>
             </defs>
-            <path d="M50,4 A46,46 0 1 1 49.99,4 L49.99,22 A28,28 0 1 0 50,22 Z" fill="url(#p2depth)"/>
+            <g filter={`url(#${uid}p2bloom)`} opacity=".8">{segs.map(s=><path key={s.i} d={arc(42,48.6,s.a0,s.a1)} fill={s.tone[0]}/>)}</g>
+            <path d={ring} transform="translate(0,2.4)" fill="rgba(0,0,0,.62)"/>
+            {segs.length?segs.map(s=><path key={s.i} d={arc(R0,R1,s.a0,s.a1)} fill={`url(#${uid}s${s.i})`}/>):<path d={ring} fill="rgba(255,255,255,.12)"/>}
+            <path d={ring} fill={`url(#${uid}p2lit)`}/>
             {seams}
-            <circle cx="50" cy="50" r="45.7" fill="none" stroke="rgba(255,255,255,.55)" strokeWidth=".6"/>
-            <circle cx="50" cy="50" r="28.3" fill="none" stroke="rgba(255,255,255,.45)" strokeWidth=".6"/>
-            <circle cx="50" cy="50" r="27.6" fill="url(#p2ball)"/>
+            <circle cx="50" cy="50" r="45.6" fill="none" stroke={`url(#${uid}p2rim)`} strokeWidth=".8"/>
+            <circle cx="50" cy="50" r="44.5" fill="none" stroke="rgba(0,0,0,.2)" strokeWidth=".45"/>
+            <circle cx="50" cy="50" r="28.4" fill="none" stroke={`url(#${uid}p2rimi)`} strokeWidth=".55"/>
+            <circle cx="50" cy="50" r="29.3" fill="none" stroke="rgba(0,0,0,.28)" strokeWidth=".5"/>
+            <circle cx="50" cy="50" r="27.6" fill={`url(#${uid}p2ball)`}/>
             <ellipse cx="44" cy="38" rx="14" ry="9" fill="rgba(255,255,255,.06)"/>
           </svg>
           <img src={logo} alt=""/>
