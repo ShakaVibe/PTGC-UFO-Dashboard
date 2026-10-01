@@ -9523,7 +9523,7 @@
     };
     /* the row's curve: 100×26, gold (PTGC) / green (UFO) when the second half of the week out-volumes the first,
        red when it does not; undefined = loading (faint dots), null = unavailable (dashed) */
-    const LpSpark=({pts,upColor,label})=>{
+    const LpSpark=({pts,upColor,label,up:upIn})=>{
       if(pts===undefined)return(<svg viewBox="0 0 110 26" preserveAspectRatio="none" role="img" aria-label={`${label}: loading 7 day volume`}><path className="w" d="M0,13 L110,13" fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/></svg>);
       if(!pts||pts.length<4)return(<svg viewBox="0 0 110 26" preserveAspectRatio="none" role="img" aria-label={`${label}: 7 day volume history unavailable`}><path className="f" d="M0,13 L110,13" fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/></svg>);
       if(!pts.some(p=>p.v>0))return(<svg viewBox="0 0 110 26" preserveAspectRatio="none" role="img" aria-label={`${label}: no volume in the last 7 days`}><path className="z" d="M0,24 L110,24" fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/></svg>);
@@ -9532,8 +9532,10 @@
          (stronger around the strongest peaks), the 2.2 px round-capped line with a tight glow, a pale core, a hot
          highlight on the peaks, an end dot. The HEIGHT is on a square-root scale: a single $80k bin in a $2k week used to
          flatten the other 27 into a floor line; the data is untouched, the spike still stands tallest. */
+      /* colour = the volume change vs the day before (the ▲/▼ under the figure; Shaka, 2026-10-01: "volume change" over price) —
+         when the row has no such figure (no complete prior day) fall back to the week's halves: second half ≥ first = up */
       const half=Math.floor(pts.length/2);
-      const a=pts.slice(0,half).reduce((s,p)=>s+p.v,0),b=pts.slice(half).reduce((s,p)=>s+p.v,0),up=b>=a;
+      const up=typeof upIn==='boolean'?upIn:pts.slice(half).reduce((s,p)=>s+p.v,0)>=pts.slice(0,half).reduce((s,p)=>s+p.v,0);
       const c=up?upColor:'#FF2E3B';
       const n=pts.length,t0=pts[0].t,span=(pts[n-1].t-t0)||1,sq=pts.map(p=>Math.sqrt(Math.max(0,p.v))),lo=Math.min(...sq),hi=Math.max(...sq),r=(hi-lo)||1;
       const xs=pts.map(p=>(p.t-t0)/span*110),ys=sq.map(v=>23-(v-lo)/r*19);
@@ -9544,7 +9546,7 @@
       const id='lps-'+String(label).replace(/[^a-z0-9]/gi,'')+'-'+String(t0).slice(-6);
       const L={fill:'none',strokeLinejoin:'round',strokeLinecap:'round',vectorEffect:'non-scaling-stroke'};
       return(
-        <svg viewBox="0 0 110 26" preserveAspectRatio="none" role="img" aria-label={`${label}: 7 day volume, ${up?'rising':'falling'}`} style={{'--sg':h2Alpha(c,.55)}}>
+        <svg viewBox="0 0 110 26" preserveAspectRatio="none" role="img" aria-label={`${label}: 7 day volume, ${up?'up':'down'} vs the day before`} style={{'--sg':h2Alpha(c,.55)}}>
           <defs>
             <linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c} stopOpacity=".3"/><stop offset=".45" stopColor={c} stopOpacity=".07"/><stop offset="1" stopColor={c} stopOpacity="0"/></linearGradient>
             <filter id={`${id}b`} x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="2.2"/></filter>
@@ -9585,7 +9587,7 @@
             <div className="p2-lplg">{isWeth?<img src={ETH_LOGO} alt=""/>:(!logoErr&&logo?<img src={logo} alt="" onError={()=>setLogoErr(true)}/>:<div className="d">{other?.symbol?.[0]}</div>)}</div>
             <div className="p2-lpnm"><div className={`p ${theme.text}`}>{name}</div><div className="d">{dex}</div></div>
             <div className="tabular-nums"><div className="p2-lpv">{fmtUSD(vol)}</div>{volChg!=null&&<div className={`p2-lpvc ${volChg>=0?'up':'dn'}`} title="24h volume vs the day before"><i aria-hidden="true">{volChg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(volChg).toFixed(0)}%</div>}</div>
-            <div className="p2-lpsp c-sp"><LpSpark pts={pts} upColor={upColor} label={name}/></div>
+            <div className="p2-lpsp c-sp"><LpSpark pts={pts} upColor={upColor} label={name} up={volChg!=null?volChg>=0:undefined}/></div>
             <div className="p2-lpv m tabular-nums">{fmtUSD(liq)}</div>
             <div className="tabular-nums c-mid">{chgKnown?<span className={`p2-lpch ${chg>=0?'up':'dn'}`}><i aria-hidden="true">{chg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(chg).toFixed(1)}%</span>:<span className="p2-lpch na">{'\u2014'}</span>}</div>
             <div className="p2-lptx tabular-nums c-tx c-mid"><div className="t">{txTotal??'\u2014'}</div><div className="bs"><b>{buys??'\u2014'}</b><s aria-hidden="true"></s><i>{sells??'\u2014'}</i></div></div>

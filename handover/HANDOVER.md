@@ -24,7 +24,7 @@ divider | name / quiet % / figure, no bars, no % at the foot, his new three-diam
 (`logos/panels/vg-diamonds3-v2.webp`). Mock-up A/B first (`design/dashboard-panels/mock-vg-tiles-v1.html`; "the bottom
 one, but not that loud — no pill"), then built as a CSS grid over the classic tile markup (`.p2-vgt`, v2 only, classic
 byte-identical); part two after his live look: names 12.5 px (measured — 6 px of slack on "BUY & BURN", never a second
-line at ≥ 1280), figures 31 px through `H2Val` (shrink, never overrun); UFO's burn tiles stack the 36 px coin on the flame like the LP pair discs. **Then the LP Pairs header** (round 17, his mock-up): one framed band — logo in a ring, LP PAIRS, Volume 24h / Liquidity glass tiles with his bar icons and a change line (volume = the KPI tile's "vs 7d avg", liquidity = vs the lv-snapshot 24 h ago; All only), All / RH Cores + SORT as the panels' glass toggles (Ratio dropped, his mock) — `LpHeaderV2`, a `{hdrV2?…:…}` fork over the classic desktop header (classic DOM hash equal); squeeze in three tiers (one row to 1110 px, then the controls drop). **Then the LP Pairs rows** (round 18, his mock-up + sparkline brief): 30 px rank rings, volume change vs the day before under the figure, the sparkline as layered light on a square-root height (`LpSpark`), 24h % as a badge, Txns total over buys | sells. Harness 1440 / 1280 / 1100 / 1024 / 390, USD + TOK, PTGC + UFO. **Not pushed yet at the time of writing —
+line at ≥ 1280), figures 31 px through `H2Val` (shrink, never overrun); UFO's burn tiles stack the 36 px coin on the flame like the LP pair discs. **Then the LP Pairs header** (round 17, his mock-up): one framed band — logo in a ring, LP PAIRS, Volume 24h / Liquidity glass tiles with his bar icons and a change line (volume = the KPI tile's "vs 7d avg", liquidity = vs the lv-snapshot 24 h ago; All only), All / RH Cores + SORT as the panels' glass toggles (Ratio dropped, his mock) — `LpHeaderV2`, a `{hdrV2?…:…}` fork over the classic desktop header (classic DOM hash equal); squeeze in three tiers (one row to 1110 px, then the controls drop). **Then the LP Pairs rows** (round 18, his mock-up + sparkline brief): 30 px rank rings, volume change vs the day before under the figure, the sparkline as layered light on a square-root height (`LpSpark`, coloured by that volume change — his pick over price), 24h % as a badge, Txns total over buys | sells. Harness 1440 / 1280 / 1100 / 1024 / 390, USD + TOK, PTGC + UFO. **Not pushed yet at the time of writing —
 Shaka's live look is owed**, then the rest of the pre-flip list (-5 below), then the sibling pages' headers (-6, same push
 as the flip). Round 16 in `sessions/2026-10-01.md`.
 
@@ -733,8 +733,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    elements: figure tiles, icons, two-button All / RH Cores); the classic header and the phone header are the untouched
    markup. Its change lines are `lpVolChg` (the KPI tile's formula) and `useLpLiqChange` (lv-snapshots, 24 h), All only.
    `LpSpark` draws the 28 bins on a SQUARE-ROOT height (2026-10-01 afternoon — one outlier bin used to flatten the week;
-   the data is untouched) as layered light; falling = `#FF2E3B`. The row's volume change is DexScreener 24 h vs the curve's
-   previous 24 h (two sources; null = no line).
+   the data is untouched) as layered light; its colour is the row's volume change vs the day before (`up` prop; the week's halves only when that
+   figure is missing), down = `#FF2E3B`. The volume change is DexScreener 24 h vs the curve's previous 24 h (two sources;
+   null = no line).
    Harness: `DS_PAIRS=burn` (real 30-pair list), `probes/lp-head.js` for the band,
    `GT_CANDLES=1` + `GT_POOLS=miss:<n>`, probes `lp-rows` / `lp-curves` / `lp-dom` / `lp-fit`. When the CSP (b7) lands,
    `connect-src https://api.geckoterminal.com` covers this too.

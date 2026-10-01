@@ -1,0 +1,1 @@
+(()=>[...document.querySelectorAll('.p2-lpr')].slice(0,8).map(r=>{const vc=r.querySelector('.p2-lpvc');const l=r.querySelector('.p2-lpsp .l');return [vc?vc.className.replace('p2-lpvc ',''):'none', l?l.getAttribute('stroke'):'none']}).map(x=>x.join(':')).join(' '))()
