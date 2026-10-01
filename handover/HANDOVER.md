@@ -17,7 +17,22 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (2026-10-01, morning)
+## Current state (end of 2026-10-01)
+
+**2026-10-01, end of day: fifteen rounds of v2 clean-ups, all pushed by Shaka through the day (last: `494f6e1d8`, "dark
+pools behind the creature row and the bar-end whale"), every one seen live on his Mac as it landed. Nothing half-done.
+NEXT SESSION STARTS WITH: the Value Generated box — "how those six boxes are displayed" (his words at close; ask what he
+has in mind before touching anything: layout of the six tiles, their size, the two rows, the icon + name + % stack, the
+figures). Then the rest of the pre-flip list (-5 below), then the sibling pages' headers (-6, same push as the flip).**
+The day, in order — the detail is `sessions/2026-10-01.md`, rounds 1–15:
+header buttons centred + address right-justified + bigger tile figures (`H2Val` shrinks, never ellipses) · `PTGC IN LP` /
+`UFO IN LP` · the sparklines rebuilt three times to his spec (thin crisp line, peak lighting by `h2Peaks`, 30-day window
+`H2_DAYS`, "30D" tag, one colour per token) · panel toggles = option A glass (`mock-toggles-v1.html`), 28 px, Value
+Generated's stacked up level with Burn's · tab row on his gold band (`logos/header/tabs-bg.jpg`, `.h2-tabband`) framed in
+black, fire-light pill, no "Updated" badge · the Token Allocation donut in SVG with lighting (`AllocRingV2`) · his icons
+everywhere on the panels (`dao-*.webp`, `vg-*.webp`, `alloc-pie.webp`, `sea-*.webp` + `SeaIcon`, `SEA_ART_V=3`) · dark
+radial pools behind the type on Value Generated, DAO Treasury and Burn · UFO's burn windows paint the snapshot at once
+(amber "as of" past 6 h) instead of a blank wait. Gotcha 38 (image swaps need a version query).
 
 **2026-10-01: v2 clean-ups, round 1 — Shaka's first three asks, CSS only in the `h2-*` block:** BUY/SELL + SWITCH
 labels centred between the logo and the button's right edge (desktop), the contract address + copy button
@@ -664,6 +679,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (`pricePair`) and `scripts/fetch-burn-history.js` carry the same rule. Summing liquidity / volume over every pair
    is a different job and still sums them all.
 
+38. **An image swapped under the SAME name needs a version query** (2026-10-01). GitHub Pages serves `logos/` with
+   `Cache-Control: max-age=600`; Shaka overwrote the sea-creature art twice and kept seeing the old set. `SeaIcon` appends
+   `?v=${SEA_ART_V}` — bump it when those files change; for any other art swap use a new file name (the `_site` allow-list
+   serves `logos/**`, so a new name costs nothing) or add the same query. Never a silent overwrite.
+
 36. **The dashboard header has two designs; `HEADER_DESIGN` picks one (2026-09-30).** 'classic' is the header +
    KPI strip JSX inside `Dashboard` (the `!hdrV2&&(<>…</>)` branches); 'v2' is `DashHeaderV2` + `KpiTilesV2` at module
    scope (above `DashboardSkeleton`), styled by the `h2-*` block at the end of the head `<style>`. Both read the SAME
@@ -737,8 +757,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    the fire-light pill on the active tab, no "Updated" badge) and the same token · price line — or a visitor steps from
    the new dashboard into the 2025 header on every Calculators / Charts click. Do it in the same push as the flip, or
    the flip waits. Not started; parked by Shaka until go-live.
--5. **Tomorrow first (Shaka, end of 2026-09-30): "cleaning up a few little things on the page"** — his list, ask for
-   it at the start; the dashboard page under v2 (header, tiles, panels, LP Pairs). Six live rounds on the LP Pairs
+-5. **Next session first (Shaka, end of 2026-10-01): the Value Generated box — "how those six boxes are displayed".**
+   Ask for his list before building (he usually has a screenshot). Then the rest of this item, which is where
+   2026-09-30 left it: the dashboard page under v2 (header, tiles, panels, LP Pairs) — clean-ups were the whole of
+   2026-10-01 (`sessions/2026-10-01.md`), the LP Pairs table has not been touched since 09-30. Six live rounds on the LP Pairs
    table today ended "sweet"; the pipeline file feeds its curves. Then, before the flip: (a) phone + iPad for the
    panels AND the pairs (only the Mac has seen either), (b) the DAO Treasury's fourth tile repeats the
    headline total — keep or replace, (c) the classic phone All/RH Cores knob sits at the "on" end (live today, one
@@ -884,9 +906,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-10-01.md` — v2 clean-ups: BUY/SELL + SWITCH labels centred, address right-justified, bigger change
-  line on taller tiles, `PTGC IN LP` / `UFO IN LP`, crisp thin sparklines with peak lighting (`h2Peaks`, `h2Tint`, `h2Alpha`), 30-day window (`H2_DAYS`) + "30D" tag, one
-  line colour per token, bigger fitted figures (`H2Val`); harness 1440 / 1024 / 390, classic unchanged.
+- `sessions/2026-10-01.md` — fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
+  (`H2Val`), `PTGC IN LP`, sparklines to Shaka's spec (`h2Peaks`, `H2_DAYS` 30, one colour per token), option-A toggles,
+  the tab band on his art, the SVG donut (`AllocRingV2`), his icons on every panel (`SeaIcon`, `SEA_ART_V`), dark pools,
+  UFO burn windows from the snapshot at once; the flip checklist (-6); harness 1440 / 1024 / 390, classic unchanged.
 - `sessions/2026-09-30.md` — the dashboard header v2 built into index.html: `DashHeaderV2` / `KpiTilesV2` / `H2Spark` /
   `useH2Series` (7-day real-data sparklines on all seven tiles), the `--u` reference-pixel CSS, `logos/header/` assets,
   `HEADER_DESIGN` + the hidden preview switch (`HeaderPreviewGate`, hashes only, empty until Shaka's); harness at
