@@ -27,7 +27,13 @@ his Mac, pushed and seen live** — (1) the Live Feed tab's NEW badge: seven moc
 `{hdrV2?…:…}` fork; UFO gets the line too), following the 24H / 7D / 30D / 90D switch — and the blanket rule that hid every
 line under the figure is gone, so the amber price notes show again as one quiet line; **the "as of" under that figure is hidden again on his ask (round 19b,
 `.p2-vghead>.p2-asof{display:none}`)**. Round 19 pushed by Shaka as `75cae8575` and seen live; 19b written to his Mac. Classic byte-identical on both tokens (`probes/vg-classic.js` vs HEAD).
-NEXT: whatever he brings, then the pre-flip list (-5), then the sibling headers (-6).
+**Round 20 (same evening): LP Pairs — the band's SORT toggle is gone, sorting is on the column headings (`LpTh`, stacked
+▲▼, six sortable columns, same `sortBy`/`sortDir` state); a third glass tile "Value Gen 24h" (green, `lp-bars-green.webp`) =
+volume × fee between Volume and Liquidity; a "Value Gen" column after the curve (vol × `cfg.feeRate` — PTGC 5 %, UFO the live
+contract fee, "—" when unknown); the 24h % heading is "Price 24h" (Shaka had read the badge as the liquidity's move — it is
+DexScreener's price change). Grid tiers re-cut (curve leaves under 1120, Value Gen under 950). Classic LP identical both tokens.
+Written to his Mac, not pushed / not seen live when this was written.** Then: whatever he brings, the pre-flip list (-5), the
+sibling headers (-6).
 
 
 **2026-10-01, afternoon session, closed by Shaka ("call it a day"): six rounds, all pushed by him as they landed (last:
@@ -761,6 +767,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    the data is untouched) as layered light; its colour is the row's volume change vs the day before (`up` prop; the week's halves only when that
    figure is missing), down = `#FF2E3B`. The volume change is DexScreener 24 h vs the curve's previous 24 h (two sources;
    null = no line).
+   **Sorting is on the column headings since 2026-10-01 evening** (`LpTh`; the band's SORT toggle is gone) over the same
+   `sortBy`/`sortDir` the classic header's buttons use; keys `valuegen` (= volume order) and `txns` exist only for v2. The
+   **Value Gen** tile and column are volume × `cfg.feeRate` — UFO's fee is the live contract read (boot overwrites `cfg`), so
+   "—" means the fee is unknown, never 0 %. The 24h % badge is DexScreener's PRICE change — heading "Price 24h", keep it so.
    Harness: `DS_PAIRS=burn` (real 30-pair list), `probes/lp-head.js` for the band,
    `GT_CANDLES=1` + `GT_POOLS=miss:<n>`, probes `lp-rows` / `lp-curves` / `lp-dom` / `lp-fit`. When the CSP (b7) lands,
    `connect-src https://api.geckoterminal.com` covers this too.
@@ -949,7 +959,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   "from $X of volume" line back beside the Value Generated total under v2, per window, UFO too; classic proven identical.** Morning: fifteen rounds of v2 clean-ups; **afternoon (rounds 16–18): the Value Generated tiles to
   Shaka's layout (`.p2-vgt`, `H2Val` figures, coin-on-flame), the LP Pairs header band (`LpHeaderV2`, change lines, glass
   toggles, three-tier squeeze), the LP Pairs rows (rank rings, volume change, illuminated sqrt-height `LpSpark` coloured by
-  that change, 24h % badge, stacked Txns)** — morning: fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
+  that change, 24h % badge, stacked Txns); round 20: column sorting (`LpTh`), the Value Gen tile + column, "Price 24h"** — morning: fifteen rounds of v2 clean-ups, all live: header buttons + address, bigger fitted figures
   (`H2Val`), `PTGC IN LP`, sparklines to Shaka's spec (`h2Peaks`, `H2_DAYS` 30, one colour per token), option-A toggles,
   the tab band on his art, the SVG donut (`AllocRingV2`), his icons on every panel (`SeaIcon`, `SEA_ART_V`), dark pools,
   UFO burn windows from the snapshot at once; the flip checklist (-6); harness 1440 / 1024 / 390, classic unchanged.

@@ -690,6 +690,8 @@
     .p2-lphk{--c:245,197,66;height:72px;border-radius:12px;padding:9px 12px;display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:center;flex:none;
       background:linear-gradient(180deg,rgba(12,16,26,.78),rgba(4,6,12,.92));border:1px solid rgba(var(--c),.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 14px -4px rgba(var(--c),.45)}
     .p2-lphk.liq{--c:56,189,248}
+    .p2-lphk.vg{--c:124,252,0}   /* Value Gen 24h = the pairs' volume × the fee (Shaka, 2026-10-01 evening: a third box between Volume and Liquidity, the Value Generated green) */
+    .p2-lphk.vg .v{color:#9DFF3A;text-shadow:0 0 12px rgba(124,252,0,.3)}
     .p2-lphk .l{grid-column:1;grid-row:1;font-family:'Orbitron',monospace;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;line-height:1;white-space:nowrap}
     .p2-lphk .v{grid-column:1;grid-row:2;font-size:26px;font-weight:700;line-height:1;color:#F1C552;text-shadow:0 0 12px rgba(255,170,60,.3);white-space:nowrap}
     .p2-lphk img{grid-column:2;grid-row:1;height:24px;width:auto;justify-self:end;filter:drop-shadow(0 1px 3px rgba(0,0,0,.8))}
@@ -729,12 +731,21 @@
     .p2-lppn .a5{position:absolute;left:-60px;top:-60px;width:260px;height:200px;pointer-events:none;background:radial-gradient(closest-side,rgba(var(--lpc),.2),transparent)}
     .p2-lpin{position:relative;padding:6px 14px 14px}
     /* the table: fixed columns for rank / logo / actions, the rest share the width; the curve hides under 1024, Txns and Vol/Liq under 768 */
-    .p2-lpg{display:grid;grid-template-columns:48px 62px minmax(150px,1.6fr) 104px minmax(110px,1.4fr) minmax(116px,1.2fr) 100px 104px 92px 128px;align-items:center}   /* Volume is a fixed column so the curve sits right after the figure, not halfway to Liquidity (Shaka) */
-    @media(max-width:1099.98px){.p2-lpg{grid-template-columns:44px 56px minmax(140px,1.5fr) minmax(96px,1fr) minmax(104px,1.1fr) 96px 100px 88px 120px}.p2-lpg .c-sp{display:none}}   /* a hidden cell takes no slot, so the column goes too */
-    @media(max-width:949.98px){.p2-lpg{grid-template-columns:36px 46px minmax(100px,1.4fr) minmax(88px,1fr) minmax(88px,1fr) 80px 112px}.p2-lpg .c-tx,.p2-lpg .c-vl,.p2-lpg .c-24{display:none}}
+    .p2-lpg{display:grid;grid-template-columns:48px 62px minmax(150px,1.6fr) 118px minmax(100px,1.4fr) 110px minmax(116px,1.2fr) 100px 104px 92px 128px;align-items:center}   /* Volume is a fixed column so the curve sits right after the figure, not halfway to Liquidity (Shaka) */
+    @media(max-width:1279.98px){.p2-lpg{grid-template-columns:44px 56px minmax(140px,1.5fr) 112px minmax(90px,1.3fr) 100px minmax(104px,1.1fr) 92px 96px 84px 120px}}   /* the Value Gen column (2026-10-01 evening) costs a tier: tighter columns under 1280, the curve leaves under 1120 (was 1100) */
+    @media(max-width:1119.98px){.p2-lpg{grid-template-columns:40px 50px minmax(120px,1.5fr) 104px 96px minmax(96px,1.1fr) 88px 92px 80px 112px}.p2-lpg .c-sp,.p2-lpg .c-24{display:none}}   /* a hidden cell takes no slot, so the column goes too */
+    @media(max-width:949.98px){.p2-lpg{grid-template-columns:36px 46px minmax(100px,1.4fr) minmax(88px,1fr) minmax(88px,1fr) 80px 112px}.p2-lpg .c-tx,.p2-lpg .c-vl,.p2-lpg .c-vg{display:none}}   /* Value Gen leaves with Txns and Vol/Liq (2026-10-01 evening) */
     .p2-lpth{height:38px;border-bottom:1px solid rgba(255,255,255,.08)}
-    .p2-lpth>div{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);padding:0 4px;white-space:nowrap;overflow:hidden}
+    .p2-lpth>div{font-family:'Orbitron',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.55);padding:0 4px;white-space:nowrap;overflow:hidden}   /* 11px/.16em → 10.5px/.12em so a heading and its sort arrows fit the column (2026-10-01 evening) */
     .p2-lpg .c-mid{text-align:center;justify-content:center}   /* 24h % · Txns · Vol/Liq: label centred over the figures (Shaka) */
+    /* column sorting (Shaka, 2026-10-01 evening: "just put sort arrows on each column" — the header band's SORT toggle is gone):
+       each sortable heading is a button with a stacked ▲▼; the live arrow lights in the token colour */
+    .p2-lpth .p2-lpsb{display:inline-flex;align-items:center;gap:5px;height:38px;background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;cursor:pointer;transition:color .15s}
+    .p2-lpth .p2-lpsb:hover,.p2-lpth .p2-lpsb.on{color:#fff}
+    .p2-lpth .p2-lpsb i{display:inline-flex;flex-direction:column;font-style:normal;font-size:9px;line-height:.85;letter-spacing:0;color:rgba(255,255,255,.28);transform:translateY(-.5px)}
+    .p2-lpth .p2-lpsb i b{font-weight:400}
+    .p2-lpth .p2-lpsb i b.on{color:rgb(var(--lpc));text-shadow:0 0 6px rgba(var(--lpc),.7)}
+    .p2-lpv.vg{color:#9DFF3A}   /* the Value Gen column (volume × fee) in the tile's green */
     .p2-lpr{min-height:56px;border-bottom:1px solid rgba(255,255,255,.05)}
     .p2-lprs:nth-child(even)>.p2-lpr{background:rgba(255,255,255,.02)}
     .p2-lpr:hover{background:rgba(var(--lpc),.06)}
@@ -9567,7 +9578,7 @@
     };
     /* One table row (tablet up). Same fields and the same details drawer as LPRow, in the mock-up's layout; a
        missing read prints "—" (a14), the rank follows the current sort. */
-    const LpRowV2=({pair,rank,theme,mainAddr,pts,upColor})=>{
+    const LpRowV2=({pair,rank,theme,mainAddr,pts,upColor,feeRate})=>{
       const[logoErr,setLogoErr]=useState(false);
       const[det,setDet]=useState(false);
       const liq=pair.liq,vol=pair.vol;
@@ -9592,6 +9603,7 @@
             <div className="p2-lpnm"><div className={`p ${theme.text}`}>{name}</div><div className="d">{dex}</div></div>
             <div className="tabular-nums"><div className="p2-lpv">{fmtUSD(vol)}</div>{volChg!=null&&<div className={`p2-lpvc ${volChg>=0?'up':'dn'}`} title="24h volume vs the day before"><i aria-hidden="true">{volChg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(volChg).toFixed(0)}%</div>}</div>
             <div className="p2-lpsp c-sp"><LpSpark pts={pts} upColor={upColor} label={name} up={volChg!=null?volChg>=0:undefined}/></div>
+            <div className="p2-lpv m vg tabular-nums c-vg" title={feeRate>0?`${(feeRate*100).toFixed(0)}% of this pair's 24h volume`:undefined}>{(vol!=null&&isFinite(vol)&&feeRate>0)?fmtUSD(vol*feeRate):'\u2014'}</div>
             <div className="p2-lpv m tabular-nums">{fmtUSD(liq)}</div>
             <div className="tabular-nums c-mid">{chgKnown?<span className={`p2-lpch ${chg>=0?'up':'dn'}`}><i aria-hidden="true">{chg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(chg).toFixed(1)}%</span>:<span className="p2-lpch na">{'\u2014'}</span>}</div>
             <div className="p2-lptx tabular-nums c-tx c-mid"><div className="t">{txTotal??'\u2014'}</div><div className="bs"><b>{buys??'\u2014'}</b><s aria-hidden="true"></s><i>{sells??'\u2014'}</i></div></div>
@@ -9615,13 +9627,26 @@
           )}
         </div>);
     };
-    const LpTableV2=({pairs,rankStart=1,theme,mainAddr,series,upColor,label})=>(
+    /* a sortable heading: the Dashboard's sortBy / sortDir state (shared with the classic header's buttons); clicking the live
+       column flips the direction, another column starts descending — the old SORT toggle's rule */
+    const LpTh=({k,name,sortBy,sortDir,onSort,className,children})=>{const on=sortBy===k;return(
+      <div className={className}><button type="button" className={`p2-lpsb${on?' on':''}`} onClick={()=>onSort(k)} aria-label={`Sort by ${name}${on?(sortDir==='desc'?', descending':', ascending'):''}`}>{children}<i aria-hidden="true"><b className={on&&sortDir==='asc'?'on':''}>{'\u25B2'}</b><b className={on&&sortDir==='desc'?'on':''}>{'\u25BC'}</b></i></button></div>);};
+    const LpTableV2=({pairs,rankStart=1,theme,mainAddr,series,upColor,label,feeRate,sortBy,sortDir,onSort})=>{
+      const th={sortBy,sortDir,onSort};
+      return(
       <div aria-label={label}>
-        <div className="p2-lpg p2-lpth" aria-hidden="true">
-          <div style={{textAlign:'center'}}>#</div><div></div><div>Pair</div><div>Volume <span className="c-24">24h</span></div><div className="c-sp"></div><div>Liquidity</div><div className="c-mid">24h %</div><div className="c-tx c-mid">Txns</div><div className="c-vl c-mid">Vol/Liq</div><div style={{textAlign:'right',paddingRight:12}}>Actions</div>
+        <div className="p2-lpg p2-lpth">
+          <div style={{textAlign:'center'}} aria-hidden="true">#</div><div></div><div>Pair</div>
+          <LpTh k="volume" name="volume" {...th}>Volume <span className="c-24">24h</span></LpTh><div className="c-sp"></div>
+          <LpTh k="valuegen" name="value generated" className="c-vg" {...th}>Value Gen</LpTh>
+          <LpTh k="liquidity" name="liquidity" {...th}>Liquidity</LpTh>
+          <LpTh k="change" name="24h price change" className="c-mid" {...th}>Price <span className="c-24">24h</span></LpTh>{/* "Price 24h", not "24h %": Shaka read the badge as the liquidity's move (2026-10-01 evening) */}
+          <LpTh k="txns" name="transactions" className="c-tx c-mid" {...th}>Txns</LpTh>
+          <LpTh k="ratio" name="volume to liquidity ratio" className="c-vl c-mid" {...th}>Vol/Liq</LpTh>
+          <div style={{textAlign:'right',paddingRight:12}}>Actions</div>
         </div>
-        {pairs.map((p,i)=><LpRowV2 key={p.pairAddress||i} pair={p} rank={rankStart+i} theme={theme} mainAddr={mainAddr} pts={series[String(p.pairAddress||'').toLowerCase()]} upColor={upColor}/>)}
-      </div>);
+        {pairs.map((p,i)=><LpRowV2 key={p.pairAddress||i} pair={p} rank={rankStart+i} theme={theme} mainAddr={mainAddr} pts={series[String(p.pairAddress||'').toLowerCase()]} upColor={upColor} feeRate={feeRate}/>)}
+      </div>);};
     /* the frame: art (the burn / value-generated backdrops, faint) + the ground strip from the cosmic Home as the
        ember band along the bottom (gold side for PTGC, green side for UFO) + veil + top hairline + corner glow */
     const LpPanelV2=({green,children})=>(
@@ -9657,7 +9682,7 @@
       return chg;
     };
     const LpChg=({v})=>v==null?null:<div className={`p2-lphc${v<0?' dn':''}`}><i aria-hidden="true">{v<0?'▼':'▲'}</i>{Math.abs(v).toFixed(1)}%</div>;
-    const LpHeaderV2=({token,cfg,theme,count,vol,liq,volChg,liqChg,showRHCores,setShowRHCores,sortBy,sortDir,setSortBy,setSortDir})=>(
+    const LpHeaderV2=({token,cfg,theme,count,vol,vgen,liq,volChg,liqChg,showRHCores,setShowRHCores})=>(
       <div className="p2-lphb" data-c={token==='PTGC'?'gold':'green'}>
         <div className="b1" aria-hidden="true"></div><div className="b2" aria-hidden="true"></div><div className="b3" aria-hidden="true"></div>
         <div className="p2-lphbt">
@@ -9667,6 +9692,10 @@
         <div className="p2-lphk vol">
           <div className="l">Volume 24h</div><div className={`v tabular-nums`}>{fmtUSD(vol)}</div>
           <img src="logos/panels/lp-bars-gold.webp" alt=""/><LpChg v={volChg}/>
+        </div>
+        <div className="p2-lphk vg" title={cfg.feeRate>0?`${(cfg.feeRate*100).toFixed(0)}% of the pairs' 24h volume`:undefined}>
+          <div className="l">Value Gen 24h</div><div className={`v tabular-nums`}>{vgen!=null?fmtUSD(vgen):'\u2014'}</div>
+          <img src="logos/panels/lp-bars-green.webp" alt=""/><LpChg v={volChg}/>{/* the same % as Volume's — it is volume × a fixed fee */}
         </div>
         <div className="p2-lphk liq">
           <div className="l">Liquidity</div><div className={`v tabular-nums`}>{fmtUSD(liq)}</div>
@@ -9678,10 +9707,7 @@
             <button onClick={()=>setShowRHCores(true)} aria-pressed={showRHCores}>RH Cores</button>
           </div>
           <InfoTip label="RH Cores" className="p2-lphi" glyphClass="text-[14px]" tone="text-white/60 hover:text-white">{EXPLAINERS.rhCores(token)}</InfoTip>
-          <span className="p2-lphs font-orbitron">Sort:</span>
-          <div className="p2-lphtg" role="group" aria-label="Sort pairs by">
-            {['Volume','Liquidity','24h %'].map((l,i)=>{const c=['volume','liquidity','change'][i];return<button key={c} onClick={()=>{sortBy===c?setSortDir(sortDir==='desc'?'asc':'desc'):(setSortBy(c),setSortDir('desc'))}} aria-pressed={sortBy===c}>{l}{sortBy===c&&<b aria-hidden="true">{sortDir==='desc'?'▼':'▲'}</b>}</button>})}
-          </div>
+          {/* the SORT toggle left 2026-10-01 evening — sorting is on the table's column headings (LpTh) */}
         </div>
       </div>);
 
@@ -11638,7 +11664,7 @@
       },[token]);
       /* ===== END AUTO-REFRESH ===== */
       
-      const sorted=useMemo(()=>{if(!data?.pairs)return[];return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':av=a.vol;bv=b.vol;break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=a.priceChange?.h24||0;bv=b.priceChange?.h24||0;break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir]);
+      const sorted=useMemo(()=>{if(!data?.pairs)return[];return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':case'valuegen':av=a.vol;bv=b.vol;break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=a.priceChange?.h24||0;bv=b.priceChange?.h24||0;break;case'txns':av=(a.txns?.h24?.buys||0)+(a.txns?.h24?.sells||0);bv=(b.txns?.h24?.buys||0)+(b.txns?.h24?.sells||0);break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir]);
       
       // Filter for RH Cores if enabled
       const filteredSorted=useMemo(()=>{
@@ -11695,6 +11721,7 @@
       const[showLow,setShowLow]=useState(false);
       const lpSeries=useLpVolSeries(hdrV2?(showLow?high.concat(low):high):null);   // LP Pairs v2: 7-day volume per pool (only fetched under v2)
       const lpVolChg=(hdrV2&&!showRHCores&&data?.vol>0&&volumeByPeriod.vol7d>0)?((data.vol-volumeByPeriod.vol7d/7)/(volumeByPeriod.vol7d/7))*100:null;   // LP header v2: the KPI tile's own "vs 7d avg"
+      const lpSort=(k)=>{sortBy===k?setSortDir(d=>d==='desc'?'asc':'desc'):(setSortBy(k),setSortDir('desc'));};   // v2 column headings (LpTh); the classic header keeps its own buttons
       const lpLiqChg=useLpLiqChange(token,filteredLiq,hdrV2&&!showRHCores);   // LP header v2: vs the snapshot nearest 24 h ago (All only)
       const creatures=getBurnC(burn?.pct||0,'Squid');
       const plsRatio=data?.price&&pls?(data.price/pls).toFixed(2):'\u2014';
@@ -12785,7 +12812,7 @@
           {/* LP Pairs section */}
           <div className={`max-w-7xl mx-auto px-3 sm:px-6 py-4 ${hdrV2?'p2-lp':''}`} style={hdrV2?{'--lpc':isGold?'212,175,55':'124,252,0'}:undefined} data-c={hdrV2?(isGold?'gold':'green'):undefined}>
             {hdrV2?(
-              <div className="hidden sm:block mb-4"><LpHeaderV2 token={token} cfg={cfg} theme={theme} count={high.length} vol={filteredVol} liq={filteredLiq} volChg={lpVolChg} liqChg={lpLiqChg} showRHCores={showRHCores} setShowRHCores={setShowRHCores} sortBy={sortBy} sortDir={sortDir} setSortBy={setSortBy} setSortDir={setSortDir}/></div>
+              <div className="hidden sm:block mb-4"><LpHeaderV2 token={token} cfg={cfg} theme={theme} count={high.length} vol={filteredVol} vgen={cfg.feeRate>0?filteredVol*cfg.feeRate:null} liq={filteredLiq} volChg={lpVolChg} liqChg={lpLiqChg} showRHCores={showRHCores} setShowRHCores={setShowRHCores}/></div>
             ):(   /* classic desktop header — untouched since the v2 fork above (2026-10-01 afternoon); the v2 hook classes it carried are gone */
             <div className="hidden sm:flex items-center justify-between gap-4 mb-4 px-1">
               <div className="flex items-center gap-3">
@@ -12853,10 +12880,10 @@
               {/* LP Pairs v2: the table in its frame from 640px up; phones keep the stacked cards (LPRow, v2 skin) */}
               <div className="hidden sm:block">
                 <LpPanelV2 green={!isGold}>
-                  <LpTableV2 pairs={high} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} liquidity pairs`}/>
+                  <LpTableV2 pairs={high} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} liquidity pairs`} feeRate={cfg.feeRate} sortBy={sortBy} sortDir={sortDir} onSort={lpSort}/>
                   {low.length>0&&<>
                     <button onClick={()=>setShowLow(!showLow)} aria-expanded={showLow} className="p2-lpmore"><span>{showLow?'Hide':'Show'} <b className="text-white">{low.length}</b> pairs &lt; $1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>
-                    {showLow&&<div className="mt-2"><LpTableV2 pairs={low} rankStart={high.length+1} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} pairs under $1K liquidity`}/></div>}
+                    {showLow&&<div className="mt-2"><LpTableV2 pairs={low} rankStart={high.length+1} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} pairs under $1K liquidity`} feeRate={cfg.feeRate} sortBy={sortBy} sortDir={sortDir} onSort={lpSort}/></div>}
                   </>}
                 </LpPanelV2>
               </div>
