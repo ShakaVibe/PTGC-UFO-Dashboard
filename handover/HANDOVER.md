@@ -32,8 +32,9 @@ line under the figure is gone, so the amber price notes show again as one quiet 
 volume × fee between Volume and Liquidity; a "Value Gen" column after the curve (vol × `cfg.feeRate` — PTGC 5 %, UFO the live
 contract fee, "—" when unknown); the 24h % heading is "Price 24h" (Shaka had read the badge as the liquidity's move — it is
 DexScreener's price change). Grid tiers re-cut (curve leaves under 1120, Value Gen under 950). Classic LP identical both tokens.
-Written to his Mac, not pushed / not seen live when this was written.** Then: whatever he brings, the pre-flip list (-5), the
-sibling headers (-6).
+Pushed `f91cbb1fe`, seen live. **Round 21:** the band's three tiles one width (222 / 198 px), further from the title, labels
+centred over their figures; the title-row tier for tablets moved 760 → 980 px — written to his Mac, owed his look.** Then:
+whatever he brings, the pre-flip list (-5), the sibling headers (-6).
 
 
 **2026-10-01, afternoon session, closed by Shaka ("call it a day"): six rounds, all pushed by him as they landed (last:
