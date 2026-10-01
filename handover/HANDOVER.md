@@ -19,14 +19,14 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-01 — three sessions)
 
-**2026-10-01, evening session (round 19, `sessions/2026-10-01.md`): two asks from Shaka, both built in the harness and written to
-his Mac, NOT YET PUSHED or seen live when this was written** — (1) the Live Feed tab's NEW badge: seven mock-ups
+**2026-10-01, evening session (round 19 + 19b, `sessions/2026-10-01.md`): two asks from Shaka, built in the harness, written to
+his Mac, pushed and seen live** — (1) the Live Feed tab's NEW badge: seven mock-ups
 (`design/dashboard-panels/mock-tabbadge-v1.html`, render `renders/tabbadge-v1.png`), **B picked "with a slight glow"** → a
 1 px gold hairline pill, gold caps, soft glow, one rule for both tokens (`.h2-tabs .h2-new`, the UFO override line gone);
 (2) **Value Generated's "from $X of volume" is back under v2, to the RIGHT of the total on its baseline** (`.p2-vgfrom`, a
 `{hdrV2?…:…}` fork; UFO gets the line too), following the 24H / 7D / 30D / 90D switch — and the blanket rule that hid every
-line under the figure is gone, so UFO's "as of" and the amber price notes show again as one quiet line (told Shaka; one rule
-to hide the as-of if he minds). Classic byte-identical on both tokens (`probes/vg-classic.js` vs HEAD). Owed: his live look.
+line under the figure is gone, so the amber price notes show again as one quiet line; **the "as of" under that figure is hidden again on his ask (round 19b,
+`.p2-vghead>.p2-asof{display:none}`)**. Round 19 pushed by Shaka as `75cae8575` and seen live; 19b written to his Mac. Classic byte-identical on both tokens (`probes/vg-classic.js` vs HEAD).
 NEXT: whatever he brings, then the pre-flip list (-5), then the sibling headers (-6).
 
 
