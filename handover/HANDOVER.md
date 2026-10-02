@@ -17,7 +17,15 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (2026-10-02, in progress)
+## Current state (end of 2026-10-02)
+
+**2026-10-02, closed by Shaka ("let's wrap it up for now"): rounds 22–25, all pushed by him as they landed (last `268038fce`,
+the phone + iPad pass). Nothing half-done. NEXT SESSION = "start preparing to make it live": (1) his live look at today's
+rounds on the Mac, then a real iPhone + iPad, both tokens — none of today has been seen live yet; (2) the sibling pages'
+headers (-6); (3) the pre-flip leftovers (-5: DAO Treasury's fourth tile — ask; UFO's Value Gen at the live 6 %); (4)
+`HEADER_DESIGN='v2'` + push, header / panels / LP Pairs / sibling headers together. The ordered plan is at the end of
+`sessions/2026-10-02.md`.**
+
 
 **2026-10-02, round 22 — LP Pairs alignment (Shaka's screenshots: headings vs data "some left justified, some centered";
 the band's tiles "need consistency").** Two option sheets rendered from the real build (`design/dashboard-panels/renders/
@@ -823,6 +831,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-7. **GO-LIVE (Shaka, 2026-10-02: "when we come back we need to start preparing to make it live")** — the ordered plan is the
+   end of `sessions/2026-10-02.md`: live look (Mac, iPhone, iPad) → sibling headers (-6) → pre-flip leftovers (-5) →
+   `HEADER_DESIGN='v2'` + push → post-deploy check (both dashboards, Home, sibling pages, Live Feed, phone). The classic
+   branches stay until he has lived with it.
 -6. **FLIP CHECKLIST — the sibling pages still wear the OLD header (Shaka, 2026-10-01: "make sure you make a note").**
    `calculators.html` and `charts.html` (and `portfolio.html`; `ledger.html` has its own bar) carry the classic sticky
    header + nav from before v2. When `HEADER_DESIGN='v2'` goes live, those pages must get the v2 look too — the art
@@ -978,8 +990,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
-- `sessions/2026-10-02.md` — LP Pairs alignment, round 22: option sheets A/B/C (table) + 1/2 (tiles) rendered from the build;
-  Table A + Tile 1 built (headings and cells centred, Pair left, "7D" over the curve; tile label + figure flush left).
+- `sessions/2026-10-02.md` — rounds 22–25: LP Pairs alignment (option sheets A/B/C + tiles 1/2 → Table A + Tile 1); PTGC
+  Burned by UFO boxes with icons, 20 px creature counts, 14 px Value Generated titles (`P2Name` fit); no "as of" top-right,
+  14 px period labels, Live Feed sky .72, Home tag line; the phone + iPad pass (Token Allocation stacks, creature strip,
+  phone LP band `p2-lphp`, All/RH knob `left-0`, 1024 tier). Ends with the go-live plan.
 - `sessions/2026-10-01.md` — **evening (rounds 19–21): the Live Feed NEW badge redrawn (seven mock-ups, B hairline + glow); the
   "from $X of volume" line back beside the Value Generated total under v2, per window, UFO too (no "as of" under it); LP Pairs:
   sorting on the column headings (`LpTh`, SORT toggle gone), the Value Gen 24h tile + Value Gen column (volume × fee), "Price
