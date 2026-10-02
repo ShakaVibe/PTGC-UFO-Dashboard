@@ -346,7 +346,7 @@
     .nh-stat{--c:245,197,66;position:relative;overflow:hidden;border-radius:16px;min-height:104px;padding:14px 16px;display:flex;align-items:center;gap:14px;background:linear-gradient(180deg,rgba(12,16,26,.78),rgba(4,6,12,.92));border:1px solid rgba(var(--c),.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px -6px rgba(var(--c),.5)}
     .nh-stat.new{--c:74,222,128}.nh-stat.left{--c:248,80,80}
     .nh-stat .bars{position:absolute;right:14px;bottom:12px;height:66%;width:auto;opacity:.55;pointer-events:none;filter:drop-shadow(0 0 10px rgba(var(--c),.35))}
-    .nh-stat .ic{position:relative;width:54px;height:54px;flex:none;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.8))}
+    .nh-stat .ic{position:relative;width:60px;height:60px;flex:none;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.8))}
     .nh-stat .l{position:relative;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.55)}
     .nh-stat .v{position:relative;font-size:46px;font-weight:700;line-height:1;margin-top:6px;color:#fff;text-shadow:0 0 18px rgba(var(--c),.45)}
     .nh-stat .s{position:relative;font-size:13px;color:rgba(255,255,255,.45);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -9620,6 +9620,7 @@
     const NEW_HOLDERS_LIVE=false;   // false = hidden behind the dot (Shaka, 2026-10-02: "hidden until I tell you to make it live")
     const NEW_HOLDERS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/new-holders.json';
     const NH_MAX_AGE=36*3600*1000,NH_TTL=5*60*1000,NH_AMBER_MS=6*3600*1000;
+    const NH_ART_V=2;   // bump when logos/holders/* change under the same names (gotcha 38) — 2: the New / Left icons became Shaka's green-plus / red-minus people (2026-10-02)
     const NH_WINDOWS=[{k:'24H',h:24,label:'Past 24 hours'},{k:'7D',h:24*7,label:'Past 7 days'},{k:'30D',h:24*30,label:'Past 30 days'}];
     let _nhFile=null,_nhAt=0,_nhP=null;
     const nhFileOk=j=>j&&(j.schema===1||j.schema===2)&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO&&Array.isArray(j.tokens.PTGC.events)&&Array.isArray(j.tokens.UFO.events)&&j.head&&isFinite(Number(j.head.ts))&&isFinite(Date.parse(j.generatedAt));
@@ -9702,8 +9703,8 @@
     /* New / Left / Net: Shaka's icon at the left, his bar-chart art fading in at the right (logos/holders/, 2026-10-02). */
     const NhStat=({kind,label,value,sub})=>(
       <div className={`nh-stat ${kind}`}>
-        <img className="bars" src={`logos/holders/nh-bars-${kind}.webp`} alt="" aria-hidden="true"/>
-        <img className="ic" src={`logos/holders/nh-ic-${kind}.webp`} alt=""/>
+        <img className="bars" src={`logos/holders/nh-bars-${kind}.webp?v=${NH_ART_V}`} alt="" aria-hidden="true"/>
+        <img className="ic" src={`logos/holders/nh-ic-${kind}.webp?v=${NH_ART_V}`} alt=""/>
         <div className="min-w-0 relative">
           <div className="l">{label}</div>
           <div className="v tabular-nums">{value}</div>
@@ -9874,7 +9875,7 @@
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                     <NhStat kind="new" label="New holders" value={fmt(view.ins.length)}/>
-                    <NhStat kind="left" label="Left" value={fmt(view.outs.length)}/>
+                    <NhStat kind="left" label="Holders left" value={fmt(view.outs.length)}/>
                     <NhStat kind="net" label="Net" value={view.covered?(view.net>0?'+':'')+fmt(view.net):'\u2014'}/>
                   </div>
                   {!view.covered&&<div className="mt-3 text-[12px] text-amber-300/90">The list starts {new Date(view.coveredFrom*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})} — this window is not fully covered yet.</div>}

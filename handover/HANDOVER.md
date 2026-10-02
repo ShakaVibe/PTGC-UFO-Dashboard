@@ -44,7 +44,8 @@ build (`91405a01a`) and round 2 (`68722802d`); round 3 pushed (`6646199fe`, afte
 sub-lines, the `NhTotals` band (sum of the new holders' bags + its creature ladder). **Round 5:** bars inset again,
 RETURNING hover + tap card, no line above the title, sortable columns (`NhTh`), no stacked ladders (3 tiers in rows, 4 in
 totals). **Round 6:** headings centred over their columns in the token colour; a NEWEST / BIGGEST sort toggle on phones.
-Rounds 4–6 written to the Mac (4 pushed as `a72f86e82`). NEXT: his look at
+**Round 7:** his green-plus / red-minus people icons on the New / Holders Left tiles (`NH_ART_V=2`). Rounds 4–7 written to the
+Mac (4 and 5 pushed). NEXT: his look at
 the window (Mac + phone, both tokens), then whatever he wants changed, then the go-live word; the owed v2 items below stand.
 
 **2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
