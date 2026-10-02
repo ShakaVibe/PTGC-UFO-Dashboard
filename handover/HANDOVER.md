@@ -26,7 +26,7 @@ pages' headers are the default for everyone from this push. The preview switch (
 branches STAY in the code (the `!hdrV2` forks, the `h2PreviewOn` reads) until he has lived with v2 — deleting them is a later,
 separate clean-up (then `probes/lp-dom.js`, `vg-classic.js`, `panels-classic.js`, `dom-hash.js` retire). Harness: v2 renders on
 all four pages with NO preview flag (`.h2-desk` present, the classic `<header>` gone / display:none).
-POST-DEPLOY CHECK (owed, on ptgc-ufo.com after Pages finishes, ~10 min): PTGC + UFO dashboards (banner, tiles + sparklines, the
+POST-DEPLOY CHECK DONE 2026-10-03 on ptgc-ufo.com from the desktop app's built-in browser, preview flag REMOVED (a plain visitor): PTGC dashboard v2 (banner, 7/7 sparklines drawn, 4 panels, LP table), Calculators PTGC / Charts UFO / Portfolio (real prices, Day pills, quotes), BUY-SELL from Calculators → the Switch window open on the dashboard, Live Feed from Charts → the deck, phone 375: UFO dashboard + Calculators (banner, triangle, no sideways scroll). Still owed: Shaka's own eyes on his iPhone / iPad. The list, for reference: PTGC + UFO dashboards (banner, tiles + sparklines, the
 four panels, LP Pairs), Home → dashboard, Calculators / Charts / Portfolio headers + their BUY-SELL and Live Feed jumps, the Live
 Feed, a phone. A visitor with the OLD page cached sees it for up to 10 min (Pages `max-age=600`).**
 
