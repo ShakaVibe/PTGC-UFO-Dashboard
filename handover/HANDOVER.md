@@ -30,7 +30,11 @@ squares (the VG "Burn PTGC" flame + coin cluster, his money stack `pbu-money.web
 22 px gold / green / gold figure (`p2-pbt`); the creature counts in the Burn panel and the PTGC-by-UFO row are 20 / 18 px
 (`p2-cnt`); the Value Generated tile names are 14 px through `P2Name` (nowrap + shrink-to-fit on the text node, so never a
 second line — the base `.p2-vgn` size lost its `!important`). Classic identical both tokens (`probes/panels-classic.js`).
-`sessions/2026-10-02.md`.
+**Rounds 24–25:** no "as of" top-right on Burn / PTGC-by-UFO, period labels 14 px, Live Feed sky .72, Home tag line
+"A COMMUNITY BUILT SITE FOR THE GRAYS ECOSYSTEM"; then **the phone + iPad pass for all of v2** (390 / 768 / 1024 both
+tokens): Token Allocation stacks on phones, the creature strip fits, the PTGC-by-UFO title on one line, a v2 band for the
+phone LP header (`p2-lphp` + `.p2-lphm` figures), the classic All/RH knob fixed (`left-0`, pre-flip item c — done), 1024-tier
+VG names may wrap and period figures 19 px. **Owed: his look on a real iPhone + iPad.** `sessions/2026-10-02.md`.
 
 ## Before that (end of 2026-10-01 — three sessions)
 
@@ -832,8 +836,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    2026-10-01 (`sessions/2026-10-01.md`), the LP Pairs table has not been touched since 09-30. Six live rounds on the LP Pairs
    table today ended "sweet"; the pipeline file feeds its curves. Then, before the flip: (a) phone + iPad for the
    panels AND the pairs (only the Mac has seen either), (b) the DAO Treasury's fourth tile repeats the
-   headline total — keep or replace, (c) the classic phone All/RH Cores knob sits at the "on" end (live today, one
-   line), (d) when he says so `HEADER_DESIGN='v2'` + push = live for everyone; the classic branches can be deleted
+   headline total — keep or replace, (c) DONE 2026-10-02 (`left-0`), (d) when he says so `HEADER_DESIGN='v2'` + push = live for everyone; the classic branches can be deleted
    once he has lived with it. Optional: a slim `data/kpi-history.json` from the pipeline instead of the 370 KB
    `lv-snapshots.json` for two sparklines; a `data/pair-history.json` would let the LP curves paint at once instead of
    over ~5 s (Shaka chose the live GeckoTerminal read for now).
