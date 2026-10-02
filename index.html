@@ -9732,10 +9732,10 @@
         </InfoTip>
       </span>);
     /* Sortable heading for the New Holders table (the LP Pairs table's LpTh look). */
-    const NhTh=({k,name,sort,onSort,right,children})=>{const on=sort.k===k;return(
-      <th className={`py-2.5 px-2 font-semibold ${right?'text-right':'text-left'} whitespace-nowrap`}>
-        <button type="button" onClick={()=>onSort(k)} aria-label={`Sort by ${name}${on?(sort.dir==='desc'?', descending':', ascending'):''}`} className={`inline-flex items-center gap-1.5 bg-transparent border-0 p-0 font-inherit uppercase tracking-[0.18em] text-[12px] font-semibold ${on?'text-white':'text-white/50 hover:text-white'}`} style={{font:'inherit',letterSpacing:'inherit'}}>
-          {children}<i aria-hidden="true" className="inline-flex flex-col not-italic text-[9px] leading-[.85]" style={{letterSpacing:0}}><b className={on&&sort.dir==='asc'?'text-white':'text-white/25'}>{'\u25B2'}</b><b className={on&&sort.dir==='desc'?'text-white':'text-white/25'}>{'\u25BC'}</b></i>
+    const NhTh=({k,name,sort,onSort,align='center',hex,children})=>{const on=sort.k===k;return(
+      <th className={`py-2.5 px-2 font-semibold whitespace-nowrap ${align==='left'?'text-left':align==='right'?'text-right':'text-center'}`}>
+        <button type="button" onClick={()=>onSort(k)} aria-label={`Sort by ${name}${on?(sort.dir==='desc'?', descending':', ascending'):''}`} className="inline-flex items-center gap-1.5 bg-transparent border-0 p-0 uppercase tracking-[0.18em] text-[12px] font-semibold transition-opacity" style={{font:'inherit',letterSpacing:'inherit',color:hex,opacity:on?1:.78}}>
+          {children}<i aria-hidden="true" className="inline-flex flex-col not-italic text-[9px] leading-[.85]" style={{letterSpacing:0}}><b style={{opacity:on&&sort.dir==='asc'?1:.3}}>{'\u25B2'}</b><b style={{opacity:on&&sort.dir==='desc'?1:.3}}>{'\u25BC'}</b></i>
         </button>
       </th>);};
     const NH_SORTS={time:(a,b)=>a.t-b.t,bal:(a,b)=>(a.bal||0)-(b.bal||0),wallet:(a,b)=>a.a<b.a?-1:a.a>b.a?1:0};
@@ -9745,8 +9745,8 @@
         <CopyBtn text={a} className="text-white/40 hover:text-white"/>
       </span>
     );
-    const NhAmount=({v,token,price,usd=false})=>v==null?<span className="text-white/35">—</span>:(   // usd=true: the USD line under the amount (cards); the tables give USD its own column (NhUsd)
-      <span className="inline-flex flex-col items-end leading-tight">
+    const NhAmount=({v,token,price,usd=false,center=false})=>v==null?<span className="text-white/35">—</span>:(   // usd=true: the USD line under the amount (cards); the tables give USD its own column (NhUsd)
+      <span className={`inline-flex flex-col leading-tight ${center?'items-center':'items-end'}`}>
         <span className="tabular-nums font-bold text-white text-[16px] sm:text-[18px] whitespace-nowrap">{v>0&&v<1?'<1':fmtAbbr(v)} <span className="text-white/55 font-semibold text-[0.8em]">{token}</span></span>
         {usd&&price>0&&v*price>=1&&<span className="tabular-nums text-[14px] text-green-400">{fmtUSD(v*price)}</span>}
       </span>
@@ -9760,10 +9760,10 @@
           <tr className="border-t border-white/[0.06] hover:bg-white/[0.03]">
             <td className="py-3 pl-3 pr-2 tabular-nums text-base font-semibold" style={{color:hex}}>{i+1}</td>
             <td className="py-3 px-2 w-[1%]"><div className="flex items-center gap-2 whitespace-nowrap"><NhWallet a={e.a}/>{e.r?<NhReturning/>:null}</div></td>
-            <td className="py-3 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[16px] sm:text-[17px]">{nhWhen(e.t)}</a><div className="text-[13px] text-white/45">{nhAgo(e.t)}</div></td>
-            <td className="py-3 px-2 text-right">{left?<span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-red-300/80">left {nhAgo(e.left.t)}</span>:<NhAmount v={e.bal} token={token} price={px}/>}</td>
-            <td className="py-3 px-2 text-right">{left?<span className="text-white/25">—</span>:<NhUsd v={e.bal} price={px}/>}</td>
-            <td className="py-3 pl-2 pr-3">{left?<span className="text-white/25">—</span>:<NhLadder bal={e.bal} token={token} size={46} max={3}/>}</td>
+            <td className="py-3 px-2 whitespace-nowrap text-center"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[16px] sm:text-[17px]">{nhWhen(e.t)}</a><div className="text-[13px] text-white/45">{nhAgo(e.t)}</div></td>
+            <td className="py-3 px-2 text-center">{left?<span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-red-300/80">left {nhAgo(e.left.t)}</span>:<NhAmount v={e.bal} token={token} price={px} center/>}</td>
+            <td className="py-3 px-2 text-center">{left?<span className="text-white/25">—</span>:<NhUsd v={e.bal} price={px}/>}</td>
+            <td className="py-3 pl-2 pr-3 text-center">{left?<span className="text-white/25">—</span>:<div className="inline-flex justify-center"><NhLadder bal={e.bal} token={token} size={46} max={3}/></div>}</td>
           </tr>);
       };
     const NhCard=({e,i,token,px,hex})=>{
@@ -9884,8 +9884,9 @@
 
                   {/* Arrivals */}
                   <div className="mt-4 flex items-baseline justify-between gap-3">
-                    <div className="text-[12px] sm:text-[13px] font-semibold uppercase tracking-[0.22em] text-white/60">New holders{sort.k==='time'&&sort.dir==='desc'?<> {'·'} newest first</>:null}</div>
-                    {view.balAt&&<div className="text-[10px] text-white/35 tabular-nums">holdings as of {fmtSnapshotAge(Date.now()-view.balAt)}</div>}
+                    <div className="text-[12px] sm:text-[13px] font-semibold uppercase tracking-[0.22em]" style={{color:hex}}>New holders{!phone&&sort.k==='time'&&sort.dir==='desc'?<span className="text-white/50"> {'·'} newest first</span>:null}</div>
+                    {phone?<NhPills items={[{k:'NEWEST',label:'Newest first'},{k:'BIGGEST',label:'Biggest holding first'}]} value={sort.k==='bal'?'BIGGEST':'NEWEST'} onChange={k=>setSort(k==='BIGGEST'?{k:'bal',dir:'desc'}:{k:'time',dir:'desc'})} label="Sort" rgb={T.rgb}/>
+                      :view.balAt&&<div className="text-[10px] text-white/35 tabular-nums">holdings as of {fmtSnapshotAge(Date.now()-view.balAt)}</div>}
                   </div>
                   {view.ins.length===0?(
                     <div className="mt-2 rounded-2xl border border-white/10 bg-black/40 p-5 text-center text-white/55 text-sm">No new {token} holders in the {W.label.toLowerCase()}.</div>
@@ -9894,8 +9895,8 @@
                   ):(
                     <div className="mt-2 rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
                       <table className="w-full text-sm">
-                        <thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em] text-white/50">
-                          <th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><NhTh k="wallet" name="wallet" sort={sort} onSort={onSort}>Wallet</NhTh><NhTh k="time" name="arrival time" sort={sort} onSort={onSort}>Arrived</NhTh><NhTh k="bal" name="holding" sort={sort} onSort={onSort} right>Holds now</NhTh><NhTh k="bal" name="USD value" sort={sort} onSort={onSort} right>USD value</NhTh><NhTh k="bal" name="league" sort={sort} onSort={onSort}>League</NhTh>
+                        <thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{color:hex}}>
+                          <th className="py-2.5 pl-3 pr-2 text-left font-semibold" style={{opacity:.78}}>#</th><NhTh k="wallet" name="wallet" sort={sort} onSort={onSort} align="left" hex={hex}>Wallet</NhTh><NhTh k="time" name="arrival time" sort={sort} onSort={onSort} hex={hex}>Arrived</NhTh><NhTh k="bal" name="holding" sort={sort} onSort={onSort} hex={hex}>Holds now</NhTh><NhTh k="bal" name="USD value" sort={sort} onSort={onSort} hex={hex}>USD value</NhTh><NhTh k="bal" name="league" sort={sort} onSort={onSort} hex={hex}>League</NhTh>
                         </tr></thead>
                         <tbody>{rows.map((e,i)=><NhRow key={e.a+e.b} e={e} i={i} token={token} px={px} hex={hex}/>)}</tbody>
                       </table>
@@ -9912,15 +9913,15 @@
                     {showOut&&(view.outs.length===0?<div className="mt-2 text-white/45 text-sm px-1">Nobody left in the {W.label.toLowerCase()}.</div>:(
                       <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
                         <table className="w-full text-sm">
-                          {!phone&&<thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em] text-white/50"><th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2.5 px-2 text-left font-semibold">Wallet</th><th className="py-2.5 px-2 text-left font-semibold">Left</th><th className="py-2.5 px-2 text-right font-semibold">Had</th><th className="py-2.5 px-2 text-right font-semibold">USD value</th><th className="py-2.5 pl-2 pr-3 text-left font-semibold">League</th></tr></thead>}
+                          {!phone&&<thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{color:hex,opacity:.85}}><th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2.5 px-2 text-left font-semibold">Wallet</th><th className="py-2.5 px-2 text-center font-semibold">Left</th><th className="py-2.5 px-2 text-center font-semibold">Had</th><th className="py-2.5 px-2 text-center font-semibold">USD value</th><th className="py-2.5 pl-2 pr-3 text-center font-semibold">League</th></tr></thead>}
                           <tbody>{view.outs.map((e,i)=>(
                             <tr key={e.a+e.b} className="border-t border-white/[0.06]">
                               <td className="py-3 pl-3 pr-2 tabular-nums text-sm font-semibold" style={{color:hex}}>{i+1}</td>
                               <td className="py-3 px-2"><NhWallet a={e.a}/></td>
-                              <td className="py-3 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[16px] sm:text-[17px]">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[13px] text-white/45">{nhAgo(e.t)}</div>}</td>
-                              <td className="py-3 px-2 text-right"><NhAmount v={e.had} token={token} price={px} usd={phone}/></td>
-                              {!phone&&<td className="py-3 px-2 text-right"><NhUsd v={e.had} price={px}/></td>}
-                              {!phone&&<td className="py-3 pl-2 pr-3"><NhLadder bal={e.had} token={token} size={40} max={3}/></td>}
+                              <td className={`py-3 px-2 whitespace-nowrap ${phone?'':'text-center'}`}><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[16px] sm:text-[17px]">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[13px] text-white/45">{nhAgo(e.t)}</div>}</td>
+                              <td className={`py-3 px-2 ${phone?'text-right':'text-center'}`}><NhAmount v={e.had} token={token} price={px} usd={phone} center={!phone}/></td>
+                              {!phone&&<td className="py-3 px-2 text-center"><NhUsd v={e.had} price={px}/></td>}
+                              {!phone&&<td className="py-3 pl-2 pr-3 text-center"><div className="inline-flex justify-center"><NhLadder bal={e.had} token={token} size={40} max={3}/></div></td>}
                             </tr>))}</tbody>
                         </table>
                       </div>))}
@@ -9935,14 +9936,14 @@
                       {showBounce&&(
                         <div className="mt-2 rounded-2xl border border-white/10 bg-black/20 overflow-hidden">
                           <table className="w-full text-sm">
-                            {!phone&&<thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em] text-white/40"><th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2.5 px-2 text-left font-semibold">Wallet</th><th className="py-2.5 px-2 text-left font-semibold">Last out</th><th className="py-2.5 px-2 text-right font-semibold">Times in</th><th className="py-2.5 pl-2 pr-3 text-right font-semibold">Last had</th></tr></thead>}
+                            {!phone&&<thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{color:hex,opacity:.7}}><th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2.5 px-2 text-left font-semibold">Wallet</th><th className="py-2.5 px-2 text-center font-semibold">Last out</th><th className="py-2.5 px-2 text-center font-semibold">Times in</th><th className="py-2.5 pl-2 pr-3 text-center font-semibold">Last had</th></tr></thead>}
                             <tbody>{view.bounced.map((e,i)=>(
                               <tr key={e.a} className="border-t border-white/[0.06] text-white/70">
                                 <td className="py-2.5 pl-3 pr-2 tabular-nums text-sm">{i+1}</td>
                                 <td className="py-2.5 px-2"><NhWallet a={e.a}/></td>
-                                <td className="py-2.5 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="hover:text-white hover:underline">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[12px] text-white/40">{nhAgo(e.t)}</div>}</td>
-                                <td className="py-2.5 px-2 text-right tabular-nums">{fmt(e.times)}{'\u00d7'}</td>
-                                <td className="py-2.5 pl-2 pr-3 text-right"><NhAmount v={e.had} token={token} price={px} usd/></td>
+                                <td className={`py-2.5 px-2 whitespace-nowrap ${phone?'':'text-center'}`}><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="hover:text-white hover:underline">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[12px] text-white/40">{nhAgo(e.t)}</div>}</td>
+                                <td className={`py-2.5 px-2 tabular-nums ${phone?'text-right':'text-center'}`}>{fmt(e.times)}{'\u00d7'}</td>
+                                <td className={`py-2.5 pl-2 pr-3 ${phone?'text-right':'text-center'}`}><NhAmount v={e.had} token={token} price={px} usd center={!phone}/></td>
                               </tr>))}</tbody>
                           </table>
                         </div>)}
