@@ -25,7 +25,12 @@ lp-align-table-v1.png`, `lp-align-tiles-v1.png`); **Shaka picked Table A + Tile 
 under its heading (Pair left, Actions centred, a quiet "7D" heading over the curve column, the curve centred under it) and the
 band's tiles with label + figure flush left on one x, icon / change at the right (`.p2-lphk` first column `1fr`, not
 `auto`). CSS in the `p2-lp*` block + the v2 heading row only; classic byte-identical (`probes/lp-dom.js`). Written to the Mac,
-NOT yet pushed or seen live. `sessions/2026-10-02.md`.
+NOT yet pushed or seen live. **Round 23 (same morning, his mock-up):** PTGC Burned by UFO's three boxes carry icons in dark
+squares (the VG "Burn PTGC" flame + coin cluster, his money stack `pbu-money.webp`, his pie `pbu-pie.webp`), label over a
+22 px gold / green / gold figure (`p2-pbt`); the creature counts in the Burn panel and the PTGC-by-UFO row are 20 / 18 px
+(`p2-cnt`); the Value Generated tile names are 14 px through `P2Name` (nowrap + shrink-to-fit on the text node, so never a
+second line — the base `.p2-vgn` size lost its `!important`). Classic identical both tokens (`probes/panels-classic.js`).
+`sessions/2026-10-02.md`.
 
 ## Before that (end of 2026-10-01 — three sessions)
 

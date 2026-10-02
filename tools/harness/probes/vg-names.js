@@ -1,0 +1,2 @@
+/* Value Generated tiles (v2): does any tile NAME wrap onto a second line? Reports name text, its line count and the slack. */
+(()=>[...document.querySelectorAll('.p2-vgt .p2-vgn')].map(n=>{const t=n.firstChild;const r=document.createRange();r.selectNodeContents(t);const rects=r.getClientRects();const w=[...rects].reduce((m,x)=>Math.max(m,x.right),0)-rects[0].left;return `${t.textContent.trim()}:lines=${rects.length},slack=${Math.round(n.getBoundingClientRect().right-rects[0].left-w)}`}).join(' | '))()
