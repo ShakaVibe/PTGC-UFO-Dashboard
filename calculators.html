@@ -16,6 +16,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
   <!-- html2canvas removed 2026-09-16: never called on this page (the share card is screenshot-only). -->
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="h2.css?v=1">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
@@ -37,8 +38,15 @@
 </head>
 <body>
   <div id="root"></div>
+  <!-- the v2 site header (SiteHeaderV2) — shared with portfolio.html; Babel runs it before the block below -->
+  <script type="text/babel" src="h2-header.jsx?v=1"></script>
   <script type="text/babel">
     const {useState,useEffect,useMemo}=React;
+    /* Header design (2026-10-03): 'classic' = the sticky header + nav strip below; 'v2' = SiteHeaderV2 (h2-header.jsx), the
+       dashboard's art banner + gold tab band. Flip = 'v2' here, in index.html, charts.html and portfolio.html in the SAME push.
+       Until then this device shows v2 only with the dashboard's preview flag (h2PreviewOn). */
+    const HEADER_DESIGN='classic';
+    const hdrV2=HEADER_DESIGN==='v2'||h2PreviewOn();
     
     const TOKENS={
       PTGC:{name:'PTGC',address:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',logo:'06_PTGC_V1_transparent_bg.png',color:'gold',colorHex:'#D4AF37',decimals:18,mainPair:'0xf5A89A6487D62df5308CDDA89c566C5B5ef94C11',pulseScanUrl:'https://scan.pulsechain.com/token/0x94534EeEe131840b1c0F61847c572228bdfDDE93',totalSupply:333333333333,feeRate:0.05,hasDAO:true,
@@ -5063,6 +5071,8 @@ if(p>0)setRwdPtgcPrice(p);
         } else if(page==='affiliates'){
           try{localStorage.setItem('ptgc_nav_view','affiliates')}catch(e){}
           window.location.href='./index.html?token='+token;
+        } else if(page==='feed'||page==='swap'){   // v2 header: the Live Feed deck / the BUY-SELL window open on the dashboard (2026-10-03)
+          window.location.href='./index.html?token='+token+'&open='+page;
         }
       };
       
@@ -5102,6 +5112,7 @@ if(p>0)setRwdPtgcPrice(p);
       
       return(
         <div className="min-h-screen bg-[#0a0a0a]">
+          {hdrV2?<SiteHeaderV2 token={token} logo={cfg.logo} otherLogo={token==='PTGC'?TOKENS.UFO.logo:TOKENS.PTGC.logo} address={cfg.address} data={data} loading={loading} hdrDaysOld={hdrDaysOld} copied={copied} copyAddress={copyAddress} plsRatio={plsRatio} xToATH={xToATH} xToPenny={xToPenny} fmtX={hdrFmtX} renderPrice={(p,cls)=><Price p={p} c={cls}/>} onBack={goBack} onSwitch={switchToken} onBuy={()=>navTo('swap')} navTo={navTo} active="calculators"/>:(
           <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
 
@@ -5226,6 +5237,7 @@ if(p>0)setRwdPtgcPrice(p);
 
             </div>
           </header>
+          )}
           {loading&&<div role="status" aria-live="polite" className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 flex items-center gap-2 text-xs text-amber-300/80"><div className="w-2 h-2 rounded-full bg-amber-300 animate-pulse"></div>Loading {cfg.name} data{'\u2026'} your inputs are kept.</div>}
           <CalculatorsTab token={token} cfg={cfg} data={data} burn={burn} pls={pls} loading={loading} theme={theme} stakingData={stakingData} volumeByPeriod={volumeByPeriod} totalUFOShareRate={totalUFOShareRate} stakingPairs={stakingPairs} onBack={goBack} onSwitchToken={switchToken}/>
         </div>

@@ -21,7 +21,7 @@ const html=html0
      date adapter is provided" and every time-axis chart on that page stays blank, which is how the
      harness ran from a37 until 2026-09-21 (a59). */
   .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/chartjs-adapter-date-fns@3\.0\.0\/dist\/chartjs-adapter-date-fns\.bundle\.min\.js"[^>]*><\/script>/,'<script src="/__chart-adapter.js"></script>')
-  .replace(/<link href="https:\/\/fonts\.googleapis\.com[^"]*" rel="stylesheet">/,'<link rel="stylesheet" href="/__fonts.css">');
+  .replace(/<link href="https:\/\/fonts\.googleapis\.com[^"]*" rel="stylesheet"\/?>/,'<link rel="stylesheet" href="/__fonts.css">');
 if(html===html0)console.warn('WARNING: no CDN tags rewritten');
 
 // Real Orbitron / Rajdhani from @fontsource (same faces the Google Fonts link loads), so screenshots
@@ -38,7 +38,7 @@ const files={
   '/__chart.js':['node_modules/chart.js/dist/chart.umd.js','text/javascript'],
   '/__chart-adapter.js':['node_modules/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js','text/javascript'],
 };
-const mime={'.json':'application/json','.png':'image/png','.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.jpg':'image/jpeg'};
+const mime={'.jsx':'text/javascript','.webp':'image/webp','.json':'application/json','.png':'image/png','.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
   const u=req.url.split('?')[0];
   if(u==='/'||u==='/index.html'){res.writeHead(200,{'content-type':'text/html'});return res.end(html);}

@@ -6,7 +6,7 @@
 const path = require('path');
 const root = path.resolve(__dirname, '..', '..');
 module.exports = {
-  content: ['index.html', 'ledger.html', 'charts.html', 'calculators.html', 'portfolio.html']
+  content: ['index.html', 'ledger.html', 'charts.html', 'calculators.html', 'portfolio.html', 'h2-header.jsx']
     .map(f => path.join(root, f)),
   theme: { extend: {} }
 };

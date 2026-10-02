@@ -13,7 +13,11 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js" integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="h2.css?v=1">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
 <style>
+  /* v2 header (charts-only glue): the token · price line waits for the scroll, the change triangle follows the sign */
+  #hdrV2:not([hidden]){display:contents}   /* no box of its own, so the band's position:sticky answers to <body>, as on the dashboard (gotcha 36) */
+  #hdrV2:not(.h2-scrolled) .js-h2-mini{display:none!important}#hdrV2 .h2-up .h2-tri-dn,#hdrV2 .h2-dn .h2-tri-up,#hdrV2 .h2-na .h2-tri-up,#hdrV2 .h2-na .h2-tri-dn{display:none}#hdrV2 .h2-chg svg{width:calc(28*var(--u));height:calc(24*var(--u))}#hdrV2 .h2-phone .h2-chg svg{width:calc(18*var(--u));height:calc(16*var(--u))}
   body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh;margin:0}
   .font-orbitron{font-family:'Orbitron',monospace}
   ::-webkit-scrollbar{width:8px}
@@ -130,6 +134,16 @@
   <!-- ═══════════════════════════════════════════════════════
        HEADER — exact replica of Dashboard / Calculators
        ═══════════════════════════════════════════════════════ -->
+  <!-- ===== HEADER v2 (2026-10-03): a static twin of SiteHeaderV2 (h2-header.jsx) — the dashboard's banner + gold tab
+       band, styled by h2.css. Hidden until HEADER_DESIGN is 'v2' or this device holds the preview flag (h2Boot below);
+       applyHeaderTheme / applyHeaderValues fill the js-h2-* hooks. Keep the markup in step with the jsx. ===== -->
+  <div id="hdrV2" hidden>
+    <div class="h2" data-tok="PTGC">
+      <div class="h2-desk hidden lg:block"><div class="h2-art" aria-hidden="true"><img class="h2-band" src="logos/header/dash-bg.jpg" alt=""/><img class="h2-band2" src="logos/header/dash-bg.jpg" alt=""/><img class="h2-head" src="logos/header/alien-head.webp" alt=""/><div class="h2-shade"></div><div class="h2-shade-r"></div><div class="h2-fade"></div></div><a href="#" onclick="navTo('dashboard');return false" aria-label="Back to the dashboard" class="h2-back">&#8592;</a><div class="h2-row"><div class="h2-coin"><div class="h2-halo" aria-hidden="true"></div><img class="h2-corona js-h2-corona" src="logos/header/coin-corona.webp" alt="" aria-hidden="true"/><div class="h2-flare" aria-hidden="true"></div><div class="h2-flare-v" aria-hidden="true"></div><div class="h2-flare-h" aria-hidden="true"></div><img class="h2-logo js-h2-logo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC"/></div><div class="h2-id"><div class="orb h2-tref h2-name js-h2-name">PTGC</div><div class="h2-addr tn"><span class="js-h2-addr">0x9453...DE93</span><button type="button" onclick="copyAddr()" aria-label="Copy contract address" class="-my-2 -mx-1 js-h2-copy" style="font-size:.85em"><svg width="1em" height="1em" viewBox="0 0 24 26" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="5" width="14" height="18" rx="2"/><path d="M9 3h6v4H9z" fill="currentColor"/><path d="M8 12h8M8 16h8"/></svg></button></div><div class="h2-day"><span class="h2-daypill js-h2-day" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--a)"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="h2-dayl">DAY</span><span class="orb h2-tref2 h2-dayn tn js-h2-dayn">—</span></span></div></div><div class="h2-vl" aria-hidden="true"></div><div class="h2-price"><span class="h2-tprice tn h2-sh h2-pricev js-h2-price">—</span><div class="h2-chg tn h2-na js-h2-chg"><svg class="h2-tri-up" viewBox="0 0 30 26" aria-hidden="true"><defs><linearGradient id="h2cdu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6BF7A8"/><stop offset="1" stop-color="#00C865"/></linearGradient></defs><path d="M15 1 L29 25 L1 25 Z" fill="url(#h2cdu)"/></svg><svg class="h2-tri-dn" viewBox="0 0 30 26" aria-hidden="true"><defs><linearGradient id="h2cdd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8AA6"/><stop offset="1" stop-color="#E0284F"/></linearGradient></defs><path d="M15 1 L29 25 L1 25 Z" fill="url(#h2cdd)"/></svg><span class="js-h2-chgt">—</span></div><div class="h2-chgl">24h change</div></div><div class="h2-vl" aria-hidden="true"></div><div class="h2-stats"><div class="h2-stat"><div class="h2-statl">PLS Ratio</div><div class="h2-tref2 tn h2-statv h2-sh js-h2-pls">—</div></div><div class="h2-stat"><div class="h2-statl">X's to ATH</div><div class="h2-tref2 tn h2-statv h2-sh js-h2-ath">—</div></div><div class="h2-stat"><div class="h2-statl">X's to a Penny</div><div class="h2-tref2 tn h2-statv h2-sh js-h2-penny">—</div></div></div><div class="h2-btns"><button type="button" onclick="navTo('swap')" aria-label="Buy or sell" class="h2-buy js-h2-buy"><img class="js-h2-logo" src="06_PTGC_V1_transparent_bg.png" alt=""/><span class="orb h2-bt"><span>BUY</span><span class="h2-hr" aria-hidden="true"></span><span>SELL</span></span></button><button type="button" onclick="switchToken()" aria-label="Switch token" class="h2-sw js-h2-sw"><img class="js-h2-swlogo" src="07_Ufo_transparent.png" alt=""/><span class="orb">SWITCH</span></button></div></div></div>
+      <div class="h2-phone lg:hidden"><div class="h2-art" aria-hidden="true"><img class="h2-band" src="logos/header/dash-bg.jpg" alt=""/><img class="h2-head" src="logos/header/alien-head.webp" alt=""/><div class="h2-shade"></div><div class="h2-shade2"></div></div><a href="#" onclick="navTo('dashboard');return false" aria-label="Back to the dashboard" class="h2-back">&#8592;</a><div class="h2-top"><div class="h2-coin"><div class="h2-halo" aria-hidden="true"></div><img class="h2-corona js-h2-corona" src="logos/header/coin-corona.webp" alt="" aria-hidden="true"/><div class="h2-flare" aria-hidden="true"></div><div class="h2-flare-v" aria-hidden="true"></div><div class="h2-flare-h" aria-hidden="true"></div><img class="h2-logo js-h2-logo" src="06_PTGC_V1_transparent_bg.png" alt="PTGC"/></div><div class="h2-id"><div class="orb h2-tref h2-name js-h2-name">PTGC</div><div class="h2-addr tn"><span class="js-h2-addr">0x9453...DE93</span><button type="button" onclick="copyAddr()" aria-label="Copy contract address" class="-my-2 -mx-1 js-h2-copy" style="font-size:.85em"><svg width="1em" height="1em" viewBox="0 0 24 26" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="5" width="14" height="18" rx="2"/><path d="M9 3h6v4H9z" fill="currentColor"/><path d="M8 12h8M8 16h8"/></svg></button></div><div class="h2-day"><span class="h2-daypill js-h2-day" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--a)"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="h2-dayl">DAY</span><span class="orb h2-tref2 h2-dayn tn js-h2-dayn">—</span></span></div></div></div><div class="h2-price"><span class="h2-tprice tn h2-sh h2-pricev js-h2-price">—</span><div class="h2-chg tn h2-na js-h2-chg"><svg class="h2-tri-up" viewBox="0 0 30 26" aria-hidden="true"><defs><linearGradient id="h2cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6BF7A8"/><stop offset="1" stop-color="#00C865"/></linearGradient></defs><path d="M15 1 L29 25 L1 25 Z" fill="url(#h2cpu)"/></svg><svg class="h2-tri-dn" viewBox="0 0 30 26" aria-hidden="true"><defs><linearGradient id="h2cpd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8AA6"/><stop offset="1" stop-color="#E0284F"/></linearGradient></defs><path d="M15 1 L29 25 L1 25 Z" fill="url(#h2cpd)"/></svg><span class="js-h2-chgt">—</span><span class="h2-chgl">24h</span></div></div><div class="h2-stats"><div class="h2-stat"><div class="h2-statl">PLS Ratio</div><div class="h2-tref2 tn h2-statv h2-sh js-h2-pls">—</div></div><div class="h2-stat"><div class="h2-statl">X's to ATH</div><div class="h2-tref2 tn h2-statv h2-sh js-h2-ath">—</div></div><div class="h2-stat"><div class="h2-statl">X's to a Penny</div><div class="h2-tref2 tn h2-statv h2-sh js-h2-penny">—</div></div></div><div class="h2-btns"><button type="button" onclick="navTo('swap')" aria-label="Buy or sell" class="h2-buy js-h2-buy"><img class="js-h2-logo" src="06_PTGC_V1_transparent_bg.png" alt=""/><span class="orb h2-bt"><span>BUY</span><span class="h2-hr" aria-hidden="true"></span><span>SELL</span></span></button><button type="button" onclick="switchToken()" aria-label="Switch token" class="h2-sw js-h2-sw"><img class="js-h2-swlogo" src="07_Ufo_transparent.png" alt=""/><span class="orb">SWITCH</span></button></div></div>
+    </div>
+    <div class="h2 h2-tabs" data-tok="PTGC"><div class="lg:hidden js-h2-mini"><div class="h2-phone-mini"><img class="js-h2-logo" src="06_PTGC_V1_transparent_bg.png" alt=""/><span class="h2-mname h2-tref js-h2-name">PTGC</span><span class="h2-mright"><span class="h2-mprice h2-tprice tn js-h2-price">—</span><span class="h2-mchg tn na js-h2-mchg">—</span></span></div></div><div class="h2-tabband"><nav aria-label="Site sections" class="h2-tabrow"><div class="hidden lg:flex js-h2-mini"><div class="h2-mini"><img class="js-h2-logo" src="06_PTGC_V1_transparent_bg.png" alt=""/><span class="h2-mname h2-tref js-h2-name">PTGC</span><span class="h2-mright"><span class="h2-mprice h2-tprice tn js-h2-price">—</span><span class="h2-mchg tn na js-h2-mchg">—</span></span></div></div><a href="#" onclick="navTo('dashboard');return false" class="h2-tab">Dashboard</a><a href="#" onclick="navTo('kpi');return false" class="h2-tab">KPI Report</a><a href="#" onclick="navTo('social');return false" class="h2-tab">Socials</a><a href="./calculators.html" onclick="try{localStorage.setItem('ptgc_last_token',currentHdrToken)}catch(e){};window.location.href='./calculators.html?from='+currentHdrToken;return false" class="h2-tab">Calculators</a><span aria-current="page" class="h2-tab">Charts</span><a href="#" onclick="navTo('feed');return false" class="h2-tab">Live Feed<span class="h2-new">NEW</span></a><a href="#" onclick="window.location.href='portfolio.html?from='+currentHdrToken;return false" class="h2-tab h2-pf"><span>Portfolio</span></a><a href="#" onclick="navTo('affiliates');return false" class="h2-tab h2-aff">Affiliates</a></nav></div></div>
+  </div>
   <header class="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4">
 
@@ -425,6 +439,49 @@ const HDR_TOKENS = {
    cards — and then navTo() wrote ptgc_last_token='PTGC' and dropped them on the PTGC dashboard
    when they clicked Dashboard. Seeded the way calculators.html and portfolio.html already do it:
    ?from= / ?token= first, then the ptgc_last_token handoff key, both validated. */
+/* Header design (2026-10-03): 'classic' = the sticky <header> below; 'v2' = #hdrV2, the dashboard's banner + gold band.
+   Flip = 'v2' here, in index.html, calculators.html and portfolio.html in the SAME push. Until then this device shows v2
+   only with the dashboard's preview flag (grays_hdr_preview_v1, the same one index.html's HeaderPreviewGate sets). */
+const HEADER_DESIGN = 'classic';
+const hdrV2 = HEADER_DESIGN === 'v2' || (() => { try { return JSON.parse(localStorage.getItem('grays_hdr_preview_v1')) === 1; } catch (e) { return false; } })();
+function h2Boot() {
+  if (!hdrV2) return;
+  const v = document.getElementById('hdrV2'), classic = document.querySelector('header.sticky');
+  if (!v) return;
+  if (classic) classic.hidden = true;
+  v.hidden = false;
+  // --u is one reference pixel (gotcha 36): desktop width/2166 (floor .47), phone width/390 (.9–1.3) — useH2Scale in the jsx
+  const scale = () => { const w = document.documentElement.clientWidth || window.innerWidth || 1440; const hsd = Math.max(.47, Math.min(1, w / 2166)), hsp = Math.max(.9, Math.min(1.3, w / 390)); v.querySelectorAll('.h2').forEach(e => { e.style.setProperty('--hsd', hsd); e.style.setProperty('--hsp', hsp); }); };
+  scale(); window.addEventListener('resize', scale);
+  // the token · price line shows on the band once the banner has scrolled away (the dashboard's rule)
+  const onScroll = () => { const a = v.querySelector('.h2-desk'), b = v.querySelector('.h2-phone'); const h = (a && a.offsetHeight) || (b && b.offsetHeight) || 300; v.classList.toggle('h2-scrolled', window.scrollY > h - 40); };
+  onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+}
+function h2All(sel, fn) { const v = document.getElementById('hdrV2'); if (v) v.querySelectorAll(sel).forEach(fn); }
+function h2ApplyTheme(t, other) {
+  h2All('.h2', e => e.dataset.tok = t.name);
+  h2All('.js-h2-logo', e => { e.src = t.logo; if (e.alt) e.alt = t.name; });
+  h2All('.js-h2-corona', e => e.src = t.name === 'UFO' ? 'logos/header/coin-corona-green.webp' : 'logos/header/coin-corona.webp');
+  h2All('.js-h2-name', e => e.textContent = t.name);
+  h2All('.js-h2-addr', e => e.textContent = t.address.slice(0, 6) + '...' + t.address.slice(-4));
+  h2All('.js-h2-swlogo', e => e.src = HDR_TOKENS[other].logo);
+  h2All('.js-h2-sw', e => e.setAttribute('aria-label', 'Switch to ' + other));
+  h2All('.js-h2-buy', e => e.setAttribute('aria-label', 'Buy or sell ' + t.name));
+}
+function h2ApplyValues(data) {
+  const { price, chg, plsRatio, xToATH, xToPenny, atATH, abovePenny, days } = data;
+  const known = chg != null && !isNaN(chg), up = known && chg >= 0;
+  const chgTxt = known ? (up ? '+' : '\u2212') + Math.abs(chg).toFixed(2) + '%' : '\u2014';
+  h2All('.js-h2-price', e => e.textContent = fmtPrice(price));
+  h2All('.js-h2-chg', e => { e.classList.remove('h2-up', 'h2-dn', 'h2-na'); e.classList.add(known ? (up ? 'h2-up' : 'h2-dn') : 'h2-na'); e.classList.remove('up', 'dn', 'na'); e.classList.add(known ? (up ? 'up' : 'dn') : 'na'); });
+  h2All('.js-h2-chgt', e => e.textContent = chgTxt);
+  h2All('.js-h2-mchg', e => { e.textContent = chgTxt; e.classList.remove('up', 'dn', 'na'); e.classList.add(known ? (up ? 'up' : 'dn') : 'na'); });
+  h2All('.js-h2-pls', e => e.textContent = plsRatio);
+  h2All('.js-h2-ath', e => e.textContent = atATH ? 'AT ATH' : fmtX(xToATH));
+  h2All('.js-h2-penny', e => e.textContent = abovePenny ? '\u2713' : fmtX(xToPenny));
+  h2All('.js-h2-day', e => e.hidden = !(days != null));
+  h2All('.js-h2-dayn', e => e.textContent = days != null ? days.toLocaleString() : '\u2014');
+}
 let currentHdrToken = (() => {
   try {
     const q = new URLSearchParams(window.location.search);
@@ -470,6 +527,7 @@ function copyAddr() {
   navigator.clipboard.writeText(t.address);
   document.getElementById('copyBtn').textContent = '\u2713';
   setTimeout(() => { document.getElementById('copyBtn').innerHTML = '&#128203;' }, 2000);
+  h2All('.js-h2-copy', e => { if (!e.dataset.svg) e.dataset.svg = e.innerHTML; e.textContent = '\u2713'; setTimeout(() => { e.innerHTML = e.dataset.svg; }, 2000); });
 }
 
 function switchToken() {
@@ -537,6 +595,7 @@ function applyHeaderTheme() {
   if (navCharts) navCharts.style.color = c;
   const indicator = document.getElementById('navChartsIndicator');
   if (indicator) indicator.style.background = c;
+  h2ApplyTheme(t, other);
 }
 
 /* Header data — non-blocking, with stale-while-revalidate from sessionStorage */
@@ -563,6 +622,7 @@ async function loadHeaderData() {
 
     const price = parseFloat(p.priceUsd);
     const chg = p.priceChange?.h24 ? parseFloat(p.priceChange.h24) : 0;
+    const days = p.pairCreatedAt ? Math.max(0, Math.floor((Date.now() - p.pairCreatedAt) / 86400000)) : null;   // the v2 header's Day pill (2026-10-03)
 
     // PLS price via DexScreener (avoids using CoinGecko rate limit budget)
     let plsPrice = 0;
@@ -587,7 +647,7 @@ async function loadHeaderData() {
     const atATH = price > 0 && price >= t.ath;
     const abovePenny = price > 0 && price >= 0.01;
 
-    const data = { price, chg, plsRatio, xToATH, xToPenny, atATH, abovePenny, ts: Date.now() };
+    const data = { price, chg, plsRatio, xToATH, xToPenny, atATH, abovePenny, days, ts: Date.now() };
     try { sessionStorage.setItem('hdr_' + currentHdrToken, JSON.stringify(data)) } catch (e) {}
     applyHeaderValues(data, t);
 
@@ -595,6 +655,7 @@ async function loadHeaderData() {
 }
 
 function applyHeaderValues(data, t) {
+  h2ApplyValues(data);
   const { price, chg, plsRatio, xToATH, xToPenny, atATH, abovePenny } = data;
   const up = chg >= 0;
 
@@ -899,6 +960,11 @@ function loadSelections() {
 
 /* NAV — route to dashboard tabs with token context */
 function navTo(tab) {
+  if (tab === 'feed' || tab === 'swap') {   // v2 header: the Live Feed deck / the BUY-SELL window open on the dashboard (2026-10-03)
+    try { localStorage.setItem('ptgc_last_token', currentHdrToken); } catch (e) {}
+    window.location.href = `./index.html?token=${currentHdrToken}&open=${tab}`;
+    return;
+  }
   try {
     localStorage.setItem('ptgc_last_token', currentHdrToken);
     if (tab === 'affiliates') {
@@ -950,6 +1016,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   loadSelections();
   cache = loadCache();
+  h2Boot();
   applyHeaderTheme();
   loadHeaderData();
   renderRange();

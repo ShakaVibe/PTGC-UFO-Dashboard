@@ -1,0 +1,1 @@
+({url:location.href,dialogs:[...document.querySelectorAll('[role=dialog]')].map(d=>(d.getAttribute('aria-label')||'')+'|'+(d.querySelector('iframe')?'iframe:'+d.querySelector('iframe').src.slice(0,40):'')).join(' ; '),deck:!!document.querySelector('.deck-sky')})

@@ -15,9 +15,24 @@ Update it at the end of every session.
   CDN, compiled in the browser). `scripts/` + `.github/workflows/data-pipeline.yml` are the
   hourly data pipeline that writes `data/*.json` (ONE workflow since 2026-09-17, a29; `deploy.yml`
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
-  `ledger.html` are separate pages.
+  `ledger.html` are separate pages. **Since 2026-10-03 the v2 header's CSS is `h2.css` (root, linked by index +
+  the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).**
 
-## Current state (end of 2026-10-02)
+## Current state (end of 2026-10-03)
+
+**2026-10-03 — go-live prep, item (2) of the plan DONE and HIDDEN: the sibling pages wear the v2 header behind the same
+preview switch.** Shaka ("make sure those dont go live yet… we dont want to ruin the suprise") picked **A — the dashboard's full
+banner + gold band on every page** from a three-option sheet (`design/sibling-header/renders/sibling-header-v1.png`), BUY / SELL
+on those pages → the dashboard's switch.win window, Ledger left alone. Built: `h2.css` (the h2-* block moved OUT of index.html,
+linked from the same spot by all four pages), `h2-header.jsx` (`SiteHeaderV2` + the shared pieces, loaded by calculators +
+portfolio), a static twin in charts.html (`#hdrV2`, `h2Boot`), `PortfolioHeaderV2` (both coins, PTGC / UFO / PLS quotes, the
+page's buttons as pills), `?open=swap|feed` on index.html (opens the Buy/Sell window / the deck on arrival), the phone
+banner's missing change triangle fixed (gotcha 39), `deploy.yml` ships `*.css *.jsx`. Classic renders proven identical on all
+four pages (`probes/dom-hash.js`), v2 rendered 1440 / 1024 / 768 / 390 both tokens with no overflow. **Written to the Mac, NOT
+pushed, NOT seen live.** All edits = `tools/sibling-header.py` (run on both copies). **The flip is now FOUR constants in one
+push** — `HEADER_DESIGN='v2'` in index.html, calculators.html, charts.html, portfolio.html. `sessions/2026-10-03.md`.
+NEXT: Shaka's live look with the switch on (the three pages, Mac + iPhone + iPad, both tokens, the two jumps), then the
+pre-flip leftovers (-5), then the flip.
 
 **2026-10-02, closed by Shaka ("let's wrap it up for now"): rounds 22–25, all pushed by him as they landed (last `268038fce`,
 the phone + iPad pass). Nothing half-done. NEXT SESSION = "start preparing to make it live": (1) his live look at today's
@@ -748,6 +763,12 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (`pricePair`) and `scripts/fetch-burn-history.js` carry the same rule. Summing liquidity / volume over every pair
    is a different job and still sums them all.
 
+39. **A gradient defined inside a hidden SVG does not paint** (2026-10-03). `H2Tri` (the change triangle) is rendered twice —
+   desktop and phone banner — and both copies carried `<linearGradient id="h2ua">`; the desktop copy owned the id and is
+   `display:none` under lg, so the phone triangle was invisible (the harness's 390 px dashboard render shows it; never seen
+   live). Per-instance ids (`uid` prop; the phone row passes `'p'`) in index.html and h2-header.jsx; charts.html's static
+   twin uses distinct ids by hand. Any new inline SVG with `<defs>` that appears in both layouts needs the same care.
+
 38. **An image swapped under the SAME name needs a version query** (2026-10-01). GitHub Pages serves `logos/` with
    `Cache-Control: max-age=600`; Shaka overwrote the sea-creature art twice and kept seeing the old set. `SeaIcon` appends
    `?v=${SEA_ART_V}` — bump it when those files change; for any other art swap use a new file name (the `_site` allow-list
@@ -771,7 +792,15 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    the only markup forks. Style a v2 panel in the `p2-*` block, never by editing the classic Tailwind classes; a new
    number goes into the classic JSX once and reaches both. `AllocRingV2` must stay grey when any slice is null (a15).
    Harness: `eval=localStorage.setItem('grays_hdr_preview_v1','1');reload=5000` turns
-   v2 on for a run; `probes/h2-imgs.js` measures the art images.
+   v2 on for a run; `probes/h2-imgs.js` measures the art images. **Since 2026-10-03 the h2-* CSS is `h2.css`** (root; index.html
+   links it from the exact spot the inline block held, the `<style>` split around it — cascade unchanged) **and the sibling pages
+   wear the same header**: `h2-header.jsx` (`SiteHeaderV2`, `H2TabBand`, `H2Coin`, `H2Btns`… loaded by calculators + portfolio as
+   `<script type="text/babel" src>`; its pieces MIRROR index.html's `DashHeaderV2` — change both), a static twin in charts.html
+   (`#hdrV2` + `h2Boot` / `h2ApplyTheme` / `h2ApplyValues`), `PortfolioHeaderV2` in portfolio.html. Each page has its own
+   `HEADER_DESIGN` + the same preview flag. `?v=1` on the h2.css / jsx tags — bump when they change (Pages caches 10 min).
+   The sibling pages' BUY / SELL and Live Feed go to `index.html?token=X&open=swap|feed` (App reads it into `takeBootOpen`,
+   Dashboard opens the window on mount). Classic identity check for any page: `probes/dom-hash.js` on `<page>.orig.html` vs
+   `<page>.html`.
 
 37. **LP Pairs under v2 is a TABLE with real per-pool curves (2026-09-30 night).** From 640 px up `LpTableV2`
    replaces the `LPRow` list (phones keep `LPRow` in the `p2-lprow` skin); classic is the untouched `else` branch and
@@ -833,9 +862,12 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 -7. **GO-LIVE (Shaka, 2026-10-02: "when we come back we need to start preparing to make it live")** — the ordered plan is the
    end of `sessions/2026-10-02.md`: live look (Mac, iPhone, iPad) → sibling headers (-6) → pre-flip leftovers (-5) →
-   `HEADER_DESIGN='v2'` + push → post-deploy check (both dashboards, Home, sibling pages, Live Feed, phone). The classic
-   branches stay until he has lived with it.
--6. **FLIP CHECKLIST — the sibling pages still wear the OLD header (Shaka, 2026-10-01: "make sure you make a note").**
+   `HEADER_DESIGN='v2'` in FOUR files (index, calculators, charts, portfolio) + push → post-deploy check (both dashboards,
+   Home, sibling pages, Live Feed, phone, the BUY / SELL and Live Feed jumps from the sibling pages). The classic branches stay
+   until he has lived with it. (2) is DONE 2026-10-03, hidden; its live look is owed.
+-6. **DONE 2026-10-03 (built, hidden behind the preview switch, owed the live look) — was: the sibling pages still wear the OLD header (Shaka, 2026-10-01: "make sure you make a note").**
+   Now: `h2.css` + `h2-header.jsx` + the forks in the three pages; the flip = `HEADER_DESIGN='v2'` in FOUR files
+   (`grep -n "const HEADER_DESIGN" *.html`). Ledger keeps its own bar (Shaka). The original note, for the record:
    `calculators.html` and `charts.html` (and `portfolio.html`; `ledger.html` has its own bar) carry the classic sticky
    header + nav from before v2. When `HEADER_DESIGN='v2'` goes live, those pages must get the v2 look too — the art
    banner is index.html's, but at minimum the black-framed gold tab band (`.h2-tabband`, `logos/header/tabs-bg.jpg`,
@@ -990,6 +1022,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-10-03.md` — go-live prep: the sibling pages' v2 header (option A) hidden behind the preview switch —
+  `h2.css` out of index.html, `h2-header.jsx`, charts' static twin, `PortfolioHeaderV2`, `?open=swap|feed`, the phone
+  triangle (gotcha 39), `deploy.yml` allow-list, harness fonts for charts.html, `probes/dom-hash.js`; classic identical on
+  all four pages. Nothing pushed, nothing seen live.
 - `sessions/2026-10-02.md` — rounds 22–25: LP Pairs alignment (option sheets A/B/C + tiles 1/2 → Table A + Tile 1); PTGC
   Burned by UFO boxes with icons, 20 px creature counts, 14 px Value Generated titles (`P2Name` fit); no "as of" top-right,
   14 px period labels, Live Feed sky .72, Home tag line; the phone + iPad pass (Token Allocation stacks, creature strip,
