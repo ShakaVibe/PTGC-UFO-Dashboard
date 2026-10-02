@@ -44,9 +44,13 @@ build (`91405a01a`) and round 2 (`68722802d`); round 3 pushed (`6646199fe`, afte
 sub-lines, the `NhTotals` band (sum of the new holders' bags + its creature ladder). **Round 5:** bars inset again,
 RETURNING hover + tap card, no line above the title, sortable columns (`NhTh`), no stacked ladders (3 tiers in rows, 4 in
 totals). **Round 6:** headings centred over their columns in the token colour; a NEWEST / BIGGEST sort toggle on phones.
-**Round 7:** his green-plus / red-minus people icons on the New / Holders Left tiles (`NH_ART_V=2`). Rounds 4–7 written to the
-Mac (4 and 5 pushed). NEXT: his look at
-the window (Mac + phone, both tokens), then whatever he wants changed, then the go-live word; the owed v2 items below stand.
+**Round 7:** his green-plus / red-minus people icons on the New / Holders Left tiles (`NH_ART_V=2`). **Round 8:** no "ago"
+line under the dates, no "holdings as of" note; **the share card MOCKED UP, not built** — `design/holders-details/mock-share-v2.html`
+(+ `renders/share-v2.png`): Wide only, single-token A2 and the COMBINED card C. Rounds 1–7 pushed by Shaka (last `90bf01990`);
+round 8 + the mock-ups on the Mac, not pushed. **Closed by Shaka ("let's call it a day"). NEXT SESSION: build the share card from
+the v2 mock-up** (camera right of the period chooser, `ShareCardModal screenshot`, Wide 1200×675 only, PTGC / UFO / BOTH on the
+toolbar — the plan is at the end of `sessions/2026-10-02.md`), then his iPhone / iPad look at the window, then the go-live word;
+the owed v2 items below stand.
 
 **2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
 (`c5ca286b9`), tree clean. Nothing half-done. NEXT SESSION: whatever he brings from living with v2 (ask — screenshots), then
@@ -931,8 +935,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--8. **Holders Details (2026-10-02, hidden behind the dot) — Shaka's look, then his changes, then the go-live word.** Written to
-   the Mac, not pushed. After his push: the first hourly run continues the file from its cursor (watch the `new-holders` step
+-8. **Holders Details (2026-10-02, hidden behind the dot) — NEXT: build the share card from `design/holders-details/mock-share-v2.html`
+   (Wide only; single-token A2 + combined C; camera right of the period chooser), then his phone look, then the go-live word.** Rounds 1–7 pushed;
+   round 8 + mock-ups on the Mac. After his push: the first hourly run continues the file from its cursor (watch the `new-holders` step
    once in Actions; `only=new-holders` reruns it alone). Go-live = `NEW_HOLDERS_LIVE=true` in index.html (gotcha 40) — the
    "+" beside the Holders ⓘ is a plain glyph for now, he may want it drawn; the dot is 16 % in `NhDot`. Not built on
    purpose: a share card, a live top-up for the hours since the file.
