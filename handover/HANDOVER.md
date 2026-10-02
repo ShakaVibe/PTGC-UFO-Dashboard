@@ -41,7 +41,9 @@ endpoints-only missed wallets that bounced inside the range); a one-token dust f
 section for bots that came and went (counted in neither). PTGC 30D now 130 / 52 / +78 vs PulseScan +94. Pushed by Shaka: the
 build (`91405a01a`) and round 2 (`68722802d`); round 3 pushed (`6646199fe`, after a rebase conflict on the data file — the bot had written its own; his version won).
 **Round 4:** clean shrimp (`SEA_ART_V=4`), solid-colour title, RETURNING pill, bigger everything, green USD, no tile
-sub-lines, the `NhTotals` band (sum of the new holders' bags + its creature ladder). Written to the Mac, not pushed. NEXT: his look at
+sub-lines, the `NhTotals` band (sum of the new holders' bags + its creature ladder). **Round 5:** bars inset again,
+RETURNING hover + tap card, no line above the title, sortable columns (`NhTh`), no stacked ladders (3 tiers in rows, 4 in
+totals). Rounds 4–5 written to the Mac, not pushed. NEXT: his look at
 the window (Mac + phone, both tokens), then whatever he wants changed, then the go-live word; the owed v2 items below stand.
 
 **2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
