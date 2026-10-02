@@ -17,7 +17,17 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages.
 
-## Current state (end of 2026-10-01 — three sessions)
+## Current state (2026-10-02, in progress)
+
+**2026-10-02, round 22 — LP Pairs alignment (Shaka's screenshots: headings vs data "some left justified, some centered";
+the band's tiles "need consistency").** Two option sheets rendered from the real build (`design/dashboard-panels/renders/
+lp-align-table-v1.png`, `lp-align-tiles-v1.png`); **Shaka picked Table A + Tile 1**: every table heading and cell centred
+under its heading (Pair left, Actions centred, a quiet "7D" heading over the curve column, the curve centred under it) and the
+band's tiles with label + figure flush left on one x, icon / change at the right (`.p2-lphk` first column `1fr`, not
+`auto`). CSS in the `p2-lp*` block + the v2 heading row only; classic byte-identical (`probes/lp-dom.js`). Written to the Mac,
+NOT yet pushed or seen live. `sessions/2026-10-02.md`.
+
+## Before that (end of 2026-10-01 — three sessions)
 
 **2026-10-01, evening session, closed by Shaka ("call it a day"): rounds 19–21, all pushed by him as they landed (last
 `63f6e1ae4`, "v2 LP Pairs band: three tiles one width…"), each seen live on his Mac. Nothing half-done. NEXT SESSION STARTS
@@ -960,6 +970,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   valid empty program. Verified 14/14 on the shipped guard expression, live against the real worker,
   and four harness runs. Open: the worker still sends no cache headers, and the endpoint is still on
   `*.workers.dev`.
+- `sessions/2026-10-02.md` — LP Pairs alignment, round 22: option sheets A/B/C (table) + 1/2 (tiles) rendered from the build;
+  Table A + Tile 1 built (headings and cells centred, Pair left, "7D" over the curve; tile label + figure flush left).
 - `sessions/2026-10-01.md` — **evening (rounds 19–21): the Live Feed NEW badge redrawn (seven mock-ups, B hairline + glow); the
   "from $X of volume" line back beside the Value Generated total under v2, per window, UFO too (no "as of" under it); LP Pairs:
   sorting on the column headings (`LpTh`, SORT toggle gone), the Value Gen 24h tile + Value Gen column (volume × fee), "Price
