@@ -1,0 +1,1 @@
+[...document.querySelectorAll('.h2-tile')].map(t=>(t.querySelector('.h2-tl')?.textContent||'').trim().slice(0,10)+':'+(t.querySelector('.h2-sp path.h2-spwait')?'wait':t.querySelector('.h2-sp path.h2-spflat')?'DASHED':t.querySelector('.h2-sp svg')?'drawn':'none')).join(' ')

@@ -243,6 +243,14 @@ const dsAnswer=(url)=>{
       /* per-pool hourly candles (the LP Pairs table's 7-day volume curves, 2026-10-01): 168 hourly rows with a
          volume (column 5) seeded from the pool address — half the pools trend up, half down; GT_POOLS=miss:<n>
          404s every n-th pool so the dashed "unavailable" line shows too */
+      /* the KPI tiles' 30-day price history (useH2Series, 2026-09-30) is ALSO an /ohlcv/hour call — the one with &token= and
+         limit=720: 720 hourly closes drifting around the stub price, so Market Cap / Liq-MCap draw (before 2026-10-03 it fell
+         into the per-pool branch below, whose close is a flat 1e-4 — 30 % off the price, so the sanity check dashed it) */
+      if(/\/ohlcv\/hour\b/.test(u)&&/[?&]token=/.test(u)){
+        const isUfo=UFO_ADDR.test(u),now=Math.floor(Date.now()/3600000)*3600,base=isUfo?1.47e-4:1.36e-4;let p=base,s=isUfo?7:3;const list=[];
+        for(let i=719;i>=0;i--){s=(s*9301+49297)%233280;p=p*(1+(s/233280-0.5)*0.02+(isUfo?-0.00004:0.00005));list.push([now-i*3600,p,p,p,p,1000]);}
+        return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});
+      }
       if(/\/ohlcv\/hour\b/.test(u)){
         const pool=(u.match(/pools\/(0x[0-9a-fA-F]{40})/)||[])[1]||'';let seed=0;for(const ch of pool)seed=(seed*31+ch.charCodeAt(0))>>>0;
         const miss=(process.env.GT_POOLS||'').match(/^miss:(\d+)$/);if(miss&&seed%+miss[1]===0)return r.fulfill({status:404,body:''});

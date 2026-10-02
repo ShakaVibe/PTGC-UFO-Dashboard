@@ -348,3 +348,46 @@ if '*.css *.jsx' not in dy:
     dy = once(dy, "          cp *.html *.png robots.txt sitemap.xml _site/\n",
         "          cp *.html *.css *.jsx *.png robots.txt sitemap.xml _site/   # h2.css + h2-header.jsx: the v2 header shared by the pages (2026-10-03)\n", 'deploy cp')
 wr('.github/workflows/deploy.yml', dy)
+
+# ---------------------------------------------------------------- index.html (later the same day): KPI sparklines — loading ≠ unavailable, candles cached
+idx = rd('index.html')
+if 'H2_PX:' not in idx:
+    idx = once(idx, "      LP_VOL:'grays_lp_vol_v1',                   // {pairAddress:{at,pts:[{t,v}]|null}} the LP Pairs table's 7-day volume curves, 30 min (fetchPoolVol7d)\n",
+        "      LP_VOL:'grays_lp_vol_v1',                   // {pairAddress:{at,pts:[{t,v}]|null}} the LP Pairs table's 7-day volume curves, 30 min (fetchPoolVol7d)\n"
+        "      H2_PX:'grays_h2_px_v1',                     // {token:{at,pts:[{t,v}]}} the KPI tiles' 30-day price candles (GeckoTerminal), 30 min (fetchH2Price7d) — a reload paints Market Cap / Liq-MCap at once\n", 'LS.H2_PX')
+    idx = once(idx, "    const H2_TTL=10*60*1000;\n",
+        "    const H2_TTL=10*60*1000;\n"
+        "    const H2_PX_TTL=30*60*1000;   // the candles' cache (memory + localStorage LS.H2_PX): GeckoTerminal is the one slow read behind the tiles (2026-10-03)\n", 'H2_PX_TTL')
+    idx = once(idx, "    const fetchH2Price7d=async(token)=>{\n      const hit=_h2PxCache[token];\n      if(hit&&Date.now()-hit.at<H2_TTL)return hit.pts;\n",
+        "    const fetchH2Price7d=async(token)=>{\n"
+        "      const hit=_h2PxCache[token];\n"
+        "      if(hit&&Date.now()-hit.at<H2_PX_TTL)return hit.pts;\n"
+        "      const ls=lsGet(LS.H2_PX,v=>v&&typeof v==='object'&&!Array.isArray(v));   // a reload / token switch within 30 min: the cached candles, no wait (2026-10-03)\n"
+        "      const lh=ls&&ls[token];\n"
+        "      if(lh&&typeof lh.at==='number'&&Date.now()-lh.at<H2_PX_TTL&&Array.isArray(lh.pts)&&lh.pts.length>=12){_h2PxCache[token]=lh;return lh.pts;}\n", 'px cache read')
+    idx = once(idx, "        if(pts.length<12)return null;\n        _h2PxCache[token]={at:Date.now(),pts};\n        return pts;\n",
+        "        if(pts.length<12)return null;\n        _h2PxCache[token]={at:Date.now(),pts};\n"
+        "        lsSet(LS.H2_PX,{...(ls||{}),[token]:_h2PxCache[token]});\n"
+        "        return pts;\n", 'px cache write')
+    idx = once(idx, "          setSt(s=>({...s,mcap:pr||s.mcap||null,vol:vol||s.vol||null,liq:liq||s.liq||null,ratio:ratio||s.ratio||null}));   // a miss never blanks a series that was already drawn\n          if((!pr||!vol)&&attempt<3)timers.push(setTimeout(()=>go(attempt+1),[4000,12000,30000][attempt]));\n",
+        "          /* a miss never blanks a series that was already drawn; and while retries remain a series that has not landed stays\n"
+        "             undefined (= loading, a faint pulsing baseline) — null (= the dashed \"history unavailable\" line) is only said once\n"
+        "             the last attempt has missed (2026-10-03; the tiles used to claim \"unavailable\" for the ~5 s GeckoTerminal takes) */\n"
+        "          const last=attempt>=3;const keep=(fresh,old)=>fresh||old||(last?null:undefined);\n"
+        "          setSt(s=>({...s,mcap:keep(pr,s.mcap),vol:keep(vol,s.vol),liq:keep(liq,s.liq),ratio:keep(ratio,s.ratio)}));\n"
+        "          if((!pr||!vol)&&attempt<3)timers.push(setTimeout(()=>go(attempt+1),[4000,12000,30000][attempt]));\n", 'pending series')
+    idx = once(idx, "    const H2Spark=({pts,color,id,label})=>{\n      if(!pts||pts.length<3)return(\n",
+        "    const H2Spark=({pts,color,id,label})=>{\n"
+        "      if(pts===undefined)return(   // still loading (2026-10-03): a faint pulsing baseline, not the dashed \"unavailable\" line\n"
+        "        <svg viewBox=\"0 0 240 60\" preserveAspectRatio=\"none\" role=\"img\" aria-label={`${label}: loading ${H2_DAYS} day history`}>\n"
+        "          <path className=\"h2-spwait\" d=\"M0,30 L240,30\" fill=\"none\" strokeWidth=\"2\" vectorEffect=\"non-scaling-stroke\"/>\n"
+        "        </svg>);\n"
+        "      if(!pts||pts.length<3)return(\n", 'H2Spark wait')
+    idx = once(idx, "<H2Spark pts={loading?null:ser[key]} color=", "<H2Spark pts={loading?undefined:ser[key]} color=", 'tiles loading undefined')
+wr('index.html', idx)
+css = rd('h2.css')
+if 'h2-spwait' not in css:
+    css = once(css, ".h2-tile .h2-sp .h2-spflat{stroke:rgba(255,255,255,.18);stroke-dasharray:6 6}\n",
+        ".h2-tile .h2-sp .h2-spflat{stroke:rgba(255,255,255,.18);stroke-dasharray:6 6}\n"
+        ".h2-tile .h2-sp .h2-spwait{stroke:rgba(255,255,255,.14);animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}   /* a series still loading (2026-10-03) — solid, breathing; dashed means it is not coming */\n", 'spwait css')
+wr('h2.css', css)

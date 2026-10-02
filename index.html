@@ -671,6 +671,7 @@
       DECK_POOLS:'grays_deck_pools_v1',           // + ':'+token → learned Live Feed pools
       HDR_PREVIEW:'grays_hdr_preview_v1',         // 1 = this device shows the v2 dashboard header before it is the default (HeaderPreviewGate)
       LP_VOL:'grays_lp_vol_v1',                   // {pairAddress:{at,pts:[{t,v}]|null}} the LP Pairs table's 7-day volume curves, 30 min (fetchPoolVol7d)
+      H2_PX:'grays_h2_px_v1',                     // {token:{at,pts:[{t,v}]}} the KPI tiles' 30-day price candles (GeckoTerminal), 30 min (fetchH2Price7d) — a reload paints Market Cap / Liq-MCap at once
       HANDOFF_TOKEN:'ptgc_last_token',HANDOFF_TAB:'ptgc_nav_tab',HANDOFF_VIEW:'ptgc_nav_view',
     };
     /* Bump when the DisclaimerModal wording changes and every device is asked to accept it again.
@@ -837,7 +838,7 @@
      * Flip this ONE value to go live (or back). Until then only a device that passed the hidden
      * preview switch (HeaderPreviewGate — secret link + password, hashes only) shows v2.
      * ============================================================================== */
-    const HEADER_DESIGN='classic';
+    const HEADER_DESIGN='v2';   // LIVE for everyone since 2026-10-03 (Shaka: "Make it LIVE"); 'classic' = the old header, kept until he has lived with v2
     const headerDesignBoot=()=>{if(HEADER_DESIGN==='v2')return'v2';return lsGet(LS.HDR_PREVIEW,v=>v===1)===1?'v2':'classic';};
     /* a40 (2026-09-20): diagnostics are on for the operator build and for anyone who asked for
        them with ?debug=1 — the same test line 39 uses to decide whether console output survives.
@@ -8743,11 +8744,15 @@
        tx    : data/transaction-history.json total
        lv-snapshots is only fetched when this header is on (it is ~370 KB). */
     const H2_TTL=10*60*1000;
+    const H2_PX_TTL=30*60*1000;   // the candles' cache (memory + localStorage LS.H2_PX): GeckoTerminal is the one slow read behind the tiles (2026-10-03)
     const H2_DAYS=30;   // the sparkline window, every tile; the "30D" tag on the tiles prints it
     const _h2PxCache={};
     const fetchH2Price7d=async(token)=>{
       const hit=_h2PxCache[token];
-      if(hit&&Date.now()-hit.at<H2_TTL)return hit.pts;
+      if(hit&&Date.now()-hit.at<H2_PX_TTL)return hit.pts;
+      const ls=lsGet(LS.H2_PX,v=>v&&typeof v==='object'&&!Array.isArray(v));   // a reload / token switch within 30 min: the cached candles, no wait (2026-10-03)
+      const lh=ls&&ls[token];
+      if(lh&&typeof lh.at==='number'&&Date.now()-lh.at<H2_PX_TTL&&Array.isArray(lh.pts)&&lh.pts.length>=12){_h2PxCache[token]=lh;return lh.pts;}
       const cfg=TOKENS[token];
       if(!cfg||!cfg.mainPair||!cfg.address)return null;
       const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${cfg.mainPair}/ohlcv/hour?aggregate=1&limit=${H2_DAYS*24}&currency=usd&token=${cfg.address}`;
@@ -8763,6 +8768,7 @@
           .sort((a,b)=>a.t-b.t);
         if(pts.length<12)return null;
         _h2PxCache[token]={at:Date.now(),pts};
+        lsSet(LS.H2_PX,{...(ls||{}),[token]:_h2PxCache[token]});
         return pts;
       }catch(e){return null;}
       finally{clearTimeout(to);}
@@ -8815,7 +8821,11 @@
             ratio=liq.map(q=>{const p=h2PriceAt(pr,q.t);return p>0?{t:q.t,v:q.v/(p*circ)*100}:null;}).filter(Boolean);
             if(ratio.length<3)ratio=null;
           }
-          setSt(s=>({...s,mcap:pr||s.mcap||null,vol:vol||s.vol||null,liq:liq||s.liq||null,ratio:ratio||s.ratio||null}));   // a miss never blanks a series that was already drawn
+          /* a miss never blanks a series that was already drawn; and while retries remain a series that has not landed stays
+             undefined (= loading, a faint pulsing baseline) — null (= the dashed "history unavailable" line) is only said once
+             the last attempt has missed (2026-10-03; the tiles used to claim "unavailable" for the ~5 s GeckoTerminal takes) */
+          const last=attempt>=3;const keep=(fresh,old)=>fresh||old||(last?null:undefined);
+          setSt(s=>({...s,mcap:keep(pr,s.mcap),vol:keep(vol,s.vol),liq:keep(liq,s.liq),ratio:keep(ratio,s.ratio)}));
           if((!pr||!vol)&&attempt<3)timers.push(setTimeout(()=>go(attempt+1),[4000,12000,30000][attempt]));
         });
         go(0);
@@ -8827,6 +8837,10 @@
       return st;
     };
     const H2Spark=({pts,color,id,label})=>{
+      if(pts===undefined)return(   // still loading (2026-10-03): a faint pulsing baseline, not the dashed "unavailable" line
+        <svg viewBox="0 0 240 60" preserveAspectRatio="none" role="img" aria-label={`${label}: loading ${H2_DAYS} day history`}>
+          <path className="h2-spwait" d="M0,30 L240,30" fill="none" strokeWidth="2" vectorEffect="non-scaling-stroke"/>
+        </svg>);
       if(!pts||pts.length<3)return(
         <svg viewBox="0 0 240 60" preserveAspectRatio="none" role="img" aria-label={`${label}: ${H2_DAYS} day history unavailable`}>
           <path className="h2-spflat" d="M0,30 L240,30" fill="none" strokeWidth="2" vectorEffect="non-scaling-stroke"/>
@@ -9077,7 +9091,7 @@
           {extra.badge&&<div className="h2-tb">{extra.badge}</div>}
           {val(<H2Val className="h2-tv tn">{node}</H2Val>)}
           {!loading&&chg&&<div className={`h2-tc tn ${chg.cls||''}`} title={chg.tip}>{chg.node}</div>}
-          <div className="h2-sp"><H2Spark pts={loading?null:ser[key]} color={extra.color||spark} id={`h2sp-${token}-${key}`} label={label}/></div>
+          <div className="h2-sp"><H2Spark pts={loading?undefined:ser[key]} color={extra.color||spark} id={`h2sp-${token}-${key}`} label={label}/></div>
           <div className="h2-spw" aria-hidden="true">{H2_DAYS}D</div>
         </div>);
       const arrow=up=>up?'▲':'▼';

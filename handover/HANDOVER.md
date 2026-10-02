@@ -20,6 +20,16 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-03)
 
+**🚀 2026-10-03 — THE FLIP. Shaka: "Make it LIVE!!!!!!!" — `HEADER_DESIGN='v2'` in all four files (index.html line ~841,
+calculators.html, charts.html, portfolio.html); the v2 dashboard header, KPI tiles, panels, LP Pairs table and the sibling
+pages' headers are the default for everyone from this push. The preview switch (`?<word>`) still works but is moot. The classic
+branches STAY in the code (the `!hdrV2` forks, the `h2PreviewOn` reads) until he has lived with v2 — deleting them is a later,
+separate clean-up (then `probes/lp-dom.js`, `vg-classic.js`, `panels-classic.js`, `dom-hash.js` retire). Harness: v2 renders on
+all four pages with NO preview flag (`.h2-desk` present, the classic `<header>` gone / display:none).
+POST-DEPLOY CHECK (owed, on ptgc-ufo.com after Pages finishes, ~10 min): PTGC + UFO dashboards (banner, tiles + sparklines, the
+four panels, LP Pairs), Home → dashboard, Calculators / Charts / Portfolio headers + their BUY-SELL and Live Feed jumps, the Live
+Feed, a phone. A visitor with the OLD page cached sees it for up to 10 min (Pages `max-age=600`).**
+
 **2026-10-03 — go-live prep, item (2) of the plan DONE and HIDDEN: the sibling pages wear the v2 header behind the same
 preview switch.** Shaka ("make sure those dont go live yet… we dont want to ruin the suprise") picked **A — the dashboard's full
 banner + gold band on every page** from a three-option sheet (`design/sibling-header/renders/sibling-header-v1.png`), BUY / SELL
@@ -31,6 +41,9 @@ banner's missing change triangle fixed (gotcha 39), `deploy.yml` ships `*.css *.
 four pages (`probes/dom-hash.js`), v2 rendered 1440 / 1024 / 768 / 390 both tokens with no overflow. **Written to the Mac, NOT
 pushed, NOT seen live.** All edits = `tools/sibling-header.py` (run on both copies). **The flip is now FOUR constants in one
 push** — `HEADER_DESIGN='v2'` in index.html, calculators.html, charts.html, portfolio.html. `sessions/2026-10-03.md`.
+**Later the same day (his screenshot):** the Market Cap / Liq-MCap sparklines read "unavailable" (dashed) for the ~5 s the
+GeckoTerminal candles take — now a solid breathing baseline while loading (`.h2-spwait`; dashed only after the last retry) and
+the candles cached 30 min in `LS.H2_PX`, so a reload paints at once. v2 only; classic fingerprint unchanged.
 NEXT: Shaka's live look with the switch on (the three pages, Mac + iPhone + iPad, both tokens, the two jumps), then the
 pre-flip leftovers (-5), then the flip.
 
@@ -800,7 +813,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    `HEADER_DESIGN` + the same preview flag. `?v=1` on the h2.css / jsx tags — bump when they change (Pages caches 10 min).
    The sibling pages' BUY / SELL and Live Feed go to `index.html?token=X&open=swap|feed` (App reads it into `takeBootOpen`,
    Dashboard opens the window on mount). Classic identity check for any page: `probes/dom-hash.js` on `<page>.orig.html` vs
-   `<page>.html`.
+   `<page>.html`. **Sparkline states (2026-10-03):** `undefined` = loading (solid pulsing baseline `.h2-spwait`), `null` = the
+   dashed "unavailable" line — `useH2Series` only says null after its last retry; the candles are cached in `LS.H2_PX`
+   (30 min). `probes/h2-spark-state.js` reads the seven states.
 
 37. **LP Pairs under v2 is a TABLE with real per-pool curves (2026-09-30 night).** From 640 px up `LpTableV2`
    replaces the `LPRow` list (phones keep `LPRow` in the `p2-lprow` skin); classic is the untouched `else` branch and
@@ -860,7 +875,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--7. **GO-LIVE (Shaka, 2026-10-02: "when we come back we need to start preparing to make it live")** — the ordered plan is the
+-7. **DONE 2026-10-03 — FLIPPED (step 4). Left: the post-deploy check (above) and the pre-flip leftovers (-5) which are now post-flip polish.** Was: GO-LIVE (Shaka, 2026-10-02: "when we come back we need to start preparing to make it live") — the ordered plan is the
    end of `sessions/2026-10-02.md`: live look (Mac, iPhone, iPad) → sibling headers (-6) → pre-flip leftovers (-5) →
    `HEADER_DESIGN='v2'` in FOUR files (index, calculators, charts, portfolio) + push → post-deploy check (both dashboards,
    Home, sibling pages, Live Feed, phone, the BUY / SELL and Live Feed jumps from the sibling pages). The classic branches stay
