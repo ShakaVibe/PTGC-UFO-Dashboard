@@ -20,6 +20,13 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-03)
 
+**2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
+(`c5ca286b9`), tree clean. Nothing half-done. NEXT SESSION: whatever he brings from living with v2 (ask — screenshots), then
+his own look on a real iPhone + iPad (owed), then the post-flip polish that used to be pre-flip (-5): the DAO Treasury's fourth
+tile (keep or replace — ask), UFO's Value Gen tile at the live 6 % (now checkable live), the LP header's % lines over a few
+days. 2026-10-06 = UFO day 90 (item 5): check the UFO dashboard + PTGC-burned-by-UFO that day. The classic branches stay
+until he says he has lived with v2; then one clean-up session removes them and retires the byte-identity probes.**
+
 **🚀 2026-10-03 — THE FLIP. Shaka: "Make it LIVE!!!!!!!" — `HEADER_DESIGN='v2'` in all four files (index.html line ~841,
 calculators.html, charts.html, portfolio.html); the v2 dashboard header, KPI tiles, panels, LP Pairs table and the sibling
 pages' headers are the default for everyone from this push. The preview switch (`?<word>`) still works but is moot. The classic
