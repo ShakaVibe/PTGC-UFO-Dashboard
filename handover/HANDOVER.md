@@ -15,10 +15,24 @@ Update it at the end of every session.
   CDN, compiled in the browser). `scripts/` + `.github/workflows/data-pipeline.yml` are the
   hourly data pipeline that writes `data/*.json` (ONE workflow since 2026-09-17, a29; `deploy.yml`
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
-  `ledger.html` are separate pages. **Since 2026-10-03 the v2 header's CSS is `h2.css` (root, linked by index +
+  `ledger.html` are separate pages. `data/new-holders.json` + `scripts/build-new-holders.mjs` = the Holders Details window's
+  data (2026-10-02, hourly `new-holders` step). **Since 2026-10-03 the v2 header's CSS is `h2.css` (root, linked by index +
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).**
 
 ## Current state (end of 2026-10-03)
+
+**2026-10-02, evening (date note: the two sessions labelled "2026-10-03" above and below were worked on Oct 2 Pacific — the commits
+are dated 2026-10-02; the labels stay, the day-90 date is still 2026-10-06). HOLDERS DETAILS — built, HIDDEN, written to the Mac, NOT
+pushed, NOT seen live.** Shaka's new idea, discussed first then built: a window listing who became a PTGC / UFO holder (balance
+0 → above 0) and who left (→ 0) over 24H / 7D / 30D (default 7D), each arrival with wallet + copy + PulseScan link, when, what
+it holds NOW (+ USD) and its league creature; the departures collapsed underneath with what they had. New − Left = Net, and
+**once live the Holders box's change line reads that same count** (Shaka: "it needs to match what the dashboard says" — a "+5"
+is PulseScan's NET, there is no list of five behind it; he chose one count on both surfaces). Data = `data/new-holders.json`
+from the new hourly `new-holders` step (`scripts/build-new-holders.mjs`, exact balances at both ends of each scanned range,
+contracts and the DAO wallets excluded, 30-day backfill done: PTGC 7D net +22 = the box's +22). **Hidden:** `NEW_HOLDERS_LIVE=false`
+→ a very faint dot bottom-right of both dashboards opens it (`NhDot`); **go-live = that one constant true** → dot gone, a "+"
+button beside the Holders ⓘ, the tile's line from the file. Gotcha 40. `sessions/2026-10-02.md` "evening". NEXT: his look at
+the window (Mac + phone, both tokens), then whatever he wants changed, then the go-live word; the owed v2 items below stand.
 
 **2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
 (`c5ca286b9`), tree clean. Nothing half-done. NEXT SESSION: whatever he brings from living with v2 (ask — screenshots), then
@@ -783,6 +797,20 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    (`pricePair`) and `scripts/fetch-burn-history.js` carry the same rule. Summing liquidity / volume over every pair
    is a different job and still sums them all.
 
+40. **Holders Details is one count on two surfaces (2026-10-02).** `data/new-holders.json` (hourly `new-holders` step,
+   `scripts/build-new-holders.mjs`) lists every real wallet whose balance went 0 → above 0 (`in`) or back to 0 (`out`) over
+   31 days, with block / time / tx, the current balance of every arrival (`balances`, read at `balAt`) and a departure's
+   `had`. The script is incremental on `cursor.block` and classifies against EXACT `balanceOf` at the block before the range
+   and at head — never by replaying transfers alone (reflections drift). Contracts (`eth_getCode`, cached in `contracts`)
+   and the two DAO wallets are never holders here. A failed RPC read aborts the run (previous file stays): a half-scanned
+   range would lose arrivals forever. In index.html everything is the HOLDERS DETAILS block above `DashboardSkeleton`:
+   `fetchNewHolders` (null past 36 h), `nhView` / `nhNet`, `holdingTier` (top BURN_C tier reached, Shell floor),
+   `NewHoldersModal`. `NEW_HOLDERS_LIVE=false` = the faint bottom-right dot (`NhDot`) is the only way in and the Holders
+   tile keeps PulseScan's snapshot delta; `true` = no dot, a "+" beside the tile's ⓘ, and the tile's change line is the
+   file's 24 h net (`nhNet`, "—" when the file is missing or stale). The window's NET must equal that line — they are the
+   same function. Don't make the box read PulseScan again once live, and don't list arrivals without departures: the
+   numbers stop matching. Harness: `probes/nh-state.js` (README line); the file is served from `data/`.
+
 39. **A gradient defined inside a hidden SVG does not paint** (2026-10-03). `H2Tri` (the change triangle) is rendered twice —
    desktop and phone banner — and both copies carried `<linearGradient id="h2ua">`; the desktop copy owned the id and is
    `display:none` under lg, so the phone triangle was invisible (the harness's 390 px dashboard render shows it; never seen
@@ -882,6 +910,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-8. **Holders Details (2026-10-02, hidden behind the dot) — Shaka's look, then his changes, then the go-live word.** Written to
+   the Mac, not pushed. After his push: the first hourly run continues the file from its cursor (watch the `new-holders` step
+   once in Actions; `only=new-holders` reruns it alone). Go-live = `NEW_HOLDERS_LIVE=true` in index.html (gotcha 40) — the
+   "+" beside the Holders ⓘ is a plain glyph for now, he may want it drawn; the dot is 16 % in `NhDot`. Not built on
+   purpose: a share card, a live top-up for the hours since the file.
 -7. **DONE 2026-10-03 — FLIPPED (step 4). Left: the post-deploy check (above) and the pre-flip leftovers (-5) which are now post-flip polish.** Was: GO-LIVE (Shaka, 2026-10-02: "when we come back we need to start preparing to make it live") — the ordered plan is the
    end of `sessions/2026-10-02.md`: live look (Mac, iPhone, iPad) → sibling headers (-6) → pre-flip leftovers (-5) →
    `HEADER_DESIGN='v2'` in FOUR files (index, calculators, charts, portfolio) + push → post-deploy check (both dashboards,
@@ -1048,7 +1081,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   `h2.css` out of index.html, `h2-header.jsx`, charts' static twin, `PortfolioHeaderV2`, `?open=swap|feed`, the phone
   triangle (gotcha 39), `deploy.yml` allow-list, harness fonts for charts.html, `probes/dom-hash.js`; classic identical on
   all four pages. Nothing pushed, nothing seen live.
-- `sessions/2026-10-02.md` — rounds 22–25: LP Pairs alignment (option sheets A/B/C + tiles 1/2 → Table A + Tile 1); PTGC
+- `sessions/2026-10-02.md` — **evening: Holders Details** (the discussion — new = 0→>0, departures listed so the net matches
+  the box, pipeline file; `build-new-holders.mjs`, the 30-day backfill and its cross-check, the window, the dot, the gate);
+  rounds 22–25: LP Pairs alignment (option sheets A/B/C + tiles 1/2 → Table A + Tile 1); PTGC
   Burned by UFO boxes with icons, 20 px creature counts, 14 px Value Generated titles (`P2Name` fit); no "as of" top-right,
   14 px period labels, Live Feed sky .72, Home tag line; the phone + iPad pass (Token Allocation stacks, creature strip,
   phone LP band `p2-lphp`, All/RH knob `left-0`, 1024 tier). Ends with the go-live plan.

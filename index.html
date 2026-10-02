@@ -5690,6 +5690,12 @@
     /* Explainer copy, in one place. Each is a function of the token so the wording can name
        it and quote live figures (fee rate, ATH). Keep these to two or three sentences. */
     const EXPLAINERS={
+      newHolders:(token)=>(
+        <>
+          <p>Every wallet whose {token} balance went from zero to above zero in the selected window, newest first, with what it holds now and the league creature that holding earns. "Left" is the other direction: wallets that sold or moved everything.</p>
+          <p>New minus Left is the net change in holders — the same count behind the Holders box. Only real wallets are listed: pools, routers, the staking and DAO contracts, the burn address and the DAO treasury wallets are left out. Updated hourly from the chain.</p>
+        </>
+      ),
       valueGenerated:(token,cfg)=>{
         const rate=cfg&&cfg.feeRate>0?(cfg.feeRate*100).toFixed(cfg.feeRate*100%1?1:0):null;
         return(
@@ -9076,7 +9082,7 @@
        the sparklines are useH2Series. Badges keep their jobs: ⓘ on Volume (by period), RH on
        Liquidity (RH Cores modal), ⓘ on Holders (HoldersSingleModal), % of supply on Tokens in LP. */
     const KpiTilesV2=(p)=>{
-      const{token,data,loading,changeKnown,priceUp,changeTxt,changeTip,volumeByPeriod,liqMcapRatio,holdersByPeriod,holders,holderChange,tokensInLPKnown,tokensInLP,tokensInLPPct,txnsKnown,txnChange24h,burnHistoryCache,openVolume,openRH,openHolders}=p;
+      const{token,data,loading,changeKnown,priceUp,changeTxt,changeTip,volumeByPeriod,liqMcapRatio,holdersByPeriod,holders,holderChange,tokensInLPKnown,tokensInLP,tokensInLPPct,txnsKnown,txnChange24h,burnHistoryCache,openVolume,openRH,openHolders,openNewHolders=null}=p;
       const sc=useH2Scale();
       const ser=useH2Series(token,data,loading);
       const spark=token==='UFO'?'#8DFF3A':'#FFD24D';   // THE sparkline colour — one per token, every tile (2026-10-01: green on this page means UFO, never "up")
@@ -9103,7 +9109,7 @@
           {T('liq','LIQUIDITY',fmtUSD(data?.liq),null,{badge:<button type="button" onClick={openRH} aria-label="Liquidity with RH Core coins" className="tap-h">RH</button>})}
           {T('ratio','LIQ / MCAP',liqMcapRatio==='—'?'—':`${liqMcapRatio}%`,null)}
           {T('hold','HOLDERS',fmt(holdersNow),holderChange!==null?(holderChange===0?{cls:'na',node:'— 0'}:{cls:holderChange>=0?'':'dn',node:`${holderChange>=0?'↑':'↓'} ${holderChange>=0?'+':''}${fmt(holderChange)}`}):null,
-            {badge:<button type="button" onClick={openHolders} aria-label="Holders by period" className="tap-h"><H2Info/></button>})}
+            {badge:<>{openNewHolders&&<button type="button" onClick={openNewHolders} aria-label="Holders details — who joined and who left" className="tap-h" style={{marginRight:'calc(6*var(--u))'}}><span className="h2-info" aria-hidden="true">+</span></button>}<button type="button" onClick={openHolders} aria-label="Holders by period" className="tap-h"><H2Info/></button></>})}
           {T('lp',`${token} IN LP`,tokensInLPKnown?fmtAbbr(tokensInLP):'—',null,{badge:<span>{tokensInLPKnown?tokensInLPPct+'%':'—'}</span>})}
           {T('tx','TXNS 24H',txnsKnown?<>{(data?.buys||0)+(data?.sells||0)}<small><span className="b">{data?.buys||0}</span><span className="sl"> / </span><span className="s">{data?.sells||0}</span></small></>:<span title="24h transaction counts unavailable — DexScreener did not answer.">{'—'}</span>,
             txc!==null?{cls:txc>=0?'':'dn',node:`${txc>=0?'↑':'↓'} ${Math.abs(txc).toFixed(1)}%`}:null,{full:true})}
@@ -9561,6 +9567,276 @@
           {/* the SORT toggle left 2026-10-01 evening — sorting is on the table's column headings (LpTh) */}
         </div>
       </div>);
+
+    /* ===================== HOLDERS DETAILS (2026-10-02) =====================
+     * Who became a PTGC / UFO holder (balance 0 → above 0) and who stopped (above 0 → 0) over
+     * the past 24H / 7D / 30D, with what each new wallet holds now and the sea creature for it.
+     * The list is `data/new-holders.json` (hourly, `scripts/build-new-holders.mjs`, the
+     * new-holders step of data-pipeline.yml): the pipeline scans the chain, the browser reads
+     * one small file and paints at once. Only real wallets — pools, routers, the staking and DAO
+     * contracts, the burn address and the two DAO treasury wallets are never listed.
+     *
+     * The numbers: `new − left = net`, and NET is what the Holders box's change line shows once
+     * NEW_HOLDERS_LIVE is true (one count, two surfaces — Shaka, 2026-10-02: "if there is 5 new
+     * holders listed for a period, show us who they are"). Until then the box keeps PulseScan's
+     * snapshot delta and the window is reachable only through the faint dot at the bottom-right
+     * of the dashboard (`NhDot`). Going live = NEW_HOLDERS_LIVE=true: the dot goes, the button
+     * beside the ⓘ in the Holders tile appears, the box's line reads this file.
+     *
+     * Honest failure (gotcha 20): file undefined = loading, null = failed / older than
+     * NH_MAX_AGE → "—" and a Retry, never a zero. A window the file does not yet cover
+     * (`coveredFrom`) says so. Balances are at `balAt`; a wallet that arrived and has since left
+     * is in both lists and shows "left" instead of a holding.
+     * ======================================================================== */
+    const NEW_HOLDERS_LIVE=false;   // false = hidden behind the dot (Shaka, 2026-10-02: "hidden until I tell you to make it live")
+    const NEW_HOLDERS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/new-holders.json';
+    const NH_MAX_AGE=36*3600*1000,NH_TTL=5*60*1000,NH_AMBER_MS=6*3600*1000;
+    const NH_WINDOWS=[{k:'24H',h:24,label:'Past 24 hours'},{k:'7D',h:24*7,label:'Past 7 days'},{k:'30D',h:24*30,label:'Past 30 days'}];
+    let _nhFile=null,_nhAt=0,_nhP=null;
+    const nhFileOk=j=>j&&j.schema===1&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO&&Array.isArray(j.tokens.PTGC.events)&&Array.isArray(j.tokens.UFO.events)&&j.head&&isFinite(Number(j.head.ts))&&isFinite(Date.parse(j.generatedAt));
+    const fetchNewHolders=(force=false)=>{   // → the file, or null (failed / malformed / too old). Cached NH_TTL; module-level so the tile and the window share one read.
+      if(!force&&_nhAt&&Date.now()-_nhAt<NH_TTL)return Promise.resolve(_nhFile);
+      if(_nhP)return _nhP;
+      _nhP=fetch(NEW_HOLDERS_URL+'?t='+Date.now()).then(r=>r.ok?r.json():null).then(j=>{
+        _nhP=null;_nhAt=Date.now();
+        _nhFile=(nhFileOk(j)&&Date.now()-Date.parse(j.generatedAt)<NH_MAX_AGE)?j:null;
+        return _nhFile;
+      }).catch(()=>{_nhP=null;_nhAt=Date.now();_nhFile=null;return null;});
+      return _nhP;
+    };
+    /* Dashboard's read of the file for the Holders tile. undefined = loading, null = unavailable. Re-read every NH_TTL while mounted. */
+    const useNewHoldersFile=(on)=>{
+      const[f,setF]=useState(undefined);
+      useEffect(()=>{
+        if(!on)return;
+        let live=true;
+        const go=()=>fetchNewHolders().then(j=>{if(live)setF(j);});
+        go();const id=setInterval(go,NH_TTL);
+        return()=>{live=false;clearInterval(id);};
+      },[on]);
+      return f;
+    };
+    /* The window's view of one token over `hours`: arrivals (newest first), departures, net, coverage. */
+    const nhView=(file,token,hours,now=Date.now())=>{
+      if(!file)return null;
+      const T=file.tokens[token];if(!T)return null;
+      const since=now/1000-hours*3600;
+      const ins=[],outs=[];
+      const leftAfter=new Map();   // wallet → the departure that came AFTER its arrival (so the arrival row can say "left")
+      for(const e of T.events){if(e.k==='out')leftAfter.set(e.a,e);}
+      for(const e of T.events){
+        if(e.t<since)continue;
+        if(e.k==='in'){const o=leftAfter.get(e.a);ins.push({...e,bal:T.balances?T.balances[e.a]:undefined,left:o&&o.t>e.t?o:null});}
+        else outs.push({...e});
+      }
+      ins.sort((x,y)=>y.t-x.t);outs.sort((x,y)=>y.t-x.t);
+      const coveredFrom=file.coveredFrom&&Number(file.coveredFrom.ts);
+      const covered=!(coveredFrom>since+2*3600);   // 2 h tolerance — the first backfill's block arithmetic
+      return{ins,outs,net:ins.length-outs.length,covered,coveredFrom,asOf:Date.parse(file.generatedAt),balAt:Number(T.balAt)*1000||null,headTs:Number(file.head.ts)*1000};
+    };
+    const nhNet=(file,token,hours)=>{const v=nhView(file,token,hours);return v&&v.covered?v.net:null;};   // the Holders box's line: null = "—"
+    /* One wallet's league creature: the top BURN_C tier its balance reaches (Shell is the floor, 0 — a67). null = holds nothing. */
+    const holdingTier=(bal,token)=>{
+      if(!(bal>0))return null;
+      const sup=SUPPLY[token]||SUPPLY.PTGC;
+      return BURN_C.find(c=>bal>=sup*c.p/100)||BURN_C[BURN_C.length-1];
+    };
+    const nhShort=a=>a?`${a.slice(0,6)}…${a.slice(-4)}`:'—';
+    const nhWhen=t=>{const d=new Date(t*1000);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
+    const nhAgo=t=>{const m=(Date.now()/1000-t)/60;if(m<1)return'just now';if(m<60)return Math.round(m)+'m ago';if(m<48*60)return (m/60).toFixed(m<10*60?1:0).replace(/\.0$/,'')+'h ago';return Math.round(m/1440)+'d ago';};
+    const NH_THEME={PTGC:{hex:'#E8C044',rgb:'232,192,68',cls:'metallic-gold',ring:'border-yellow-400/40'},UFO:{hex:'#9DFF3A',rgb:'124,252,0',cls:'metallic-green',ring:'border-lime-400/40'}};
+
+    /* The faint dot: Shaka's private entrance while the window is hidden (bottom-right of every dashboard). */
+    const NhDot=({token,onOpen})=>(
+      <button type="button" onClick={onOpen} aria-label="Holders details (preview)" title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
+        <span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:(TOKENS[token]||TOKENS.PTGC).colorHex,opacity:0.16}}></span>
+      </button>
+    );
+
+    const NhPills=({items,value,onChange,label,hex})=>(
+      <div role="group" aria-label={label} className="inline-flex items-center gap-0.5 p-0.5 rounded-full border border-white/10 bg-black/60">
+        {items.map(it=>{const on=it.k===value;return(
+          <button key={it.k} type="button" onClick={()=>onChange(it.k)} aria-pressed={on} aria-label={it.label||it.k} className={`tap-h px-3 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.12em] transition-colors ${on?'text-black':'text-white/55 hover:text-white'}`} style={on?{background:hex,boxShadow:`0 0 14px ${hex}66`}:undefined}>{it.k}</button>);})}
+      </div>
+    );
+    const NhStat=({label,value,tone,sub})=>(
+      <div className="rounded-2xl border border-white/10 bg-black/40 px-3 py-2.5 sm:px-4 sm:py-3 min-w-0">
+        <div className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.22em] text-white/45">{label}</div>
+        <div className={`tabular-nums text-2xl sm:text-3xl font-bold leading-none mt-1 ${tone||'text-white'}`}>{value}</div>
+        {sub&&<div className="text-[10px] sm:text-[11px] text-white/40 mt-1 truncate">{sub}</div>}
+      </div>
+    );
+    const NhWallet=({a})=>(
+      <span className="inline-flex items-center gap-1.5 min-w-0">
+        <a href={`https://scan.pulsechain.com/address/${a}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[13px] sm:text-sm text-white/85 hover:text-white hover:underline whitespace-nowrap" title={a}>{nhShort(a)}<span aria-hidden="true" className="text-white/35 ml-1 text-xs">{'↗'}</span></a>
+        <CopyBtn text={a} className="text-white/40 hover:text-white"/>
+      </span>
+    );
+    const NhCreature=({bal,token,size='text-xl'})=>{
+      const c=holdingTier(bal,token);
+      if(!c)return<span className="text-white/35 text-xs">—</span>;
+      return<span className="inline-flex items-center gap-1.5"><span role="img" aria-label={c.n} className={`${size} leading-none`} style={{filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{c.e}</span><span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.12em] text-white/60">{c.n}</span></span>;
+    };
+    const NhAmount=({v,token,price})=>v==null?<span className="text-white/35">—</span>:(
+      <span className="inline-flex flex-col items-end leading-tight">
+        <span className="tabular-nums font-bold text-white">{v>0&&v<1?'<1':fmtAbbr(v)} <span className="text-white/50 font-semibold text-[0.8em]">{token}</span></span>
+        {price>0&&v*price>=1&&<span className="tabular-nums text-[11px] text-white/45">{fmtUSD(v*price)}</span>}
+      </span>
+    );
+
+    /* One arrival: a table row (sm+) or a card (phones). `left` = it has since gone back to zero. */
+    const NhRow=({e,i,token,px,hex})=>{
+      const left=!!e.left;
+        return(
+          <tr className="border-t border-white/[0.06] hover:bg-white/[0.03]">
+            <td className="py-2.5 pl-3 pr-2 text-white/35 tabular-nums text-xs">{i+1}</td>
+            <td className="py-2.5 px-2"><div className="flex items-center gap-2 flex-wrap"><NhWallet a={e.a}/>{e.r?<span className="text-[9px] font-bold tracking-[0.14em] uppercase px-1.5 py-0.5 rounded-full border border-white/20 text-white/60">back</span>:null}</div></td>
+            <td className="py-2.5 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white hover:underline">{nhWhen(e.t)}</a><div className="text-[11px] text-white/40">{nhAgo(e.t)}</div></td>
+            <td className="py-2.5 px-2 text-right">{left?<span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-red-300/80">left {nhAgo(e.left.t)}</span>:<NhAmount v={e.bal} token={token} price={px}/>}</td>
+            <td className="py-2.5 pl-2 pr-3">{left?<span className="text-white/25">—</span>:<NhCreature bal={e.bal} token={token}/>}</td>
+          </tr>);
+      };
+    const NhCard=({e,i,token,px,hex})=>{
+      const left=!!e.left;
+        return(
+          <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0"><span className="text-white/35 tabular-nums text-xs">{i+1}</span><NhWallet a={e.a}/>{e.r?<span className="text-[9px] font-bold tracking-[0.14em] uppercase px-1.5 py-0.5 rounded-full border border-white/20 text-white/60">back</span>:null}</div>
+              {left?<span className="text-white/25">—</span>:<NhCreature bal={e.bal} token={token} size="text-2xl"/>}
+            </div>
+            <div className="flex items-end justify-between gap-2 mt-2">
+              <a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-[12px] text-white/70 hover:text-white">{nhWhen(e.t)} <span className="text-white/40">· {nhAgo(e.t)}</span></a>
+              {left?<span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-red-300/80">left {nhAgo(e.left.t)}</span>:<NhAmount v={e.bal} token={token} price={px}/>}
+            </div>
+          </div>);
+      };
+    /* The window. `price` = the opener's USD price for `token`; the other token's is fetched (dsPairsFor) on the first switch. */
+    const NewHoldersModal=({token:initial,price,onClose})=>{
+      const[token,setToken]=useState(initial==='UFO'?'UFO':'PTGC');
+      const[win,setWin]=useState('7D');
+      const[file,setFile]=useState(undefined);        // undefined = loading, null = failed (gotcha 3)
+      const[prices,setPrices]=useState({[initial]:price>0?price:null});
+      const tried=useRef({});
+      const[showOut,setShowOut]=useState(false);
+      const[more,setMore]=useState(40);
+      const load=(force)=>{setFile(undefined);fetchNewHolders(force).then(setFile);};
+      useEffect(()=>{let live=true;fetchNewHolders().then(j=>{if(live)setFile(j);});return()=>{live=false;};},[]);
+      useEffect(()=>{   // a token's price, once, the first time it is shown without one (the opener passes the dashboard's)
+        if(prices[token]>0||tried.current[token])return;
+        tried.current[token]=1;let live=true;
+        dsPairsFor(TOKENS[token].address).then(pairs=>{const v=dsPriceOf(pairs,TOKENS[token].address);if(live&&v>0)setPrices(p=>({...p,[token]:v}));}).catch(()=>{});
+        return()=>{live=false;};
+      },[token]);
+      useEffect(()=>{setMore(40);setShowOut(false);},[token,win]);
+      const cfg=TOKENS[token],T=NH_THEME[token],hex=T.hex;
+      const W=NH_WINDOWS.find(w=>w.k===win)||NH_WINDOWS[1];
+      const view=React.useMemo(()=>file?nhView(file,token,W.h):null,[file,token,win]);
+      const px=prices[token]>0?prices[token]:0;
+      const ageMs=view?Date.now()-view.asOf:null;
+      const amber=ageMs!=null&&ageMs>NH_AMBER_MS;
+      const phone=typeof window!=='undefined'&&window.innerWidth<640;
+      const rows=view?view.ins.slice(0,more):[];
+      return(
+        <Modal onClose={onClose} label={`${token} holders details`} className="z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay bg-black/85">
+          <div onClick={e=>e.stopPropagation()} className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl flex flex-col rounded-none sm:rounded-3xl border bg-[#070707] overflow-y-auto overflow-x-hidden overscroll-contain" style={{borderColor:`${hex}55`,boxShadow:`0 0 120px -30px ${hex}aa, 0 40px 100px rgba(0,0,0,.8)`}}>
+            <div aria-hidden="true" className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[640px] h-[300px] rounded-full blur-3xl opacity-20" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{background:`linear-gradient(90deg, transparent, ${hex}cc, transparent)`}}></div>
+
+            {/* Header */}
+            <div className="relative shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="relative shrink-0">
+                  <div aria-hidden="true" className="absolute inset-0 rounded-full blur-xl opacity-40 scale-110" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 60%)`}}></div>
+                  <img src={cfg.logo} alt="" className="relative w-12 h-12 sm:w-16 sm:h-16"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.25em] flex items-center gap-1 min-w-0"><span className="truncate">{'\u{1F6F8}'} Holders {'·'} {token}</span><InfoTip label="Holders details" className="-my-2 ml-0.5" glyphClass="text-[10px]">{EXPLAINERS.newHolders(token)}</InfoTip></div>
+                  <h2 className={`font-orbitron text-xl sm:text-3xl font-bold tracking-wide leading-tight ${T.cls}`}>Holders Details</h2>
+                  <div className="text-white/45 text-[11px] sm:text-xs mt-0.5">{W.label} {'·'} who became a {token} holder, and who left</div>
+                </div>
+                <button type="button" onClick={onClose} aria-label="Close" className="tap-h shrink-0 w-9 h-9 rounded-full border border-white/15 text-white/60 hover:text-white hover:border-white/40 flex items-center justify-center text-lg leading-none">{'×'}</button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
+                <NhPills items={[{k:'PTGC'},{k:'UFO'}]} value={token} onChange={setToken} label="Token" hex={hex}/>
+                <NhPills items={NH_WINDOWS} value={win} onChange={setWin} label="Period" hex={hex}/>
+                <div className="ml-auto text-[11px] text-white/40 tabular-nums">
+                  {file===undefined?'Loading…':view?<span className={amber?'text-amber-300/90':''}>as of {fmtSnapshotAge(ageMs)}{amber?' — the hourly update is late':''}</span>:null}
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="relative px-4 sm:px-6 pb-5 sm:pb-6 flex-1 min-h-0">
+              {file===null?(
+                <div className="rounded-2xl border border-white/10 bg-black/40 p-6 text-center">
+                  <div className="text-white/80 font-semibold">Couldn't load the holders list</div>
+                  <div className="text-white/45 text-sm mt-1">The hourly file didn't answer, or it is more than {NH_MAX_AGE/3600000} hours old.</div>
+                  <button type="button" onClick={()=>load(true)} className="tap-h mt-4 px-4 rounded-full border text-xs font-bold uppercase tracking-[0.14em]" style={{borderColor:`${hex}88`,color:hex}}>Retry</button>
+                </div>
+              ):file===undefined?(
+                <div aria-busy="true" className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">{[0,1,2].map(i=><div key={i} className="h-[72px] rounded-2xl bg-white/[0.05] animate-pulse"></div>)}</div>
+                  {[0,1,2,3,4].map(i=><div key={i} className="h-11 rounded-xl bg-white/[0.04] animate-pulse"></div>)}
+                </div>
+              ):(
+                <>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    <NhStat label="New holders" value={fmt(view.ins.length)} tone="text-green-400" sub={view.ins.length?`${fmtAbbr(view.ins.reduce((s,e)=>s+(e.bal>0?e.bal:0),0))} ${token} held now`:null}/>
+                    <NhStat label="Left" value={fmt(view.outs.length)} tone={view.outs.length?'text-red-400':'text-white/60'} sub={view.outs.length?`${fmtAbbr(view.outs.reduce((s,e)=>s+(e.had>0?e.had:0),0))} ${token} sold or moved`:null}/>
+                    <NhStat label="Net" value={view.covered?(view.net>0?'+':'')+fmt(view.net):'—'} tone={view.net>0?'text-white':view.net<0?'text-red-300':'text-white/70'} sub={`${fmt(view.ins.length)} new \u2212 ${fmt(view.outs.length)} left`}/>
+                  </div>
+                  {!view.covered&&<div className="mt-3 text-[12px] text-amber-300/90">The list starts {new Date(view.coveredFrom*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})} — this window is not fully covered yet.</div>}
+
+                  {/* Arrivals */}
+                  <div className="mt-4 flex items-baseline justify-between gap-3">
+                    <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">New holders {'·'} newest first</div>
+                    {view.balAt&&<div className="text-[10px] text-white/35 tabular-nums">holdings as of {fmtSnapshotAge(Date.now()-view.balAt)}</div>}
+                  </div>
+                  {view.ins.length===0?(
+                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/40 p-5 text-center text-white/55 text-sm">No new {token} holders in the {W.label.toLowerCase()}.</div>
+                  ):phone?(
+                    <div className="mt-2 space-y-2">{rows.map((e,i)=><NhCard key={e.a+e.b} e={e} i={i} token={token} px={px} hex={hex}/>)}</div>
+                  ):(
+                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                          <th className="py-2 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2 px-2 text-left font-semibold">Wallet</th><th className="py-2 px-2 text-left font-semibold">Arrived</th><th className="py-2 px-2 text-right font-semibold">Holds now</th><th className="py-2 pl-2 pr-3 text-left font-semibold">League</th>
+                        </tr></thead>
+                        <tbody>{rows.map((e,i)=><NhRow key={e.a+e.b} e={e} i={i} token={token} px={px} hex={hex}/>)}</tbody>
+                      </table>
+                    </div>
+                  )}
+                  {view.ins.length>rows.length&&<button type="button" onClick={()=>setMore(m=>m+40)} className="tap-h mt-2 w-full justify-center rounded-xl border border-white/10 text-xs font-bold uppercase tracking-[0.14em] text-white/60 hover:text-white">Show {Math.min(40,view.ins.length-rows.length)} more {'·'} {view.ins.length-rows.length} left</button>}
+
+                  {/* Departures */}
+                  <div className="mt-5">
+                    <button type="button" onClick={()=>setShowOut(s=>!s)} aria-expanded={showOut} className="tap-h w-full justify-between rounded-xl border border-white/10 bg-black/40 px-3 text-left">
+                      <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">Left {'·'} {fmt(view.outs.length)} wallet{view.outs.length===1?'':'s'} sold or moved everything</span>
+                      <span aria-hidden="true" className="text-white/40 text-xs">{showOut?'▲':'▼'}</span>
+                    </button>
+                    {showOut&&(view.outs.length===0?<div className="mt-2 text-white/45 text-sm px-1">Nobody left in the {W.label.toLowerCase()}.</div>:(
+                      <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+                        <table className="w-full text-sm">
+                          {!phone&&<thead><tr className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40"><th className="py-2 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2 px-2 text-left font-semibold">Wallet</th><th className="py-2 px-2 text-left font-semibold">Left</th><th className="py-2 pl-2 pr-3 text-right font-semibold">Had</th></tr></thead>}
+                          <tbody>{view.outs.map((e,i)=>(
+                            <tr key={e.a+e.b} className="border-t border-white/[0.06]">
+                              <td className="py-2 pl-3 pr-2 text-white/35 tabular-nums text-xs">{i+1}</td>
+                              <td className="py-2 px-2"><NhWallet a={e.a}/></td>
+                              <td className="py-2 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/75 hover:text-white hover:underline">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[11px] text-white/40">{nhAgo(e.t)}</div>}</td>
+                              <td className="py-2 pl-2 pr-3 text-right"><NhAmount v={e.had} token={token} price={px}/></td>
+                            </tr>))}</tbody>
+                        </table>
+                      </div>))}
+                  </div>
+                  <div className="mt-4 text-[10px] text-white/30 leading-relaxed">Real wallets only — pools, routers, the staking and DAO contracts, the burn address and the DAO treasury wallets are never listed. A wallet is "new" when its {token} balance went from zero to above zero; it "left" when it went back to zero. Updated hourly from the chain; holdings are read at the same time.</div>
+                </>
+              )}
+            </div>
+          </div>
+        </Modal>
+      );
+    };
+    /* ===================== END HOLDERS DETAILS ===================== */
 
     const DashboardSkeleton=({token,tiles=true})=>(   // tiles=false: the v2 header draws its own tile skeletons (KpiTilesV2)
       <div aria-busy="true" aria-label={`Loading ${token}`}>
@@ -10842,6 +11118,8 @@
       const[showRHModal,setShowRHModal]=useState(false);
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHoldersSingleModal,setShowHoldersSingleModal]=useState(false);   // the ⓘ on the Holders box → HoldersSingleModal (2026-09-26)
+      const[showNewHolders,setShowNewHolders]=useState(false);   // Holders Details (2026-10-02): the faint dot while hidden, the button beside the ⓘ once NEW_HOLDERS_LIVE
+      const nhFile=useNewHoldersFile(NEW_HOLDERS_LIVE);          // data/new-holders.json, read only once the window is live — the Holders tile's change line comes from it then
       const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
       const[showXsShareModal,setShowXsShareModal]=useState(false);
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
@@ -11913,9 +12191,9 @@
           {activeTab==='dashboard'&&!loading&&(<>
           {/* v2: the seven KPI tiles with 30-day sparklines (KpiTilesV2); the classic strip is untouched below */}
           {hdrV2?<KpiTilesV2 token={token} data={data} loading={loading} changeKnown={changeKnown} priceUp={priceUp} changeTxt={changeTxt} changeTip={changeTip}
-            volumeByPeriod={volumeByPeriod} liqMcapRatio={liqMcapRatio} holdersByPeriod={holdersByPeriod} holders={holders} holderChange={holderChange}
+            volumeByPeriod={volumeByPeriod} liqMcapRatio={liqMcapRatio} holdersByPeriod={holdersByPeriod} holders={holders} holderChange={NEW_HOLDERS_LIVE?(nhFile?nhNet(nhFile,token,24):null):holderChange}
             tokensInLPKnown={tokensInLPKnown} tokensInLP={tokensInLP} tokensInLPPct={tokensInLPPct} txnsKnown={txnsKnown} txnChange24h={txnChange24h} burnHistoryCache={burnHistoryCache}
-            openVolume={()=>setShowVolumeModal(true)} openRH={()=>setShowRHModal(true)} openHolders={()=>setShowHoldersSingleModal(true)}/>:(<>
+            openVolume={()=>setShowVolumeModal(true)} openRH={()=>setShowRHModal(true)} openHolders={()=>setShowHoldersSingleModal(true)} openNewHolders={NEW_HOLDERS_LIVE?()=>setShowNewHolders(true):null}/>:(<>
           {/* Top KPI strip - silver-bordered metric cards */}
           <div className="border-b border-white/[0.06]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5">
@@ -13171,6 +13449,9 @@
 
           {/* Holder Analytics — the ⓘ on the Holders box opens this token's card (HoldersSingleModal, 2026-09-26): 7D/30D/90D trend, Wide/Tall. Reads the panel's own state. */}
           {showHoldersSingleModal&&<HoldersSingleModal token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={holderTiers} onClose={()=>closeModalAndReturn(setShowHoldersSingleModal)}/>}
+          {/* Holders Details (2026-10-02): who became / stopped being a holder. Hidden behind the faint bottom-right dot until NEW_HOLDERS_LIVE; then the button beside the ⓘ. */}
+          {showNewHolders&&<NewHoldersModal token={token} price={data&&data.price>0?data.price:0} onClose={()=>setShowNewHolders(false)}/>}
+          {!NEW_HOLDERS_LIVE&&activeTab==='dashboard'&&<NhDot token={token} onOpen={()=>setShowNewHolders(true)}/>}
           
           {/* Burn Share Modal - Twitter optimized 1.91:1 ratio */}
           {/* Burn Stats share card - fire redesign 2026-09-23 (BurnSocialCard); the 600x314 card it replaced is in git history */}

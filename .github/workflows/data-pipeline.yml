@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'Run only these steps, comma-separated: charts, coingecko, value-generated, burn-history, treasury, dao-buys, ufo-ptgc-burns, token-allocation, lv-snapshot, pair-volume. Empty = the normal hourly set.'
+        description: 'Run only these steps, comma-separated: charts, coingecko, value-generated, burn-history, treasury, dao-buys, ufo-ptgc-burns, token-allocation, lv-snapshot, pair-volume, new-holders. Empty = the normal hourly set.'
         required: false
         default: ''
       force:
@@ -78,7 +78,7 @@ jobs:
       - name: Gate — hourly steps (only `only=` can switch these off)
         id: g_hourly
         run: |
-          for s in coingecko value-generated burn-history treasury dao-buys pair-volume; do
+          for s in coingecko value-generated burn-history treasury dao-buys pair-volume new-holders; do
             if [ -z "$ONLY" ] || echo ",$ONLY," | tr -d ' ' | grep -q ",$s,"; then v=true; else v=false; fi
             echo "[gate] $s: run=$v"
             echo "${s//-/_}=$v" >> "$GITHUB_OUTPUT"
@@ -152,6 +152,12 @@ jobs:
         continue-on-error: true
         run: node scripts/build-pair-volume.mjs
 
+      - name: new-holders.json (wallets that became / stopped being PTGC + UFO holders, 30 days — the Holders Details window, 2026-10-02)
+        id: new_holders
+        if: steps.g_hourly.outputs.new_holders == 'true'
+        continue-on-error: true
+        run: node scripts/build-new-holders.mjs
+
       # ---------- one commit, only the files the steps above own ----------
       - name: Commit if changed (rebase + retry)
         if: always()
@@ -173,7 +179,8 @@ jobs:
             data/ufo-ptgc-burns.json data/ufo-ptgc-burns-cache.json \
             data/token-allocation.json \
             data/lv-snapshots.json data/lv-latest.json \
-            data/pair-volume-7d.json; do
+            data/pair-volume-7d.json \
+            data/new-holders.json; do
             if [ -e "$f" ] || git ls-files --error-unmatch "$f" >/dev/null 2>&1; then add="$add $f"; fi
           done
           # shellcheck disable=SC2086
@@ -206,7 +213,8 @@ jobs:
                    value-generated:${{ steps.value_generated.outcome }} burn-history:${{ steps.burn_history.outcome }} \
                    treasury:${{ steps.treasury.outcome }} dao-buys:${{ steps.dao_buys.outcome }} \
                    ufo-ptgc-burns:${{ steps.ufo_ptgc.outcome }} token-allocation:${{ steps.alloc.outcome }} \
-                   lv-snapshot:${{ steps.lv.outcome }} pair-volume:${{ steps.pair_volume.outcome }}; do
+                   lv-snapshot:${{ steps.lv.outcome }} pair-volume:${{ steps.pair_volume.outcome }} \
+                   new-holders:${{ steps.new_holders.outcome }}; do
             echo "  $s"
             case "$s" in *:failure) failed="$failed ${s%%:*}";; esac
           done
