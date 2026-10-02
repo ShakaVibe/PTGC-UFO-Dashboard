@@ -348,11 +348,18 @@
     .nh-stat .bars{position:absolute;right:-6px;bottom:-4px;height:88%;width:auto;opacity:.55;pointer-events:none;filter:drop-shadow(0 0 10px rgba(var(--c),.35))}
     .nh-stat .ic{position:relative;width:54px;height:54px;flex:none;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.8))}
     .nh-stat .l{position:relative;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.55)}
-    .nh-stat .v{position:relative;font-size:42px;font-weight:700;line-height:1;margin-top:4px;color:#fff;text-shadow:0 0 18px rgba(var(--c),.45)}
+    .nh-stat .v{position:relative;font-size:46px;font-weight:700;line-height:1;margin-top:6px;color:#fff;text-shadow:0 0 18px rgba(var(--c),.45)}
     .nh-stat .s{position:relative;font-size:13px;color:rgba(255,255,255,.45);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .nh-lad{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 10px}
+    .nh-tot{--c:245,197,66;margin-top:16px;border-radius:16px;padding:14px 18px;display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:10px 28px;background:linear-gradient(90deg,rgba(var(--c),.14),rgba(6,8,12,.9) 55%,rgba(6,8,12,.9));border:1px solid rgba(var(--c),.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 22px -8px rgba(var(--c),.5)}
+    .nh-tot .l{font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:rgba(var(--c),.95)}
+    .nh-tot .t{font-size:15px;color:rgba(255,255,255,.7);margin-top:3px;white-space:nowrap}
+    .nh-tot .v{font-size:30px;font-weight:700;line-height:1;color:#fff;white-space:nowrap}
+    .nh-tot .u{font-size:18px;font-weight:600;color:#4ade80;margin-top:4px}
+    .nh-tot-r{justify-self:end}
+    @media(max-width:639.98px){.nh-tot{grid-template-columns:1fr 1fr;padding:12px 14px;gap:8px 12px}.nh-tot-r{grid-column:1/-1;justify-self:start}.nh-tot .v{font-size:24px}.nh-tot .u{font-size:15px}}
+    .nh-lad{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 12px}
     .nh-lad span{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
-    .nh-lad b{font-size:13px;font-weight:700;color:rgba(255,255,255,.7);font-variant-numeric:tabular-nums}
+    .nh-lad b{font-size:16px;font-weight:700;color:rgba(255,255,255,.7);font-variant-numeric:tabular-nums}
     @media(max-width:639.98px){.nh-stat{min-height:84px;padding:10px 12px;gap:10px;border-radius:14px}.nh-stat .ic{width:44px;height:44px}.nh-stat .v{font-size:30px}.nh-stat .l{font-size:10px}.nh-stat .s{font-size:11px}.nh-stat .bars{opacity:.4}}
     .p2 [role="group"]:not(.p2-pill)>button[aria-pressed="true"]{color:#fff!important;background:linear-gradient(180deg,rgba(var(--tg),.32),rgba(var(--tg),.14))!important;box-shadow:inset 0 0 0 1px rgba(var(--tg),.6),inset 0 1px 0 rgba(255,255,255,.18),0 0 14px -2px rgba(var(--tg),.55);text-shadow:0 0 8px rgba(var(--tg),.55)}
     .p2 .p2-ctl{position:absolute;right:24px;top:30px;width:auto;z-index:1;flex-direction:column;align-items:flex-end;gap:7px!important}   /* Value Generated: the two toggles STACKED at the top right, USD/TOK level with the Burn panel's (Shaka, 2026-10-01, his second call) */
@@ -9284,7 +9291,8 @@
     /* Shaka's sea-creature art (2026-10-01, sea_creature_league_icons.zip → logos/panels/sea-*.webp, 160 px): under v2 the
        dashboard panels draw these instead of the creature emoji. The emoji stay the data (BURN_C), the tier names, the
        classic branches, the share cards and the other pages — SeaIcon just maps an emoji to its picture. */
-    const SEA_ART_V=3;   // bump when the art files change under the same names — GitHub Pages serves them with a 10-minute cache and the browser keeps showing the old picture otherwise (2026-10-01: Shaka saw the water set after the clean set was live)
+    const SEA_ART_V=4;   // 4 (2026-10-02): sea-shrimp.webp re-cut from Shaka's clean file — the old one had a baked-in checkerboard inside the curl
+    // (was 3)   // bump when the art files change under the same names — GitHub Pages serves them with a 10-minute cache and the browser keeps showing the old picture otherwise (2026-10-01: Shaka saw the water set after the clean set was live)
     const SEA_ART={'\u{1F531}':'trident','\u{1F40B}':'whale','\u{1F988}':'shark','\u{1F42C}':'dolphin','\u{1F991}':'squid','\u{1F422}':'turtle','\u{1F990}':'shrimp','\u{1F41A}':'shell'};
     const SeaIcon=({e,size=30,className=''})=>{const k=SEA_ART[e];return k?<img src={`logos/panels/sea-${k}.webp?v=${SEA_ART_V}`} alt="" title={BURN_C.find(c=>c.e===e)?.n} className={`sea-ic ${className}`} style={{width:size,height:size}}/>:<span className={className}>{e}</span>;};
     const CreatureStripV2=({tiers})=>(
@@ -9715,31 +9723,33 @@
           {list.map((c,i)=><span key={i}><SeaIcon e={c.e} size={size}/><b>{'\u00d7'}{fmt(c.cnt)}</b></span>)}
         </span>);
     };
+    /* A wallet that had left earlier in the period and bought back in. */
+    const NhReturning=()=><span className="text-[11px] font-bold tracking-[0.12em] uppercase px-2 py-0.5 rounded-full border border-amber-300/40 text-amber-200/90 whitespace-nowrap" title="Sold out earlier in this period, then bought back in">returning</span>;
     const NhWallet=({a})=>(
       <span className="inline-flex items-center gap-1.5 min-w-0">
-        <a href={`https://scan.pulsechain.com/address/${a}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[15px] sm:text-base text-white/90 hover:text-white hover:underline whitespace-nowrap" title={a}>{nhShort(a)}<span aria-hidden="true" className="text-white/35 ml-1 text-xs">{'↗'}</span></a>
+        <a href={`https://scan.pulsechain.com/address/${a}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[16px] sm:text-[18px] text-white/90 hover:text-white hover:underline whitespace-nowrap" title={a}>{nhShort(a)}<span aria-hidden="true" className="text-white/35 ml-1 text-xs">{'↗'}</span></a>
         <CopyBtn text={a} className="text-white/40 hover:text-white"/>
       </span>
     );
     const NhAmount=({v,token,price,usd=false})=>v==null?<span className="text-white/35">—</span>:(   // usd=true: the USD line under the amount (cards); the tables give USD its own column (NhUsd)
       <span className="inline-flex flex-col items-end leading-tight">
-        <span className="tabular-nums font-bold text-white text-[15px] sm:text-base">{v>0&&v<1?'<1':fmtAbbr(v)} <span className="text-white/55 font-semibold text-[0.8em]">{token}</span></span>
-        {usd&&price>0&&v*price>=1&&<span className="tabular-nums text-[12px] text-white/50">{fmtUSD(v*price)}</span>}
+        <span className="tabular-nums font-bold text-white text-[16px] sm:text-[18px] whitespace-nowrap">{v>0&&v<1?'<1':fmtAbbr(v)} <span className="text-white/55 font-semibold text-[0.8em]">{token}</span></span>
+        {usd&&price>0&&v*price>=1&&<span className="tabular-nums text-[14px] text-green-400">{fmtUSD(v*price)}</span>}
       </span>
     );
-    const NhUsd=({v,price})=>(v>0&&price>0&&v*price>=1)?<span className="tabular-nums text-white/85 text-[15px] sm:text-base">{fmtUSD(v*price)}</span>:<span className="text-white/30">—</span>;
+    const NhUsd=({v,price})=>(v>0&&price>0&&v*price>=1)?<span className="tabular-nums text-green-400 font-semibold text-[16px] sm:text-[18px]">{fmtUSD(v*price)}</span>:<span className="text-white/30">—</span>;
 
     /* One arrival: a table row (sm+) or a card (phones). `left` = it has since gone back to zero. */
     const NhRow=({e,i,token,px,hex})=>{
       const left=!!e.left;
         return(
           <tr className="border-t border-white/[0.06] hover:bg-white/[0.03]">
-            <td className="py-3 pl-3 pr-2 tabular-nums text-sm font-semibold" style={{color:hex}}>{i+1}</td>
-            <td className="py-3 px-2"><div className="flex items-center gap-2 flex-wrap"><NhWallet a={e.a}/>{e.r?<span className="text-[10px] font-bold tracking-[0.14em] uppercase px-1.5 py-0.5 rounded-full border border-white/20 text-white/60">back</span>:null}</div></td>
-            <td className="py-3 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[15px] sm:text-base">{nhWhen(e.t)}</a><div className="text-[12px] text-white/45">{nhAgo(e.t)}</div></td>
+            <td className="py-3 pl-3 pr-2 tabular-nums text-base font-semibold" style={{color:hex}}>{i+1}</td>
+            <td className="py-3 px-2"><div className="flex items-center gap-2 flex-wrap"><NhWallet a={e.a}/>{e.r?<NhReturning/>:null}</div></td>
+            <td className="py-3 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[16px] sm:text-[17px]">{nhWhen(e.t)}</a><div className="text-[13px] text-white/45">{nhAgo(e.t)}</div></td>
             <td className="py-3 px-2 text-right">{left?<span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-red-300/80">left {nhAgo(e.left.t)}</span>:<NhAmount v={e.bal} token={token} price={px}/>}</td>
             <td className="py-3 px-2 text-right">{left?<span className="text-white/25">—</span>:<NhUsd v={e.bal} price={px}/>}</td>
-            <td className="py-3 pl-2 pr-3">{left?<span className="text-white/25">—</span>:<NhLadder bal={e.bal} token={token} size={34}/>}</td>
+            <td className="py-3 pl-2 pr-3">{left?<span className="text-white/25">—</span>:<NhLadder bal={e.bal} token={token} size={46}/>}</td>
           </tr>);
       };
     const NhCard=({e,i,token,px,hex})=>{
@@ -9747,8 +9757,8 @@
         return(
           <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0"><span className="tabular-nums text-sm font-semibold" style={{color:hex}}>{i+1}</span><NhWallet a={e.a}/>{e.r?<span className="text-[9px] font-bold tracking-[0.14em] uppercase px-1.5 py-0.5 rounded-full border border-white/20 text-white/60">back</span>:null}</div>
-              {left?<span className="text-white/25">—</span>:<NhLadder bal={e.bal} token={token} size={30} max={3}/>}
+              <div className="flex items-center gap-2 min-w-0 flex-wrap"><span className="inline-flex items-center gap-2 whitespace-nowrap"><span className="tabular-nums text-sm font-semibold" style={{color:hex}}>{i+1}</span><NhWallet a={e.a}/></span>{e.r?<div className="w-full mt-1"><NhReturning/></div>:null}</div>
+              {left?<span className="text-white/25">—</span>:<div className="shrink-0 max-w-[52%] flex justify-end"><NhLadder bal={e.bal} token={token} size={40} max={3}/></div>}
             </div>
             <div className="flex items-end justify-between gap-2 mt-2">
               <a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-[13px] text-white/80 hover:text-white">{nhWhen(e.t)} <span className="text-white/45">· {nhAgo(e.t)}</span></a>
@@ -9756,6 +9766,23 @@
             </div>
           </div>);
       };
+    /* The band above the list: what the period's new holders hold between them — token total, USD (green) and the league
+       ladder of that sum in Shaka's sea art. */
+    const NhTotals=({ins,token,px,rgb,hex,label})=>{
+      const tot=ins.reduce((s,e)=>s+(e.bal>0?e.bal:0),0);
+      return(
+        <div className="nh-tot" style={{'--c':rgb}}>
+          <div className="nh-tot-l">
+            <div className="l">Totals {'·'} {label}</div>
+            <div className="t">{fmt(ins.length)} new holder{ins.length===1?'':'s'} hold</div>
+          </div>
+          <div className="nh-tot-m">
+            <div className="v tabular-nums">{fmtAbbr(tot)} <span style={{color:hex}}>{token}</span></div>
+            {px>0&&tot*px>=1&&<div className="u tabular-nums">{fmtUSD(tot*px)}</div>}
+          </div>
+          <div className="nh-tot-r"><NhLadder bal={tot} token={token} size={54} max={5}/></div>
+        </div>);
+    };
     /* The window. `price` = the opener's USD price for `token`; the other token's is fetched (dsPairsFor) on the first switch. */
     const NewHoldersModal=({token:initial,price,onClose})=>{
       const[token,setToken]=useState(initial==='UFO'?'UFO':'PTGC');
@@ -9800,7 +9827,7 @@
                 </div>
                 <div className="flex-1 min-w-0" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
                   <div className="text-white/70 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.25em] flex items-center gap-1 min-w-0"><span className="truncate">{'\u{1F6F8}'} Holders {'\u00b7'} {token}</span><InfoTip label="Holders details" className="-my-2 ml-0.5" glyphClass="text-[10px]" tone="text-white/70 hover:text-white">{EXPLAINERS.newHolders(token)}</InfoTip></div>
-                  <h2 className={`nh-title font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight ${T.cls}`}>Holders Details</h2>
+                  <h2 className="nh-title font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight" style={{color:hex}}>Holders Details</h2>
                   <div className="text-white/85 text-[12px] sm:text-sm mt-1">{W.label} {'\u00b7'} who became a {token} holder, and who left</div>
                 </div>
                 <button type="button" onClick={onClose} aria-label="Close" className="tap-h shrink-0 w-9 h-9 rounded-full border border-white/25 bg-black/50 text-white/80 hover:text-white hover:border-white/60 flex items-center justify-center text-lg leading-none">{'\u00d7'}</button>
@@ -9830,11 +9857,14 @@
               ):(
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-                    <NhStat kind="new" label="New holders" value={fmt(view.ins.length)} sub={view.ins.length?`${fmtAbbr(view.ins.reduce((s,e)=>s+(e.bal>0?e.bal:0),0))} ${token} held now`:'nobody yet'}/>
-                    <NhStat kind="left" label="Left" value={fmt(view.outs.length)} sub={view.outs.length?`${fmtAbbr(view.outs.reduce((s,e)=>s+(e.had>0?e.had:0),0))} ${token} sold or moved`:'nobody left'}/>
-                    <NhStat kind="net" label="Net" value={view.covered?(view.net>0?'+':'')+fmt(view.net):'\u2014'} sub={`${fmt(view.ins.length)} new \u2212 ${fmt(view.outs.length)} left`}/>
+                    <NhStat kind="new" label="New holders" value={fmt(view.ins.length)}/>
+                    <NhStat kind="left" label="Left" value={fmt(view.outs.length)}/>
+                    <NhStat kind="net" label="Net" value={view.covered?(view.net>0?'+':'')+fmt(view.net):'\u2014'}/>
                   </div>
                   {!view.covered&&<div className="mt-3 text-[12px] text-amber-300/90">The list starts {new Date(view.coveredFrom*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})} — this window is not fully covered yet.</div>}
+
+                  {/* Totals from the period's new holders: tokens, USD, the creature ladder of the sum (Shaka, round 4) */}
+                  {view.ins.length>0&&<NhTotals ins={view.ins} token={token} px={px} rgb={T.rgb} hex={hex} label={W.label}/>}
 
                   {/* Arrivals */}
                   <div className="mt-4 flex items-baseline justify-between gap-3">
@@ -9849,7 +9879,7 @@
                     <div className="mt-2 rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
                       <table className="w-full text-sm">
                         <thead><tr className="text-[12px] font-semibold uppercase tracking-[0.18em] text-white/50">
-                          <th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2.5 px-2 text-left font-semibold">Wallet</th><th className="py-2.5 px-2 text-left font-semibold">Arrived</th><th className="py-2.5 px-2 text-right font-semibold">Holds now</th><th className="py-2.5 px-2 text-right font-semibold">USD value</th><th className="py-2.5 pl-2 pr-3 text-left font-semibold">League</th>
+                          <th className="py-2.5 pl-3 pr-2 text-left font-semibold">#</th><th className="py-2.5 px-2 text-left font-semibold">Wallet</th><th className="py-2.5 px-2 text-left font-semibold">Arrived</th><th className="py-2.5 px-2 text-right font-semibold">Holds now</th><th className="py-2.5 px-2 text-right font-semibold whitespace-nowrap">USD value</th><th className="py-2.5 pl-2 pr-3 text-left font-semibold">League</th>
                         </tr></thead>
                         <tbody>{rows.map((e,i)=><NhRow key={e.a+e.b} e={e} i={i} token={token} px={px} hex={hex}/>)}</tbody>
                       </table>
@@ -9871,10 +9901,10 @@
                             <tr key={e.a+e.b} className="border-t border-white/[0.06]">
                               <td className="py-3 pl-3 pr-2 tabular-nums text-sm font-semibold" style={{color:hex}}>{i+1}</td>
                               <td className="py-3 px-2"><NhWallet a={e.a}/></td>
-                              <td className="py-3 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[15px] sm:text-base">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[12px] text-white/45">{nhAgo(e.t)}</div>}</td>
+                              <td className="py-3 px-2 whitespace-nowrap"><a href={`https://scan.pulsechain.com/tx/${e.tx}`} target="_blank" rel="noopener noreferrer" className="text-white/90 hover:text-white hover:underline text-[16px] sm:text-[17px]">{phone?nhAgo(e.t):nhWhen(e.t)}</a>{!phone&&<div className="text-[13px] text-white/45">{nhAgo(e.t)}</div>}</td>
                               <td className="py-3 px-2 text-right"><NhAmount v={e.had} token={token} price={px} usd={phone}/></td>
                               {!phone&&<td className="py-3 px-2 text-right"><NhUsd v={e.had} price={px}/></td>}
-                              {!phone&&<td className="py-3 pl-2 pr-3"><NhLadder bal={e.had} token={token} size={30} max={3}/></td>}
+                              {!phone&&<td className="py-3 pl-2 pr-3"><NhLadder bal={e.had} token={token} size={40} max={3}/></td>}
                             </tr>))}</tbody>
                         </table>
                       </div>))}
