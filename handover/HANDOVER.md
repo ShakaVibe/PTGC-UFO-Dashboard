@@ -31,7 +31,10 @@ is PulseScan's NET, there is no list of five behind it; he chose one count on bo
 from the new hourly `new-holders` step (`scripts/build-new-holders.mjs`, exact balances at both ends of each scanned range,
 contracts and the DAO wallets excluded, 30-day backfill done: PTGC 7D net +22 = the box's +22). **Hidden:** `NEW_HOLDERS_LIVE=false`
 → a very faint dot bottom-right of both dashboards opens it (`NhDot`); **go-live = that one constant true** → dot gone, a "+"
-button beside the Holders ⓘ, the tile's line from the file. Gotcha 40. `sessions/2026-10-02.md` "evening". NEXT: his look at
+button beside the Holders ⓘ, the tile's line from the file. Gotcha 40. `sessions/2026-10-02.md` "evening". **Round 2 (same evening): his art on it** — the gold UFO panorama as the header plate
+(`logos/holders/nh-sky.jpg`, green-rotated on UFO), his New / Left / Net icons + bar-chart art on the tiles (`.nh-stat`), the panels'
+glass toggles (`.nh-tg`), and the league as the creature LADDER in his sea art (`NhLadder`: 🐬×1 🦑×8 🦐×4 — getBurnC on the
+STARTING supply, no words). Pushed by Shaka: the build (`91405a01a`); round 2 written to the Mac, not pushed. NEXT: his look at
 the window (Mac + phone, both tokens), then whatever he wants changed, then the go-live word; the owed v2 items below stand.
 
 **2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
@@ -808,7 +811,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    `NewHoldersModal`. `NEW_HOLDERS_LIVE=false` = the faint bottom-right dot (`NhDot`) is the only way in and the Holders
    tile keeps PulseScan's snapshot delta; `true` = no dot, a "+" beside the tile's ⓘ, and the tile's change line is the
    file's 24 h net (`nhNet`, "—" when the file is missing or stale). The window's NET must equal that line — they are the
-   same function. Don't make the box read PulseScan again once live, and don't list arrivals without departures: the
+   same function. **Known and deliberate until go-live:** the box's PulseScan figure and the window disagree — on day one the
+   box read "+5" while the window read 3 new / 0 left; every recipient in PulseScan's own snapshot window was checked on
+   chain and exactly three wallets went 0 → >0, no pools, nobody left. PulseScan's counter is its indexer's number, not
+   wallets. Shaka chose (2026-10-02) to leave the box on PulseScan until the flip rather than switch the line early. Don't make the box read PulseScan again once live, and don't list arrivals without departures: the
    numbers stop matching. Harness: `probes/nh-state.js` (README line); the file is served from `data/`.
 
 39. **A gradient defined inside a hidden SVG does not paint** (2026-10-03). `H2Tri` (the change triangle) is rendered twice —

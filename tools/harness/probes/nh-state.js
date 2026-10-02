@@ -5,7 +5,7 @@
   const tileBtn=document.querySelector('button[aria-label^="Holders details —"]');
   const r={dot:!!dot,dotRect:dot?(b=>({x:b.x,y:b.y,w:b.width,h:b.height}))(dot.getBoundingClientRect()):null,tileBtn:!!tileBtn,open:!!dlg};
   if(dlg){
-    const stats=[...dlg.querySelectorAll('.tabular-nums.text-2xl, .tabular-nums.text-3xl')].map(e=>e.textContent.trim());
+    const stats=[...dlg.querySelectorAll('.nh-stat .v')].map(e=>e.textContent.trim());
     r.stats=stats.slice(0,3);
     r.title=(dlg.querySelector('h2')||{}).textContent;
     r.rows=dlg.querySelectorAll('tbody tr').length;
