@@ -8,15 +8,14 @@
 // Method, per run (incremental — the file carries a block cursor):
 //   1. eth_getLogs Transfer(address,address,uint256) for each token from cursor+1 to head−3.
 //      First run (no file): the last BACKFILL_DAYS days, so the window is full from day one.
-//   2. Every address a transfer touched is classified against two EXACT balances:
-//      balanceOf at the block before the range (archive read — rpc.pulsechain.com serves it)
-//      and balanceOf at head. 0 → >0 is an arrival, >0 → 0 a departure, anything else is a
-//      wallet that was already holding (or never held) and is left alone. A wallet that arrived
-//      AND left inside one range nets to nothing and is not recorded — PulseScan's holder count
-//      would not show it either.
-//   3. The transfers are replayed from the exact "before" balance to find WHICH transfer made
-//      the crossing (the arrival's block/tx; the departure's block/tx). For a departure the
-//      amount it held is read exactly: balanceOf at the block before that last transfer.
+//   2. Every address a transfer touched: EXACT balanceOf at the block before the range (archive
+//      read — rpc.pulsechain.com serves it) and at every block in which it had a transfer. Each
+//      crossing of DUST (1 wei — "anything above zero", Shaka) between consecutive states is an event at the
+//      later block — below → at/above = arrival, the reverse = departure. A wallet may arrive,
+//      leave and arrive again inside one range; all of it is recorded (schema 2; schema 1 compared
+//      the two endpoints only and missed the bounces). No replay of Transfer values: a sell emits
+//      ~99 % of what left (the fee goes without a Transfer from the holder), so a replay never
+//      reaches zero. A departure's `had` is the exact balance before its last transfer block.
 //   4. Contracts are never holders here: a known list (pairs, staking, router, burn, the DAO
 //      wallets, the token contracts) plus eth_getCode on every unknown address (cached in the
 //      file's `contracts` map so each address costs one call, once).
@@ -42,7 +41,12 @@ const BLOCKS_PER_DAY = 8640;                                      // ~10 s block
 const HEAD_LAG = 3;                                               // blocks behind the tip (reorg margin)
 const LOG_CHUNK = Number(process.env.LOG_CHUNK || 20000);         // blocks per eth_getLogs (halved on refusal)
 const CONCURRENCY = Number(process.env.CONCURRENCY || 24);
-const SCHEMA = 1;
+const SCHEMA = 2;   // 2 = every crossing inside a range, exact per-block states (2026-10-02 round 3; 1 = endpoints only)
+// A wallet HOLDS when its balance is at least DUST. Shaka's call (2026-10-02, after seeing both): NO floor — any
+// balance above zero is a holder, the same reading PulseScan has. (A one-token floor was built and measured first:
+// 90 of the 138 PTGC wallets that left in 30 days still hold sell residue like 0.00005 PTGC, which that floor would
+// have called "left" and this reading calls "holding". Set DUST = 10n ** 18n to get the floor back.)
+const DUST = 1n;
 
 // Same addresses as ADDR / TOKENS in index.html — keep in sync (gotcha 00).
 const TOKENS = {
@@ -176,36 +180,52 @@ const main = async () => {
     addrs.forEach((a, k) => { if (codeFlags[k]) { contracts[a] = true; byAddr.delete(a); nContracts++; } });
     console.log(`  ${nContracts} contracts skipped, ${byAddr.size} wallets to classify`);
 
-    // Exact balances at both ends of the range.
+    // EXACT states, no replay: for every wallet, balanceOf at the block before the range and at each block in which it
+    // had a transfer; a crossing of the DUST floor between two consecutive states is an event at the later block. Replaying
+    // the Transfer values does not work for these tokens — a sell emits transfers for ~99 % of what left (the fee leaves
+    // without a Transfer from the holder), so a replay never reaches zero (round 3: every departure was being missed until
+    // the endpoint fallback caught the final state; the wallet that went 846M → 0 → 4.26B → 0.01 UFO inside the window
+    // showed one event instead of three). Cost: one read per (wallet, block) pair — a few thousand for a 30-day backfill,
+    // a few dozen per hourly run.
     const wallets = [...byAddr.keys()];
+    const holds = b => b >= DUST;
+    const pairs = [];   // {a, b} in wallet order, blocks ascending
+    const walletBlocks = new Map();
+    for (const a of wallets) {
+      const bs = [...new Set(byAddr.get(a).map(x => x.b))].sort((x, y) => x - y);
+      walletBlocks.set(a, bs);
+      for (const b of bs) pairs.push({ a, b });
+    }
+    console.log(`  ${pairs.length + wallets.length} exact balance reads (${wallets.length} wallets, ${pairs.length} transfer blocks)`);
     const before = await pool(wallets, a => balanceAt(token, a, from - 1));
-    const now = await pool(wallets, a => balanceAt(token, a, head));
-    const known = new Map(events.map(e => [e.a + ':' + e.k, e]));   // dedupe guard — an event is one (wallet, kind) per crossing
-    const lastKindOf = a => { const es = events.filter(e => e.a === a); return es.length ? es[es.length - 1].k : null; };
+    const states = await pool(pairs, p => balanceAt(token, p.a, p.b));
+    const stateAt = new Map(pairs.map((p, i) => [p.a + ':' + p.b, states[i]]));
+    const known = new Set(events.map(e => e.a + ':' + e.k + ':' + e.b));
     let nIn = 0, nOut = 0, nSkipped = 0;
-    const newEvents = [];
-    for (let k = 0; k < wallets.length; k++) {
-      const a = wallets[k], b0 = before[k], b1 = now[k];
-      const arrived = b0 === 0n && b1 > 0n, left = b0 > 0n && b1 === 0n;
-      if (!arrived && !left) { nSkipped++; continue; }
-      // Replay the wallet's transfers from the exact starting balance to find the crossing.
-      let run = b0, crossing = null;
+    const found = [];   // {a, k, x, had}
+    wallets.forEach((a, k) => {
+      let prev = before[k], any = false;
       const list = byAddr.get(a);
-      for (const x of list) {
-        const wasZero = run <= 0n;
-        run += x.dir === 'in' ? x.v : -x.v;
-        if (arrived && wasZero && run > 0n) crossing = x;            // the LAST 0→>0 wins (a wallet that bounced ends on its final arrival)
-        if (left && !wasZero && run <= 0n) crossing = x;              // the LAST >0→0 wins
+      for (const b of walletBlocks.get(a)) {
+        const cur = stateAt.get(a + ':' + b);
+        if (holds(prev) !== holds(cur)) {
+          const kind = holds(cur) ? 'in' : 'out';
+          const inBlock = list.filter(x => x.b === b && x.dir === kind);
+          const x = inBlock.length ? inBlock[inBlock.length - 1] : list.filter(x => x.b === b).pop();
+          found.push({ a, k: kind, x, had: kind === 'out' ? prev : null });
+          any = true;
+        }
+        prev = cur;
       }
-      if (!crossing) crossing = arrived ? list.find(x => x.dir === 'in') || list[0] : [...list].reverse().find(x => x.dir === 'out') || list[list.length - 1];   // reflection drift — fall back to the first in / last out
-      const ev = { a, k: arrived ? 'in' : 'out', b: crossing.b, tx: crossing.tx, t: 0 };
-      if (arrived) {
-        if (lastKindOf(a) === 'out') ev.r = 1;                        // returning: left inside the window, back again
-        nIn++;
-      } else {
-        try { ev.had = Number(await balanceAt(token, a, crossing.b - 1)) / 10 ** cfg.decimals; } catch (e) { ev.had = null; }
-        nOut++;
-      }
+      if (!any) nSkipped++;
+    });
+    const newEvents = [];
+    const lastKind = new Map(events.map(e => [e.a, e.k]));   // after the kept history, in time order
+    for (const f of found) {
+      const ev = { a: f.a, k: f.k, b: f.x.b, tx: f.x.tx, t: 0 };
+      if (f.k === 'in') { if (lastKind.get(f.a) === 'out') ev.r = 1; nIn++; }   // returning: left inside the window, back again
+      else { ev.had = Number(f.had) / 10 ** cfg.decimals; nOut++; }
+      lastKind.set(f.a, f.k);
       newEvents.push(ev);
     }
     // Timestamps for the new events' blocks (one read per distinct block).
@@ -215,8 +235,7 @@ const main = async () => {
     for (const ev of newEvents) {
       ev.t = tsOf.get(ev.b);
       if (ev.t < keepFrom) continue;                                 // a long-stalled cursor: older than the window, not worth keeping
-      const key = ev.a + ':' + ev.k;
-      if (known.has(key) && known.get(key).b === ev.b) continue;   // already recorded (overlapping re-run)
+      if (known.has(ev.a + ':' + ev.k + ':' + ev.b)) continue;   // already recorded (overlapping re-run)
       events.push(ev);
     }
     events.sort((x, y) => x.t - y.t || x.b - y.b);

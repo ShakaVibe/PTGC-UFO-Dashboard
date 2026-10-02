@@ -34,7 +34,12 @@ contracts and the DAO wallets excluded, 30-day backfill done: PTGC 7D net +22 = 
 button beside the Holders ⓘ, the tile's line from the file. Gotcha 40. `sessions/2026-10-02.md` "evening". **Round 2 (same evening): his art on it** — the gold UFO panorama as the header plate
 (`logos/holders/nh-sky.jpg`, green-rotated on UFO), his New / Left / Net icons + bar-chart art on the tiles (`.nh-stat`), the panels'
 glass toggles (`.nh-tg`), and the league as the creature LADDER in his sea art (`NhLadder`: 🐬×1 🦑×8 🦐×4 — getBurnC on the
-STARTING supply, no words). Pushed by Shaka: the build (`91405a01a`); round 2 written to the Mac, not pushed. NEXT: his look at
+STARTING supply, no words). **Round 3:** his seven size / readability asks, USD column, opens on 24H; the script rebuilt on EXACT
+per-block balances (schema 2 — a replay of Transfer values never reaches zero on these tokens, the fee leaves without a Transfer;
+endpoints-only missed wallets that bounced inside the range); a one-token dust floor measured then DROPPED at Shaka's call
+(`DUST = 1n`, above zero = holding, PulseScan's reading); the window reads per WALLET over the period with an "In and out"
+section for bots that came and went (counted in neither). PTGC 30D now 130 / 52 / +78 vs PulseScan +94. Pushed by Shaka: the
+build (`91405a01a`) and round 2 (`68722802d`); round 3 written to the Mac, not pushed. NEXT: his look at
 the window (Mac + phone, both tokens), then whatever he wants changed, then the go-live word; the owed v2 items below stand.
 
 **2026-10-03, closed by Shaka ("lets wrap it up for the day"): v2 IS LIVE (`93e7774e7`), post-deploy walk done and pushed
@@ -811,7 +816,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    `NewHoldersModal`. `NEW_HOLDERS_LIVE=false` = the faint bottom-right dot (`NhDot`) is the only way in and the Holders
    tile keeps PulseScan's snapshot delta; `true` = no dot, a "+" beside the tile's ⓘ, and the tile's change line is the
    file's 24 h net (`nhNet`, "—" when the file is missing or stale). The window's NET must equal that line — they are the
-   same function. **Known and deliberate until go-live:** the box's PulseScan figure and the window disagree — on day one the
+   same function. **Schema 2 (round 3): exact balance at the block before the range and at every block a wallet traded in; a
+   crossing of zero between consecutive states is the event — never replay Transfer values here (the fee leaves without a
+   Transfer, a replay never hits zero). `DUST = 1n` = Shaka's "no floor"; `10n ** 18n` = the one-token floor he saw and
+   declined. The window is per WALLET per period (`nhView`): first-event state vs last-event state; came-and-went = "In and
+   out", listed, not counted. **Known and deliberate until go-live:** the box's PulseScan figure and the window disagree — on day one the
    box read "+5" while the window read 3 new / 0 left; every recipient in PulseScan's own snapshot window was checked on
    chain and exactly three wallets went 0 → >0, no pools, nobody left. PulseScan's counter is its indexer's number, not
    wallets. Shaka chose (2026-10-02) to leave the box on PulseScan until the flip rather than switch the line early. Don't make the box read PulseScan again once live, and don't list arrivals without departures: the
