@@ -22,8 +22,11 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-03)
 
-**2026-10-03, second session (Saturday) — THE SOCIALS HUB REDESIGNED, built into index.html, written to the Mac, NOT pushed,
-NOT seen live.** Shaka put Holders Details on the back burner ("maybe next session") and brought a full-page mock-up + an icon
+**2026-10-03, second session (Saturday), closed by Shaka ("lets wrap it up. good work"): THE SOCIALS HUB REDESIGNED — built,
+pushed by him as `6786b4af0` (mock-up rounds `9d3f434f0` before it), tree clean, NOT yet seen live by anyone. Nothing half-done.
+NEXT SESSION STARTS WITH: his live look at ptgc-ufo.com → Socials (Mac, then iPhone + iPad — one column under 900 px), whatever
+he brings from it (ask — screenshots), the full-size icon sheet if he has it (swap `logos/socials/hub/<col>-<key>.png` file-for-
+file), then the list below (-9 … -8: the Holders Details share card).** Shaka put Holders Details on the back burner ("maybe next session") and brought a full-page mock-up + an icon
 zip for the Socials tab. The zip was mis-cut (every icon off its mark, labels bleeding in) — the icons are cut from his mock-up
 image instead (70 × 56, provisional; **he owes the full-size sheet**, swap `logos/socials/hub/<col>-<key>.png` file-for-file).
 Six mock-up rounds in `design/socials-hub/` (README = every decision; approved state `renders/hub-v3-1240.png`): his wide sky
@@ -951,7 +954,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--9. **Socials Hub redesign (2026-10-03, second session) — BUILT, on the Mac, not pushed.** After his push: ptgc-ufo.com → Socials
+-9. **Socials Hub redesign (2026-10-03, second session) — BUILT and PUSHED (`6786b4af0`), live look owed.** Now: ptgc-ufo.com → Socials
    on the Mac (sky, title, three columns, every row opens the same card as before), then iPhone + iPad (one column). Then the
    full-size icon sheet from Shaka → replace the 18 cut icons in `logos/socials/hub/` (same names). `_to_delete/hub-sky-top.jpg`
    in the repo root is mine to lose — he bins it. Design: `design/socials-hub/README.md`; build: `tools/socials-hub.py`.

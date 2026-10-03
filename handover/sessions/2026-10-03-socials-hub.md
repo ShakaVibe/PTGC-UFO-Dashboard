@@ -64,9 +64,14 @@ at 1440 and 390 (`overflow.js`); the Burn Stats row opens the Burn share card (s
 foot shows the planet under the Back button. Compile clean (Babel's size note only); the three 404s in the console are the
 harness's usual (favicon / manifest).
 
+## End of session (Shaka: "lets wrap it up. good work")
+
+Pushed by Shaka: the mock-up rounds (`9d3f434f0`) and the build (`6786b4af0`). Tree clean. Not seen live by anyone yet —
+that is the first thing next session.
+
 ## Not done / owed
 
-- **Shaka's live look** on the Mac after his push (ptgc-ufo.com → Socials), then iPhone + iPad (the one-column hub).
+- **Shaka's live look** on the Mac (ptgc-ufo.com → Socials), then iPhone + iPad (the one-column hub).
 - **The full-size icon sheet** — the 18 cut icons are 70 × 56 px and will look soft on a Retina Mac; swap them file-for-file.
 - A `_to_delete/hub-sky-top.jpg` in the repo root (my mirrored sky, before his wide file arrived) — the bridge cannot delete; he
   bins it or it ships in `_site` (harmless, 90 KB).
