@@ -17,9 +17,25 @@ Update it at the end of every session.
   is the only other workflow). `calculators.html`, `charts.html`, `portfolio.html`,
   `ledger.html` are separate pages. `data/new-holders.json` + `scripts/build-new-holders.mjs` = the Holders Details window's
   data (2026-10-02, hourly `new-holders` step). **Since 2026-10-03 the v2 header's CSS is `h2.css` (root, linked by index +
-  the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).**
+  the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
+  art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (end of 2026-10-03)
+
+**2026-10-03, second session (Saturday) — THE SOCIALS HUB REDESIGNED, built into index.html, written to the Mac, NOT pushed,
+NOT seen live.** Shaka put Holders Details on the back burner ("maybe next session") and brought a full-page mock-up + an icon
+zip for the Socials tab. The zip was mis-cut (every icon off its mark, labels bleeding in) — the icons are cut from his mock-up
+image instead (70 × 56, provisional; **he owes the full-size sheet**, swap `logos/socials/hub/<col>-<key>.png` file-for-file).
+Six mock-up rounds in `design/socials-hub/` (README = every decision; approved state `renders/hub-v3-1240.png`): his wide sky
+ONCE (`hub-sky.jpg`, never mirrored — "too many big planets"), metallic title over a dark pool, three framed columns with darker
+headers, the token logos on the Logos rows, the dashboard droplet on RH Core Liquidity, his new gold globe on The Grays & The
+Cores, a black gap under the tab band, and **the rows reordered: Logos / Burn / Value Generated / KPI / Holders level across all
+three columns, then Token Allocation + Targets level between PTGC and UFO (Combined: RH Core Liquidity, Leagues), then each
+column's own.** Built by `tools/socials-hub.py` (run on both copies, sha256 `c76bdf7b…`): `sh-*` CSS, `ShRow` / `ShCol` at module
+scope, the tab's JSX — **every row's onClick is the old hub's handler, lifted verbatim by the script**; only frame, art and order
+changed. Harness: both tokens at 1440, phone 390, no overflow, all 26 rows in the designed order, Burn Stats opens its card.
+`sessions/2026-10-03-socials-hub.md`. **NEXT: his push + live look (Mac, then iPhone / iPad — the hub is one column under
+900 px), the icon sheet, then back to the list below (Holders Details share card, -8).**
 
 **2026-10-02, evening (date note: the two sessions labelled "2026-10-03" above and below were worked on Oct 2 Pacific — the commits
 are dated 2026-10-02; the labels stay, the day-90 date is still 2026-10-06). HOLDERS DETAILS — built, HIDDEN, written to the Mac, NOT
@@ -935,6 +951,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-9. **Socials Hub redesign (2026-10-03, second session) — BUILT, on the Mac, not pushed.** After his push: ptgc-ufo.com → Socials
+   on the Mac (sky, title, three columns, every row opens the same card as before), then iPhone + iPad (one column). Then the
+   full-size icon sheet from Shaka → replace the 18 cut icons in `logos/socials/hub/` (same names). `_to_delete/hub-sky-top.jpg`
+   in the repo root is mine to lose — he bins it. Design: `design/socials-hub/README.md`; build: `tools/socials-hub.py`.
 -8. **Holders Details (2026-10-02, hidden behind the dot) — NEXT: build the share card from `design/holders-details/mock-share-v2.html`
    (Wide only; single-token A2 + combined C; camera right of the period chooser), then his phone look, then the go-live word.** Rounds 1–7 pushed;
    round 8 + mock-ups on the Mac. After his push: the first hourly run continues the file from its cursor (watch the `new-holders` step
@@ -1152,3 +1172,5 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 - `sessions/2026-09-14.md` — g8 follow-up: `DaoCreatures` (Grays tiers via `getBurnC`) in the
   "PTGC bought" tile, Recent-buys ledger box (last 10, +10, table on sm+, stacked list on
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
+- `sessions/2026-10-03-socials-hub.md` — the Socials Hub redesign: his mock-up + icons (the zip mis-cut, icons cut from the
+  mock-up instead), six mock-up rounds, the row order, the build (`tools/socials-hub.py`, handlers lifted verbatim), harness.
