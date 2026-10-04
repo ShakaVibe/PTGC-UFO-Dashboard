@@ -22,7 +22,14 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-04)
 
-**2026-10-04 (Sunday): THE HOLDERS DETAILS SHARE CARD — built, written to the Mac, NOT pushed, NOT seen live.** Shaka: "time to
+**2026-10-04 (Sunday), closed by Shaka ("lets wrap it up and call it a day"): HOLDERS DETAILS IS LIVE, its share card built,
+the three cards on the Socials tab, the tile's grey icon — four pushes by him, last `859e8ffd1`, tree clean, NOTHING of today
+seen live yet (harness only). Nothing half-done. NEXT SESSION STARTS WITH: his live look — the Holders tile (the grey
+people icon right of the ⓘ opens the window; the change line is now the file's 24 h net, not PulseScan's), Socials → New
+Holder Details in all three columns (PTGC / UFO / BOTH, 24H / 7D / 30D), the 📷 inside the window, on the Mac then his
+phone — whatever he brings from it (ask — screenshots); then the Socials Hub live look + the icon sheet (owed since
+2026-10-03), then the v2 leftovers (-5). 2026-10-06 (Tuesday) = UFO day 90: check the UFO dashboard + PTGC-burned-by-UFO.**
+The day, in order — THE HOLDERS DETAILS SHARE CARD first (pushed `a2382e474`). Shaka: "time to
 finish working on the new holder report". The 📷 sits right of the 24H / 7D / 30D chooser in the window; `NhShareModal` (module
 scope, above `NewHoldersModal`) on the 2026-09-23 pattern, `ShareCardModal screenshot`, **Wide 1200×675 only**, toolbar = PTGC /
 UFO / BOTH (opens on the window's token), period = the window's. A2 for one token (`NhShareCard`: dark left, saucer right, logo
@@ -35,9 +42,7 @@ Pushed by Shaka (`a2382e474`), "those look good" — A2 + C stand. **Round 2 (sa
 gotcha 40 — one count on both surfaces), **and the three cards are on the Socials tab: a "New Holder Details" row under Holders
 in all three columns** (green, the New Holders tile's green-people icon, "New holder analytics"; PTGC / UFO / BOTH), opening
 the card on its own (`NhShareSocial`: 7D, a period chooser on the toolbar, the a18 overlay while the file is out; prices via
-`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. **Round 3: the tile's entrance is the people icon in GREY (`img.h2-hd`, h2.css, a grayscale filter on the green file) to the RIGHT of the ⓘ — no "+".** `sessions/2026-10-04.md` rounds 2–3. **Written to the
-Mac, NOT pushed, NOT seen live. NEXT: his push + live look (the Socials rows, the live Holders tile, the cards on his phone),
-then the Socials Hub live look + icon sheet (owed from 2026-10-03, below), then the v2 leftovers (-5). 2026-10-06 = UFO day 90.**
+`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. Pushed `447566fab`. **Round 3: the tile's entrance is the people icon to the RIGHT of the ⓘ — no "+" (`72f650351`); round 4: in GREY (`img.h2-hd`, h2.css, a grayscale filter on the green file; the Socials row and the card stay green) (`859e8ffd1`).** `sessions/2026-10-04.md` rounds 2–4.
 
 **2026-10-03, second session (Saturday), closed by Shaka ("lets wrap it up. good work"): THE SOCIALS HUB REDESIGNED — built,
 pushed by him as `6786b4af0` (mock-up rounds `9d3f434f0` before it), tree clean, NOT yet seen live by anyone. Nothing half-done.
