@@ -35,7 +35,7 @@ Pushed by Shaka (`a2382e474`), "those look good" — A2 + C stand. **Round 2 (sa
 gotcha 40 — one count on both surfaces), **and the three cards are on the Socials tab: a "New Holder Details" row under Holders
 in all three columns** (green, the New Holders tile's green-people icon, "New holder analytics"; PTGC / UFO / BOTH), opening
 the card on its own (`NhShareSocial`: 7D, a period chooser on the toolbar, the a18 overlay while the file is out; prices via
-`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. `sessions/2026-10-04.md` round 2. **Written to the
+`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. **Round 3: the tile's entrance is the green-people icon (`img.h2-hd`, h2.css) to the RIGHT of the ⓘ — no "+".** `sessions/2026-10-04.md` rounds 2–3. **Written to the
 Mac, NOT pushed, NOT seen live. NEXT: his push + live look (the Socials rows, the live Holders tile, the cards on his phone),
 then the Socials Hub live look + icon sheet (owed from 2026-10-03, below), then the v2 leftovers (-5). 2026-10-06 = UFO day 90.**
 
@@ -860,7 +860,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    range would lose arrivals forever. In index.html everything is the HOLDERS DETAILS block above `DashboardSkeleton`:
    `fetchNewHolders` (null past 36 h), `nhView` / `nhNet`, `holdingTier` (top BURN_C tier reached, Shell floor),
    `NewHoldersModal`. **LIVE since 2026-10-04 (`NEW_HOLDERS_LIVE=true`).** `NEW_HOLDERS_LIVE=false` = the faint bottom-right dot (`NhDot`) is the only way in and the Holders
-   tile keeps PulseScan's snapshot delta; `true` = no dot, a "+" beside the tile's ⓘ, and the tile's change line is the
+   tile keeps PulseScan's snapshot delta; `true` = no dot, the green-people icon (`img.h2-hd`) right of the tile's ⓘ (a "+" until 2026-10-04 round 3), and the tile's change line is the
    file's 24 h net (`nhNet`, "—" when the file is missing or stale). The window's NET must equal that line — they are the
    same function. **Schema 2 (round 3): exact balance at the block before the range and at every block a wallet traded in; a
    crossing of zero between consecutive states is the event — never replay Transfer values here (the fee leaves without a
