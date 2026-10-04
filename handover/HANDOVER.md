@@ -23,8 +23,8 @@ Update it at the end of every session.
 ## Current state (end of 2026-10-04)
 
 **2026-10-04 (Sunday), closed by Shaka ("wrap it up and update the handover"): HOLDERS DETAILS IS LIVE, its share card built,
-the three cards on the Socials tab, the tile's grey icon, and the Home cards' buttons swapped — five pushes by him, last
-`78e75aaa5`, tree clean, NOTHING of today seen live yet (harness only). Nothing half-done. **Round 5, after the wrap (his Home screenshot): the Home cards' two buttons SWAPPED — the big bottom button is ENTER DASHBOARD (logo + chevron → the dashboard), the top-right pill is BUY / SELL (swap arrows → SwapModal); classes `.hc-buy` / `.hc-dash` kept, aria-labels follow the actions. Pushed `78e75aaa5`.** NEXT SESSION STARTS WITH: his live look — the Home (both buttons, Mac + phone), the Holders tile (the grey
+the three cards on the Socials tab, the tile's grey icon, the Home cards' buttons swapped, and the BOTH card's fit fix from his first live look (round 6, on the Mac,
+not pushed) — five pushes by him, last `78e75aaa5`. Nothing half-done. **Round 5, after the wrap (his Home screenshot): the Home cards' two buttons SWAPPED — the big bottom button is ENTER DASHBOARD (logo + chevron → the dashboard), the top-right pill is BUY / SELL (swap arrows → SwapModal); classes `.hc-buy` / `.hc-dash` kept, aria-labels follow the actions. Pushed `78e75aaa5`. Round 6 (his first live look): on the BOTH card "109 NEW HOLDERS" crossed the PTGC panel — the two panels' count groups now scale together to fit (`NhShareCombo`, `.nn-fit`), icon kept. Written to the Mac, not pushed.** NEXT SESSION STARTS WITH: his live look — the Home (both buttons, Mac + phone), the Holders tile (the grey
 people icon right of the ⓘ opens the window; the change line is now the file's 24 h net, not PulseScan's), Socials → New
 Holder Details in all three columns (PTGC / UFO / BOTH, 24H / 7D / 30D), the 📷 inside the window, on the Mac then his
 phone — whatever he brings from it (ask — screenshots); then the Socials Hub live look + the icon sheet (owed since
