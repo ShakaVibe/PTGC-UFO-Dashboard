@@ -20,7 +20,19 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (end of 2026-10-03)
+## Current state (end of 2026-10-04)
+
+**2026-10-04 (Sunday): THE HOLDERS DETAILS SHARE CARD — built, written to the Mac, NOT pushed, NOT seen live.** Shaka: "time to
+finish working on the new holder report". The 📷 sits right of the 24H / 7D / 30D chooser in the window; `NhShareModal` (module
+scope, above `NewHoldersModal`) on the 2026-09-23 pattern, `ShareCardModal screenshot`, **Wide 1200×675 only**, toolbar = PTGC /
+UFO / BOTH (opens on the window's token), period = the window's. A2 for one token (`NhShareCard`: dark left, saucer right, logo
+top-right, count 170 px, the "Between them they hold" band with the ladder of the sum), C for BOTH (`NhShareCombo`: saucer on
+top, gold PTGC + green UFO panels). Content = the v2 mock-ups' exactly (new holders only, no wallets). Both tokens' views from
+the one file; the other token's price via the window's `requestPrice`; `NhsFit` scales a crowded ladder down instead of
+clipping. CSS = the `nhs-*` block after `nh-*`. Harness: PTGC / UFO / BOTH at 24H + 30D (1440), 390 UFO, no overflow.
+`sessions/2026-10-04.md`. **NEXT: his push + live look at the card (Mac, then phone), A2 vs B for the single-token card (ask
+once), his iPhone / iPad look at the window, the go-live word (`NEW_HOLDERS_LIVE=true`), the Socials Hub live look + icon sheet
+(owed from 2026-10-03, below), then the v2 leftovers (-5). 2026-10-06 = UFO day 90.**
 
 **2026-10-03, second session (Saturday), closed by Shaka ("lets wrap it up. good work"): THE SOCIALS HUB REDESIGNED — built,
 pushed by him as `6786b4af0` (mock-up rounds `9d3f434f0` before it), tree clean, NOT yet seen live by anyone. Nothing half-done.
