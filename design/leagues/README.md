@@ -60,3 +60,13 @@ coins 0.66 → 0.8 u (156 px), header 584, coins at 306.
 Then: "make sure the image does not go out past the border" — the creatures live in a `.clipin` box (inset 16, the frame's
 radius) and are placed fully inside it (whale 590 px at 10 / 92, shark 430 px at right 12 / 78); "take the numbers away next
 to the sea creatures" — the rank gone, creature + name left-aligned in the centre column.
+
+## Modal mock v3 — `mock-tiers-v3.html` → `renders/tiers-v3.png` (2026-10-04 evening, after the build went live)
+Shaka's second mock-up of the single-token window (`reference/shaka-tiers-mockup-v2.png`) with a new sea plate
+(`reference/shaka-sea-wide-bg.jpg` → `lg-sea-wide.jpg`, 1536×1024: ruins, coral, lit from above — no creatures): the plate
+under the whole header, the whale cut-out at the LEFT (255 px, drop shadow), the coin centred as before, the same plate faint
+under the Close. The rest = the live build (no rank, no chevrons, the round-8 sizes). Both tokens on the one plate.
+Then "rotate the whale clockwise slightly" → 10°, "do 10 more degrees" → 20° (nudged to −30 / 86 so the nose clears the price
+line); "make it where they can click the box as well" → the Starting and Circulating tiles are buttons in the build. BUILT
+2026-10-04 evening (round 9): `lg-sea-wide.jpg` replaces `lg-sky.jpg` in `logos/leagues/`.
+Then the shark at the right, facing left, 185 px (smaller than the whale's 255), −12°.
