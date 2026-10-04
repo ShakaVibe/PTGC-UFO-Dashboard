@@ -35,7 +35,7 @@ Pushed by Shaka (`a2382e474`), "those look good" — A2 + C stand. **Round 2 (sa
 gotcha 40 — one count on both surfaces), **and the three cards are on the Socials tab: a "New Holder Details" row under Holders
 in all three columns** (green, the New Holders tile's green-people icon, "New holder analytics"; PTGC / UFO / BOTH), opening
 the card on its own (`NhShareSocial`: 7D, a period chooser on the toolbar, the a18 overlay while the file is out; prices via
-`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. **Round 3: the tile's entrance is the green-people icon (`img.h2-hd`, h2.css) to the RIGHT of the ⓘ — no "+".** `sessions/2026-10-04.md` rounds 2–3. **Written to the
+`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. **Round 3: the tile's entrance is the people icon in GREY (`img.h2-hd`, h2.css, a grayscale filter on the green file) to the RIGHT of the ⓘ — no "+".** `sessions/2026-10-04.md` rounds 2–3. **Written to the
 Mac, NOT pushed, NOT seen live. NEXT: his push + live look (the Socials rows, the live Holders tile, the cards on his phone),
 then the Socials Hub live look + icon sheet (owed from 2026-10-03, below), then the v2 leftovers (-5). 2026-10-06 = UFO day 90.**
 
