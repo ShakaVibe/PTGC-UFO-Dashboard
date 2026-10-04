@@ -226,10 +226,10 @@
     @media(min-width:1024px){.hc-day{font-size:.8rem;padding-left:8px}}
     /* the way INTO each token's dashboard: a pill button in the token colour (the whole card is
        clickable too, but that is not obvious — Shaka, 2026-09-25). Short label on phones. */
-    .hc-dash{position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 11px 0 14px;border-radius:999px;border:1.5px solid var(--hc-c);
+    .hc-dash{position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px 0 12px;border-radius:999px;border:1.5px solid var(--hc-c);
       background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.02)),var(--hc-bg1);color:var(--hc-t);font-family:'Orbitron',monospace;font-weight:800;font-size:.58rem;letter-spacing:.14em;white-space:nowrap;
       box-shadow:0 0 14px var(--hc-glow2),0 0 0 3px var(--hc-glow2),inset 0 1px 0 rgba(255,255,255,.14);transition:background .2s ease,color .2s ease,box-shadow .2s ease,transform .2s ease}
-    @media(min-width:1024px){.hc-dash{top:14px;right:14px;height:40px;padding:0 13px 0 18px;font-size:.68rem}}
+    @media(min-width:1024px){.hc-dash{top:14px;right:14px;height:40px;padding:0 18px 0 14px;font-size:.68rem}}
     .hc-dash:hover{background:var(--hc-c);color:#0b0b06;box-shadow:0 0 22px var(--hc-glow),inset 0 1px 0 rgba(255,255,255,.3);transform:translateY(-1px)}
     .hc-dash svg{flex-shrink:0}
     .hc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -5320,10 +5320,13 @@
     const HC_COPY_ICON=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>;
     const HC_DONE_ICON=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>;
 
-    /* One token card. Whole card → that token's dashboard (as the classic card); the
-       "DASHBOARD ›" button is the same thing for keyboards and for anyone who does not guess the
-       card is clickable. ONE "BUY / SELL" button (Shaka, 2026-09-25: not two) opens SwapModal —
-       the switch.win widget, where buy or sell is chosen (gotcha 13). */
+    /* One token card. Whole card → that token's dashboard (as the classic card); the big
+       "ENTER DASHBOARD ›" button (logo on it) is the same thing for keyboards and for anyone who does
+       not guess the card is clickable. ONE "BUY / SELL" pill, top-right (Shaka, 2026-09-25: not two)
+       opens SwapModal — the switch.win widget, where buy or sell is chosen (gotcha 13).
+       2026-10-04 (Shaka, from his screenshot): the two SWAPPED places — the big bottom button used to
+       be BUY / SELL and the top-right pill DASHBOARD; the dashboard is the main act, so it got the big
+       one. Classes kept (`.hc-dash` = the pill, `.hc-buy` = the big button) so the CSS and skeleton stand. */
     const CosmicCard=({token,d,pls,onSelect,onMaint,onSwap})=>{
       const cfg=TOKENS[token],isGold=cfg.color==='gold';
       const masked=(token==='UFO'&&UFO_MAINTENANCE); // MAINT-MIGRATION: hide all live figures
@@ -5339,7 +5342,7 @@
         <div onClick={open} className={`hc-card ${isGold?'hc-gold':'hc-green'}${masked?' hc-masked':''}`}>
           {masked
             ?<div className="hc-maint"><span aria-hidden="true">{'⚠'}</span>Under Maintenance</div>
-            :<button type="button" className="hc-dash" onClick={e=>{e.stopPropagation();onSelect(token);}} aria-label={`Open the ${token} dashboard`}><span>DASHBOARD</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>}
+            :<button type="button" className="hc-dash" onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/></svg><span>BUY / SELL</span></button>}
           <div className="hc-top">
             <img src={cfg.logo} alt={token} className="hc-logo"/>
             <div className="hc-info">
@@ -5362,7 +5365,7 @@
             <div><span className="hc-lbl">PLS RATIO</span><span className="hc-val">{masked?'—':plsRatio}</span></div>
           </div>
           {masked?<HomeSparkFlat label={`${token} chart hidden during maintenance`}/>:<HomeSpark token={token} d={d}/>}
-          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSwap(token);}} aria-haspopup="dialog" aria-label={`Buy or sell ${token}`}><img src={cfg.logo} alt=""/><span>BUY / SELL {token}</span></button>}
+          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSelect(token);}} aria-label={`Open the ${token} dashboard`}><img src={cfg.logo} alt=""/><span>ENTER DASHBOARD</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>}
         </div>
       );
     };

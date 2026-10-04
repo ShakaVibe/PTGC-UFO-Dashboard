@@ -24,7 +24,7 @@ Update it at the end of every session.
 
 **2026-10-04 (Sunday), closed by Shaka ("lets wrap it up and call it a day"): HOLDERS DETAILS IS LIVE, its share card built,
 the three cards on the Socials tab, the tile's grey icon — four pushes by him, last `859e8ffd1`, tree clean, NOTHING of today
-seen live yet (harness only). Nothing half-done. NEXT SESSION STARTS WITH: his live look — the Holders tile (the grey
+seen live yet (harness only). Nothing half-done. **Round 5, after the wrap (his Home screenshot): the Home cards' two buttons SWAPPED — the big bottom button is ENTER DASHBOARD (logo + chevron → the dashboard), the top-right pill is BUY / SELL (swap arrows → SwapModal); classes `.hc-buy` / `.hc-dash` kept, aria-labels follow the actions. Written to the Mac, not pushed.** NEXT SESSION STARTS WITH: his live look — the Home (both buttons, Mac + phone), the Holders tile (the grey
 people icon right of the ⓘ opens the window; the change line is now the file's 24 h net, not PulseScan's), Socials → New
 Holder Details in all three columns (PTGC / UFO / BOTH, 24H / 7D / 30D), the 📷 inside the window, on the Mac then his
 phone — whatever he brings from it (ask — screenshots); then the Socials Hub live look + the icon sheet (owed since
@@ -394,7 +394,7 @@ Allocation (both tokens) and PTGC Burned by UFO — in Wide and Tall. Full trail
 gold/green alien art behind a metallic THE GRAYS / DASHBOARD title, two glowing token cards (price,
 24 h change, contract + copy, Day counter, MCap, volume, PLS ratio, a real 24 h chart from
 GeckoTerminal 15-minute candles) and ONE "BUY / SELL <token>" button per card (Shaka: not two) that
-opens the existing switch.win `SwapModal`. Round 2 the same day: the art COVERS the window at any
+opens the existing switch.win `SwapModal` (**since 2026-10-04 the big button is ENTER DASHBOARD and BUY / SELL is the top-right pill**). Round 2 the same day: the art COVERS the window at any
 shape (scaled, sides cropped, never stretched), 140px of faded headroom over the alien's crown that
 only shows when the window is tall enough (`--oy`), buttons with the classic glow + light sweep, stat
 tiles. **Also 2026-09-25: the Value Generated and Token Allocation share cards (both tokens) redone in the
