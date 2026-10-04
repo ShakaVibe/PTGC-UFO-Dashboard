@@ -30,9 +30,14 @@ top-right, count 170 px, the "Between them they hold" band with the ladder of th
 top, gold PTGC + green UFO panels). Content = the v2 mock-ups' exactly (new holders only, no wallets). Both tokens' views from
 the one file; the other token's price via the window's `requestPrice`; `NhsFit` scales a crowded ladder down instead of
 clipping. CSS = the `nhs-*` block after `nh-*`. Harness: PTGC / UFO / BOTH at 24H + 30D (1440), 390 UFO, no overflow.
-`sessions/2026-10-04.md`. **NEXT: his push + live look at the card (Mac, then phone), A2 vs B for the single-token card (ask
-once), his iPhone / iPad look at the window, the go-live word (`NEW_HOLDERS_LIVE=true`), the Socials Hub live look + icon sheet
-(owed from 2026-10-03, below), then the v2 leftovers (-5). 2026-10-06 = UFO day 90.**
+Pushed by Shaka (`a2382e474`), "those look good" — A2 + C stand. **Round 2 (same day): HOLDERS DETAILS IS LIVE —
+`NEW_HOLDERS_LIVE=true`** (the dot gone, the "+" beside the Holders tile's ⓘ, the tile's change line = the file's 24 h net,
+gotcha 40 — one count on both surfaces), **and the three cards are on the Socials tab: a "New Holder Details" row under Holders
+in all three columns** (green, the New Holders tile's green-people icon, "New holder analytics"; PTGC / UFO / BOTH), opening
+the card on its own (`NhShareSocial`: 7D, a period chooser on the toolbar, the a18 overlay while the file is out; prices via
+`useNhPrices`). Harness: the three rows, 30D, 390, the file-missing state. `sessions/2026-10-04.md` round 2. **Written to the
+Mac, NOT pushed, NOT seen live. NEXT: his push + live look (the Socials rows, the live Holders tile, the cards on his phone),
+then the Socials Hub live look + icon sheet (owed from 2026-10-03, below), then the v2 leftovers (-5). 2026-10-06 = UFO day 90.**
 
 **2026-10-03, second session (Saturday), closed by Shaka ("lets wrap it up. good work"): THE SOCIALS HUB REDESIGNED — built,
 pushed by him as `6786b4af0` (mock-up rounds `9d3f434f0` before it), tree clean, NOT yet seen live by anyone. Nothing half-done.
@@ -854,7 +859,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    and the two DAO wallets are never holders here. A failed RPC read aborts the run (previous file stays): a half-scanned
    range would lose arrivals forever. In index.html everything is the HOLDERS DETAILS block above `DashboardSkeleton`:
    `fetchNewHolders` (null past 36 h), `nhView` / `nhNet`, `holdingTier` (top BURN_C tier reached, Shell floor),
-   `NewHoldersModal`. `NEW_HOLDERS_LIVE=false` = the faint bottom-right dot (`NhDot`) is the only way in and the Holders
+   `NewHoldersModal`. **LIVE since 2026-10-04 (`NEW_HOLDERS_LIVE=true`).** `NEW_HOLDERS_LIVE=false` = the faint bottom-right dot (`NhDot`) is the only way in and the Holders
    tile keeps PulseScan's snapshot delta; `true` = no dot, a "+" beside the tile's ⓘ, and the tile's change line is the
    file's 24 h net (`nhNet`, "—" when the file is missing or stale). The window's NET must equal that line — they are the
    same function. **Schema 2 (round 3): exact balance at the block before the range and at every block a wallet traded in; a

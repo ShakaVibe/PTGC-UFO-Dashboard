@@ -9723,7 +9723,7 @@
      * (`coveredFrom`) says so. Balances are at `balAt`; a wallet that arrived and has since left
      * is in both lists and shows "left" instead of a holding.
      * ======================================================================== */
-    const NEW_HOLDERS_LIVE=false;   // false = hidden behind the dot (Shaka, 2026-10-02: "hidden until I tell you to make it live")
+    const NEW_HOLDERS_LIVE=true;   // LIVE 2026-10-04 (Shaka: "lets go ahead and make it live"). false = hidden behind the dot (2026-10-02 → 10-04)
     const NEW_HOLDERS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/new-holders.json';
     const NH_MAX_AGE=36*3600*1000,NH_TTL=5*60*1000,NH_AMBER_MS=6*3600*1000;
     const NH_ART_V=2;   // bump when logos/holders/* change under the same names (gotcha 38) — 2: the New / Left icons became Shaka's green-plus / red-minus people (2026-10-02)
@@ -9972,28 +9972,59 @@
           <div className="nhs-foot"><span className="site">ptgc-ufo.com</span><span>{nhsToday()} {'·'} real wallets only</span></div>
         </div>
       </div>);
-    /* The 📷 on the window: `file` + `win` are the window's, `prices` its price table, `requestPrice` fetches a token's USD price once. */
-    const NhShareModal=({token:initial,file,win,prices,requestPrice,onClose})=>{
-      const[mode,setMode]=useState(initial==='UFO'?'UFO':'PTGC');   // 'PTGC' | 'UFO' | 'BOTH'
+    /* A token's USD price table for the window and the card: the opener passes the dashboard's own price for its token; any
+       other token's comes from DexScreener (dsPairsFor) once, the first time it is needed (`requestPrice`). */
+    const useNhPrices=(token,price)=>{
+      const[prices,setPrices]=useState({[token]:price>0?price:null});
+      const tried=useRef({}),live=useRef(true);
+      useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
+      const requestPrice=React.useCallback(tk=>{
+        if(!TOKENS[tk]||tried.current[tk])return;
+        tried.current[tk]=1;
+        dsPairsFor(TOKENS[tk].address).then(pairs=>{const v=dsPriceOf(pairs,TOKENS[tk].address);if(live.current&&v>0)setPrices(p=>({...p,[tk]:v}));}).catch(()=>{});
+      },[]);
+      return[prices,requestPrice];
+    };
+    /* The card's modal. From the window's 📷: `file` + `win` are the window's (no period chooser — the window has one). From the
+       Socials hub (`setWin` given): a 24H / 7D / 30D chooser on the toolbar, and the file's load states over the card
+       (`loading` / `error` / `onRetry`, the a18 overlay — "Unknown, not zero"). `prices` + `requestPrice` = useNhPrices. */
+    const NhShareModal=({token:initial,file,win,setWin,prices,requestPrice,loading=false,error=false,onRetry,onClose})=>{
+      const[mode,setMode]=useState(initial==='BOTH'?'BOTH':initial==='UFO'?'UFO':'PTGC');   // 'PTGC' | 'UFO' | 'BOTH'
       const W=NH_WINDOWS.find(w=>w.k===win)||NH_WINDOWS[1];
       const label=W.label.toUpperCase();
       useEffect(()=>{(mode==='BOTH'?['PTGC','UFO']:[mode]).forEach(t=>{if(!(prices[t]>0))requestPrice(t);});},[mode]);
       const views=React.useMemo(()=>({PTGC:nhView(file,'PTGC',W.h),UFO:nhView(file,'UFO',W.h)}),[file,win]);
       const T=NH_THEME[mode==='UFO'?'UFO':'PTGC'];
-      const controls=<NhPills items={[{k:'PTGC',label:'PTGC card'},{k:'UFO',label:'UFO card'},{k:'BOTH',label:'Both tokens on one card'}]} value={mode} onChange={setMode} label="Card" rgb={T.rgb}/>;
+      const controls=(<>
+        <NhPills items={[{k:'PTGC',label:'PTGC card'},{k:'UFO',label:'UFO card'},{k:'BOTH',label:'Both tokens on one card'}]} value={mode} onChange={setMode} label="Card" rgb={T.rgb}/>
+        {setWin&&<NhPills items={NH_WINDOWS} value={win} onChange={setWin} label="Period" rgb={T.rgb}/>}
+      </>);
       const stamp=new Date().toISOString().slice(0,10);
       return(
         <ShareCardModal onClose={onClose} width={1200} height={675} screenshot controls={controls} toolbarClass="mb-6" label="New holders share card" filename={`${mode.toLowerCase()}-new-holders-${win.toLowerCase()}-${stamp}.png`}>
-          {mode==='BOTH'?<NhShareCombo views={views} prices={prices} label={label}/>:<NhShareCard token={mode} view={views[mode]} px={prices[mode]>0?prices[mode]:0} label={label}/>}
+          <div style={{position:'relative',width:1200,height:675}}>
+            {mode==='BOTH'?<NhShareCombo views={views} prices={prices} label={label}/>:<NhShareCard token={mode} view={views[mode]} px={prices[mode]>0?prices[mode]:0} label={label}/>}
+            <CardLoadState loading={loading} error={error} what="the holders list" onRetry={onRetry} radius="0" font="'Rajdhani',sans-serif"/>
+          </div>
         </ShareCardModal>);
+    };
+    /* Socials → "New Holder Details" (2026-10-04, under Holders in all three columns): the card on its own, no window behind it.
+       `mode` = the column (PTGC / UFO / BOTH); opens on the past 7 days; reads the same hourly file (fetchNewHolders — null past
+       36 h → the error overlay with Retry, never zeros presented as real). */
+    const NhShareSocial=({mode,token,price,onClose})=>{
+      const[win,setWin]=useState('7D');
+      const[file,setFile]=useState(undefined);
+      const[tries,setTries]=useState(0);
+      const[prices,requestPrice]=useNhPrices(token,price);
+      useEffect(()=>{let live=true;setFile(undefined);fetchNewHolders(tries>0).then(j=>{if(live)setFile(j);});return()=>{live=false;};},[tries]);
+      return <NhShareModal token={mode} file={file||null} win={win} setWin={setWin} prices={prices} requestPrice={requestPrice} loading={file===undefined} error={file===null} onRetry={()=>setTries(n=>n+1)} onClose={onClose}/>;
     };
     /* The window. `price` = the opener's USD price for `token`; the other token's is fetched (dsPairsFor) on the first switch. */
     const NewHoldersModal=({token:initial,price,onClose})=>{
       const[token,setToken]=useState(initial==='UFO'?'UFO':'PTGC');
       const[win,setWin]=useState('24H');   // Shaka, round 3: opens on 24 hours
       const[file,setFile]=useState(undefined);        // undefined = loading, null = failed (gotcha 3)
-      const[prices,setPrices]=useState({[initial]:price>0?price:null});
-      const tried=useRef({});
+      const[prices,requestPrice]=useNhPrices(initial,price);
       const[showOut,setShowOut]=useState(false);
       const[showBounce,setShowBounce]=useState(false);
       const[sort,setSort]=useState({k:'time',dir:'desc'});
@@ -10001,16 +10032,8 @@
       const[more,setMore]=useState(40);
       const[share,setShare]=useState(false);   // the 📷: NhShareModal (2026-10-04)
       const load=(force)=>{setFile(undefined);fetchNewHolders(force).then(setFile);};
-      const live=useRef(true);
-      useEffect(()=>{live.current=true;fetchNewHolders().then(j=>{if(live.current)setFile(j);});return()=>{live.current=false;};},[]);
-      /* A token's USD price, once, the first time it is needed without one (the opener passes the dashboard's own; the other
-         token's comes from DexScreener on the first switch — or when the share card shows BOTH). */
-      const requestPrice=React.useCallback(tk=>{
-        if(!TOKENS[tk]||tried.current[tk])return;
-        tried.current[tk]=1;
-        dsPairsFor(TOKENS[tk].address).then(pairs=>{const v=dsPriceOf(pairs,TOKENS[tk].address);if(live.current&&v>0)setPrices(p=>({...p,[tk]:v}));}).catch(()=>{});
-      },[]);
-      useEffect(()=>{if(!(prices[token]>0))requestPrice(token);},[token]);
+      useEffect(()=>{let live=true;fetchNewHolders().then(j=>{if(live)setFile(j);});return()=>{live=false;};},[]);
+      useEffect(()=>{if(!(prices[token]>0))requestPrice(token);},[token]);   // the other token's price on the first switch
       useEffect(()=>{setMore(40);setShowOut(false);setShowBounce(false);setSort({k:'time',dir:'desc'});},[token,win]);
       const cfg=TOKENS[token],T=NH_THEME[token],hex=T.hex;
       const W=NH_WINDOWS.find(w=>w.k===win)||NH_WINDOWS[1];
@@ -11181,6 +11204,7 @@
       const[combinedValueGenPeriod,setCombinedValueGenPeriod]=useState('90d');
       const[showCombinedLeaguesModal,setShowCombinedLeaguesModal]=useState(false);
       const[showHoldersShareModal,setShowHoldersShareModal]=useState(false);
+      const[showNhShare,setShowNhShare]=useState(null);   // Socials → New Holder Details: 'PTGC' | 'UFO' | 'BOTH' (2026-10-04)
       const[holdersShareData,setHoldersShareData]=useState(null);
       const[holdersShareLoading,setHoldersShareLoading]=useState(false);
       const[holdersShareError,setHoldersShareError]=useState(false);   // a18
@@ -13411,6 +13435,7 @@
                   <ShRow tone="green" icon={shIcon('ptgc','valuegen')} title="Value Generated" sub="Fee distribution breakdown" onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowValueGenShareModal(true),100)}}/>
                   <ShRow tone="gold" icon={shIcon('ptgc','kpi')} title="KPI Report" sub="Full stats card" onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowKPI(true),100)}}/>
                   <ShRow tone="blue" icon={shIcon('ptgc','holders')} title="Holders" sub="PTGC holder analytics" onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowHoldersSingleModal(true),100)}}/>
+                  <ShRow tone="green" icon={`logos/holders/nh-ic-new.webp?v=${NH_ART_V}`} title="New Holder Details" sub="New holder analytics" onClick={()=>{setSocialReturn(true);setShowNhShare('PTGC')}}/>
                   <ShRow tone="purple" icon={shIcon('ptgc','alloc')} title="Token Allocation" sub="Supply distribution" onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowAllocationShareModal(true),100)}}/>
                   <ShRow tone="red" icon={shIcon('ptgc','targets')} title="Targets" sub="Price milestone multipliers" onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowXsShareModal(true),100)}}/>
                   <ShRow tone="blue" icon={shIcon('ptgc','dao-treasury')} title="DAO Treasury" sub="Treasury breakdown" onClick={()=>{setSocialReturn(true);if(token!=='PTGC')onSwitch('PTGC');setTimeout(()=>setShowDAOShareModal(true),100)}}/>
@@ -13427,6 +13452,7 @@
                   <ShRow tone="green" icon={shIcon('ufo','valuegen')} title="Value Generated" sub="Fee distribution breakdown" onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowValueGenShareModal(true),100)}}/>
                   <ShRow tone="lime" icon={shIcon('ufo','kpi')} title="KPI Report" sub="Full stats card" onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowKPI(true),100)}}/>
                   <ShRow tone="blue" icon={shIcon('ufo','holders')} title="Holders" sub="UFO holder analytics" onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowHoldersSingleModal(true),100)}}/>
+                  <ShRow tone="green" icon={`logos/holders/nh-ic-new.webp?v=${NH_ART_V}`} title="New Holder Details" sub="New holder analytics" onClick={()=>{setSocialReturn(true);setShowNhShare('UFO')}}/>
                   <ShRow tone="purple" icon={shIcon('ufo','alloc')} title="Token Allocation" sub="Supply distribution" onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowAllocationShareModal(true),100)}}/>
                   <ShRow tone="lime" icon={shIcon('ufo','targets')} title="Targets" sub="Price milestone multipliers" onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowXsShareModal(true),100)}}/>
                   <ShRow tone="blue" icon={shIcon('ufo','ptgc-by-ufo')} title="PTGC Burned by UFO" sub="Cross-token burn stats" onClick={()=>{setSocialReturn(true);if(token!=='UFO')onSwitch('UFO');setTimeout(()=>setShowDAOShareModal(true),100)}}/>
@@ -13472,6 +13498,7 @@
                   }}/>
                   <ShRow tone="blue" icon={shIcon('combined','kpi')} title="Combined KPI Report" sub="Both tokens side-by-side" onClick={()=>{setSocialReturn(true);setShowCombinedKPI(true)}}/>
                   <ShRow tone="blue" icon={shIcon('combined','holders')} title="Holders" sub="Holder analytics for both tokens" onClick={()=>{setSocialReturn(true);setShowHoldersShareModal(true)}}/>
+                  <ShRow tone="green" icon={`logos/holders/nh-ic-new.webp?v=${NH_ART_V}`} title="New Holder Details" sub="New holder analytics for both tokens" onClick={()=>{setSocialReturn(true);setShowNhShare('BOTH')}}/>
                   <ShRow tone="blue" icon='logos/panels/vg-droplet.webp' title="RH Core Liquidity" sub="LP breakdown by RH cores" onClick={()=>{setSocialReturn(true);setShowRHCoresShareModal(true)}}/>
                   <ShRow tone="purple" icon={shIcon('combined','leagues')} title="PTGC &amp; UFO Leagues" sub="Combined tier price table" onClick={()=>{setSocialReturn(true);setShowCombinedLeaguesModal(true)}}/>
                   <ShRow tone="gold" icon={shIcon('combined','grays-cores')} globe title="The Grays &amp; The Cores" sub="24Hr price comparison" onClick={()=>{setSocialReturn(true);setShowPriceWithCoresModal(true)}}/>
@@ -14126,6 +14153,7 @@
           
           {/* Combined Holders Share Modal — Socials → Holders (2026-09-26 build, gotcha 31). Loader above (holdersShareData); the card draws its own SVG trend. */}
           {showHoldersShareModal&&<HoldersSocialModal data={holdersShareData} loading={holdersShareLoading} error={holdersShareError} onRetry={()=>setHoldersShareTry(n=>n+1)} onClose={()=>closeModalAndReturn(setShowHoldersShareModal)}/>}
+          {showNhShare&&<NhShareSocial mode={showNhShare} token={token} price={data&&data.price>0?data.price:0} onClose={()=>closeModalAndReturn(setShowNhShare)}/>}
           
           {/* The Grays & The Cores price card — 2026-09-29: GraysCoresSocialModal at module scope (Wide/Tall, 24H-90D). Loader above (corePrices, grayPrices). */}
           {showPriceWithCoresModal&&<GraysCoresSocialModal cores={corePrices} grays={grayPrices} period={priceModalPeriod} setPeriod={setPriceModalPeriod} onClose={()=>closeModalAndReturn(setShowPriceWithCoresModal)}/>}
