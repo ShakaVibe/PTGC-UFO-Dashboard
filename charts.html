@@ -916,17 +916,19 @@ function getCached(tokenKey, tier) {
   if (!entry || !entry.data) return null;
   const cfg = TIER_CONFIG[tier];
   const age = Date.now() - entry.ts;
+  const fallback = !!(entry.limited || entry.coarse);   // 2026-10-05: a 2-point / daily stand-in is shown at once but never "fresh" — the next load asks GeckoTerminal again
   return {
     data: entry.data,
     limited: entry.limited || false,
-    fresh: age < cfg.ttl,    // Within primary TTL — no refetch needed
+    coarse: entry.coarse || false,
+    fresh: age < cfg.ttl && !fallback,    // Within primary TTL — no refetch needed
     stale: age < cfg.staleTtl // Within stale TTL — show immediately, refetch in bg
   };
 }
 
-function setCached(tokenKey, tier, data, limited = false) {
+function setCached(tokenKey, tier, data, limited = false, coarse = false) {
   const ck = `${tokenKey}_${tier}`;
-  cache[ck] = { data, tier, ts: Date.now(), limited };
+  cache[ck] = { data, tier, ts: Date.now(), limited, coarse };
 }
 
 /* Pool discovery cache with 7-day TTL */
@@ -1170,9 +1172,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
    serializes ALL GT calls with ~2.2s spacing (~27/min) so they never collide. */
 let _gtChain = Promise.resolve();
 let _gtLast = 0;
+let _gtRefusals = 0;        // 2026-10-05: consecutive refusals, across tokens; any success resets it
+let _gtCircuitUntil = 0;   // 2026-10-05: three refusals in a row open the circuit for 45 s — every other GT fetch returns null at once and the fallbacks draw
+let _gtPauseUntil = 0;   // 2026-10-05: a refusal (429 / 5xx — the browser prints it as a CORS error) pauses EVERY GT call, not just the one
 const GT_MIN_INTERVAL = 2200;
 function gtGate() {
   const p = _gtChain.then(async () => {
+    const pause = _gtPauseUntil - Date.now();
+    if (pause > 0) await sleep(pause);
     const wait = GT_MIN_INTERVAL - (Date.now() - _gtLast);
     if (wait > 0) await sleep(wait);
     _gtLast = Date.now();
@@ -1335,7 +1342,7 @@ function getShareItems(includeStartPrice) {
     const p0 = d[0].price, pN = d[d.length - 1].price;
     if (!p0 || p0 <= 0) return;
     const pct = ((pN - p0) / p0) * 100;
-    const item = { sym: t.sym, color: t.color, logo: t.logo, pct, ps: fmtCardPrice(pN), limited: !!t._limited, spark: sparkSample(d) };
+    const item = { sym: t.sym, color: t.color, logo: t.logo, pct, ps: fmtCardPrice(pN), limited: !!t._limited, coarse: !!t._coarse, spark: sparkSample(d) };
     if (includeStartPrice) { item.startP = fmtCardPrice(p0); item.endP = fmtCardPrice(pN) }
     items.push(item);
   });
@@ -1374,11 +1381,12 @@ function startWatchdog() {
 }
 
 /* Apply cached/fetched data to a token for the current range */
-function applyTokenData(k, data, limited, days) {
+function applyTokenData(k, data, limited, days, coarse = false) {
   const filtered = filterToRange(clampToTokenStart(k, data), days);
   if (filtered && filtered.length >= 2) {
     TOKENS[k]._data = filtered;
     TOKENS[k]._limited = limited;
+    TOKENS[k]._coarse = !!coarse;   // daily closes standing in for hourly candles (2026-10-05)
     return true;
   }
   return false;
@@ -1413,14 +1421,14 @@ async function go() {
       if (!t.on) return;
       const cached = getCached(k, tier);
       if (cached && cached.stale) {
-        applyTokenData(k, cached.data, cached.limited, days);
+        applyTokenData(k, cached.data, cached.limited, days, cached.coarse);
         anyStaleShown = true;
         if (!cached.fresh) {
           _statusFromCache = true;   // a37: the line says "Cached" until this refetch lands
           needFetch.push([k, t]);
         }
       } else {
-        delete t._data; delete t._limited; delete t._carried;
+        delete t._data; delete t._limited; delete t._carried; delete t._coarse;
         needFetch.push([k, t]);
       }
     });
@@ -1515,6 +1523,22 @@ async function go() {
           }
         }
 
+        /* 2026-10-05: 7D / 14D without GeckoTerminal's hourly candles → the prebuilt DAILY file clipped to the range (real daily
+           closes, 8 / 15 points, tagged DAILY) — far better than the two-point line that used to stand in for a fortnight. */
+        if ((!data || data.length < 2) && tier === 'hourly' && t.source === 'moralis') {
+          try {
+            const json = await loadStaticDaily(signal);
+            const series = getStaticDailySeries(json, k);
+            const coarse = series ? cleanData(series, days + 1) : null;
+            if (coarse && coarse.length >= 3) {
+              console.log(`Daily-file fallback for ${k} [${tier}]: ${coarse.length} daily closes over ${days}d`);
+              setCached(k, tier, coarse, false, true);
+              applyTokenData(k, coarse, false, days, true);
+              continue;
+            }
+          } catch (e) { if (e.name !== 'AbortError') console.warn(`Daily-file fallback failed for ${k}:`, e); }
+        }
+
         /* Last resort for PulseChain tokens: DexScreener 2-point */
         if ((!data || data.length < 2) && (t.pairAddr || t.dexAddr)) {
           data = await fetchFromDexScreener(t.pairAddr || t.dexAddr, k, signal);
@@ -1574,6 +1598,7 @@ function updateStatusLine() {
   }
   const still = Object.entries(TOKENS).filter(([k, t]) => t.on && (!t._data || t._data.length < 2)).map(([k]) => k);
   const limited = Object.entries(TOKENS).filter(([k, t]) => t.on && t._limited).map(([k]) => k);
+  const coarse = Object.entries(TOKENS).filter(([k, t]) => t.on && t._coarse && !t._limited).map(([k]) => k);
   const carried = Object.entries(TOKENS).filter(([k, t]) => t.on && t._carried && t._data && t._data.length >= 2).map(([k]) => k);
   if (ok > 0) {
     let newest = 0;
@@ -1585,6 +1610,7 @@ function updateStatusLine() {
     else msg = `<span class="dot" style="background:#eab308"></span><span style="color:#eab308">${_statusFromCache ? 'Cached \u00B7 ' : ''}as of ${asOf}</span> \u00B7 ${ok}/${total} tokens`;
     if (still.length) msg += ` \u00B7 <span style="color:#ef4444">${still.join(', ')} unavailable</span>`;
     if (limited.length) msg += ` \u00B7 <span style="color:#eab308">${limited.join(', ')} limited data</span>`;
+    if (coarse.length) msg += ` \u00B7 <span style="color:#eab308">${coarse.join(', ')} daily candles</span>`;
     if (carried.length) msg += ` \u00B7 <span style="color:#eab308">${carried.join(', ')} carried forward (builder could not refresh)</span>`;
     setStatus(msg);
     document.getElementById('statusTime').textContent = newest ? `data to ${new Date(newest).toLocaleTimeString()}` : '';
@@ -1755,13 +1781,29 @@ async function fetchFromGeckoTerminal(pairAddr, tier, sym, signal, tokenSide) {
   let oldestSeen = Infinity;
   const MAX_PAGES = 8; // ~6 months/page → covers >1yr with margin
 
+  if (_gtCircuitUntil > Date.now()) { console.warn(`GeckoTerminal circuit open — skipping ${sym} [${tier}] (fallbacks instead)`); return null; }
   for (let p = 0; p < MAX_PAGES; p++) {
     if (signal && signal.aborted) return null;
     const url = `https://api.geckoterminal.com/api/v2/networks/${GT_NETWORK}/pools/${pairAddr}/ohlcv/${timeframe}` +
       `?aggregate=${aggregate}&before_timestamp=${beforeTs}&limit=1000&currency=usd&token=${side}`;
-    await gtGate();
-    const r = await fetchRetry(url, 2, 2000, signal, { 'accept': 'application/json' });
-    if (!r) break;
+    /* 2026-10-05: one gated attempt per try, fetchRetry's own retry off (retries = 1 — it fired 2 s later, outside the gate, and was
+       refused too). A refusal = fetchRetry's null: a network error (a 429 / 5xx without CORS headers, which the browser prints as a
+       CORS error), a 429 it could read, or a 404 (a pool GT does not list — same handling, cheap). */
+    let r = null;
+    for (let attempt = 0; attempt < 3 && !r; attempt++) {
+      if (_gtCircuitUntil > Date.now()) return null;   // the circuit opened (this token's refusals or another's) — the fallbacks draw
+      await gtGate();
+      if (signal && signal.aborted) return null;
+      r = await fetchRetry(url, 1, 2000, signal, { 'accept': 'application/json' });
+      if (!r) {   // refusals count ACROSS tokens: the 1st pauses every GT call 4 s, the 2nd 8 s, the 3rd opens the circuit for 45 s
+        _gtRefusals++;
+        if (_gtRefusals >= 3) { _gtCircuitUntil = Date.now() + 45000; console.warn(`GeckoTerminal refused ${_gtRefusals} calls in a row — circuit open 45 s, the fallbacks draw the rest of this load`); return null; }
+        _gtPauseUntil = Math.max(_gtPauseUntil, Date.now() + 4000 * _gtRefusals); console.warn(`GeckoTerminal refused ${sym} [${tier}] page ${p} — pausing ${4 * _gtRefusals}s`);
+      }
+    }
+    if (!r) return null;
+    _gtRefusals = 0;
+    _gtCircuitUntil = 0;
     let j;
     try { j = await r.json(); }
     catch (e) { console.warn(`GeckoTerminal parse error for ${sym} (page ${p}):`, e); break; }
@@ -2138,7 +2180,7 @@ function _doRenderSummary() {
   const items = getShareItems(false);
   el.innerHTML = items.map((it, idx) => {
     const up = it.pct >= 0;
-    const limitedBadge = it.limited ? '<span class="card-limited">24H ONLY</span>' : '';
+    const limitedBadge = it.limited ? '<span class="card-limited">24H ONLY</span>' : it.coarse ? '<span class="card-limited">DAILY</span>' : '';
     const spark = sparkSVG(it.spark, it.color, `spark-grad-${idx}`);
     return `<div class="card" style="--cc:${it.color}"><div class="card-top"><img src="${it.logo}" alt="${it.sym}" onerror="this.style.display='none'"/><span class="card-sym">${it.sym}</span></div><div class="card-chg ${up ? 'up' : 'dn'}">${up ? '+' : ''}${it.pct.toFixed(2)}%</div><div class="card-price">${it.ps}</div>${spark ? `<div class="card-spark">${spark}</div>` : ''}${limitedBadge}</div>`;
   }).join('');

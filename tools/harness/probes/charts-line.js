@@ -1,0 +1,1 @@
+(()=>{const st=document.getElementById("statusTxt");const t=Object.entries(TOKENS).filter(([k,t])=>t.on).map(([k,t])=>`${k}:${t._data?t._data.length:0}pts${t._limited?' LIMITED':''}${t._coarse?' DAILY':''}`);return JSON.stringify({status:st&&st.textContent.trim(),tokens:t,cards:[...document.querySelectorAll('.card-limited')].map(e=>e.textContent)})})()

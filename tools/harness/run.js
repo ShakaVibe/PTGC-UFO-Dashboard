@@ -240,6 +240,7 @@ const dsAnswer=(url)=>{
       const gc=process.env.GT_CANDLES;if(!gc)return r.fulfill({status:404,body:''});
       if(/^slow:/.test(gc))await sleep(+gc.slice(5));
       if(gc==='flaky'){gtCalls++;if(gtCalls<=2)return r.fulfill({status:429,body:''});}   // GT_CANDLES=flaky: the first two answers are 429s, then normal — the dashboard's sparkline retry must recover
+      const rf=gc.match(/^refuse(?::(\d+))?$/);if(rf){gtCalls++;if(!rf[1]||gtCalls<=+rf[1])return r.fulfill({status:429,body:''});}   // GT_CANDLES=refuse: EVERY GT answer is a 429 (charts.html 2026-10-05: the daily-file fallback must draw 7D / 14D); refuse:<n>: the first n, then normal (the global back-off must recover)
       /* per-pool hourly candles (the LP Pairs table's 7-day volume curves, 2026-10-01): 168 hourly rows with a
          volume (column 5) seeded from the pool address — half the pools trend up, half down; GT_POOLS=miss:<n>
          404s every n-th pool so the dashed "unavailable" line shows too */
