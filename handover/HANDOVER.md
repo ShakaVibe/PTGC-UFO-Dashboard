@@ -36,8 +36,13 @@ droplet / pie / rising chart / green people / money bag / flame), **real 30-day 
 (the old `renderKPICard` maths moved in unchanged; `renderKPICard` is a one-liner now). Tab container 1264 px, side-by-side
 from `lg`, controls in one centred row. **Found on the way: the Socials "Combined KPI Report" row had been DEAD since
 `42f244912` (2026-09-29) — its modal was deleted by accident; restored.** Four explainers added (`liquidity`, `liqMcap`,
-`volume24h`, `totalBurned`). Not touched: the 📷 share image (`TwitterCard`, 2025 look). Harness: 1440 single + both, 1024
-both, 390, DS_DOWN, the two Socials rows, the dashboard unchanged — `sessions/2026-10-05.md`. **NEXT SESSION STARTS WITH: his
+`volume24h`, `totalBurned`). Not touched: the 📷 share image (`TwitterCard`, 2025 look). **Round 2 (his first live look, Mac): the 📷 button
+GONE from the tab ("they can screen shot the images" — the share image now only opens from the Socials Combined row); ADD /
+REMOVE restyled as the header's SWITCH button (`.kp-btn`); the VALUE GEN change badge gone (it was the volume change
+relabelled and overran the tile); the UFO compare card's Value Generated now from the hourly delivered snapshot (`vgPrices` +
+`otherVg` → "7D", EST only when the file is missing / stale); the price change 26 px; the creature row a fixed 40 px that
+scales (`NhsFit`) — a scrollbar had made the PTGC card taller than UFO's — and the pair `lg:items-stretch`.** Harness: 1440
+single + both, 1024 both, 390, DS_DOWN, the two Socials rows, the dashboard unchanged — `sessions/2026-10-05.md`. **NEXT SESSION STARTS WITH: his
 push + live look (KPI tab both tokens, Add UFO / Add PTGC, Mac then phone; Socials → KPI Report and → Combined KPI Report), the
 full-size backgrounds, then — if he wants — the share image in the new look; then the live look owed from 2026-10-04 (below).
 2026-10-06 (Tuesday) = UFO day 90: check the UFO dashboard + PTGC-burned-by-UFO.**

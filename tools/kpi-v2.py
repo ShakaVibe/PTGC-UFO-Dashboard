@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KPI Report v2 (2026-10-05): splice KpiCardV2 + the kp-* CSS into index.html, swap renderKPICard to it, widen the tab,
+"""KPI Report v2 (2026-10-05, rounds 1–2): splice KpiCardV2 + the kp-* CSS into index.html, swap renderKPICard to it, widen the tab,
 restore the Combined KPI modal (deleted by accident in 42f244912, 2026-09-29), add four explainers.
 Run from the repo root on a clean index.html: python3 tools/kpi-v2.py  (idempotent — refuses to run twice)."""
 import re,sys,pathlib
@@ -35,7 +35,7 @@ s=s[:a]+('      /* The card — KpiCardV2 (2026-10-05, Shaka\'s mock-up); the ma
          '      const renderKPICard=(t,c,d,b,bp,h,hChange,isMain=true)=><KpiCardV2 t={t} c={c} d={d} b={b} bp={bp} h={h} hChange={hChange} pls={pls} token={token} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} burnHistoryCache={burnHistoryCache}/>;\n      \n')+s[b:]
 # 5. the side-by-side from lg (two 600 px cards need ~1224), the placeholders at the card's size
 rep("<div className={`flex ${showBoth?'flex-col md:flex-row gap-6 justify-center items-start':'flex-col items-center'}`}>",
-    "<div className={`w-full flex ${showBoth?'flex-col lg:flex-row gap-6 justify-center items-center lg:items-start':'flex-col items-center'}`}>")
+    "<div className={`w-full flex ${showBoth?'flex-col lg:flex-row gap-6 justify-center items-center lg:items-stretch':'flex-col items-center'}`}>")
 rep('<div className="w-full max-w-md flex-shrink-0 h-[700px] rounded-2xl flex items-center justify-center" style={{background:\'#0d0d0d\',border:`2px solid ${token===\'PTGC\'?\'#7CFC00\':\'#D4AF37\'}40`}}>',
     '<div className="w-full max-w-[600px] flex-shrink-0 h-[700px] rounded-3xl flex items-center justify-center" style={{background:\'#0d0d0d\',border:`2px solid ${token===\'PTGC\'?\'#7CFC00\':\'#D4AF37\'}40`}}>')
 rep('<div className="w-full max-w-md flex-shrink-0 h-[700px] rounded-2xl flex items-center justify-center" style={{background:\'#0d0d0d\',border:`2px solid ${token===\'PTGC\'?\'#7CFC00\':\'#D4AF37\'}40`}} role="status">',
@@ -86,5 +86,49 @@ rep('''      plsRatio:(token)=>(
         <p>The {token} price expressed in PLS: how many PLS one {token} is worth right now.</p>
       )
     };''',expl)
+# 8. the camera goes (Shaka, 2026-10-05: "they can screen shot the images"); the controls in one centred row; ADD / REMOVE as
+#    the SWITCH-style glass button
+a=s.index('          {/* Twitter Screenshot Button - show when in dual view */}'); b=s.index('          {!showBoth?(',a)
+s=s[:a]+('          {/* the controls, one centred row over the cards (2026-10-05) */}\n'
+         '          <div className="flex justify-center items-center gap-3 mb-4">\n'
+         '          {/* no 📷 here since 2026-10-05 (Shaka: "they can screen shot the images"); the 1200×675 share image is still what the Socials → Combined KPI Report row opens */}\n')+s[b:]
+rep('''            <button onClick={()=>{loadOtherToken();setShowBoth(true);}} className="mb-3 px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 hover:opacity-80 transition-opacity" style={{background:token==='PTGC'?'#7CFC00':'#D4AF37',color:'#000'}}>
+              <span className="text-lg">+</span> Add {otherToken}
+            </button>''',
+'''            <button type="button" onClick={()=>{loadOtherToken();setShowBoth(true);}} aria-label={`Add the ${otherToken} card`} className={`kp-btn tap-h ${otherToken==='PTGC'?'gold':''}`}>
+              <img src={otherCfg.logo} alt=""/><span>ADD {otherToken}</span>
+            </button>''')
+rep('''            <button onClick={()=>setShowBoth(false)} className="mb-3 px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 hover:opacity-80 transition-opacity bg-gray-700 text-white">
+              <span className="text-lg">−</span> Remove {otherToken}
+            </button>
+          )}
+          
+          {/* Side by side on desktop, stacked on mobile */}''',
+'''            <button type="button" onClick={()=>setShowBoth(false)} aria-label={`Remove the ${otherToken} card`} className={`kp-btn off tap-h ${otherToken==='PTGC'?'gold':''}`}>
+              <img src={otherCfg.logo} alt=""/><span>REMOVE {otherToken}</span>
+            </button>
+          )}
+          </div>
+          
+          {/* Side by side on desktop, stacked on mobile */}''')
+# 9. round 2 (same day): the compare card's UFO Value Generated from the hourly snapshot (no "7D EST" when the file is fresh),
+#    the page's price map handed in, the pair stretched to one height
+rep('    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7d})=>{',
+    '    const KPIContent=({token,cfg,data,burn,burnPeriods,holders,holderChange,pls,burnHistoryCache,onClose,startWithBoth=false,startInTwitterMode=false,volumeByPeriod,valueGen7d,vgPrices})=>{')
+rep('''      const[otherLoading,setOtherLoading]=useState(startWithBoth);
+      ''','''      const[otherLoading,setOtherLoading]=useState(startWithBoth);
+      const[otherVg,setOtherVg]=useState(null);   // UFO as the other token: {ufoSnap,plsxPx,wethPx} — the hourly delivered snapshot + the LP partner prices (2026-10-05)
+      ''')
+rep('''          if(burnData)setOtherBurn(burnData);
+          if(otherToken==='UFO'){''',
+'''          if(burnData)setOtherBurn(burnData);
+          if(otherToken==='UFO'){
+            /* the UFO card's Value Generated = the UFO dashboard's delivered figure (the hourly snapshot its panel reads) +
+               the PLSX / WETH prices its LP buckets need — the Combined Value Generated card's 2026-09-29 route, not volume × fee */
+            Promise.all([fetchValueGenSnapshot().catch(()=>null),Promise.all([PLSX_ADDRESS,UFO_WETH].map(a=>dsPairsFor(a).then(ps=>dsPriceOf(ps,a)).catch(()=>null)))])
+              .then(([snap,lpPx])=>{const ufoSnap=snap&&snap.valid&&snap.ageMs<VALUE_GEN_INTERIM_MS?{delivered:snap.json.delivered,realizedFees:snap.json.realizedFees,at:Date.now()-snap.ageMs}:null;setOtherVg({ufoSnap,plsxPx:lpPx[0],wethPx:lpPx[1]});}).catch(()=>{});''')
+rep('volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d}/>','volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>',3)
+rep('      const renderKPICard=(t,c,d,b,bp,h,hChange,isMain=true)=><KpiCardV2 t={t} c={c} d={d} b={b} bp={bp} h={h} hChange={hChange} pls={pls} token={token} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} burnHistoryCache={burnHistoryCache}/>;',
+    '      const renderKPICard=(t,c,d,b,bp,h,hChange,isMain=true)=><KpiCardV2 t={t} c={c} d={d} b={b} bp={bp} h={h} hChange={hChange} pls={pls} token={token} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} burnHistoryCache={burnHistoryCache} vgPrices={vgPrices} otherVg={otherVg}/>;')
 p.write_text(s)
 print('applied', len(s))

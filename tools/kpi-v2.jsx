@@ -14,12 +14,12 @@
       return<span className={`kp-chg ${up?'up':'dn'}`}><i aria-hidden="true">{up?'▲':'▼'}</i>{pct?`${Math.abs(v).toFixed(dec)}%`:`${up?'+':''}${fmt(Math.abs(v))}`}</span>;
     };
     const KpInfo=({label,children})=>(<InfoTip label={label} className="kp-info" trigger={<span className="kp-i" aria-hidden="true">i</span>}>{children}</InfoTip>);
-    const KpTile=({t,k,icon,label,badge,value,pts,tag,spark})=>(   // module scope (gotcha 14): a tile declared inside the card would remount — and re-request its icon — on every render
+    const KpTile=({t,k,icon,label,badge,value,pts,spark})=>(   // module scope (gotcha 14): a tile declared inside the card would remount — and re-request its icon — on every render
       <div className="kp-bx kp-t">
-        <div className="r1"><img className="kp-ic" src={icon} alt="" aria-hidden="true"/><span className="kp-chip">{label}{tag&&<span className="kp-chip tag">{tag}</span>}</span><span className="sp"></span>{badge}</div>
+        <div className="r1"><img className="kp-ic" src={icon} alt="" aria-hidden="true"/><span className="kp-chip">{label}</span><span className="sp"></span>{badge}</div>
         <div className="r2"><H2Val className="v">{value}</H2Val>{pts===false?null:<KpSpark pts={pts} color={spark} id={`kp-${t}-${k}`} label={`${label} ${H2_DAYS} day history`}/>}</div>
       </div>);
-    const KpiCardV2=({t,c,d,b,bp,h,hChange,pls,token,volumeByPeriod,valueGen7d,burnHistoryCache})=>{
+    const KpiCardV2=({t,c,d,b,bp,h,hChange,pls,token,volumeByPeriod,valueGen7d,burnHistoryCache,vgPrices,otherVg})=>{
       const isPTGC=t==='PTGC';
       const spark=isPTGC?'#FFD24D':'#8DFF3A';   // the tiles' line colour — one per token (2026-10-01)
       const ser=useH2Series(t,d,!d);              // the 30-day series: mcap (price candles), vol, liq, ratio (lv-snapshots), hold (holder history)
@@ -36,7 +36,14 @@
       const burnUSD=(d?.price>0&&b)?b.total*d.price:null;
       const liqMcapPct=(d?.mcap>0&&d?.liq!=null)?(d.liq/d.mcap*100):null;
       const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      /* u5: the active token's figure is the panel's own object. The OTHER token: PTGC = volume × fee (its only basis);
+         UFO = the UFO dashboard's DELIVERED figure from the hourly snapshot (value-generated.json, the same file its panel
+         reads — fetched by loadOtherToken, with the PLSX / WETH prices its LP buckets need), so the compare card prints what
+         the UFO page prints and the tag is "7D"; only when that file is missing or > 48 h old does it fall back to
+         volume × fee, tagged "7D EST" (Shaka, 2026-10-05: "why are we putting 7D EST on UFO's"). */
       const vg7=(t===token&&valueGen7d)?valueGen7d
+        :(t==='UFO'&&otherVg?.ufoSnap)?computeValueGen({token:'UFO',cfg:c,period:'7d',periodVol:vol7dFromCache('UFO'),delivered:otherVg.ufoSnap.delivered,realizedFees:otherVg.ufoSnap.realizedFees,
+            prices:{...(vgPrices||{}),UFO:(vgPrices?.UFO)||(d?.price>0?d.price:null),PLSX:(vgPrices?.PLSX)||otherVg.plsxPx||null,WETH:(vgPrices?.WETH)||otherVg.wethPx||null}})
         :computeValueGen({token:t,cfg:c,period:'7d',periodVol:(t===token?volumeByPeriod?.vol7d:vol7dFromCache(t)),delivered:null,realizedFees:null,prices:{},estimate:t!==token});
       const valueGenPending=!!vg7.pending;
       const valueGenUsd=vg7.total;
@@ -70,7 +77,8 @@
               <KpTile t={t} spark={spark} k="ratio" icon={KP_ICONS.ratio} label="LIQ/MC RATIO" badge={<KpInfo label="Liquidity to market cap ratio">{EXPLAINERS.liqMcap(t)}</KpInfo>} value={liqMcapPct==null?'—':`${liqMcapPct.toFixed(1)}%`} pts={ser.ratio}/>
               <KpTile t={t} spark={spark} k="vol" icon={KP_ICONS.vol} label="VOLUME" badge={volChange!=null?<KpChg v={volChange}/>:<KpInfo label="Volume">{EXPLAINERS.volume24h(t)}</KpInfo>} value={fmtUSD(d?.vol)} pts={ser.vol}/>
               <KpTile t={t} spark={spark} k="hold" icon={KP_ICONS.hold} label="HOLDERS" badge={<KpChg v={hChange} pct={false}/>} value={fmt(h)} pts={ser.hold}/>
-              <KpTile t={t} spark={spark} k="vg" icon={KP_ICONS.vg} label="VALUE GEN" tag={valueGenTag} badge={(valueGenPending||valueGenUsd==null)?<KpInfo label="Value Generated">{EXPLAINERS.valueGenerated(t,c)}</KpInfo>:<KpChg v={volChange}/>}
+              {/* no change badge here — the old card's "change" on this tile was the VOLUME change relabelled (2026-10-05); the tag sits by the ⓘ */}
+              <KpTile t={t} spark={spark} k="vg" icon={KP_ICONS.vg} label="VALUE GEN" badge={<><span className="kp-chip tag">{valueGenTag}</span><KpInfo label="Value Generated">{EXPLAINERS.valueGenerated(t,c)}</KpInfo></>}
                 value={valueGenPending?<span className="animate-pulse text-white/40" title="reading fees from chain…">{'—'}</span>:fmtUSD(valueGenUsd)} pts={false}/>
             </div>
             <div className="kp-bn">
@@ -78,7 +86,7 @@
                 <div className="lab"><img className="kp-ic" src={KP_ICONS.flame} alt="" aria-hidden="true"/><span className="kp-chip">TOTAL BURNED</span><span style={{flex:1}}></span><KpInfo label="Total burned">{EXPLAINERS.totalBurned(t)}</KpInfo></div>
                 <H2Val className="big">{burnKnown?fmt(b.total):'—'}<span>{t}</span></H2Val>
                 <div className="usd">{burnKnown?fmtUSD(burnUSD):'—'}{burnKnown&&<span>{burnPctNum.toFixed(2)}%</span>}</div>
-                <div className="kp-cre">{creatures.length>0?creatures.map((cr,i)=><span key={i}><SeaIcon e={cr.e} size={38}/>x{cr.cnt}</span>):<span style={{color:'rgba(255,255,255,.45)',fontSize:'14px',fontWeight:500}}>{burnKnown?'Building…':'—'}</span>}</div>
+                <div className="kp-cre"><NhsFit className="kp-crefit">{creatures.length>0?creatures.map((cr,i)=><span key={i}><SeaIcon e={cr.e} size={38}/>x{cr.cnt}</span>):<span style={{color:'rgba(255,255,255,.45)',fontSize:'14px',fontWeight:500}}>{burnKnown?'Building…':'—'}</span>}</NhsFit></div>
                 <div className="kp-bar"><P2Bar pct={burnKnown?whaleP.progress:0}/><span className="pct">{burnKnown?`${whaleP.progress.toFixed(1)}%`:'—'}</span><SeaIcon e={'\u{1F40B}'} size={34}/></div>
               </div>
               <div className="R">
