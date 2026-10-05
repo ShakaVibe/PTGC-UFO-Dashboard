@@ -26,10 +26,20 @@ Update it at the end of every session.
 
 ## Current state (end of 2026-10-05)
 
+**2026-10-05 (Monday), closed by Shaka ("let's call it a day, wrap it up"): PUSHED by him as `318957448` — ONE commit for the whole
+day (the KPI Report tab, the Calculators page, the Charts page + its GeckoTerminal fix), tree clean. Nothing half-done. Seen live by
+him on the Mac: the KPI tab (two rounds of notes, all done), the Charts page (where he found the 14D bug). NOT yet seen live: the
+Calculators page, the charts after the GeckoTerminal fix, any of it on a phone. NEXT SESSION STARTS WITH: his live look — Charts
+14D on WPLS + HEX (hourly candles if GeckoTerminal answers, "daily candles" if it refuses — never two points), the Calculators
+page (Mac + phone), the KPI tab on a phone; the full-size KPI backgrounds if he has them (`logos/kpi/`, gotcha 38); whatever he
+brings (ask — screenshots); then the live look owed from 2026-10-04 (below). **2026-10-06 (Tuesday) = UFO day 90: check the UFO
+dashboard + PTGC-burned-by-UFO.** Not done, if he asks: the KPI 📷 share image (`TwitterCard`) in the new look; a "30D" mark on
+the KPI card's sparklines.**
+
 **2026-10-05 (Monday), afternoon: THE CALCULATORS PAGE RESKINNED — his gold space art as a fixed page plate under a 62 % veil,
 "Grays Calculators" in the Socials Hub's metallic title, his five calculator buttons with his icons (three gold, two blue), every
 calculator's own disclaimer card framed at the foot ("this needs to stay on the bottom of all the calculator pages"). Three mock
-rounds (`design/calculators/`), then `tools/calc-v2.py` on calculators.html; **then the Charts page got the same treatment (`tools/charts-v2.py`: the plate, "Grays Charts", the chart card more solid; the two "—" placeholder sub-tabs gone, the one button centred). **His live look of the charts: 14D drew TWO DAYS, slow, "limited data" — GeckoTerminal refused every call after the first (a 429 prints as a CORS error), `fetchRetry` retried outside the gate, the two-point DexScreener line was cached for 10 min. `tools/charts-gt.py`: refusals count across tokens (pause 4 s / 8 s, then a 45 s circuit), 7D / 14D fall to the prebuilt DAILY file (real daily closes, "daily candles" / DAILY badge) before the two-point line, a fallback is never "fresh" in the cache. Harness `GT_CANDLES=refuse` / `refuse:<n>`.** Written to the Mac, NOT pushed, NOT seen live.**
+rounds (`design/calculators/`), then `tools/calc-v2.py` on calculators.html; **then the Charts page got the same treatment (`tools/charts-v2.py`: the plate, "Grays Charts", the chart card more solid; the two "—" placeholder sub-tabs gone, the one button centred). **His live look of the charts: 14D drew TWO DAYS, slow, "limited data" — GeckoTerminal refused every call after the first (a 429 prints as a CORS error), `fetchRetry` retried outside the gate, the two-point DexScreener line was cached for 10 min. `tools/charts-gt.py`: refusals count across tokens (pause 4 s / 8 s, then a 45 s circuit), 7D / 14D fall to the prebuilt DAILY file (real daily closes, "daily candles" / DAILY badge) before the two-point line, a fallback is never "fresh" in the cache. Harness `GT_CANDLES=refuse` / `refuse:<n>`.** Pushed as `318957448` (end of day); the Calculators page and the charts fix not yet seen live.**
 
 **2026-10-05 (Monday): THE KPI REPORT TAB REDESIGNED — built to Shaka's mock-up ("perfect, make it live"), written to the Mac,
 NOT pushed, NOT seen live.** His page mock-up + two card backgrounds (`design/kpi/reference/`; **the zip with the full-size
@@ -1012,9 +1022,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--11. **Calculators + Charts pages (2026-10-05) — BUILT, on the Mac, not pushed.** His push + live look (Mac + phone). Charts = `tools/charts-v2.py` then `tools/charts-gt.py` (the GeckoTerminal back-off + daily fallback). After the push: 14D on WPLS + HEX again — hourly candles if GT answers, "daily candles" if it refuses; never two points for a fortnight. Build = `tools/calc-v2.py`
+-11. **Calculators + Charts pages (2026-10-05) — PUSHED (`318957448`), live look owed** (Mac + phone). Charts = `tools/charts-v2.py` then `tools/charts-gt.py` (the GeckoTerminal back-off + daily fallback). After the push: 14D on WPLS + HEX again — hourly candles if GT answers, "daily candles" if it refuses; never two points for a fortnight. Build = `tools/calc-v2.py`
    on a clean calculators.html; design `design/calculators/README.md`; icons `logos/calculators/ic-*.webp`, plate `calc-bg.jpg`.
--10. **KPI Report tab (2026-10-05) — BUILT, on the Mac, not pushed.** His push + live look; the full-size backgrounds
+-10. **KPI Report tab (2026-10-05) — PUSHED (`318957448`), seen live on the Mac (two rounds of notes done); owed: a phone; the full-size backgrounds
    (`logos/kpi/`, new names or `?v=`); the 📷 share image (`TwitterCard`) in the new look if he asks. Build = `tools/kpi-v2.py`
    on a clean index.html (`kpi-v2.css` + `kpi-v2.jsx` are its parts); design `design/kpi/README.md`.
 -9. **Socials Hub redesign (2026-10-03, second session) — BUILT and PUSHED (`6786b4af0`), live look owed.** Now: ptgc-ufo.com → Socials
