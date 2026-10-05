@@ -11,6 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
+- **KPI Report tab (2026-10-05):** `KpiCardV2` (`.kp-*`, container queries) — assets `logos/kpi/`, build script `tools/kpi-v2.py`, mock-up + every decision `design/kpi/README.md`. The 📷 share image (`TwitterCard`) is still the old look.
 - **Leagues (2026-10-04):** the holder-tiers modal (`TierInfoModal`, `.lg-*`) and the Socials combined card (`LeaguesCombinedCard`, `.lgc`) — assets `logos/leagues/`, mock-ups + every decision `design/leagues/README.md`.
 - Repo layout: `index.html` is the whole app (React 18 + Babel-standalone + Tailwind play
   CDN, compiled in the browser). `scripts/` + `.github/workflows/data-pipeline.yml` are the
@@ -21,7 +22,26 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (end of 2026-10-04)
+## Current state (end of 2026-10-05)
+
+**2026-10-05 (Monday): THE KPI REPORT TAB REDESIGNED — built to Shaka's mock-up ("perfect, make it live"), written to the Mac,
+NOT pushed, NOT seen live.** His page mock-up + two card backgrounds (`design/kpi/reference/`; **the zip with the full-size
+backgrounds never arrived — `logos/kpi/kpi-bg-*.jpg` are cut from the side-by-side image, 656 px, swap file-for-file when it
+lands, gotcha 38**). Mock v1 (`design/kpi/mock-kpi-v1.html`, README = every decision) approved as rendered, then the build:
+`KpiCardV2` at module scope above `KPIContent` — his art as the plate, the lit coin, the panel icons (Treasury coins / LP bars /
+droplet / pie / rising chart / green people / money bag / flame), **real 30-day sparklines from the KPI tiles' own
+`useH2Series` + `H2Spark`** (the compare card's other token draws its own), the sea-creature row and the v2 fire bar (its
+`.p2 .p2-bar` rules now also match `.kp .p2-bar`), figures through `H2Val`; the `kp-*` CSS is a **container-query** unit (under
+540 px: sparkline under the figure, badge bottom-right — a phone, or two cards side by side at 1024). Same numbers as before
+(the old `renderKPICard` maths moved in unchanged; `renderKPICard` is a one-liner now). Tab container 1264 px, side-by-side
+from `lg`, controls in one centred row. **Found on the way: the Socials "Combined KPI Report" row had been DEAD since
+`42f244912` (2026-09-29) — its modal was deleted by accident; restored.** Four explainers added (`liquidity`, `liqMcap`,
+`volume24h`, `totalBurned`). Not touched: the 📷 share image (`TwitterCard`, 2025 look). Harness: 1440 single + both, 1024
+both, 390, DS_DOWN, the two Socials rows, the dashboard unchanged — `sessions/2026-10-05.md`. **NEXT SESSION STARTS WITH: his
+push + live look (KPI tab both tokens, Add UFO / Add PTGC, Mac then phone; Socials → KPI Report and → Combined KPI Report), the
+full-size backgrounds, then — if he wants — the share image in the new look; then the live look owed from 2026-10-04 (below).
+2026-10-06 (Tuesday) = UFO day 90: check the UFO dashboard + PTGC-burned-by-UFO.**
+
 
 **2026-10-04 (Sunday), closed by Shaka ("lets wrap it up and call it a day and update the handover"): HOLDERS DETAILS IS
 LIVE with its share card and the three Socials rows, the tile's grey icon, the Home cards' buttons swapped, the BOTH card's fit
@@ -980,6 +1000,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-10. **KPI Report tab (2026-10-05) — BUILT, on the Mac, not pushed.** His push + live look; the full-size backgrounds
+   (`logos/kpi/`, new names or `?v=`); the 📷 share image (`TwitterCard`) in the new look if he asks. Build = `tools/kpi-v2.py`
+   on a clean index.html (`kpi-v2.css` + `kpi-v2.jsx` are its parts); design `design/kpi/README.md`.
 -9. **Socials Hub redesign (2026-10-03, second session) — BUILT and PUSHED (`6786b4af0`), live look owed.** Now: ptgc-ufo.com → Socials
    on the Mac (sky, title, three columns, every row opens the same card as before), then iPhone + iPad (one column). Then the
    full-size icon sheet from Shaka → replace the 18 cut icons in `logos/socials/hub/` (same names). `_to_delete/hub-sky-top.jpg`
@@ -1076,6 +1099,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
+- `sessions/2026-10-05.md` — the KPI Report tab redesigned to Shaka's mock-up: mock v1 (approved), `KpiCardV2` + `kp-*`
+  container-query CSS, real sparklines via `useH2Series`, the fire bar shared, the Combined KPI Report row restored (dead since
+  09-29), four explainers; harness at 1440 / 1024 / 390, DS_DOWN, the Socials rows.
 - `sessions/2026-09-08.md` — review, roadmap, Phase 0, dead code, data quick wins, generator repoint,
   share cards, Phase 2 leftovers, u7/u8 clarity + mobile pass, harness ported to `tools/`.
 - `sessions/2026-09-09.md` — u1 Modal shell (16 overlays migrated, key stack shared with
