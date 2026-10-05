@@ -11,6 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
+- **Charts page (2026-10-05):** the Calculators treatment (same plate, "Grays Charts") — `tools/charts-v2.py`, `cp-*` CSS in charts.html.
 - **Calculators page (2026-10-05):** his art as the plate + "Grays Calculators" title + his icon buttons + framed disclaimers — `tools/calc-v2.py` (`cp-*` CSS in calculators.html), assets `logos/calculators/`, decisions `design/calculators/README.md`.
 - **KPI Report tab (2026-10-05):** `KpiCardV2` (`.kp-*`, container queries) — assets `logos/kpi/`, build script `tools/kpi-v2.py`, mock-up + every decision `design/kpi/README.md`. The 📷 share image (`TwitterCard`) is still the old look.
 - **Leagues (2026-10-04):** the holder-tiers modal (`TierInfoModal`, `.lg-*`) and the Socials combined card (`LeaguesCombinedCard`, `.lgc`) — assets `logos/leagues/`, mock-ups + every decision `design/leagues/README.md`.
@@ -28,7 +29,7 @@ Update it at the end of every session.
 **2026-10-05 (Monday), afternoon: THE CALCULATORS PAGE RESKINNED — his gold space art as a fixed page plate under a 62 % veil,
 "Grays Calculators" in the Socials Hub's metallic title, his five calculator buttons with his icons (three gold, two blue), every
 calculator's own disclaimer card framed at the foot ("this needs to stay on the bottom of all the calculator pages"). Three mock
-rounds (`design/calculators/`), then `tools/calc-v2.py` on calculators.html. Written to the Mac, NOT pushed, NOT seen live.**
+rounds (`design/calculators/`), then `tools/calc-v2.py` on calculators.html; **then the Charts page got the same treatment (`tools/charts-v2.py`: the plate, "Grays Charts", the chart card more solid; the two "—" placeholder sub-tabs gone, the one button centred)**. Written to the Mac, NOT pushed, NOT seen live.**
 
 **2026-10-05 (Monday): THE KPI REPORT TAB REDESIGNED — built to Shaka's mock-up ("perfect, make it live"), written to the Mac,
 NOT pushed, NOT seen live.** His page mock-up + two card backgrounds (`design/kpi/reference/`; **the zip with the full-size
@@ -1011,7 +1012,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--11. **Calculators page (2026-10-05) — BUILT, on the Mac, not pushed.** His push + live look (Mac + phone). Build = `tools/calc-v2.py`
+-11. **Calculators + Charts pages (2026-10-05) — BUILT, on the Mac, not pushed.** His push + live look (Mac + phone). Charts = `tools/charts-v2.py`. Build = `tools/calc-v2.py`
    on a clean calculators.html; design `design/calculators/README.md`; icons `logos/calculators/ic-*.webp`, plate `calc-bg.jpg`.
 -10. **KPI Report tab (2026-10-05) — BUILT, on the Mac, not pushed.** His push + live look; the full-size backgrounds
    (`logos/kpi/`, new names or `?v=`); the 📷 share image (`TwitterCard`) in the new look if he asks. Build = `tools/kpi-v2.py`
