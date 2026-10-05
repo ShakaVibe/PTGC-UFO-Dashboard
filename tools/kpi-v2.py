@@ -119,14 +119,28 @@ rep('''      const[otherLoading,setOtherLoading]=useState(startWithBoth);
       ''','''      const[otherLoading,setOtherLoading]=useState(startWithBoth);
       const[otherVg,setOtherVg]=useState(null);   // UFO as the other token: {ufoSnap,plsxPx,wethPx} — the hourly delivered snapshot + the LP partner prices (2026-10-05)
       ''')
-rep('''          if(burnData)setOtherBurn(burnData);
-          if(otherToken==='UFO'){''',
-'''          if(burnData)setOtherBurn(burnData);
-          if(otherToken==='UFO'){
+a=s.index("          if(otherToken==='UFO'){\n            const _fp=dexData?.pairs?.reduce("); b=s.index('          }',a)+len('          }')
+s=s[:a]+'''          if(otherToken==='UFO'){
             /* the UFO card's Value Generated = the UFO dashboard's delivered figure (the hourly snapshot its panel reads) +
-               the PLSX / WETH prices its LP buckets need — the Combined Value Generated card's 2026-09-29 route, not volume × fee */
+               the PLSX / WETH prices its LP buckets need — the Combined Value Generated card's 2026-09-29 route, not volume × fee.
+               2026-10-05 round 3: the same snapshot's burnPeriods.UFO paints the burn box AT ONCE (the UFO panel's own route) —
+               the first live look sat on "—" for the whole ~55-call chain scan; the scan now runs only when the file is not
+               fresh (or failed), and replaces the snapshot's windows when it lands. */
+            const _fp=dexData?.pairs?.reduce((m,pr)=>(pr.pairCreatedAt&&pr.pairCreatedAt<m)?pr.pairCreatedAt:m,Infinity);
+            const scan=()=>fetchBurnPeriodsOnChain(otherCfg.address,otherCfg.decimals,(_fp&&isFinite(_fp))?_fp:UFO_LAUNCH_FALLBACK_MS).then(bp=>{if(bp)setOtherBurnPeriodsChain(bp);}).catch(()=>{});
             Promise.all([fetchValueGenSnapshot().catch(()=>null),Promise.all([PLSX_ADDRESS,UFO_WETH].map(a=>dsPairsFor(a).then(ps=>dsPriceOf(ps,a)).catch(()=>null)))])
-              .then(([snap,lpPx])=>{const ufoSnap=snap&&snap.valid&&snap.ageMs<VALUE_GEN_INTERIM_MS?{delivered:snap.json.delivered,realizedFees:snap.json.realizedFees,at:Date.now()-snap.ageMs}:null;setOtherVg({ufoSnap,plsxPx:lpPx[0],wethPx:lpPx[1]});}).catch(()=>{});''')
+              .then(([snap,lpPx])=>{
+                const ufoSnap=snap&&snap.valid&&snap.ageMs<VALUE_GEN_INTERIM_MS?{delivered:snap.json.delivered,realizedFees:snap.json.realizedFees,at:Date.now()-snap.ageMs}:null;
+                setOtherVg({ufoSnap,plsxPx:lpPx[0],wethPx:lpPx[1]});
+                const bp=snap&&snap.valid&&snap.ageMs<BURN_HISTORY_MAX_AGE_MS&&snap.json.burnPeriods&&snap.json.burnPeriods.UFO;
+                let painted=false;
+                if(bp&&!bp.carriedForward&&typeof bp.h24==='number'&&typeof bp.d90==='number'){
+                  setOtherBurnPeriodsChain(p=>p||{h12:bp.h12||0,h24:bp.h24,d7:bp.d7,d30:bp.d30,d90:bp.d90,sinceLaunch:!!bp.sinceLaunch,burnTxs:bp.burnTxs});   // never over a chain read that already landed
+                  painted=true;
+                }
+                if(!(painted&&snap.ageMs<VALUE_GEN_STALE_MS))scan();
+              }).catch(()=>{scan();});
+          }'''+s[b:]
 rep('volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d}/>','volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>',3)
 rep('      const renderKPICard=(t,c,d,b,bp,h,hChange,isMain=true)=><KpiCardV2 t={t} c={c} d={d} b={b} bp={bp} h={h} hChange={hChange} pls={pls} token={token} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} burnHistoryCache={burnHistoryCache}/>;',
     '      const renderKPICard=(t,c,d,b,bp,h,hChange,isMain=true)=><KpiCardV2 t={t} c={c} d={d} b={b} bp={bp} h={h} hChange={hChange} pls={pls} token={token} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} burnHistoryCache={burnHistoryCache} vgPrices={vgPrices} otherVg={otherVg}/>;')

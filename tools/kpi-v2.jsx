@@ -28,8 +28,9 @@
       const volChange=(t===token)
         ?(()=>{const v24=d?.vol||0;const v7=volumeByPeriod?.vol7d||0;const avg=v7/7;return(v24>0&&avg>0)?((v24-avg)/avg)*100:null;})()
         :(burnHistoryCache?.[t]?.changes?.volume24h??null);
-      const burn7dKnown=bp!=null&&bp.d7!=null;
-      const burn7dAmt=burn7dKnown?bp.d7:0;
+      /* the window box is 30 DAYS since 2026-10-05 round 3 (Shaka: "let's move the burn box to a 30 day burn not 7 day") — was d7 */
+      const burn7dKnown=bp!=null&&bp.d30!=null;
+      const burn7dAmt=burn7dKnown?bp.d30:0;
       const burn7dUSD=burn7dAmt*(d?.price||0);
       const burnKnown=!!(b&&b.supply>0);
       const burnPctNum=b?.pct||0;
@@ -90,7 +91,7 @@
                 <div className="kp-bar"><P2Bar pct={burnKnown?whaleP.progress:0}/><span className="pct">{burnKnown?`${whaleP.progress.toFixed(1)}%`:'—'}</span><SeaIcon e={'\u{1F40B}'} size={34}/></div>
               </div>
               <div className="R">
-                <div className="lab"><img className="kp-ic" src={KP_ICONS.flame} alt="" aria-hidden="true"/><span className="kp-chip sm">7D BURN</span></div>
+                <div className="lab"><img className="kp-ic" src={KP_ICONS.flame} alt="" aria-hidden="true"/><span className="kp-chip sm">30D BURN</span></div>
                 <div className="a">{burn7dKnown?fmtAbbr(burn7dAmt):'—'}</div><div className="tk">{t}</div><div className="us">{burn7dKnown?fmtUSD(burn7dUSD):'—'}</div>
                 <div className="cr"><SeaIcon e={burn7dKnown?singleCreature7d.e:'\u{1F41A}'} size={68} className={burn7dKnown?'':'na'}/></div>
               </div>
