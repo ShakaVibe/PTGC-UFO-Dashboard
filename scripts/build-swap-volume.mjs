@@ -14,8 +14,14 @@
 // from charts-data.json beyond 14 d). A trade with no price is counted but not valued (`unpriced`).
 //
 // Incremental: data/swap-volume-cache.json keeps every trade of the last 91 days (compact rows: [ts, block, tx
-// prefix, pool#, sender#, kind, PTGC amount, PTGC usd, UFO amount, UFO usd, PTGC dir, UFO dir, wallet#] over index tables —
-// dir = +1 a buy of the token, −1 a sell; wallet# = tx.from of a HUMAN trade, looked up FROM_CAP per run) + a block cursor; each run
+// prefix, pool#, sender#, kind, PTGC amount, PTGC usd, UFO amount, UFO usd, PTGC dir, UFO dir, wallet#, to#] over index tables —
+// dir = +1 a buy of the token, −1 a sell; wallet# = tx.from of a HUMAN trade, looked up FROM_CAP per run; to# = the Swap's `to`,
+// who received the output) + a block cursor; each run
+//
+// Aggregators we have not listed (switch.win, a new router) are caught by the `to` field: a router / aggregator delivers the
+// output to the trader's wallet — many different recipients — while a bot sends it to itself or on to the next pool. A sender
+// with ≥ AGG_MIN_RECIPIENTS distinct recipients that are neither itself nor a pool, over ≥ AGG_MIN_SHARE of its trades, is
+// classed human and labelled "aggregator (delivers to wallets)". That is in addition to the PulseScan-name promotion.
 // scans only the new blocks (first run: BACKFILL_DAYS). Block times are interpolated between the chunk ends
 // (PulseChain's ~10 s blocks; hourly bins do not need better). Pools = DexScreener's list for both tokens +
 // the pinned RH-core pools (index.html HARDCODED_*_PAIRS — DexScreener drops a quiet pool). Honest failure:
@@ -33,8 +39,9 @@ const BLOCKS_PER_DAY = 8640;
 const HEAD_LAG = 3;
 const LOG_CHUNK = Number(process.env.LOG_CHUNK || 4000);
 const HOUR = 3600000;
-const SCHEMA = 2;   // 2 (2026-10-06 round 5): rows carry the trade's direction and the human trader's wallet; a schema-1 cache is rebuilt
-const FROM_CAP = Number(process.env.FROM_CAP || 1500);   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
+const SCHEMA = 3;   // 3 (2026-10-06 round 6): rows carry the Swap's `to` as well — a sender that delivers to many different wallets is an aggregator, not a bot; 2: direction + tx.from; an older cache is rebuilt
+const FROM_CAP = Number(process.env.FROM_CAP || 1500);
+const AGG_MIN_RECIPIENTS = 5, AGG_MIN_SHARE = 0.6;   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
 
 const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';   // Swap(address,uint,uint,uint,uint,address)
 const TOKENS = {   // same as index.html TOKENS / ADDR (gotcha 00)
@@ -213,12 +220,14 @@ async function main() {
     }
     const P = amounts.PTGC || [null, null], U = amounts.UFO || [null, null];
     const tx10 = l.transactionHash.slice(0, 10);
-    fresh.push([ts, parseInt(l.blockNumber, 16), tx10, ix(idx.pools, addr), ix(idx.senders, sender), classOf(sender).kind === 'human' ? 1 : 0, P[0], P[1], U[0], U[1], dirs.PTGC || 0, dirs.UFO || 0, -1, l.transactionHash]);
+    const to = '0x' + l.topics[2].slice(26);
+    idx.wallets = idx.wallets || [];
+    fresh.push([ts, parseInt(l.blockNumber, 16), tx10, ix(idx.pools, addr), ix(idx.senders, sender), classOf(sender).kind === 'human' ? 1 : 0, P[0], P[1], U[0], U[1], dirs.PTGC || 0, dirs.UFO || 0, -1, ix(idx.wallets, lc(to)), l.transactionHash]);
   }
 
   // the human trades' wallets: tx.from, FROM_CAP lookups a run, newest first; remembered in cache.from by tx prefix
   const need = []; const seenTx = new Set();
-  for (const r of [...fresh].sort((a, b) => b[0] - a[0])) if (r[5] === 1 && !cache.from[r[2]] && !seenTx.has(r[2])) { seenTx.add(r[2]); need.push([r[2], r[13]]); }
+  for (const r of [...fresh].sort((a, b) => b[0] - a[0])) if (r[5] === 1 && !cache.from[r[2]] && !seenTx.has(r[2])) { seenTx.add(r[2]); need.push([r[2], r[14]]); }
   const pending = [...(cache.fromPending || [])];   // full hashes still to look up from earlier runs
   const todo = [...need, ...pending.filter(([t]) => !seenTx.has(t))].slice(0, FROM_CAP);
   if (todo.length) {
@@ -227,18 +236,29 @@ async function main() {
   }
   cache.fromPending = [...need, ...pending].filter(([t]) => !cache.from[t]).slice(0, 20000);
   idx.wallets = idx.wallets || [];
-  for (const r of fresh) { if (r[5] === 1 && cache.from[r[2]]) r[12] = ix(idx.wallets, cache.from[r[2]]); r.length = 13; }   // the full hash leaves the row
+  for (const r of fresh) { if (r[5] === 1 && cache.from[r[2]]) r[12] = ix(idx.wallets, cache.from[r[2]]); r.length = 14; }   // the full hash leaves the row
 
   // merge with the cache (dedupe by tx+pool+logIndex-free key: tx + pool + amounts), prune to KEEP_DAYS
   const keepFrom = Date.now() - KEEP_DAYS * 86400000;
   const seen = new Set();
   const rows = [...(cache.swaps || []), ...fresh].filter(r => { if (r[0] < keepFrom) return false; const k = r[2] + '|' + r[1] + '|' + r[3] + '|' + r[6] + '|' + r[8]; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((x, y) => x[0] - y[0]);
+  // aggregators by behaviour: who does each unlisted sender deliver to? (the whole 90 days)
+  const poolSet = new Set(Object.keys(pools));
+  const recip = {};
+  for (const r of rows) { const sd = idx.senders[r[4]], to = idx.wallets[r[13]]; const o = recip[sd] || (recip[sd] = { n: 0, other: 0, set: new Set() }); o.n++; if (to && to !== sd && !poolSet.has(to)) { o.other++; o.set.add(to); } }
+  for (const [sd, o] of Object.entries(recip)) {
+    if (ROUTERS[sd]) continue;
+    const cur = cache.senders[sd] || (cache.senders[sd] = { label: null, kind: 'bot', checkedAt: 0 });
+    const agg = o.set.size >= AGG_MIN_RECIPIENTS && o.other / o.n >= AGG_MIN_SHARE;
+    if (agg && cur.kind !== 'human') { cur.kind = 'human'; cur.label = cur.label || 'aggregator (delivers to wallets)'; cur.by = 'recipients'; console.log(`  ${sd.slice(0, 10)}… delivers to ${o.set.size} wallets over ${o.other}/${o.n} trades → human (aggregator)`); }
+    else if (!agg && cur.by === 'recipients') { cur.kind = 'bot'; cur.label = null; cur.by = null; }   // the pattern faded — back to bot
+  }
   // re-class everything with the current knowledge (a sender promoted to human applies to its past trades too)
   for (const r of rows) { r[5] = classOf(idx.senders[r[4]]).kind === 'human' ? 1 : 0; if (r[5] === 1 && r[12] < 0 && cache.from[r[2]]) r[12] = ix(idx.wallets, cache.from[r[2]]); }
   cache.swaps = rows; cache.cursor = { block: head, ts: Date.now() }; cache.schema = SCHEMA; cache.fromBlock = Math.min(cache.fromBlock || Infinity, from, back ? back[0] : Infinity);
   // the view the aggregation below reads
-  const all = rows.map(r => ({ ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: idx.senders[r[4]], kind: r[5] ? 'human' : 'bot', wallet: r[12] >= 0 ? idx.wallets[r[12]] : null, amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
+  const all = rows.map(r => ({ ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: idx.senders[r[4]], kind: r[5] ? 'human' : 'bot', wallet: r[12] >= 0 ? idx.wallets[r[12]] : (r[5] && r[10] + r[11] > 0 && r[13] >= 0 && !poolSet.has(idx.wallets[r[13]]) ? idx.wallets[r[13]] : null), amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
 
   // ---- the public file
   const now = Date.now();
