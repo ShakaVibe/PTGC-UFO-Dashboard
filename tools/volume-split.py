@@ -20,7 +20,11 @@ CSS = r'''    /* ---- Volume Split window (2026-10-06): vs-* — human vs arb-bo
     .vs-stat .v{font-family:'Orbitron',monospace;font-weight:700;font-size:26px;line-height:1.1;margin-top:6px;color:#fff;letter-spacing:-.01em}
     .vs-stat .s{font-size:12px;color:rgba(255,255,255,.55);margin-top:5px}
     .vs-stat .s b{color:rgb(var(--acc));font-weight:700}
-    .vs-bar{height:14px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+    .vs-big{display:flex;align-items:baseline;gap:8px;line-height:1}
+    .vs-big b{font-family:'Orbitron',monospace;font-weight:900;font-size:30px;letter-spacing:-.01em;text-shadow:0 0 18px currentColor}
+    .vs-big span{font-size:12px;letter-spacing:.22em;text-transform:uppercase;font-weight:700;opacity:.8}
+    .vs-big.r{flex-direction:row-reverse}
+    .vs-bar{height:18px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
     .vs-bar>i{display:block;height:100%}
     .vs-bar>i.h{background:linear-gradient(180deg,rgba(var(--tg),1),rgba(var(--tg),.7))}
     .vs-bar>i.b{background:linear-gradient(180deg,rgba(var(--bot),1),rgba(var(--bot),.7))}
@@ -35,7 +39,7 @@ CSS = r'''    /* ---- Volume Split window (2026-10-06): vs-* — human vs arb-bo
     .vs-mini{display:inline-flex;height:6px;width:72px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);vertical-align:middle;margin-left:8px}
     .vs-mini i{display:block;height:100%}
     .vs-note{font-size:12px;color:rgba(255,255,255,.55);line-height:1.5}
-    @media(max-width:640px){.vs-stat{min-height:84px;padding:12px 14px 10px}.vs-stat .v{font-size:22px}.vs-chart{height:140px}.vs-td,.vs-th{padding:8px 6px}.vs-mini{width:46px}}
+    @media(max-width:640px){.vs-big b{font-size:24px}.vs-big span{font-size:11px}.vs-stat{min-height:84px;padding:12px 14px 10px}.vs-stat .v{font-size:22px}.vs-chart{height:140px}.vs-td,.vs-th{padding:8px 6px}.vs-mini{width:46px}}
 '''
 rep("    .nh-sky{position:absolute;inset:0;background:url(logos/holders/nh-sky.jpg)", CSS+"    .nh-sky{position:absolute;inset:0;background:url(logos/holders/nh-sky.jpg)")
 
@@ -75,7 +79,7 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
       for(const tk of toks){
         const per=file.tokens[tk]&&file.tokens[tk].periods&&file.tokens[tk].periods[P.p];if(!per)continue;
         for(const k of['human','bot']){v[k].n+=per[k].n;v[k].usd+=per[k].usd;}
-        for(const[a,pl]of Object.entries(per.pools||{})){const o=v.pools[a]||(v.pools[a]={name:pl.name,token:tk,human:zero(),bot:zero()});for(const k of['human','bot']){o[k].n+=pl[k].n;o[k].usd+=pl[k].usd;}if(o.token!==tk)o.token='BOTH';}
+        for(const[a,pl]of Object.entries(per.pools||{})){const o=v.pools[a]||(v.pools[a]={addr:a,name:pl.name,token:tk,human:zero(),bot:zero(),partner:vsPartner(file,a,tk)});for(const k of['human','bot']){o[k].n+=pl[k].n;o[k].usd+=pl[k].usd;}if(o.token!==tk)o.token='BOTH';}
         for(const sd of per.senders||[]){const o=v.senders[sd.addr]||(v.senders[sd.addr]={addr:sd.addr,kind:sd.kind,label:sd.label,n:0,usd:0});o.n+=sd.n;o.usd+=sd.usd;}
       }
       v.total={n:v.human.n+v.bot.n,usd:v.human.usd+v.bot.usd};
@@ -92,6 +96,16 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
       return v;
     };
     const vsPct=x=>x==null?'—':(x*100).toFixed(x*100>=10?0:1)+'%';
+    /* The OTHER token of a pool (Shaka: "the logos to all the pools — just the other token, not the ptgc or ufo"): its address from
+       the file's pools map (token0 / token1), its logo = DexScreener's token image, or our own file for the Grays' pair. */
+    const vsPartner=(file,addr,tk)=>{
+      const pl=file.pools&&file.pools[addr];if(!pl||!pl.token0)return null;
+      const mine=(TOKENS[tk].address||'').toLowerCase();
+      const other=[pl.token0,pl.token1].map(a=>(a||'').toLowerCase()).find(a=>a&&a!==mine);if(!other)return null;
+      const grays=Object.keys(TOKENS).find(k=>(TOKENS[k].address||'').toLowerCase()===other);
+      return{addr:other,logo:grays?TOKENS[grays].logo:getLogo(other)};
+    };
+    const VsPoolLogo=({p})=>p&&p.logo?<img src={p.logo} alt="" className="w-6 h-6 rounded-full object-contain bg-black/40 ring-1 ring-white/10 shrink-0" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>:<span aria-hidden="true" className="w-6 h-6 rounded-full bg-white/[0.06] shrink-0 inline-block"></span>;
     const vsShort=a=>a.slice(0,6)+'…'+a.slice(-4);
     const VsStat=({label,value,sub,acc})=>(
       <div className="vs-stat" style={{'--acc':acc}}>
@@ -188,9 +202,9 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                     <VsStat label="ARB bot volume" value={fmtUSD(view.bot.usd)} sub={<><b>{vsPct(view.botShare)}</b> {'·'} {fmt(view.bot.n)} trades from {fmt(Object.values(view.senders).filter(s=>s.kind==='bot').length)} bot contract{Object.values(view.senders).filter(s=>s.kind==='bot').length===1?'':'s'}</>} acc={VS_BOT}/>
                   </div>
                   <div className="mt-3 rounded-2xl border border-white/10 bg-black/40 p-3 sm:p-4" style={{'--tg':rgb,'--bot':VS_BOT}}>
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <span className="vs-key"><i style={{background:`rgb(${rgb})`}}></i>Humans {vsPct(view.total.usd>0?view.human.usd/view.total.usd:null)}</span>
-                      <span className="vs-key"><i style={{background:`rgb(${VS_BOT})`}}></i>Arb bots {vsPct(view.botShare)}</span>
+                    <div className="flex items-end justify-between gap-3">
+                      <div className="vs-big" style={{color:`rgb(${rgb})`}}><b className="tabular-nums">{vsPct(view.total.usd>0?view.human.usd/view.total.usd:null)}</b><span>Humans</span></div>
+                      <div className="vs-big r" style={{color:`rgb(${VS_BOT})`}}><b className="tabular-nums">{vsPct(view.botShare)}</b><span>Arb bots</span></div>
                     </div>
                     <div className="vs-bar mt-2" role="img" aria-label={`Humans ${vsPct(view.total.usd>0?view.human.usd/view.total.usd:null)}, bots ${vsPct(view.botShare)}`}>
                       <i className="h" style={{width:`${view.total.usd>0?view.human.usd/view.total.usd*100:0}%`}}></i><i className="b" style={{width:`${view.total.usd>0?view.bot.usd/view.total.usd*100:0}%`}}></i>
@@ -205,7 +219,7 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                       <thead><tr><th className="vs-th">Pool</th><th className="vs-th">Volume</th>{!phone&&<th className="vs-th">Humans</th>}{!phone&&<th className="vs-th">Bots</th>}<th className="vs-th">Bot share</th></tr></thead>
                       <tbody>{view.pools.filter(pl=>pl.total>0||pl.human.n+pl.bot.n>0).slice(0,phone?10:20).map(pl=>{const bs=pl.total>0?pl.bot.usd/pl.total:null;return(
                         <tr key={pl.name+pl.token} className="border-t border-white/[0.06]">
-                          <td className="vs-td font-semibold">{pl.name}{token==='BOTH'&&<span className="text-white/40 font-normal text-[12px]"> {pl.token}</span>}</td>
+                          <td className="vs-td font-semibold"><span className="inline-flex items-center gap-2.5"><VsPoolLogo p={pl.partner}/>{pl.name}{token==='BOTH'&&<span className="text-white/40 font-normal text-[12px]"> {pl.token}</span>}</span></td>
                           <td className="vs-td">{fmtUSD(pl.total)}</td>
                           {!phone&&<td className="vs-td">{fmtUSD(pl.human.usd)} <span className="text-white/40 text-[12px]">{fmt(pl.human.n)}</span></td>}
                           {!phone&&<td className="vs-td">{fmtUSD(pl.bot.usd)} <span className="text-white/40 text-[12px]">{fmt(pl.bot.n)}</span></td>}
