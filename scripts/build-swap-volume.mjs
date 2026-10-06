@@ -26,8 +26,8 @@ import fs from 'node:fs';
 const OUT_PATH = process.env.OUT_PATH || 'data/swap-volume.json';
 const CACHE_PATH = process.env.CACHE_PATH || 'data/swap-volume-cache.json';
 const RPC = process.env.RPC || 'https://rpc.pulsechain.com';
-const BACKFILL_DAYS = Number(process.env.BACKFILL_DAYS || 30);
-const KEEP_DAYS = 31;
+const BACKFILL_DAYS = Number(process.env.BACKFILL_DAYS || 90);   // 2026-10-06 round 3: a 90D period (Shaka)
+const KEEP_DAYS = 91;
 const BLOCKS_PER_DAY = 8640;
 const HEAD_LAG = 3;
 const LOG_CHUNK = Number(process.env.LOG_CHUNK || 4000);
@@ -159,13 +159,18 @@ async function main() {
   const t0 = Date.now();
   const cache = readJson(CACHE_PATH, { schema: SCHEMA, cursor: null, pools: {}, senders: {}, swaps: [] });
   const head = parseInt(await rpc('eth_blockNumber', []), 16) - HEAD_LAG;
-  const from = cache.cursor ? cache.cursor.block + 1 : head - BACKFILL_DAYS * BLOCKS_PER_DAY;
+  const target = head - BACKFILL_DAYS * BLOCKS_PER_DAY;
+  const from = cache.cursor ? cache.cursor.block + 1 : target;
+  // the oldest block the cache covers — a cache built for fewer days (the 30-day first cut) is extended BACKWARDS once
+  const oldest = cache.fromBlock || (cache.swaps && cache.swaps.length ? Math.min(...cache.swaps.map(r => r[1])) : null);
+  const back = cache.cursor && oldest && oldest > target + BLOCKS_PER_DAY ? [target, oldest - 1] : null;
   const pools = await discoverPools(cache);
   const addrs = Object.keys(pools);
-  console.log(`${addrs.length} pools (${addrs.filter(a => pools[a].tokens.includes('PTGC')).length} PTGC, ${addrs.filter(a => pools[a].tokens.includes('UFO')).length} UFO); scanning ${from}…${head} (${head - from + 1} blocks${cache.cursor ? '' : ', first run — backfill'})`);
+  console.log(`${addrs.length} pools (${addrs.filter(a => pools[a].tokens.includes('PTGC')).length} PTGC, ${addrs.filter(a => pools[a].tokens.includes('UFO')).length} UFO); scanning ${from}…${head} (${head - from + 1} blocks${cache.cursor ? '' : ', first run — backfill'})${back ? ` + backfill ${back[0]}…${back[1]} (${back[1] - back[0] + 1} blocks, the cache covered ${Math.round((head - oldest) / BLOCKS_PER_DAY)} d)` : ''}`);
 
   // Swap logs, chunked, addresses in one filter; a refused chunk is split
   const ranges = []; for (let s = from; s <= head; s += LOG_CHUNK) ranges.push([s, Math.min(s + LOG_CHUNK - 1, head)]);
+  if (back) for (let s = back[0]; s <= back[1]; s += LOG_CHUNK) ranges.push([s, Math.min(s + LOG_CHUNK - 1, back[1])]);
   const fetchRange = async ([a, b]) => {
     try { return await rpc('eth_getLogs', [{ address: addrs, topics: [SWAP_TOPIC], fromBlock: hex(a), toBlock: hex(b) }], 3); }
     catch (e) { if (b - a < 100) throw e; const m = Math.floor((a + b) / 2); console.log(`    getLogs ${a}-${b} refused (${String(e.message).slice(0, 60)}) — splitting`); return [...await fetchRange([a, m]), ...await fetchRange([m + 1, b])]; }
@@ -211,13 +216,13 @@ async function main() {
     .sort((x, y) => x[0] - y[0]);
   // re-class everything with the current knowledge (a sender promoted to human applies to its past trades too)
   for (const r of rows) r[5] = classOf(idx.senders[r[4]]).kind === 'human' ? 1 : 0;
-  cache.swaps = rows; cache.cursor = { block: head, ts: Date.now() }; cache.schema = SCHEMA;
+  cache.swaps = rows; cache.cursor = { block: head, ts: Date.now() }; cache.schema = SCHEMA; cache.fromBlock = Math.min(cache.fromBlock || Infinity, from, back ? back[0] : Infinity);
   // the view the aggregation below reads
   const all = rows.map(r => ({ ts: r[0], pool: idx.pools[r[3]], sender: idx.senders[r[4]], kind: r[5] ? 'human' : 'bot', amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9]] } : {}) } }));
 
   // ---- the public file
   const now = Date.now();
-  const periods = { '24h': 1, '7d': 7, '30d': 30 };
+  const periods = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
   const zero = () => ({ n: 0, usd: 0 });
   const add = (o, usd) => { o.n++; o.usd += usd || 0; };
   const tokensOut = {};

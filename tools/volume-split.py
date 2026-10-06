@@ -14,11 +14,12 @@ def rep(old,new):
     assert s.count(old)==1,(old[:70],s.count(old)); s=s.replace(old,new)
 
 CSS = r'''    /* ---- Volume Split window (2026-10-06): vs-* — human vs arb-bot volume. --tg = the token accent, --bot = the bot accent ---- */
+    .vs-sky{position:absolute;inset:0;background:url(logos/panels/bg-dao.jpg) center 42%/cover no-repeat;opacity:.95}   /* round 3: the DAO panel's blue mountains — a plate no window wears yet (Shaka: "pick a new background") */
     .vs-stat{position:relative;overflow:hidden;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));padding:14px 16px 12px;min-height:96px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
     .vs-stat::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:rgb(var(--acc));opacity:.9;box-shadow:0 0 18px rgba(var(--acc),.7)}
-    .vs-stat .l{font-size:11px;letter-spacing:.22em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.55)}
-    .vs-stat .v{font-family:'Orbitron',monospace;font-weight:700;font-size:26px;line-height:1.1;margin-top:6px;color:#fff;letter-spacing:-.01em}
-    .vs-stat .s{font-size:12px;color:rgba(255,255,255,.55);margin-top:5px}
+    .vs-stat .l{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.6)}
+    .vs-stat .v{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:34px;line-height:1;margin-top:6px;color:#fff}   /* the dashboard tiles' figure (h2.css .h2-tv: Rajdhani 700) */
+    .vs-stat .s{font-size:14px;color:rgba(255,255,255,.6);margin-top:5px;font-weight:500}
     .vs-stat .s b{color:rgb(var(--acc));font-weight:700}
     .vs-big{display:flex;align-items:baseline;gap:8px;line-height:1}
     .vs-big b{font-family:'Orbitron',monospace;font-weight:900;font-size:30px;letter-spacing:-.01em;text-shadow:0 0 18px currentColor}
@@ -31,15 +32,15 @@ CSS = r'''    /* ---- Volume Split window (2026-10-06): vs-* — human vs arb-bo
     .vs-key{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,.7)}
     .vs-key i{width:10px;height:10px;border-radius:3px;display:inline-block}
     .vs-chart{display:block;width:100%;height:170px}
-    .vs-chart text{font-family:'JetBrains Mono',monospace;font-size:10px;fill:rgba(255,255,255,.45)}
-    .vs-th{font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.5);padding:9px 8px;text-align:right;white-space:nowrap}
+    .vs-chart text{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;fill:rgba(255,255,255,.5)}
+    .vs-th{font-size:12px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.55);padding:9px 8px;text-align:right;white-space:nowrap}
     .vs-th:first-child{text-align:left}
-    .vs-td{padding:9px 8px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14px;color:rgba(255,255,255,.9)}
+    .vs-td{padding:9px 8px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:16px;font-weight:600;color:rgba(255,255,255,.9)}
     .vs-td:first-child{text-align:left}
     .vs-mini{display:inline-flex;height:6px;width:72px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);vertical-align:middle;margin-left:8px}
     .vs-mini i{display:block;height:100%}
-    .vs-note{font-size:12px;color:rgba(255,255,255,.55);line-height:1.5}
-    @media(max-width:640px){.vs-big b{font-size:24px}.vs-big span{font-size:11px}.vs-stat{min-height:84px;padding:12px 14px 10px}.vs-stat .v{font-size:22px}.vs-chart{height:140px}.vs-td,.vs-th{padding:8px 6px}.vs-mini{width:46px}}
+    .vs-note{font-size:14px;color:rgba(255,255,255,.6);line-height:1.5}
+    @media(max-width:640px){.vs-big b{font-size:24px}.vs-big span{font-size:11px}.vs-stat{min-height:84px;padding:12px 14px 10px}.vs-stat .v{font-size:28px}.vs-chart{height:140px}.vs-td,.vs-th{padding:8px 6px}.vs-mini{width:46px}}
 '''
 rep("    .nh-sky{position:absolute;inset:0;background:url(logos/holders/nh-sky.jpg)", CSS+"    .nh-sky{position:absolute;inset:0;background:url(logos/holders/nh-sky.jpg)")
 
@@ -53,7 +54,8 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
     const SWAP_VOL_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/swap-volume.json';
     const VS_MAX_AGE=36*3600*1000,VS_TTL=5*60*1000,VS_AMBER_MS=3*3600*1000;
     const VS_BOT='79,209,255';   // the bots' colour (electric cyan) — never a token colour, so a bar reads at a glance
-    const VS_PERIODS=[{k:'24H',p:'24h',h:24,label:'Past 24 hours'},{k:'7D',p:'7d',h:168,label:'Past 7 days'},{k:'30D',p:'30d',h:720,label:'Past 30 days'}];
+    const VS_PERIODS=[{k:'24H',p:'24h',h:24,label:'Past 24 hours'},{k:'7D',p:'7d',h:168,label:'Past 7 days'},{k:'30D',p:'30d',h:720,label:'Past 30 days'},{k:'90D',p:'90d',h:2160,label:'Past 90 days'}];
+    const VS_BOTH='236,232,214';   // BOTH's accent (Shaka, round 3: "a different colour scheme for the BOTH — it looks like PTGC"): the combined cards' cream-silver
     let _vsFile,_vsAt=0,_vsP=null;
     const fetchSwapVolume=(force=false)=>{
       if(!force&&_vsAt&&Date.now()-_vsAt<VS_TTL)return Promise.resolve(_vsFile);
@@ -121,7 +123,7 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
       const n=series.length,bw=(W-padL-padR)/n,gap=Math.min(4,bw*0.25);
       const y=v=>padT+(H-padT-padB)*(1-v/max);
       const fmtT=t=>{const d=new Date(t);return binMs<86400000&&binMs<6*3600000?d.toLocaleTimeString([],{hour:'numeric'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
-      const every=n<=24?4:n<=28?4:5;
+      const every=n<=24?4:n<=28?4:n<=31?5:15;
       return(
         <svg className="vs-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Volume over time, humans over bots">
           {[0.25,0.5,0.75].map(f=><line key={f} x1={padL} x2={W-padR} y1={y(max*f)} y2={y(max*f)} stroke="rgba(255,255,255,.07)"/>)}
@@ -145,22 +147,24 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
       const load=(force)=>{setFile(undefined);fetchSwapVolume(force).then(setFile);};
       useEffect(()=>{let live=true;fetchSwapVolume().then(j=>{if(live)setFile(j);});return()=>{live=false;};},[]);
       const P=VS_PERIODS.find(w=>w.k===win)||VS_PERIODS[1];
-      const T=NH_THEME[token==='BOTH'?'PTGC':token],hex=token==='BOTH'?'#F5F0D8':T.hex,rgb=token==='BOTH'?'232,192,68':T.rgb;
+      const T=NH_THEME[token==='BOTH'?'PTGC':token],hex=token==='BOTH'?'#F5F0D8':T.hex,rgb=token==='BOTH'?VS_BOTH:T.rgb;
       const view=React.useMemo(()=>file?vsView(file,token,P):null,[file,token,win]);
       const ageMs=file?Date.now()-Date.parse(file.generatedAt):null;
       const amber=ageMs!=null&&ageMs>VS_AMBER_MS;
       const phone=typeof window!=='undefined'&&window.innerWidth<640;
       const fee=token==='BOTH'?null:(feeRates&&feeRates[token])||0;
       const vg=view&&fee>0?{h:view.human.usd*fee,b:view.bot.usd*fee}:view&&token==='BOTH'&&feeRates?{h:(file.tokens.PTGC.periods[P.p].human.usd*(feeRates.PTGC||0))+(file.tokens.UFO.periods[P.p].human.usd*(feeRates.UFO||0)),b:(file.tokens.PTGC.periods[P.p].bot.usd*(feeRates.PTGC||0))+(file.tokens.UFO.periods[P.p].bot.usd*(feeRates.UFO||0))}:null;
+      const pct=r=>r>0?`${+(r*100).toFixed(2)}%`:'';
+      const feeLabel=token==='BOTH'?`${pct(feeRates&&feeRates.PTGC)} PTGC fee · ${pct(feeRates&&feeRates.UFO)} UFO fee`:`at the ${pct(fee)} fee`;
       const logo=token==='BOTH'?null:TOKENS[token].logo;
       return(
-        <Modal onClose={onClose} label={`${token} volume split`} className="z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay bg-black/85">
+        <Modal onClose={onClose} label={`${token} humans vs bots`} className="z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay bg-black/85">
           <div onClick={e=>e.stopPropagation()} className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-4xl flex flex-col rounded-none sm:rounded-3xl border bg-[#070707] overflow-y-auto overflow-x-hidden overscroll-contain" style={{borderColor:`${hex}55`,boxShadow:`0 0 80px -20px ${hex}66, 0 30px 80px -20px rgba(0,0,0,.9)`}}>
             <div aria-hidden="true" className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[640px] h-[300px] rounded-full blur-3xl opacity-20" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{background:`linear-gradient(90deg, transparent, ${hex}cc, transparent)`}}></div>
             {/* Header — the Holders window's plate for now (his art for this window is owed) */}
             <div className="relative shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 overflow-hidden" style={{minHeight:phone?150:190}}>
-              <div aria-hidden="true" className={`nh-sky${token==='UFO'?' ufo':''}`}></div>
+              <div aria-hidden="true" className="vs-sky"></div>
               <div aria-hidden="true" className="nh-sky-fade"></div>
               <div className="relative flex items-start gap-3 sm:gap-4">
                 <div className="relative shrink-0 flex items-center">
@@ -168,8 +172,8 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                   :(<><div aria-hidden="true" className="absolute inset-0 rounded-full blur-xl opacity-50 scale-110" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 60%)`}}></div><img src={logo} alt="" className="relative w-16 h-16 sm:w-24 sm:h-24" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/></>)}
                 </div>
                 <div className="flex-1 min-w-0" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
-                  <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight" style={{color:hex}}>Volume Split</h2>
-                  <div className="text-white/85 text-[12px] sm:text-sm mt-1">{P.label} {'·'} {token==='BOTH'?'PTGC + UFO':token} trading volume {'—'} people vs arbitrage bots</div>
+                  <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight" style={{color:hex}}>Humans vs Bots</h2>
+                  <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} who moves {token==='BOTH'?'the Grays\u2019':token+'\u2019s'} volume {'—'} people, or the arbitrage bots</div>
                 </div>
                 <button type="button" onClick={onClose} aria-label="Close" className="tap-h shrink-0 w-9 h-9 rounded-full border border-white/25 bg-black/50 text-white/80 hover:text-white hover:border-white/60 flex items-center justify-center text-lg leading-none">{'✕'}</button>
               </div>
@@ -201,6 +205,11 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                     <VsStat label="Human volume" value={fmtUSD(view.human.usd)} sub={<><b>{vsPct(view.total.usd>0?view.human.usd/view.total.usd:null)}</b> {'·'} {fmt(view.human.n)} trades through routers</>} acc={rgb}/>
                     <VsStat label="ARB bot volume" value={fmtUSD(view.bot.usd)} sub={<><b>{vsPct(view.botShare)}</b> {'·'} {fmt(view.bot.n)} trades from {fmt(Object.values(view.senders).filter(s=>s.kind==='bot').length)} bot contract{Object.values(view.senders).filter(s=>s.kind==='bot').length===1?'':'s'}</>} acc={VS_BOT}/>
                   </div>
+                  {/* Value generated (round 3, Shaka: "a box at the top — Value Generated from Humans, and from the bots — 5 % PTGC, 6 % UFO") */}
+                  {vg&&<div className="mt-2 sm:mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    <VsStat label="Value generated · humans" value={fmtUSD(vg.h)} sub={<><b>{vsPct(vg.h+vg.b>0?vg.h/(vg.h+vg.b):null)}</b> {'·'} {feeLabel}</>} acc={rgb}/>
+                    <VsStat label="Value generated · arb bots" value={fmtUSD(vg.b)} sub={<><b>{vsPct(vg.h+vg.b>0?vg.b/(vg.h+vg.b):null)}</b> {'·'} {feeLabel}</>} acc={VS_BOT}/>
+                  </div>}
                   <div className="mt-3 rounded-2xl border border-white/10 bg-black/40 p-3 sm:p-4" style={{'--tg':rgb,'--bot':VS_BOT}}>
                     <div className="flex items-end justify-between gap-3">
                       <div className="vs-big" style={{color:`rgb(${rgb})`}}><b className="tabular-nums">{vsPct(view.total.usd>0?view.human.usd/view.total.usd:null)}</b><span>Humans</span></div>
@@ -210,7 +219,6 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                       <i className="h" style={{width:`${view.total.usd>0?view.human.usd/view.total.usd*100:0}%`}}></i><i className="b" style={{width:`${view.total.usd>0?view.bot.usd/view.total.usd*100:0}%`}}></i>
                     </div>
                     <div className="mt-3"><VsChart series={view.series} binMs={view.binMs} rgb={rgb}/></div>
-                    {vg&&<div className="mt-2 vs-note">Value generated at {token==='BOTH'?'each token’s':''} {fee>0?`${+(fee*100).toFixed(2)}% `:''}fee: <b className="text-white">{fmtUSD(vg.h)}</b> from people {'·'} <b className="text-white">{fmtUSD(vg.b)}</b> from bots</div>}
                   </div>
                   {/* Pools */}
                   <div className="mt-4 text-[12px] sm:text-[13px] font-semibold uppercase tracking-[0.22em]" style={{color:hex}}>By pool</div>

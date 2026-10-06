@@ -1,4 +1,4 @@
-# Volume Split — people vs arbitrage bots (2026-10-06)
+# Humans vs Bots (was "Volume Split") — people vs arbitrage bots (2026-10-06)
 
 Shaka: "both ptgc and ufo heavily rely on the volume that it gets from the arb bots. I would like to add a little icon to the
 volume box like we just did to the holders box. for now I want to hide it down with a very small faint dot in the bottom right…
@@ -40,3 +40,8 @@ no sideways scroll. Renders: `renders/vs-ptgc-1440.png`, `vs-ufo-both.png`, `vs-
 - The UFO dashboard's **TXNS 24H** tile reads 10,761 / 46 while the chain shows ~100 UFO swaps a day — it counts something other
   than trades; fix alongside or the two surfaces contradict each other.
 - A verified aggregator the heuristic misses shows up in "Top bot contracts" with a PulseScan name — add it to `ROUTERS`.
+
+## Round 3 (same day)
+90D added (the builder keeps 91 d, backfills backwards once); BOTH in cream-silver (`VS_BOTH`), not gold; two Value Generated tiles
+(humans / bots, each token's fee); the plate is the DAO panel's blue mountains (`bg-dao.jpg`); title "Humans vs Bots"; the dashboard's
+fonts (Rajdhani figures and text, Orbitron for the title and the two big percentages).
