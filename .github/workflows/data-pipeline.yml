@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'Run only these steps, comma-separated: charts, coingecko, value-generated, burn-history, treasury, dao-buys, ufo-ptgc-burns, token-allocation, lv-snapshot, pair-volume, new-holders. Empty = the normal hourly set.'
+        description: 'Run only these steps, comma-separated: charts, charts-intraday, coingecko, value-generated, burn-history, treasury, dao-buys, ufo-ptgc-burns, token-allocation, lv-snapshot, pair-volume, new-holders. Empty = the normal hourly set.'
         required: false
         default: ''
       force:
@@ -78,7 +78,7 @@ jobs:
       - name: Gate — hourly steps (only `only=` can switch these off)
         id: g_hourly
         run: |
-          for s in coingecko value-generated burn-history treasury dao-buys pair-volume new-holders; do
+          for s in charts-intraday coingecko value-generated burn-history treasury dao-buys pair-volume new-holders; do
             if [ -z "$ONLY" ] || echo ",$ONLY," | tr -d ' ' | grep -q ",$s,"; then v=true; else v=false; fi
             echo "[gate] $s: run=$v"
             echo "${s//-/_}=$v" >> "$GITHUB_OUTPUT"
@@ -91,6 +91,14 @@ jobs:
         if: steps.g_charts.outputs.run == 'true'
         continue-on-error: true
         run: node scripts/build-charts-data.js
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+
+      - name: charts-intraday.json (CoinGecko OHLCV, 15-min + hourly candles — the Charts page's 24H / 7D / 14D, 2026-10-06)
+        id: charts_intraday
+        if: steps.g_hourly.outputs.charts_intraday == 'true'
+        continue-on-error: true
+        run: node scripts/build-charts-intraday.js
         env:
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
 
@@ -169,7 +177,7 @@ jobs:
           # is skipped instead of failing `git add` with "pathspec did not match".
           add=""
           for f in \
-            data/charts-data.json \
+            data/charts-data.json data/charts-intraday.json \
             data/coingecko-data.json data/liquidity-history.json data/transaction-history.json data/tokensinlp-history.json \
             data/value-generated.json \
             data/burn-summary.json data/ufo-burns.json data/holder-history.json \
@@ -209,7 +217,7 @@ jobs:
         if: always()
         run: |
           failed=""
-          for s in charts:${{ steps.charts.outcome }} coingecko:${{ steps.coingecko.outcome }} \
+          for s in charts:${{ steps.charts.outcome }} charts-intraday:${{ steps.charts_intraday.outcome }} coingecko:${{ steps.coingecko.outcome }} \
                    value-generated:${{ steps.value_generated.outcome }} burn-history:${{ steps.burn_history.outcome }} \
                    treasury:${{ steps.treasury.outcome }} dao-buys:${{ steps.dao_buys.outcome }} \
                    ufo-ptgc-burns:${{ steps.ufo_ptgc.outcome }} token-allocation:${{ steps.alloc.outcome }} \

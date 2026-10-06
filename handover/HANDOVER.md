@@ -11,7 +11,11 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
-- **Charts page (2026-10-05):** the Calculators treatment (same plate, "Grays Charts") — `tools/charts-v2.py`, `cp-*` CSS in charts.html.
+- **Charts page (2026-10-05 / 10-06):** the Calculators treatment (same plate, "Grays Charts") — `tools/charts-v2.py`, `cp-*` CSS in charts.html; then
+  `charts-gt.py` (GeckoTerminal back-off), `charts-v3.py` (no sub-tab box, the Share badge at the right, UFO-green titles) and **`charts-fast.py` +
+  `scripts/build-charts-intraday.js` → `data/charts-intraday.json` (hourly pipeline step `charts-intraday`): 24H / 7D / 14D paint from the prebuilt
+  file at once, live GeckoTerminal only tops up; a new load supersedes the one in flight.** Every page's metallic "Grays …" / "Socials Hub" title turns
+  UFO green via `html[data-tok]` (stamped by the headers).
 - **Calculators page (2026-10-05):** his art as the plate + "Grays Calculators" title + his icon buttons + framed disclaimers — `tools/calc-v2.py` (`cp-*` CSS in calculators.html), assets `logos/calculators/`, decisions `design/calculators/README.md`.
 - **KPI Report tab (2026-10-05):** `KpiCardV2` (`.kp-*`, container queries) — assets `logos/kpi/`, build script `tools/kpi-v2.py`, mock-up + every decision `design/kpi/README.md`. The 📷 share image (`TwitterCard`) is still the old look.
 - **Leagues (2026-10-04):** the holder-tiers modal (`TierInfoModal`, `.lg-*`) and the Socials combined card (`LeaguesCombinedCard`, `.lgc`) — assets `logos/leagues/`, mock-ups + every decision `design/leagues/README.md`.
@@ -24,7 +28,28 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (end of 2026-10-05)
+## Current state (2026-10-06, in progress)
+
+**2026-10-06 (Tuesday) — THE CHARTS PAGE, round 3 + the speed fix — written to the Mac, NOT pushed, NOT seen live.** Shaka's four asks,
+all done: (1) the "The Grays vs Others" box gone, page up; (2) the Share Chart badge = the Calculators buttons' glass with a drawn
+camera, at the RIGHT of the card's width, menu right-aligned; (3) **UFO GREEN on the metallic titles** — Grays Charts, Grays
+Calculators, Socials Hub (+ the Share badge) swap the gold word for the UFO green gradient while UFO is the token (`html[data-tok]`,
+stamped by charts.html `h2ApplyTheme`, h2-header.jsx `SiteHeaderV2`, index.html `DashHeaderV2`); (4) **load speed**: the intraday
+ranges were drawn only from live GeckoTerminal calls (2.2 s apart, 4 s / 8 s pauses, 20–40 s for eight tokens) and a range click
+queued behind the load in flight — now `scripts/build-charts-intraday.js` (CoinGecko Pro, new hourly step `charts-intraday`, file
+`data/charts-intraday.json`: 14 d hourly + 24 h 15-min closes, every token) and the page paints any range from it at once
+(`go()` phase 0.5), tops up live, merges, says "updating" while it does; a refused top-up leaves the full line (amber "as of"),
+never "unavailable" / "daily candles" when the file has the token; a new load aborts the old one; the GT gate skips aborted calls.
+Scripts `tools/charts-v3.py` + `tools/charts-fast.py` (run on both copies, md5-identical). Harness in `sessions/2026-10-06.md`.
+**After his push: Actions → Data Pipeline → Run workflow → `only=charts-intraday` once (the page is on the old path until the
+file exists — it degrades, nothing breaks), then his live look: Charts 24H / 7D / 14D switching fast, HEX on 24H, the badge, the
+green titles on UFO (Charts, Calculators, Socials), Mac + phone.** UFO day 90 checked live (13:17 UTC): the 90-day boundary still
+precedes the pool's creation, so the 90D boxes read "since launch" (UFO burn 90D = total burned $508K, PTGC-by-UFO 90D 220.54M,
+headline 4.79B / 1.4368 %) — **the real first test is 2026-10-07 after ~07:30 PDT** (details + what to expect in the session file).
+Still owed from 2026-10-05: the Calculators page live (Mac + phone), the KPI tab on a phone, the full-size KPI backgrounds, the live
+look owed from 2026-10-04.
+
+## Before that (end of 2026-10-05)
 
 **2026-10-05 (Monday), closed by Shaka ("let's call it a day, wrap it up"): PUSHED by him as `318957448` — ONE commit for the whole
 day (the KPI Report tab, the Calculators page, the Charts page + its GeckoTerminal fix), tree clean. Nothing half-done. Seen live by
@@ -618,6 +643,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   (PLS/USD via `PAIR_WPLS_DAI`, PTGC via `PAIR_PTGC_WPLS`). Price line = same reserves on a
   block grid, extended backwards when an older wallet appears. No third-party API anywhere in it.
   Run the generator locally with `NODE_USE_ENV_PROXY=1` (Node's fetch ignores the VM proxy).
+- **Charts page intraday (24H / 7D / 14D)**: `data/charts-intraday.json` (hourly, the charts-intraday step; generator
+  `scripts/build-charts-intraday.js`, CoinGecko Pro — 14 d of hourly + 24 h of 15-min closes per token). The page paints from it
+  and tops up live from GeckoTerminal (PulseChain) / public CoinGecko (majors); a file > 36 h old is ignored. Daily (1M–1Y) =
+  `charts-data.json`, as before.
 - **LP Pairs 7-day volume curves**: `data/pair-volume-7d.json` (hourly, the pair-volume step; generator
   `scripts/build-pair-volume.mjs` — GeckoTerminal hourly candles per pool, 28 six-hour bins, `binStart` shared). A
   pool the file has no entry for is read live by the browser; a file older than 36 h is ignored. GeckoTerminal's
@@ -1022,6 +1051,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-12. **Charts round 3 + speed (2026-10-06) — written, NOT pushed.** After the push: `only=charts-intraday` once in Actions, then the live
+   look (24H / 7D / 14D switching, HEX on 24H, the badge, UFO-green titles on Charts / Calculators / Socials, Mac + phone). Watch the
+   `charts-intraday` step's first runs (~1 min, 26 CoinGecko calls); the page ignores a file > 36 h old. **2026-10-07 after ~07:30 PDT =
+   the real UFO day-90 test** (`sessions/2026-10-06.md`, "UFO day 90"). Builds: `tools/charts-v3.py` then `tools/charts-fast.py` on a
+   charts-gt.py'd charts.html.
 -11. **Calculators + Charts pages (2026-10-05) — PUSHED (`318957448`), live look owed** (Mac + phone). Charts = `tools/charts-v2.py` then `tools/charts-gt.py` (the GeckoTerminal back-off + daily fallback). After the push: 14D on WPLS + HEX again — hourly candles if GT answers, "daily candles" if it refuses; never two points for a fortnight. Build = `tools/calc-v2.py`
    on a clean calculators.html; design `design/calculators/README.md`; icons `logos/calculators/ic-*.webp`, plate `calc-bg.jpg`.
 -10. **KPI Report tab (2026-10-05) — PUSHED (`318957448`), seen live on the Mac (two rounds of notes done); owed: a phone; the full-size backgrounds
@@ -1123,6 +1157,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
+- `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
+  page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,
+  loads that supersede each other, the GT gate skipping aborted calls; harness; the UFO day-90 live check (real test = Oct 7).
 - `sessions/2026-10-05.md` — afternoon: the Calculators page reskinned (his art, Hub-style title, icon buttons, framed disclaimers; `tools/calc-v2.py`). Morning: the KPI Report tab redesigned to Shaka's mock-up: mock v1 (approved), `KpiCardV2` + `kp-*`
   container-query CSS, real sparklines via `useH2Series`, the fire bar shared, the Combined KPI Report row restored (dead since
   09-29), four explainers; harness at 1440 / 1024 / 390, DS_DOWN, the Socials rows.

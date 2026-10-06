@@ -140,14 +140,23 @@
   .cp-t.g{background-image:linear-gradient(180deg,#FFF3B0 0%,#F7D35A 40%,#C9921A 62%,#F2C94C 100%)}
   .cp-t.w{background-image:linear-gradient(180deg,#FFF 0%,#E6E6E6 45%,#8C8C8C 60%,#DDD 100%);margin-left:.22em}
   .cp-ttl p{text-shadow:0 1px 3px #000;color:rgba(255,255,255,.58)!important;font-size:16px!important}
+  .cp-share{display:flex;justify-content:flex-end;margin:-16px 0 14px}   /* 2026-10-06: the badge at the right of the card's width, menu right-aligned */
+  .cp-share .camera-btn{--c:242,201,76;--c2:255,215,120;margin:0;height:46px;padding:0 20px 0 15px;gap:10px;border-radius:12px;border:1.5px solid rgba(var(--c),.6);color:#FFE38A;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:19px;letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.8);background:radial-gradient(ellipse at 50% 0%,rgba(var(--c),.24),rgba(0,0,0,0) 70%),repeating-linear-gradient(0deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px),linear-gradient(180deg,rgba(24,20,8,.92),rgba(8,7,4,.94));box-shadow:0 0 24px -4px rgba(var(--c),.55),0 8px 24px -12px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.14)}
+  .cp-share .camera-btn svg{width:24px;height:24px;color:#F7D35A;filter:drop-shadow(0 2px 3px rgba(0,0,0,.85))}
+  .cp-share .camera-btn:hover{filter:brightness(1.1);transform:translateY(-1px);border-color:rgba(var(--c2),.95);box-shadow:0 0 30px -4px rgba(var(--c),.7),inset 0 1px 0 rgba(255,255,255,.16)}
+  .cp-share .share-menu{left:auto;right:0;transform:none}
+  html[data-tok="UFO"] .cp-share .camera-btn{--c:141,255,58;--c2:200,255,150;color:#D9FFB0}
+  html[data-tok="UFO"] .cp-share .camera-btn svg{color:#8DFF3A}
+  html[data-tok="UFO"] .cp-t.g{background-image:linear-gradient(180deg,#F0FFD0 0%,#A6FF5C 40%,#3E9C12 62%,#8DFF3A 100%)}   /* 2026-10-06: the gold word goes UFO green on UFO (Shaka) */
   .cp-page .chart-card{background:rgba(8,8,10,.86);box-shadow:0 0 40px rgba(212,175,55,.06),0 10px 40px -10px rgba(0,0,0,.9)}
-  .cp-page .chart-sub-tab,.cp-page .share-menu-wrap button{backdrop-filter:blur(4px)}
+  .cp-page .share-menu-wrap button{backdrop-filter:blur(4px)}
   @media(max-width:640px){
     .cp-art{position:absolute;inset:auto 0 auto 0;top:0;height:1000px}
     .cp-art::before{content:'';position:absolute;left:0;right:0;bottom:0;height:260px;z-index:1;background:linear-gradient(180deg,rgba(0,0,0,0),#000)}
     .cp-band::before{height:110px}
     .cp-ttl{padding:16px 8px 12px;margin-bottom:18px}
     .cp-t{font-size:30px;letter-spacing:0}.cp-t.w{margin-left:.18em}
+    .cp-share .camera-btn{height:40px;font-size:16px;padding:0 14px 0 11px}.cp-share .camera-btn svg{width:20px;height:20px}
   }
 </style>
 </head>
@@ -289,16 +298,10 @@
       <p class="text-white/35 text-sm mt-3 max-w-xl mx-auto">Compare token performance across time periods &mdash; for entertainment &amp; educational purposes only.</p>
     </div>
 
-    <!-- Sub-tabs — same glow style as X Multiplier / Moon Math / Rewards -->
-    <div class="flex justify-center mb-10">
-      <div class="inline-flex gap-2" id="chartSubTabs">
-        <button class="relative overflow-hidden rounded-xl font-orbitron font-bold text-sm sm:text-base transition-all hover:brightness-110 chart-sub-tab active" data-tab="compare" style="padding:10px 24px;background:linear-gradient(135deg,rgba(212,175,55,0.45),rgba(212,175,55,0.2));border:1px solid rgba(212,175,55,0.6);box-shadow:0 0 20px rgba(212,175,55,0.25),inset 0 1px 0 rgba(255,255,255,0.15);color:white">The Grays vs Others</button>
-      </div>
-    </div>
     <!-- Camera / Share menu -->
-    <div class="share-menu-wrap" style="display:flex;justify-content:center">
+    <div class="share-menu-wrap cp-share">
       <div style="position:relative">
-        <button class="camera-btn" onclick="toggleShareMenu()" title="Share to Twitter"><span style="font-size:20px;line-height:1">&#128247;</span> Share Chart</button>
+        <button class="camera-btn" onclick="toggleShareMenu()" title="Share to Twitter" aria-haspopup="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18v-8A1.5 1.5 0 0 1 4 8.5z"/><circle cx="12" cy="13.5" r="3.4"/><circle cx="17.6" cy="11" r=".6" fill="currentColor"/></svg>Share Chart</button>
         <div class="share-menu" id="shareMenu">
           <button class="share-menu-item" onclick="pickShare('full')">
             <div class="share-menu-icon">&#128200;</div>
@@ -484,6 +487,7 @@ function h2Boot() {
 function h2All(sel, fn) { const v = document.getElementById('hdrV2'); if (v) v.querySelectorAll(sel).forEach(fn); }
 function h2ApplyTheme(t, other) {
   h2All('.h2', e => e.dataset.tok = t.name);
+  document.documentElement.dataset.tok = t.name;   // 2026-10-06: the metallic title + share badge read it (gold on PTGC, green on UFO)
   h2All('.js-h2-logo', e => { e.src = t.logo; if (e.alt) e.alt = t.name; });
   h2All('.js-h2-corona', e => e.src = t.name === 'UFO' ? 'logos/header/coin-corona-green.webp' : 'logos/header/coin-corona.webp');
   h2All('.js-h2-name', e => e.textContent = t.name);
@@ -776,6 +780,49 @@ function getStaticDailySeries(json, sym) {
   if (!tok || !Array.isArray(tok.series) || tok.series.length < 2) return null;
   return tok.series.map(p => ({ ts: p[0], price: p[1] }));
 }
+
+/* ── Static INTRADAY series (server-side prebuilt, 2026-10-06) ───────────────────────
+   data/charts-intraday.json — scripts/build-charts-intraday.js (hourly step): 14 d of 1-hour closes
+   (the 7D / 14D ranges) and 24 h of 15-minute closes (24H) for every token. go() paints a range from
+   it AT ONCE and asks GeckoTerminal / CoinGecko only to top it up with the candles since the file was
+   written; when they refuse, the file's line stands (an honest amber "as of" past 2 h) instead of a
+   long wait, a "daily candles" stand-in or "unavailable". Missing or stale file → the old path. */
+const STATIC_INTRADAY_URL = 'https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-intraday.json';
+const INTRADAY_MAX_AGE_MS = 36 * 3600000;   // older = the pipeline has stopped; ignore the file
+const TIER_STEP_MS = { minute: 900000, hourly: 3600000, daily: 86400000 };
+let _staticIntradayPromise = null, _staticIntradayKey = null;
+async function loadStaticIntraday() {
+  const key = Math.floor(Date.now() / 300000);   // raw.githubusercontent caches ~5 min — one fetch per 5-min slot, shared by every load
+  if (_staticIntradayPromise && _staticIntradayKey === key) return _staticIntradayPromise;
+  _staticIntradayKey = key;
+  _staticIntradayPromise = (async () => {
+    const r = await fetch(`${STATIC_INTRADAY_URL}?t=${key}`);
+    if (!r.ok) throw new Error(`static intraday HTTP ${r.status}`);
+    const json = await r.json();
+    const age = Date.now() - Date.parse((json && json.lastUpdated) || 0);
+    console.log('Static intraday series loaded:', json && json.lastUpdated, `(${Math.round(age / 60000)} min old) —`, Object.keys((json && json.tokens) || {}).length, 'tokens');
+    if (!(age < INTRADAY_MAX_AGE_MS)) throw new Error(`static intraday file is ${Math.round(age / 3600000)} h old — ignored`);
+    return json;
+  })();
+  _staticIntradayPromise.catch(() => { if (_staticIntradayKey === key) { _staticIntradayPromise = null; _staticIntradayKey = null; } });
+  return _staticIntradayPromise;
+}
+function getStaticIntradaySeries(json, sym, tier) {
+  const t = json && json.tokens && json.tokens[sym] && json.tokens[sym][tier];
+  if (!t || !Array.isArray(t.series) || t.series.length < 2) return null;
+  return t.series.map(p => ({ ts: p[0], price: p[1] }));
+}
+/* The file's series + the live candles since it — one point per candle of the tier, live wins. */
+function mergeSeries(base, live, step) {
+  if (!base || !base.length) return live;
+  if (!live || !live.length) return base;
+  const m = new Map(), q = step || 60000;
+  base.forEach(d => m.set(Math.floor(d.ts / q), d));
+  live.forEach(d => m.set(Math.floor(d.ts / q), d));
+  return [...m.values()].sort((a, b) => a.ts - b.ts);
+}
+let _statusUpdating = false;   // the chart is painted (file / cache) and a live top-up is running — the status line says so instead of "Loading…"
+const _liveTried = {};   // `${k}_${tier}` → when a live top-up last ran; a line painted from the file is not topped up again within 3 min
 
 const dexLogo = a => `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${a.toLowerCase()}.png`;
 
@@ -1084,7 +1131,9 @@ function clearCacheAndRefresh() {
   try { localStorage.removeItem(CACHE_STORAGE_KEY) } catch {}
   try { localStorage.removeItem('charts_pool_cache') } catch {}
   try { sessionStorage.removeItem('charts_data_cache') } catch {}
-  Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited });
+  Object.values(TOKENS).forEach(t => { delete t._data; delete t._limited; delete t._coarse; delete t._file; });
+  _staticIntradayPromise = null; _staticIntradayKey = null;   // 2026-10-06: Refresh re-reads the intraday file and tops up live again
+  Object.keys(_liveTried).forEach(k => delete _liveTried[k]);
   go();
 }
 
@@ -1176,8 +1225,9 @@ let _gtRefusals = 0;        // 2026-10-05: consecutive refusals, across tokens; 
 let _gtCircuitUntil = 0;   // 2026-10-05: three refusals in a row open the circuit for 45 s — every other GT fetch returns null at once and the fallbacks draw
 let _gtPauseUntil = 0;   // 2026-10-05: a refusal (429 / 5xx — the browser prints it as a CORS error) pauses EVERY GT call, not just the one
 const GT_MIN_INTERVAL = 2200;
-function gtGate() {
+function gtGate(signal) {
   const p = _gtChain.then(async () => {
+    if (signal && signal.aborted) return;   // 2026-10-06: a superseded load's calls take no 2.2 s slot
     const pause = _gtPauseUntil - Date.now();
     if (pause > 0) await sleep(pause);
     const wait = GT_MIN_INTERVAL - (Date.now() - _gtLast);
@@ -1393,8 +1443,13 @@ function applyTokenData(k, data, limited, days, coarse = false) {
 }
 
 async function go() {
-  if (isRefreshing) { pendingGo = true; return; }
+  /* 2026-10-06: a new load SUPERSEDES one in flight. A range or token click used to queue behind the running load
+     (`pendingGo`) — the new range appeared only after the old load's last gated GeckoTerminal call. Now the old cycle's
+     fetches are aborted, its awaits see the generation move and stop, and its finally only tidies up if it is still the
+     newest cycle. */
   isRefreshing = true;
+  pendingGo = false;
+  _statusUpdating = false;
   fetchGeneration++;
   const currentGen = fetchGeneration;
 
@@ -1409,6 +1464,7 @@ async function go() {
   const tier = getTier(days);
   const ld = document.getElementById('loadOverlay');
   const rb = document.getElementById('refreshBtn');
+  Object.values(TOKENS).forEach(t => { delete t._file; });   // the intraday file's series for THIS tier only (phase 0.5)
 
   try {
     /* ── PHASE 0: Stale-while-revalidate ──────────────────────
@@ -1437,7 +1493,37 @@ async function go() {
       renderChart(); renderSummary(); updateStatusLine(); updatePeriod();
     }
 
+    /* ── PHASE 0.5: the prebuilt intraday file (2026-10-06) ──────────────────────────────
+       24H / 7D / 14D paint from data/charts-intraday.json at once. A token whose file series reaches
+       within 1.5 candles of now needs no live call; one topped up in the last 3 min is left as painted;
+       the rest keep their place in needFetch and the live candles since the file top them up below. */
+    if (tier !== 'daily' && needFetch.length) {
+      let json = null;
+      try { json = await loadStaticIntraday(); } catch (e) { console.warn('Static intraday unavailable — live path:', e.message); }
+      if (currentGen !== fetchGeneration) return;
+      if (json) {
+        const step = TIER_STEP_MS[tier];
+        let painted = false;
+        needFetch = needFetch.filter(([k, t]) => {
+          const series = getStaticIntradaySeries(json, k, tier);
+          if (!series) return true;
+          t._file = series;
+          const shown = (t._data && t._data.length >= 2 && !t._limited && !t._coarse) ? t._data[t._data.length - 1].ts : 0;
+          const newest = series[series.length - 1].ts;
+          if (newest >= shown && applyTokenData(k, series, false, days)) { painted = true; t._carried = false; }
+          const fileFresh = Date.now() - newest < step * 1.5;
+          const triedRecently = (_liveTried[`${k}_${tier}`] || 0) > Date.now() - 180000;
+          if (fileFresh) setCached(k, tier, series, false);
+          if (fileFresh || triedRecently) return false;
+          _liveTried[`${k}_${tier}`] = Date.now();
+          return true;
+        });
+        if (painted) { renderChart(); renderSummary(); updateStatusLine(); updatePeriod(); }
+      }
+    }
+
     if (needFetch.length === 0) {
+      _statusFromCache = false; updateStatusLine(); updatePeriod();
       return; // finally block handles cleanup
     }
 
@@ -1448,15 +1534,19 @@ async function go() {
       setLoadMsg('Loading...');
     }
     rb.classList.add('spinning');
-    setStatus('<span class="dot spin"></span>Loading ' + needFetch.length + ' token' + (needFetch.length > 1 ? 's' : '') + '...');
+    const allPainted = needFetch.every(([k, t]) => t._data && t._data.length >= 2);   // 2026-10-06: the file / cache drew every line — say "updating", not "Loading"
+    if (allPainted) { _statusUpdating = true; updateStatusLine(); }
+    else setStatus('<span class="dot spin"></span>Loading ' + needFetch.length + ' token' + (needFetch.length > 1 ? 's' : '') + '...');
 
     const total = needFetch.length;
     let completed = 0;
 
     function progress(sym) {
+      if (currentGen !== fetchGeneration) return;
       completed++;
       if (!hasAnyData) setLoadMsg(`${sym}... (${completed}/${total})`);
-      setStatus(`<span class="dot spin"></span>Loading... ${completed}/${total}`);
+      if (allPainted) updateStatusLine();
+      else setStatus(`<span class="dot spin"></span>Loading... ${completed}/${total}`);
     }
 
     /* ── PHASE 2: Parallel fetching ────────────────────────── */
@@ -1468,8 +1558,9 @@ async function go() {
       sleep(i * 400).then(async () => {
         if (currentGen !== fetchGeneration) return;
         try {
-          const data = await fetchMoralisUnified(t, tier, k, signal);
-          if (data && data.length >= 2 && currentGen === fetchGeneration) {
+          const live = await fetchMoralisUnified(t, tier, k, signal);
+          if (live && live.length >= 2 && currentGen === fetchGeneration) {
+            const data = mergeSeries(t._file, live, TIER_STEP_MS[tier]);   // the file's older candles + the live ones since it
             setCached(k, tier, data, false);
             applyTokenData(k, data, false, days);
             ld.style.display = 'none';
@@ -1485,8 +1576,9 @@ async function go() {
       sleep(i * 300).then(async () => {
         if (currentGen !== fetchGeneration) return;
         try {
-          const data = await fetchMajorUnified(t, tier, k, signal);
-          if (data && data.length >= 2 && currentGen === fetchGeneration) {
+          const live = await fetchMajorUnified(t, tier, k, signal);
+          if (live && live.length >= 2 && currentGen === fetchGeneration) {
+            const data = mergeSeries(t._file, live, TIER_STEP_MS[tier]);
             setCached(k, tier, data, false);
             applyTokenData(k, data, false, days);
             ld.style.display = 'none';
@@ -1560,6 +1652,7 @@ async function go() {
     /* ── PHASE 4: Finalize ─────────────────────────────────── */
     if (currentGen === fetchGeneration) {
       _statusFromCache = false;   // a37: the refetch landed (or nothing needed fetching) — no longer "Cached"
+      _statusUpdating = false;
       updateStatusLine(); updatePeriod(); renderChart(); renderSummary();
       saveCache();
     }
@@ -1571,13 +1664,15 @@ async function go() {
       updateStatusLine();
     }
   } finally {
-    // ALWAYS clean up — this can never get stuck
-    ld.style.display = 'none';
-    rb.classList.remove('spinning');
-    isRefreshing = false;
-    clearTimeout(_watchdogTimer);
-
-    if (pendingGo) { pendingGo = false; go(); }
+    // ALWAYS clean up — this can never get stuck. A superseded cycle leaves the newest one's overlay,
+    // spinner and watchdog alone (2026-10-06).
+    if (currentGen === fetchGeneration) {
+      ld.style.display = 'none';
+      rb.classList.remove('spinning');
+      isRefreshing = false;
+      clearTimeout(_watchdogTimer);
+      if (pendingGo) { pendingGo = false; go(); }
+    }
   }
 }
 
@@ -1612,6 +1707,7 @@ function updateStatusLine() {
     if (limited.length) msg += ` \u00B7 <span style="color:#eab308">${limited.join(', ')} limited data</span>`;
     if (coarse.length) msg += ` \u00B7 <span style="color:#eab308">${coarse.join(', ')} daily candles</span>`;
     if (carried.length) msg += ` \u00B7 <span style="color:#eab308">${carried.join(', ')} carried forward (builder could not refresh)</span>`;
+    if (_statusUpdating) msg += ` \u00B7 <span class="dot spin"></span><span style="color:rgba(255,255,255,0.45)">updating</span>`;
     setStatus(msg);
     document.getElementById('statusTime').textContent = newest ? `data to ${new Date(newest).toLocaleTimeString()}` : '';
   } else {
@@ -1792,7 +1888,7 @@ async function fetchFromGeckoTerminal(pairAddr, tier, sym, signal, tokenSide) {
     let r = null;
     for (let attempt = 0; attempt < 3 && !r; attempt++) {
       if (_gtCircuitUntil > Date.now()) return null;   // the circuit opened (this token's refusals or another's) — the fallbacks draw
-      await gtGate();
+      await gtGate(signal);
       if (signal && signal.aborted) return null;
       r = await fetchRetry(url, 1, 2000, signal, { 'accept': 'application/json' });
       if (!r) {   // refusals count ACROSS tokens: the 1st pauses every GT call 4 s, the 2nd 8 s, the 3rd opens the circuit for 45 s
@@ -1854,7 +1950,7 @@ async function resolveBestGTPool(tokenAddr, signal) {
 
   try {
     const url = `https://api.geckoterminal.com/api/v2/networks/${GT_NETWORK}/tokens/${tokenAddr}/pools`;
-    await gtGate();
+    await gtGate(signal);
     const r = await fetchRetry(url, 2, 2000, signal, { accept: 'application/json' });
     if (!r) return null;
     const j = await r.json();

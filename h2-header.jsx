@@ -77,6 +77,7 @@ const H2TabBand=({token,vars,active,navTo,mini,miniOn})=>(
 const SiteHeaderV2=(p)=>{
   const{token,logo,otherLogo,address,data,loading,hdrDaysOld,copied,copyAddress,plsRatio,xToATH,xToPenny,fmtX,renderPrice,onBack,onSwitch,onBuy,navTo,active}=p;
   const sc=useH2Scale();
+  React.useEffect(()=>{document.documentElement.dataset.tok=token;},[token]);   // 2026-10-06: the pages' metallic titles read html[data-tok] (gold on PTGC, green on UFO)
   const[scrolled,setScrolled]=React.useState(false);
   const artRef=React.useRef(null),artRef2=React.useRef(null);
   React.useEffect(()=>{
