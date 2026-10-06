@@ -1322,3 +1322,5 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   phones). Harness ran in the cloud workspace (no Chromium on the local VM).
 - `sessions/2026-10-03-socials-hub.md` — the Socials Hub redesign: his mock-up + icons (the zip mis-cut, icons cut from the
   mock-up instead), six mock-up rounds, the row order, the build (`tools/socials-hub.py`, handlers lifted verbatim), harness.
+
+- Round 12 (HvB): UFO greens the banner human side (.vs-sky-tint), veil 56%, confidence note .vs-conf, Round-trips InfoTip, wallet rule in How we tell, logos/hvb/ic-bot.svg (Classic) chosen for go-live — not wired. See handover/sessions/2026-10-06.md.
