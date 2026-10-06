@@ -35,10 +35,11 @@ const STEPS = {
   'lv-snapshot':     { run: 'scripts/lv-snapshot.js',               gate: ['data/lv-snapshots.json', 6] },
   'pair-volume':     { run: 'scripts/build-pair-volume.mjs' },
   'new-holders':     { run: 'scripts/build-new-holders.mjs' },
+  'swap-volume':     { run: 'scripts/build-swap-volume.mjs' },   // 2026-10-06: human vs arb-bot volume (reads charts-intraday for prices — last in the rpc lane)
 };
 const LANES = [
   { name: 'coingecko-key', steps: ['charts', 'charts-intraday', 'coingecko'] },
-  { name: 'rpc',           steps: ['value-generated', 'burn-history', 'treasury', 'dao-buys', 'ufo-ptgc-burns', 'token-allocation', 'lv-snapshot', 'new-holders'] },
+  { name: 'rpc',           steps: ['value-generated', 'burn-history', 'treasury', 'dao-buys', 'ufo-ptgc-burns', 'token-allocation', 'lv-snapshot', 'new-holders', 'swap-volume'] },
   { name: 'pair-volume',   steps: ['pair-volume'] },
 ];
 

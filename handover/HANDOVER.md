@@ -32,7 +32,7 @@ Update it at the end of every session.
 
 **2026-10-06 (Tuesday), afternoon — THE ACTIONS REVIEW: worker v7 (hourly dispatch — Shaka deploys, Next up -13), the pipeline in
 three parallel lanes with a job-summary report (`scripts/pipeline-run.mjs`), pair-volume on CoinGecko Pro, dao-buys carrying forward —
-PUSHED by Shaka ~13:40; worker v7 DEPLOYED by him (token, `DISPATCH_TOKEN`, cron `7 * * * *`) at 14:00 — first dispatched run expected 14:07 UTC. Then **the RH cores pinned** (`tools/rh-cores-pinned.py`, index.html: all six RH-core pools for both tokens in `HARDCODED_*_PAIRS` so a pool DexScreener drops — UFO/INC today, ~$120K — still shows on the RH Cores card / modal / LP table; written, NOT pushed).** The morning's Charts work below WAS pushed by him (13:21) and the full pipeline run he started at
+PUSHED by Shaka ~13:40; worker v7 DEPLOYED by him (token, `DISPATCH_TOKEN`, cron `7 * * * *`) at 14:00 — first dispatched run expected 14:07 UTC. Then **the Volume Split window** (people vs arb bots — `scripts/build-swap-volume.mjs`, `VolumeSplitModal` behind the dot, `VOL_SPLIT_LIVE=false`; Next up -14) and **the RH cores pinned** (`tools/rh-cores-pinned.py`, index.html: all six RH-core pools for both tokens in `HARDCODED_*_PAIRS` so a pool DexScreener drops — UFO/INC today, ~$120K — still shows on the RH Cores card / modal / LP table; written, NOT pushed).** The morning's Charts work below WAS pushed by him (13:21) and the full pipeline run he started at
 13:22 built `charts-intraday.json` in 71 s.
 
 **2026-10-06 (Tuesday) — THE CHARTS PAGE, round 3 + the speed fix — PUSHED by Shaka 13:21, NOT yet seen live.** Shaka's four asks,
@@ -656,6 +656,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   `scripts/build-charts-intraday.js`, CoinGecko Pro — 14 d of hourly + 24 h of 15-min closes per token). The page paints from it
   and tops up live from GeckoTerminal (PulseChain) / public CoinGecko (majors); a file > 36 h old is ignored. Daily (1M–1Y) =
   `charts-data.json`, as before.
+- **Human vs arb-bot volume**: `data/swap-volume.json` (hourly, step `swap-volume`; generator `scripts/build-swap-volume.mjs`): every
+  PTGC / UFO pool's Swap events over 30 d, classed by the Swap's `sender` (known router / aggregator = human, other contract = bot),
+  priced at the hourly close. Cache `swap-volume-cache.json` (compact trade rows + cursor) is not deployed.
 - **LP Pairs 7-day volume curves**: `data/pair-volume-7d.json` (hourly, the pair-volume step; generator
   `scripts/build-pair-volume.mjs` — GeckoTerminal hourly candles per pool, 28 six-hour bins, `binStart` shared). A
   pool the file has no entry for is read live by the browser; a file older than 36 h is ignored. GeckoTerminal's
@@ -1060,6 +1063,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-14. **THE VOLUME SPLIT WINDOW (2026-10-06, afternoon) — built, HIDDEN behind the faint bottom-right dot, NOT pushed.** People vs
+   arb-bot volume, both tokens + BOTH, 24H / 7D / 30D, from `data/swap-volume.json` (new hourly step `swap-volume`, first run backfills
+   30 d). `VOL_SPLIT_LIVE=false`; go-live = true + the Volume tile's icon entrance (the Holders pattern). Owed: his live look (the
+   dot on the dashboard, Mac + phone), his art for the header, the TXNS 24H tile (reads 10,761 / 46 vs ~100 real UFO swaps a day —
+   counts something other than trades), a share card if he wants one. Design + method: `design/volume-split/README.md`.
 -13. **The Actions review (2026-10-06 afternoon) — three things built, NOT pushed; one needs Shaka's hands, one his decision.**
    (a) **Deploy worker v7** (`handover/ptgcapi-worker-v7.js`) so the pipeline really runs hourly: GitHub → Settings → Developer
    settings → Personal access tokens → Fine-grained → Generate: owner ShakaVibe, "Only select repositories" = PTGC-UFO-Dashboard,
