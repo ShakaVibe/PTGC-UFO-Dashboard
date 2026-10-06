@@ -1327,3 +1327,4 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 - Round 13 (HvB): Round-trips column + Human routes fold removed (restorable, see session notes).
 - Humans vs Bots LIVE 2026-10-06: VOL_SPLIT_LIVE=true, bot icon on the Volume tile (h2-bot). Preview dot retired.
 - 2026-10-06 tiles: clickable badges (bot/Holders/RH) in token colour via CSS mask (.h2-hd span --ic), RH badge .h2-rh, LP % grey .h2-pct; round-trip numbers removed everywhere (HvB round 14).
+- HvB share card + Socials rows LIVE 2026-10-06 (tools/hvb-share.py, .hvs-*, HvbShareCard/Modal/Social, logos/hvb/sh-bot.webp). See sessions/2026-10-06.md.
