@@ -231,9 +231,14 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                   {both?(<><img src={TOKENS.PTGC.logo} alt="" className="relative w-12 h-12 sm:w-20 sm:h-20 -mr-3" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/><img src={TOKENS.UFO.logo} alt="" className="relative w-12 h-12 sm:w-20 sm:h-20" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/></>)
                   :(<><div aria-hidden="true" className="absolute inset-0 rounded-full blur-xl opacity-50 scale-110" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 60%)`}}></div><img src={logo} alt="" className="relative w-16 h-16 sm:w-24 sm:h-24" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/></>)}
                 </div>
-                <div className="flex-1 min-w-0" style={{textShadow:both?'none':'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
-                  <h2 className={`font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight${both?' gold-green-text':''}`} style={both?{filter:'drop-shadow(0 2px 6px rgba(0,0,0,.9))'}:{color:hex}}>Humans vs Bots</h2>
-                  <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium" style={{textShadow:'0 2px 10px rgba(0,0,0,.95)'}}>{P.label} {'·'} who moves {both?'the Grays’':token+'’s'} volume {'—'} people, or the arbitrage bots</div>
+                {/* round 10 (his mock-up): the title centred in the banner — "Humans" in the token's colour (gold → green on BOTH), "vs" silver, "Bots" in the bots' blue */}
+                <div className="flex-1 min-w-0 text-center sm:pr-12" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
+                  <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight whitespace-nowrap">
+                    <span className={both?'gold-green-text':''} style={both?{filter:'drop-shadow(0 2px 6px rgba(0,0,0,.9))'}:{color:hex}}>Humans</span>
+                    <span className="text-white/80 mx-2 sm:mx-3">vs</span>
+                    <span style={{color:`rgb(${VS_BOT})`}}>Bots</span>
+                  </h2>
+                  <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} who moves {both?'the Grays’':token+'’s'} volume {'—'} people, or the arbitrage bots</div>
                 </div>
                 <button type="button" onClick={onClose} aria-label="Close" className="tap-h shrink-0 w-9 h-9 rounded-full border border-white/25 bg-black/50 text-white/80 hover:text-white hover:border-white/60 flex items-center justify-center text-lg leading-none">{'✕'}</button>
               </div>

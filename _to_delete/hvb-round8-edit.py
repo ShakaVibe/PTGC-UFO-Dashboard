@@ -54,3 +54,24 @@ for f in ['tools/volume-split.py','index.html']:
     a=s.index("    .vs-bs{margin-top:10px}"); b=s.index("    .vs-bar{height:16px;")
     s=s[:a]+s[b:]
     p.write_text(s); print('ok',f)
+import pathlib,sys
+root=pathlib.Path(sys.argv[1])
+for f in ['tools/volume-split.py','index.html']:
+    p=root/f; s=p.read_text()
+    def rep(old,new):
+        global s
+        assert s.count(old)==1,(f,old[:70],s.count(old)); s=s.replace(old,new)
+    rep("""                <div className="flex-1 min-w-0" style={{textShadow:both?'none':'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
+                  <h2 className={`font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight${both?' gold-green-text':''}`} style={both?{filter:'drop-shadow(0 2px 6px rgba(0,0,0,.9))'}:{color:hex}}>Humans vs Bots</h2>
+                  <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium" style={{textShadow:'0 2px 10px rgba(0,0,0,.95)'}}>{P.label} {'·'} who moves {both?'the Grays’':token+'’s'} volume {'—'} people, or the arbitrage bots</div>
+                </div>""",
+"""                {/* round 10 (his mock-up): the title centred in the banner — "Humans" in the token's colour (gold → green on BOTH), "vs" silver, "Bots" in the bots' blue */}
+                <div className="flex-1 min-w-0 text-center sm:pr-12" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
+                  <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight whitespace-nowrap">
+                    <span className={both?'gold-green-text':''} style={both?{filter:'drop-shadow(0 2px 6px rgba(0,0,0,.9))'}:{color:hex}}>Humans</span>
+                    <span className="text-white/80 mx-2 sm:mx-3">vs</span>
+                    <span style={{color:`rgb(${VS_BOT})`}}>Bots</span>
+                  </h2>
+                  <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} who moves {both?'the Grays’':token+'’s'} volume {'—'} people, or the arbitrage bots</div>
+                </div>""")
+    p.write_text(s); print('ok',f)
