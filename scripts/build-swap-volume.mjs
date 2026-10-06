@@ -75,6 +75,12 @@ const ROUTERS = {
   '0x165c3410fc91ef562c50559f7d2289febed552d9': 'PulseX v2 router',
   '0xda9aba4eacf54e0273f56dffee6b8f1e20b23bba': 'PulseXSwapRouter',       // the PulseX app's current router (verified on PulseScan)
   '0x6bf228eb7f8ad948d37ded07e595efddfaaf88a6': 'Piteas router',
+  // switch.win (the dashboard's own Buy / Sell): SwitchRouter → UniswapV2DirectPairAdapter → pool. Shaka's tx 0x6393f6c8… (2026-09-23,
+  // a DAO buy, split over the v1 + v2 PTGC/WPLS pools) shows the adapters as the Swap senders — PulseScan names them, so they were
+  // already human by name; labelled here so the Human-routes list says what they are (round 9).
+  '0x2dfc8b6e13ff7f04e37ef97006084805d65a6f19': 'switch.win (SwitchRouter)',
+  '0x6f5ccfca1f1d3fff70202463df05573cc1668cb6': 'switch.win adapter',
+  '0x393e382520b93b8f662dc76295000930c06d689f': 'switch.win adapter',
 };
 const HUMAN_NAME = /router|aggregat|swap|exchange|dex/i;   // a verified, named contract matching this is a human path
 
