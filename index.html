@@ -9542,7 +9542,7 @@
        the sparklines are useH2Series. Badges keep their jobs: ⓘ on Volume (by period), RH on
        Liquidity (RH Cores modal), ⓘ on Holders (HoldersSingleModal), % of supply on Tokens in LP. */
     const KpiTilesV2=(p)=>{
-      const{token,data,loading,changeKnown,priceUp,changeTxt,changeTip,volumeByPeriod,liqMcapRatio,holdersByPeriod,holders,holderChange,tokensInLPKnown,tokensInLP,tokensInLPPct,txnsKnown,txnChange24h,burnHistoryCache,openVolume,openRH,openHolders,openNewHolders=null}=p;
+      const{token,data,loading,changeKnown,priceUp,changeTxt,changeTip,volumeByPeriod,liqMcapRatio,holdersByPeriod,holders,holderChange,tokensInLPKnown,tokensInLP,tokensInLPPct,txnsKnown,txnChange24h,burnHistoryCache,openVolume,openRH,openHolders,openNewHolders=null,openVolSplit=null}=p;
       const sc=useH2Scale();
       const ser=useH2Series(token,data,loading);
       const spark=token==='UFO'?'#8DFF3A':'#FFD24D';   // THE sparkline colour — one per token, every tile (2026-10-01: green on this page means UFO, never "up")
@@ -9565,7 +9565,7 @@
         <div className="h2 h2-tiles" data-tok={token} style={{'--hsd':sc.hsd,'--hsp':sc.hsp}}>
           {T('mcap','MARKET CAP',fmtUSD(data?.mcap),{cls:changeKnown?(priceUp?'':'dn'):'na',tip:changeTip,node:changeKnown?`${arrow(priceUp)} ${Math.abs(data.change).toFixed(2)}%`:'—'},{hot:true})}
           {T('vol','VOLUME 24H',fmtUSD(data?.vol),volChg!=null?{cls:volChg>=0?'':'dn',node:<>{arrow(volChg>=0)} {Math.abs(volChg).toFixed(1)}% <span className="h2-vs">vs 7d avg</span></>}:null,
-            {badge:<button type="button" onClick={openVolume} aria-label="Volume by period" className="tap-h"><H2Info/></button>})}
+            {badge:<><button type="button" onClick={openVolume} aria-label="Volume by period" className="tap-h"><H2Info/></button>{openVolSplit&&<button type="button" onClick={openVolSplit} aria-label="Humans vs Bots — who moves the volume" title="Humans vs Bots" className="tap-h"><img className="h2-hd h2-bot" src="logos/hvb/ic-bot.svg" alt="" aria-hidden="true"/></button>}</>})}{/* Humans vs Bots LIVE 2026-10-06: the Classic bot icon right of the ⓘ, like the Holders people icon */}
           {T('liq','LIQUIDITY',fmtUSD(data?.liq),null,{badge:<button type="button" onClick={openRH} aria-label="Liquidity with RH Core coins" className="tap-h">RH</button>})}
           {T('ratio','LIQ / MCAP',liqMcapRatio==='—'?'—':`${liqMcapRatio}%`,null)}
           {T('hold','HOLDERS',fmt(holdersNow),holderChange!==null?(holderChange===0?{cls:'na',node:'— 0'}:{cls:holderChange>=0?'':'dn',node:`${holderChange>=0?'↑':'↓'} ${holderChange>=0?'+':''}${fmt(holderChange)}`}):null,
@@ -10125,7 +10125,7 @@
        every pool's Swap events, classed by the contract that called the pool — a known router / aggregator is a person, any other
        contract is an arb bot — priced at the hourly close. Hidden behind the faint bottom-right dot until VOL_SPLIT_LIVE; then the
        entrance moves to the Volume tile (the Holders Details pattern). States per gotcha 3 / a18: undefined = loading, null = failed. */
-    const VOL_SPLIT_LIVE=false;
+    const VOL_SPLIT_LIVE=true;   // LIVE 2026-10-06 (Shaka: "lets make it live!"). false = hidden behind the faint bottom-right dot (2026-10-06 preview rounds 1-13)
     const SWAP_VOL_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/swap-volume.json';
     const VS_MAX_AGE=36*3600*1000,VS_TTL=5*60*1000,VS_AMBER_MS=3*3600*1000;
     const VS_BOT='79,209,255';   // the bots' colour (electric cyan) — never a token colour, so a bar reads at a glance
@@ -13086,7 +13086,7 @@
           {hdrV2?<KpiTilesV2 token={token} data={data} loading={loading} changeKnown={changeKnown} priceUp={priceUp} changeTxt={changeTxt} changeTip={changeTip}
             volumeByPeriod={volumeByPeriod} liqMcapRatio={liqMcapRatio} holdersByPeriod={holdersByPeriod} holders={holders} holderChange={NEW_HOLDERS_LIVE?(nhFile?nhNet(nhFile,token,24):null):holderChange}
             tokensInLPKnown={tokensInLPKnown} tokensInLP={tokensInLP} tokensInLPPct={tokensInLPPct} txnsKnown={txnsKnown} txnChange24h={txnChange24h} burnHistoryCache={burnHistoryCache}
-            openVolume={()=>setShowVolumeModal(true)} openRH={()=>setShowRHModal(true)} openHolders={()=>setShowHoldersSingleModal(true)} openNewHolders={NEW_HOLDERS_LIVE?()=>setShowNewHolders(true):null}/>:(<>
+            openVolume={()=>setShowVolumeModal(true)} openRH={()=>setShowRHModal(true)} openHolders={()=>setShowHoldersSingleModal(true)} openNewHolders={NEW_HOLDERS_LIVE?()=>setShowNewHolders(true):null} openVolSplit={VOL_SPLIT_LIVE?()=>setShowVolSplit(true):null}/>:(<>
           {/* Top KPI strip - silver-bordered metric cards */}
           <div className="border-b border-white/[0.06]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5">
