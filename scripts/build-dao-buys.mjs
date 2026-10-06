@@ -168,8 +168,8 @@ async function main() {
   const buys = []; let lpRemovals = 0, noPlsPaid = 0; const source = {};
   for (const w of WALLETS) {
     const txnsFile = readJson(w.txns, null), tokensFile = readJson(w.tokens, null);
-    if (!txnsFile || !tokensFile) { console.error(`missing treasury input files for ${w.addr}`); process.exit(1); }
-    if (lc(txnsFile.wallet) !== w.addr || lc(tokensFile.wallet) !== w.addr) { console.error(`treasury files for ${w.addr} are for ${txnsFile.wallet} / ${tokensFile.wallet}`); process.exit(1); }
+    if (!txnsFile || !tokensFile) throw new Error(`missing treasury input files for ${w.addr}`);
+    if (lc(txnsFile.wallet || '') !== w.addr || lc(tokensFile.wallet || '') !== w.addr) throw new Error(`treasury files for ${w.addr} are for ${txnsFile.wallet} / ${tokensFile.wallet}`);
     const d = deriveBuys(txnsFile.transactions || [], tokensFile.transfers || [], w.addr);
     console.log(`${w.addr.slice(0, 6)}…${w.addr.slice(-4)}: ${d.buys.length} buys (excluded: ${d.lpRemovals} LP removals, ${d.noPlsPaid} with no PLS paid)`);
     buys.push(...d.buys); lpRemovals += d.lpRemovals; noPlsPaid += d.noPlsPaid;
@@ -189,7 +189,7 @@ async function main() {
   for (const b of buys) {
     const p = prevBuys.get(b.hash);
     if (b.plsUsd == null && p) { b.plsUsd = p.plsUsd; b.marketUsd = p.marketUsd; }
-    if (!(b.plsUsd > 0)) { console.error(`buy ${b.hash} has no price — aborting write`); process.exit(1); }
+    if (!(b.plsUsd > 0)) throw new Error(`buy ${b.hash} has no price — aborting write`);
     b.usd = b.pls * b.plsUsd;
     b.price = b.ptgc > 0 ? b.usd / b.ptgc : 0;       // effective USD per PTGC (after fee + slippage)
   }
@@ -259,5 +259,12 @@ async function main() {
 }
 
 if (process.argv[1] && /build-dao-buys\.mjs$/.test(process.argv[1])) {
-  main().catch(e => { console.error(e); process.exit(1); });
+  /* 2026-10-06: a failed run KEEPS the previous file (the other steps' rule) and warns, instead of
+     going red — twice in four days (Oct 3, Oct 4) this step failed inside a second and healed itself
+     the next hour. Only a failure with NO previous file to keep fails the step. */
+  main().catch(e => {
+    const msg = (e && e.stack) || String(e);
+    if (fs.existsSync(OUT_PATH)) { console.error(`::warning::dao-buys: ${(e && e.message) || e} — previous data/dao-buys.json kept`); console.error(msg); process.exit(0); }
+    console.error(msg); process.exit(1);
+  });
 }

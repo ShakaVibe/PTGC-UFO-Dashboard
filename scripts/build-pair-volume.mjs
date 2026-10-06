@@ -15,6 +15,10 @@
 // pipeline's "Report step failures" step goes red. A pool with candles but no trade in the week is a real row
 // of zeros (the table draws the floor line) — never a guessed shape.
 //
+// 2026-10-06: with COINGECKO_API_KEY set (the pipeline's secret) the candles come from CoinGecko Pro's on-chain
+// API — the same data as GeckoTerminal (CoinGecko owns it), served fast and keyed: ~1.5 min for 47 pools instead of
+// 9 (GeckoTerminal answered GitHub's runners in ~10 s per pool). Without the key: GeckoTerminal, as before.
+//
 // Local run (Node 22): NODE_USE_ENV_PROXY=1 node scripts/build-pair-volume.mjs   (OUT_PATH= to write elsewhere)
 import fs from 'node:fs';
 
@@ -25,7 +29,11 @@ const TOKENS = {
 };
 const MIN_LIQ = 1000;              // index.html's MIN_LIQ: the rows shown by default; the under-$1K rows come too, up to the cap
 const MAX_POOLS_PER_TOKEN = 45;
-const GAP_MS = Number(process.env.GAP_MS || 1200);               // GeckoTerminal free tier: ~30 calls/min
+const CG_KEY = process.env.COINGECKO_API_KEY || '';
+const GAP_MS = Number(process.env.GAP_MS || (CG_KEY ? 1500 : 1200));   // GeckoTerminal free tier: ~30 calls/min; the Pro key is paced like the sibling scripts
+const OHLCV_BASE = CG_KEY
+  ? 'https://pro-api.coingecko.com/api/v3/onchain/networks/pulsechain/pools/'
+  : 'https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/';
 const BIN_MS = 6 * 3600 * 1000, BINS = 28;   // 7 days
 const UA = 'grays-dashboard-pipeline/1.0 (+https://ptgc-ufo.com)';
 
@@ -34,7 +42,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function getJson(url, tries = 3) {
   for (let a = 0; a < tries; a++) {
     try {
-      const r = await fetch(url, { headers: { accept: 'application/json', 'user-agent': UA }, signal: AbortSignal.timeout(15000) });
+      const headers = { accept: 'application/json', 'user-agent': UA };
+      if (CG_KEY && url.startsWith(OHLCV_BASE)) headers['x-cg-pro-api-key'] = CG_KEY;
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
       if (r.status === 429 || r.status >= 500) { console.log(`  ${r.status} from ${url.slice(0, 90)} — waiting`); await sleep(5000 * (a + 1)); continue; }
       if (r.status === 404) return { status: 404 };
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -81,6 +91,7 @@ async function main() {
     await sleep(500);
   }
   const pools = [...seen.values()];
+  console.log(`candles from ${CG_KEY ? 'CoinGecko Pro (keyed)' : 'GeckoTerminal (keyless)'}, ${GAP_MS} ms apart`);
   console.log(`${pools.length} pools to read (${pools.filter(p => p.token === 'PTGC').length} PTGC, ${pools.filter(p => p.token === 'UFO').length} UFO)`);
 
   const now = Date.now();
@@ -97,7 +108,7 @@ async function main() {
   };
   for (const p of pools) {
     if (down) { refused++; carry(p); continue; }   // GeckoTerminal is down this run: don't spend 30 × 3 retries on it
-    const url = `https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${p.addr}/ohlcv/hour?aggregate=1&limit=168&currency=usd`;
+    const url = `${OHLCV_BASE}${p.addr}/ohlcv/hour?aggregate=1&limit=168&currency=usd`;
     const { status, json, error } = await getJson(url);
     if (status === 404) { out[p.addr] = null; missing++; streak = 0; }
     else if (status === 200 && json && json.data && json.data.attributes && Array.isArray(json.data.attributes.ohlcv_list)) {
@@ -106,7 +117,7 @@ async function main() {
       refused++;
       const kept = carry(p);
       console.log(`  refused: ${p.name} ${p.addr.slice(0, 10)} (${error || status})${kept ? ' — carried' : ' — left out, the browser reads it live'}`);
-      if (++streak >= 3) { down = true; console.log('  three refusals in a row — GeckoTerminal is down this run; carrying the rest'); }
+      if (++streak >= 3) { down = true; console.log(`  three refusals in a row — ${CG_KEY ? 'CoinGecko' : 'GeckoTerminal'} is down this run; carrying the rest`); }
     }
     await sleep(GAP_MS);
   }
@@ -114,7 +125,7 @@ async function main() {
   const file = {
     schema: 1,
     generatedAt: new Date(now).toISOString(),
-    source: 'GeckoTerminal hourly candles, volume_usd, summed into 6-hour bins',
+    source: `${CG_KEY ? 'CoinGecko Pro on-chain' : 'GeckoTerminal'} hourly candles, volume_usd, summed into 6-hour bins`,
     binMs: BIN_MS, bins: BINS, binStart,
     pools: out,
     meta: { pools: pools.length, ok, missing, refused, carried, ms: Date.now() - t0 },

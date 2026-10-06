@@ -30,7 +30,12 @@ Update it at the end of every session.
 
 ## Current state (2026-10-06, in progress)
 
-**2026-10-06 (Tuesday) — THE CHARTS PAGE, round 3 + the speed fix — written to the Mac, NOT pushed, NOT seen live.** Shaka's four asks,
+**2026-10-06 (Tuesday), afternoon — THE ACTIONS REVIEW: worker v7 (hourly dispatch — Shaka deploys, Next up -13), the pipeline in
+three parallel lanes with a job-summary report (`scripts/pipeline-run.mjs`), pair-volume on CoinGecko Pro, dao-buys carrying forward —
+written to the Mac, NOT pushed.** The morning's Charts work below WAS pushed by him (13:21) and the full pipeline run he started at
+13:22 built `charts-intraday.json` in 71 s.
+
+**2026-10-06 (Tuesday) — THE CHARTS PAGE, round 3 + the speed fix — PUSHED by Shaka 13:21, NOT yet seen live.** Shaka's four asks,
 all done: (1) the "The Grays vs Others" box gone, page up; (2) the Share Chart badge = the Calculators buttons' glass with a drawn
 camera, at the RIGHT of the card's width, menu right-aligned; (3) **UFO GREEN on the metallic titles** — Grays Charts, Grays
 Calculators, Socials Hub (+ the Share badge) swap the gold word for the UFO green gradient while UFO is the token (`html[data-tok]`,
@@ -609,15 +614,19 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    stage it from a NEW path under outputs/ — re-using the first path re-sent the first snapshot.)
 4. If a pipeline script changed, run it once by hand: Actions → "Data Pipeline (hourly)" → Run
    workflow → `only=<step>` (step names are in the workflow's `only` description; `force=true`
-   ignores the file-age gates).
+   ignores the file-age gates). Since 2026-10-06 the steps run inside ONE workflow step
+   (`scripts/pipeline-run.mjs`, three lanes) — a new script = a line in its `STEPS` + a place in a
+   lane, and the file in the Commit step's list; the run page's job summary has the per-step table.
 
 ## Sources of truth for numbers
 
 - **Prices / liquidity / volume**: DexScreener, with on-chain reserves as fallback.
 - **Burn totals**: `balanceOf(0x369)` on chain.
-- **Pipeline cadence (measured 2026-09-18)**: GitHub delivers the hourly cron ~5×/day (gaps 2–5 h), every run
+- **Pipeline cadence (measured 2026-09-18, again 2026-10-06)**: GitHub delivers the hourly cron ~4–5×/day (gaps 2–9 h), every run
   green. The site's thresholds assume that: value-generated live-scan fallback after 6 h, burn-summary amber
-  after 8 h. Expect ~5 "data: hourly pipeline" commits a day, not 24.
+  after 8 h. **Since 2026-10-06 the real hourly beat is meant to be the ptgcapi Worker's `7 * * * *` cron dispatching the
+  workflow (worker v7 — deployed? see Next up -13); once it is, expect ~24 data commits a day.** The run itself is three parallel
+  lanes (`scripts/pipeline-run.mjs`), ~6–7 min; the job summary table on the run page says what ran, skipped and failed.
 - **PTGC burn windows (24H/7D/30D/90D)**: `data/burn-summary.json` (hourly, the burn-history step of `data-pipeline.yml`).
   The burn archive behind it is `data/ptgc-burns-<year>-h1|h2.json`, half-years derived from the date (a30) —
   never add a period to a list; a file past 80 MB logs a warning, GitHub refuses 100 MB.
@@ -1051,7 +1060,19 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--12. **Charts round 3 + speed (2026-10-06) — written, NOT pushed.** After the push: `only=charts-intraday` once in Actions, then the live
+-13. **The Actions review (2026-10-06 afternoon) — three things built, NOT pushed; one needs Shaka's hands, one his decision.**
+   (a) **Deploy worker v7** (`handover/ptgcapi-worker-v7.js`) so the pipeline really runs hourly: GitHub → Settings → Developer
+   settings → Personal access tokens → Fine-grained → Generate: owner ShakaVibe, "Only select repositories" = PTGC-UFO-Dashboard,
+   Repository permissions → **Actions: Read and write** (Metadata comes with it), a long expiry; Cloudflare → Workers → ptgcapi →
+   Settings → Variables and Secrets → add secret **`DISPATCH_TOKEN`**; paste v7 into the editor → Deploy; Settings → Triggers →
+   Cron Triggers → add **`7 * * * *`** (keep the existing sync cron). Check: at the next :07 the Actions list shows a "Data Pipeline
+   (hourly)" run with event `workflow_dispatch`; the Worker's log says "dispatch: Data Pipeline started". Until then GitHub's own
+   schedule keeps delivering ~4 runs a day. (b) After the push, watch the first pipeline run: three lanes in one step, the job
+   summary table at the bottom of the run page, ~6–7 min; pair-volume's file `source` should read "CoinGecko Pro on-chain".
+   (c) **Decision**: move the bot's data commits to an orphan `data` branch (pages read `raw.githubusercontent.com/…/data/data/…`),
+   which ends the `pull --rebase` collisions and keeps `main` code-only — say the word and it is a session. Optional after that:
+   checkpoint value-generated's 90-day rescan. Review notes: `sessions/2026-10-06.md` "Afternoon".
+-12. **Charts round 3 + speed (2026-10-06) — PUSHED by Shaka 13:21; his full pipeline run at 13:22 built the intraday file.** Owed: the live
    look (24H / 7D / 14D switching, HEX on 24H, the badge, UFO-green titles on Charts / Calculators / Socials, Mac + phone). Watch the
    `charts-intraday` step's first runs (~1 min, 26 CoinGecko calls); the page ignores a file > 36 h old. **2026-10-07 after ~07:30 PDT =
    the real UFO day-90 test** (`sessions/2026-10-06.md`, "UFO day 90"). Builds: `tools/charts-v3.py` then `tools/charts-fast.py` on a
@@ -1160,6 +1181,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 - `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
   page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,
   loads that supersede each other, the GT gate skipping aborted calls; harness; the UFO day-90 live check (real test = Oct 7).
+  Afternoon: the Actions review — cadence ~4 runs/day, 22-min serial runs, two dao-buys reds, the 1.2 GB history — and the fixes:
+  worker v7 dispatching the pipeline hourly (Shaka deploys), `scripts/pipeline-run.mjs` three parallel lanes + job-summary report,
+  pair-volume on CoinGecko Pro, dao-buys carrying forward.
 - `sessions/2026-10-05.md` — afternoon: the Calculators page reskinned (his art, Hub-style title, icon buttons, framed disclaimers; `tools/calc-v2.py`). Morning: the KPI Report tab redesigned to Shaka's mock-up: mock v1 (approved), `KpiCardV2` + `kp-*`
   container-query CSS, real sparklines via `useH2Series`, the fire bar shared, the Combined KPI Report row restored (dead since
   09-29), four explainers; harness at 1440 / 1024 / 390, DS_DOWN, the Socials rows.
