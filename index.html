@@ -358,6 +358,17 @@
     .vs-card .vg .k{margin-top:0}
     .vs-card .vg .v{font-size:28px;margin-top:0}
     .vs-card .vg .s{margin-top:0}
+    .vs-bs{margin-top:10px}
+    .vs-bsbar{height:7px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,.06)}
+    .vs-bsbar i{display:block;height:100%}
+    .vs-bsl{display:flex;justify-content:space-between;gap:10px;margin-top:5px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);flex-wrap:wrap}
+    .vs-hod{margin-top:14px}
+    .vs-hodr,.vs-hodx{display:grid;grid-template-columns:76px 1fr;align-items:center;gap:10px;margin-top:4px}
+    .vs-hodr .k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.55)}
+    .vs-hodr .cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;height:16px}
+    .vs-hodr .cells i{display:block;border-radius:3px}
+    .vs-hodx .cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;font-size:11px;font-weight:600;color:rgba(255,255,255,.4)}
+    @media(max-width:640px){.vs-hodr,.vs-hodx{grid-template-columns:58px 1fr}.vs-hodr .k{font-size:10px}}
     .vs-bar{height:16px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
     .vs-bar>i{display:block;height:100%}
     .vs-bar>i.h{background:linear-gradient(180deg,rgba(var(--tg),1),rgba(var(--tg),.7))}
@@ -10105,7 +10116,7 @@
       if(_vsP)return _vsP;
       _vsP=fetch(SWAP_VOL_URL+'?t='+Date.now()).then(r=>r.ok?r.json():null).then(j=>{
         _vsP=null;_vsAt=Date.now();
-        _vsFile=(j&&j.schema===1&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO&&Date.now()-Date.parse(j.generatedAt)<VS_MAX_AGE)?j:null;
+        _vsFile=(j&&j.schema>=1&&j.schema<=2&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO&&Date.now()-Date.parse(j.generatedAt)<VS_MAX_AGE)?j:null;
         return _vsFile;
       }).catch(()=>{_vsP=null;_vsAt=Date.now();_vsFile=null;return null;});
       return _vsP;
@@ -10120,10 +10131,13 @@
     const vsView=(file,token,P,pairMap)=>{
       const toks=token==='BOTH'?['PTGC','UFO']:[token];
       const zero=()=>({n:0,usd:0});
-      const v={human:zero(),bot:zero(),pools:{},senders:{},routers:file.routers||{}};
+      const v={human:zero(),bot:zero(),pools:{},senders:{},routers:file.routers||{},buys:{human:zero(),bot:zero()},sells:{human:zero(),bot:zero()},hod:Array.from({length:24},()=>[0,0]),wallets:{human:0,humanTxs:0,humanTxsKnown:0},hasDir:false};
       for(const tk of toks){
         const per=file.tokens[tk]&&file.tokens[tk].periods&&file.tokens[tk].periods[P.p];if(!per)continue;
-        for(const k of['human','bot']){v[k].n+=per[k].n;v[k].usd+=per[k].usd;}
+        for(const k of['human','bot']){v[k].n+=per[k].n;v[k].usd+=per[k].usd;
+          if(per.buys){v.buys[k].n+=per.buys[k].n;v.buys[k].usd+=per.buys[k].usd;v.sells[k].n+=per.sells[k].n;v.sells[k].usd+=per.sells[k].usd;v.hasDir=true;}}
+        if(per.hod)per.hod.forEach((h,i)=>{v.hod[i][0]+=h[0];v.hod[i][1]+=h[1];});
+        if(per.wallets){v.wallets.human+=per.wallets.human;v.wallets.humanTxs+=per.wallets.humanTxs;v.wallets.humanTxsKnown+=per.wallets.humanTxsKnown;}
         for(const[a,pl]of Object.entries(per.pools||{})){const o=v.pools[a]||(v.pools[a]={addr:a,name:pl.name,token:tk,human:zero(),bot:zero(),partner:vsPartner(file,a,tk,pairMap)});for(const k of['human','bot']){o[k].n+=pl[k].n;o[k].usd+=pl[k].usd;}if(o.token!==tk)o.token='BOTH';}
         for(const sd of per.senders||[]){const o=v.senders[sd.addr]||(v.senders[sd.addr]={addr:sd.addr,kind:sd.kind,label:sd.label,n:0,usd:0});o.n+=sd.n;o.usd+=sd.usd;}
       }
@@ -10186,6 +10200,27 @@
           <text x={W-padR} y={padT+8} textAnchor="end">{fmtUSD(max)}</text>
         </svg>
       );
+    };
+    /* Buys vs sells of the token for one side (round 5): a two-tone bar in the dashboard's up / down colours + the two figures. */
+    const VsBuySell=({b,s})=>{const t=(b.usd||0)+(s.usd||0);if(!(t>0))return null;const pb=b.usd/t*100;return(
+      <div className="vs-bs">
+        <div className="vs-bsbar" role="img" aria-label={`Buys ${fmtUSD(b.usd)}, sells ${fmtUSD(s.usd)}`}><i style={{width:`${pb}%`,background:'#2BE07F'}}></i><i style={{width:`${100-pb}%`,background:'#FF5A78'}}></i></div>
+        <div className="vs-bsl"><span><b style={{color:'#2BE07F'}}>Buys</b> {fmtUSD(b.usd)} <span className="text-white/40">{fmt(b.n)}</span></span><span><b style={{color:'#FF5A78'}}>Sells</b> {fmtUSD(s.usd)} <span className="text-white/40">{fmt(s.n)}</span></span></div>
+      </div>);};
+    /* When they trade (round 5): two rows of 24 cells, the viewer's local hours, each row lit by its own busiest hour. */
+    const VsHod=({hod,rgb,gg})=>{
+      const off=Math.round(-new Date().getTimezoneOffset()/60);   // UTC → local, whole hours
+      const local=Array.from({length:24},(_,h)=>hod[((h-off)%24+24)%24]);
+      const mh=Math.max(1,...local.map(x=>x[0])),mb=Math.max(1,...local.map(x=>x[1]));
+      const lbl=h=>h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
+      const row=(i,max,color)=>local.map((x,h)=>{const a=x[i]/max;return <i key={h} title={`${lbl(h)}: ${fmtUSD(x[i])}`} style={{background:color,opacity:0.08+a*0.92}}></i>;});
+      return(
+        <div className="vs-hod">
+          <div className="vs-hodr"><span className="k">Humans</span><div className="cells">{row(0,mh,gg?'linear-gradient(180deg,#E8C044,#7CFC00)':`rgb(${rgb})`)}</div></div>
+          <div className="vs-hodr"><span className="k">Arb bots</span><div className="cells">{row(1,mb,`rgb(${VS_BOT})`)}</div></div>
+          <div className="vs-hodx"><span></span><div className="cells">{[0,6,12,18].map(h=><span key={h} style={{gridColumn:`${h+1} / span 6`}}>{lbl(h)}</span>)}</div></div>
+          <div className="vs-note mt-1">When they trade {'\u00b7'} your local time {'\u00b7'} each row lit against its own busiest hour</div>
+        </div>);
     };
     const VolumeSplitModal=({token:initial,feeRates,pairs,otherPairs,onClose})=>{
       const[token,setToken]=useState(initial==='UFO'?'UFO':'PTGC');
@@ -10283,7 +10318,8 @@
                       <div className="hd"><span className={`n${gg}`}>Humans</span><span className={`pct tabular-nums${gg}`}>{vsPct(share(view.human.usd,view.bot.usd))}</span></div>
                       <div className="k">Volume</div>
                       <div className="v tabular-nums">{fmtUSD(view.human.usd)}</div>
-                      <div className="s">{fmt(view.human.n)} trades through {view.humans.length} router{view.humans.length===1?'':'s'}</div>
+                      <div className="s">{fmt(view.human.n)} trades{view.wallets.humanTxs>0?(view.wallets.human>0?<> by <b className="text-white">{view.wallets.humanTxsKnown<view.wallets.humanTxs||both?'\u2265':''}{fmt(view.wallets.human)}</b> wallet{view.wallets.human===1?'':'s'}</>:<span className="text-white/40"> {'\u00b7'} wallets being counted</span>):null} through {view.humans.length} router{view.humans.length===1?'':'s'}</div>
+                      {view.hasDir&&<VsBuySell b={view.buys.human} s={view.sells.human}/>}
                       {vg&&<div className="vg"><span><span className="k">Value generated</span><div className="v tabular-nums">{fmtUSD(vg.h)}</div></span><span className="s">{vsPct(share(vg.h,vg.b))} of it {'·'} {feeLabel}</span></div>}
                     </div>
                     <div className="vs-card" style={{'--acc':VS_BOT}}>
@@ -10291,6 +10327,7 @@
                       <div className="k">Volume</div>
                       <div className="v tabular-nums">{fmtUSD(view.bot.usd)}</div>
                       <div className="s">{fmt(view.bot.n)} trades from {fmt(botN)} bot contract{botN===1?'':'s'}</div>
+                      {view.hasDir&&<VsBuySell b={view.buys.bot} s={view.sells.bot}/>}
                       {vg&&<div className="vg"><span><span className="k">Value generated</span><div className="v tabular-nums">{fmtUSD(vg.b)}</div></span><span className="s">{vsPct(share(vg.b,vg.h))} of it {'·'} {feeLabel}</span></div>}
                     </div>
                   </div>
@@ -10304,6 +10341,7 @@
                       <i className={`h${gg}`} style={{width:`${view.total.usd>0?view.human.usd/view.total.usd*100:0}%`}}></i><i className="b" style={{width:`${view.total.usd>0?view.bot.usd/view.total.usd*100:0}%`}}></i>
                     </div>
                     <div className="mt-3"><VsChart series={view.series} binMs={view.binMs} rgb={rgb} gg={both}/></div>
+                    {view.hod.some(h=>h[0]+h[1]>0)&&<VsHod hod={view.hod} rgb={rgb} gg={both}/>}
                   </div>
                   {/* roll-downs (round 4): closed by default — the bar with the title and the count, the data under it on a click */}
                   <Fold open={showPools} onToggle={()=>setShowPools(s=>!s)} title="By pool" count={`${view.pools.filter(pl=>pl.total>0||pl.human.n+pl.bot.n>0).length} pools`} color={hex}>

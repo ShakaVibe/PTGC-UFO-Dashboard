@@ -13,8 +13,9 @@
 // USD per trade = the token-side amount × the token's hourly close from data/charts-intraday.json (daily close
 // from charts-data.json beyond 14 d). A trade with no price is counted but not valued (`unpriced`).
 //
-// Incremental: data/swap-volume-cache.json keeps every trade of the last 31 days (compact rows: [ts, block, tx
-// prefix, pool#, sender#, kind, PTGC amount, PTGC usd, UFO amount, UFO usd] over index tables) + a block cursor; each run
+// Incremental: data/swap-volume-cache.json keeps every trade of the last 91 days (compact rows: [ts, block, tx
+// prefix, pool#, sender#, kind, PTGC amount, PTGC usd, UFO amount, UFO usd, PTGC dir, UFO dir, wallet#] over index tables —
+// dir = +1 a buy of the token, −1 a sell; wallet# = tx.from of a HUMAN trade, looked up FROM_CAP per run) + a block cursor; each run
 // scans only the new blocks (first run: BACKFILL_DAYS). Block times are interpolated between the chunk ends
 // (PulseChain's ~10 s blocks; hourly bins do not need better). Pools = DexScreener's list for both tokens +
 // the pinned RH-core pools (index.html HARDCODED_*_PAIRS — DexScreener drops a quiet pool). Honest failure:
@@ -32,7 +33,8 @@ const BLOCKS_PER_DAY = 8640;
 const HEAD_LAG = 3;
 const LOG_CHUNK = Number(process.env.LOG_CHUNK || 4000);
 const HOUR = 3600000;
-const SCHEMA = 1;
+const SCHEMA = 2;   // 2 (2026-10-06 round 5): rows carry the trade's direction and the human trader's wallet; a schema-1 cache is rebuilt
+const FROM_CAP = Number(process.env.FROM_CAP || 1500);   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
 
 const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';   // Swap(address,uint,uint,uint,uint,address)
 const TOKENS = {   // same as index.html TOKENS / ADDR (gotcha 00)
@@ -157,7 +159,9 @@ async function classifySenders(cache, addrs) {
 // ---------------------------------------------------------------- main
 async function main() {
   const t0 = Date.now();
-  const cache = readJson(CACHE_PATH, { schema: SCHEMA, cursor: null, pools: {}, senders: {}, swaps: [] });
+  let cache = readJson(CACHE_PATH, { schema: SCHEMA, cursor: null, pools: {}, senders: {}, swaps: [] });
+  if ((cache.schema || 1) < SCHEMA) { console.log(`cache is schema ${cache.schema || 1} — rebuilding the ${BACKFILL_DAYS}-day history with directions and wallets`); cache = { schema: SCHEMA, cursor: null, pools: cache.pools || {}, senders: cache.senders || {}, swaps: [], from: {} }; }
+  cache.from = cache.from || {};
   const head = parseInt(await rpc('eth_blockNumber', []), 16) - HEAD_LAG;
   const target = head - BACKFILL_DAYS * BLOCKS_PER_DAY;
   const from = cache.cursor ? cache.cursor.block + 1 : target;
@@ -197,17 +201,33 @@ async function main() {
     const sender = '0x' + l.topics[1].slice(26);
     const [a0i, a1i, a0o, a1o] = [0, 1, 2, 3].map(i => word(l.data, i));
     const ts = tsOf(parseInt(l.blockNumber, 16));
-    const amounts = {};
+    const amounts = {}, dirs = {};
     for (const tk of rec.tokens) {
-      const side = TOKENS[tk].address === rec.token0 ? a0i + a0o : TOKENS[tk].address === rec.token1 ? a1i + a1o : 0n;
-      const amt = Number(side) / 10 ** TOKENS[tk].decimals;
+      const is0 = TOKENS[tk].address === rec.token0, is1 = TOKENS[tk].address === rec.token1;
+      const tin = is0 ? a0i : is1 ? a1i : 0n, tout = is0 ? a0o : is1 ? a1o : 0n;   // the token's amount INTO the pool (a sell) / OUT of it (a buy)
+      const amt = Number(tin + tout) / 10 ** TOKENS[tk].decimals;
       const p = prices[tk](ts);
       if (!(p > 0)) unpriced++;
       amounts[tk] = [Number(amt.toPrecision(7)), p > 0 ? Number((amt * p).toPrecision(6)) : null];
+      dirs[tk] = tout > tin ? 1 : tin > 0n ? -1 : 0;
     }
     const P = amounts.PTGC || [null, null], U = amounts.UFO || [null, null];
-    fresh.push([ts, parseInt(l.blockNumber, 16), l.transactionHash.slice(0, 10), ix(idx.pools, addr), ix(idx.senders, sender), classOf(sender).kind === 'human' ? 1 : 0, P[0], P[1], U[0], U[1]]);
+    const tx10 = l.transactionHash.slice(0, 10);
+    fresh.push([ts, parseInt(l.blockNumber, 16), tx10, ix(idx.pools, addr), ix(idx.senders, sender), classOf(sender).kind === 'human' ? 1 : 0, P[0], P[1], U[0], U[1], dirs.PTGC || 0, dirs.UFO || 0, -1, l.transactionHash]);
   }
+
+  // the human trades' wallets: tx.from, FROM_CAP lookups a run, newest first; remembered in cache.from by tx prefix
+  const need = []; const seenTx = new Set();
+  for (const r of [...fresh].sort((a, b) => b[0] - a[0])) if (r[5] === 1 && !cache.from[r[2]] && !seenTx.has(r[2])) { seenTx.add(r[2]); need.push([r[2], r[13]]); }
+  const pending = [...(cache.fromPending || [])];   // full hashes still to look up from earlier runs
+  const todo = [...need, ...pending.filter(([t]) => !seenTx.has(t))].slice(0, FROM_CAP);
+  if (todo.length) {
+    console.log(`looking up ${todo.length} human trades' wallets (${need.length + pending.length} outstanding)`);
+    await pmap(todo, async ([t, hash]) => { try { const tx = await rpc('eth_getTransactionByHash', [hash], 3); if (tx && tx.from) cache.from[t] = lc(tx.from); } catch (e) { /* next run */ } }, 12);
+  }
+  cache.fromPending = [...need, ...pending].filter(([t]) => !cache.from[t]).slice(0, 20000);
+  idx.wallets = idx.wallets || [];
+  for (const r of fresh) { if (r[5] === 1 && cache.from[r[2]]) r[12] = ix(idx.wallets, cache.from[r[2]]); r.length = 13; }   // the full hash leaves the row
 
   // merge with the cache (dedupe by tx+pool+logIndex-free key: tx + pool + amounts), prune to KEEP_DAYS
   const keepFrom = Date.now() - KEEP_DAYS * 86400000;
@@ -215,10 +235,10 @@ async function main() {
   const rows = [...(cache.swaps || []), ...fresh].filter(r => { if (r[0] < keepFrom) return false; const k = r[2] + '|' + r[1] + '|' + r[3] + '|' + r[6] + '|' + r[8]; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((x, y) => x[0] - y[0]);
   // re-class everything with the current knowledge (a sender promoted to human applies to its past trades too)
-  for (const r of rows) r[5] = classOf(idx.senders[r[4]]).kind === 'human' ? 1 : 0;
+  for (const r of rows) { r[5] = classOf(idx.senders[r[4]]).kind === 'human' ? 1 : 0; if (r[5] === 1 && r[12] < 0 && cache.from[r[2]]) r[12] = ix(idx.wallets, cache.from[r[2]]); }
   cache.swaps = rows; cache.cursor = { block: head, ts: Date.now() }; cache.schema = SCHEMA; cache.fromBlock = Math.min(cache.fromBlock || Infinity, from, back ? back[0] : Infinity);
   // the view the aggregation below reads
-  const all = rows.map(r => ({ ts: r[0], pool: idx.pools[r[3]], sender: idx.senders[r[4]], kind: r[5] ? 'human' : 'bot', amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9]] } : {}) } }));
+  const all = rows.map(r => ({ ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: idx.senders[r[4]], kind: r[5] ? 'human' : 'bot', wallet: r[12] >= 0 ? idx.wallets[r[12]] : null, amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
 
   // ---- the public file
   const now = Date.now();
@@ -234,16 +254,26 @@ async function main() {
     const per = {};
     for (const [p, days] of Object.entries(periods)) {
       const since = now - days * 86400000;
-      const o = { human: zero(), bot: zero(), tokens: { human: 0, bot: 0 }, pools: {}, senders: {} };
+      const o = { human: zero(), bot: zero(), tokens: { human: 0, bot: 0 }, pools: {}, senders: {},
+        buys: { human: zero(), bot: zero() }, sells: { human: zero(), bot: zero() },        // round 5: direction per side
+        hod: Array.from({ length: 24 }, () => [0, 0]),                                        // round 5: USD by UTC hour of day [human, bot]
+        wallets: { human: 0, humanTxs: 0, humanTxsKnown: 0 } };                               // round 5: distinct wallets behind the human trades
+      const hw = new Set(), htx = new Set(), htxKnown = new Set();
       for (const s of mine) {
         if (s.ts < since) continue;
-        const [amt, usd] = s.amounts[tk];
+        const [amt, usd, dir] = s.amounts[tk];
         add(o[s.kind], usd); o.tokens[s.kind] += amt;
+        if (dir > 0) add(o.buys[s.kind], usd); else if (dir < 0) add(o.sells[s.kind], usd);
+        o.hod[new Date(s.ts).getUTCHours()][s.kind === 'human' ? 0 : 1] += usd || 0;
+        if (s.kind === 'human') { htx.add(s.tx); if (s.wallet) { hw.add(s.wallet); htxKnown.add(s.tx); } }
         const pl = o.pools[s.pool] || (o.pools[s.pool] = { name: pools[s.pool].name, human: zero(), bot: zero() }); add(pl[s.kind], usd);
         const sd = o.senders[s.sender] || (o.senders[s.sender] = { kind: s.kind, label: classOf(s.sender).label, n: 0, usd: 0 }); sd.n++; sd.usd += usd || 0;
       }
       const round = x => Number(x.toPrecision(6));
       o.human.usd = round(o.human.usd); o.bot.usd = round(o.bot.usd); o.tokens.human = round(o.tokens.human); o.tokens.bot = round(o.tokens.bot);
+      for (const k of ['human', 'bot']) { o.buys[k].usd = round(o.buys[k].usd); o.sells[k].usd = round(o.sells[k].usd); }
+      o.hod = o.hod.map(([h, b]) => [round(h), round(b)]);
+      o.wallets = { human: hw.size, humanTxs: htx.size, humanTxsKnown: htxKnown.size };
       for (const pl of Object.values(o.pools)) { pl.human.usd = round(pl.human.usd); pl.bot.usd = round(pl.bot.usd); }
       o.senders = Object.entries(o.senders).map(([addr, v]) => ({ addr, ...v, usd: round(v.usd) })).sort((a, b) => b.usd - a.usd || b.n - a.n).slice(0, 25);
       per[p] = o;
@@ -252,12 +282,12 @@ async function main() {
   }
   const out = {
     schema: SCHEMA, generatedAt: new Date(now).toISOString(),
-    method: 'Swap events of every PTGC / UFO pool; sender = a known router or aggregator → human, any other contract → arb bot; USD = token-side amount × hourly close (charts-intraday.json)',
+    method: 'Swap events of every PTGC / UFO pool; sender = a known router or aggregator → human, any other contract → arb bot; USD = token-side amount × hourly close (charts-intraday.json); direction = the token leaving the pool is a buy; wallets = tx.from of the human trades',
     cursor: cache.cursor, since: new Date(Math.max(keepFrom, all.length ? all[0].ts : keepFrom)).toISOString(),
     routers: { ...ROUTERS, ...Object.fromEntries(Object.entries(cache.senders).filter(([, v]) => v.kind === 'human' && v.label).map(([a, v]) => [a, v.label])) },
     pools: Object.fromEntries(Object.entries(pools).map(([a, r]) => [a, { name: r.name, tokens: r.tokens, token0: r.token0, token1: r.token1 }])),   // token0/1: the window draws the other token's logo
     tokens: tokensOut,
-    stats: { swaps30d: all.length, newThisRun: fresh.length, unpricedThisRun: unpriced, pools: addrs.length, ms: now - t0 },
+    stats: { swaps: all.length, walletsPending: (cache.fromPending || []).length, newThisRun: fresh.length, unpricedThisRun: unpriced, pools: addrs.length, ms: now - t0 },
   };
   fs.mkdirSync('data', { recursive: true });
   fs.writeFileSync(CACHE_PATH, JSON.stringify(cache));
