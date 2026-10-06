@@ -1324,3 +1324,4 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   mock-up instead), six mock-up rounds, the row order, the build (`tools/socials-hub.py`, handlers lifted verbatim), harness.
 
 - Round 12 (HvB): UFO greens the banner human side (.vs-sky-tint), veil 56%, confidence note .vs-conf, Round-trips InfoTip, wallet rule in How we tell, logos/hvb/ic-bot.svg (Classic) chosen for go-live — not wired. See handover/sessions/2026-10-06.md.
+- Round 13 (HvB): Round-trips column + Human routes fold removed (restorable, see session notes).
