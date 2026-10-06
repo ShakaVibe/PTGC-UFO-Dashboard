@@ -31,8 +31,8 @@ Update it at the end of every session.
 ## Current state (end of 2026-10-06)
 
 **2026-10-06 (Tuesday), closed by Shaka ("lets wrap it up and call it a day"). PUSHED by him — the day ended as
-`6073ad2a5` (Charts 13:21, Actions 13:40, round 11 `02323fe3f`, go-live `ae67befe3`, share card `6073ad2a5`); only this handover
-update is left uncommitted (one more push, line in the session file). Nothing is half-done.**
+`5b955fa93` (Charts 13:21, Actions 13:40, round 11 `02323fe3f`, go-live `ae67befe3`, share card `6073ad2a5`, audit fix `5b955fa93`);
+only this final handover update is left uncommitted (one more push, line in the session file). Nothing is half-done.**
 
 **HUMANS VS BOTS IS LIVE (pushed 2026-10-06 evening; his live look NOT yet reported).** The Volume tile carries a bot icon (the "Classic" robot, `logos/hvb/ic-bot.svg`) right of
 its ⓘ, the Holders pattern; `VOL_SPLIT_LIVE=true`, the preview dot is gone. The window (`VolumeSplitModal`, `.vs-*`) is the version
@@ -51,11 +51,13 @@ a wallet trading ≥ 50×/day through a router is a bot; verified against DexScr
 bot side ~90 %, human side ~85 %. The Telegram announcement is drafted (session file, "Announcement") — post it after the push +
 a live look.
 
-**AUDIT + FIX (after close):** his 24 h card said 70 % bots; the per-transaction audit (`design/volume-split/audit-ptgc-24h-2026-10-06.html`)
-found one $3,787 human sale split over four pools by PulseX's smart router counted as a bot (the wallet rule counted legs, not swaps),
-and that every router-sent "round trip" in 90 d was really a split sale with a small buy leg (~$108K of UFO). Fixed in the builder
-(`tools/swap-volume-audit-fix.py`: transactions per day; router round trips need balanced legs and a same-asset loop); the next hourly
-run re-classes the whole cache. Expected: PTGC 30d bots ~22 %, UFO 7d ~50 %. NOT pushed — commit line in the session file.
+**AUDIT + FIX (after close) — PUSHED by Shaka as `5b955fa93`, pipeline ran on it 18:42 UTC, live file 18:50 UTC confirms it.** His
+24 h card said 70 % bots; the per-transaction audit (`design/volume-split/audit-ptgc-24h-2026-10-06.html`) found one $3,787 human
+sale split over four pools by PulseX's smart router counted as a bot (the wallet rule counted legs, not swaps), and that every
+router-sent "round trip" in 90 d was really a split sale with a small buy leg (~$108K of UFO). Fixed in the builder
+(`tools/swap-volume-audit-fix.py`: transactions per day; router round trips need balanced legs and a same-asset loop). Live after
+the fix: PTGC 24h humans $13,308 / bots $3,470 (79 / 21); expected PTGC 30d bots ~22 %, UFO 7d ~50 %. His window still showed the
+old file at 18:55 — raw.githubusercontent's 5-minute edge cache; it clears by itself (the window refetches every 5 min).
 
 **Open / owed:** (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
 phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron never reached GitHub**
