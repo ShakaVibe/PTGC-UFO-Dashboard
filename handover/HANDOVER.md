@@ -32,7 +32,7 @@ Update it at the end of every session.
 
 **2026-10-06 (Tuesday), afternoon — THE ACTIONS REVIEW: worker v7 (hourly dispatch — Shaka deploys, Next up -13), the pipeline in
 three parallel lanes with a job-summary report (`scripts/pipeline-run.mjs`), pair-volume on CoinGecko Pro, dao-buys carrying forward —
-written to the Mac, NOT pushed.** The morning's Charts work below WAS pushed by him (13:21) and the full pipeline run he started at
+PUSHED by Shaka ~13:40; worker v7 DEPLOYED by him (token, `DISPATCH_TOKEN`, cron `7 * * * *`) at 14:00 — first dispatched run expected 14:07 UTC. Then **the RH cores pinned** (`tools/rh-cores-pinned.py`, index.html: all six RH-core pools for both tokens in `HARDCODED_*_PAIRS` so a pool DexScreener drops — UFO/INC today, ~$120K — still shows on the RH Cores card / modal / LP table; written, NOT pushed).** The morning's Charts work below WAS pushed by him (13:21) and the full pipeline run he started at
 13:22 built `charts-intraday.json` in 71 s.
 
 **2026-10-06 (Tuesday) — THE CHARTS PAGE, round 3 + the speed fix — PUSHED by Shaka 13:21, NOT yet seen live.** Shaka's four asks,
