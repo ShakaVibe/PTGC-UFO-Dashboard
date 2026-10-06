@@ -14,9 +14,10 @@ def rep(old,new):
     assert s.count(old)==1,(old[:70],s.count(old)); s=s.replace(old,new)
 
 CSS = r'''    /* ---- Humans vs Bots window (2026-10-06): vs-* — human vs arb-bot volume. --acc = a side's accent (rgb), --accbg = its gradient ---- */
-    .vs-sky{position:absolute;inset:0;background:url(logos/hvb/banner.jpg) center 38%/cover no-repeat}   /* round 6: his humans-vs-bots panorama (logos/hvb/banner.jpg) */
-    .vs-sky-veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.64) 0%,rgba(0,0,0,.64) 60%,rgba(7,7,7,.86) 88%,#070707 100%)}   /* round 7: ~64 % ("dim it a little more" than the 50 %) + the fade into the body */
-    .vs-strip{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px;padding:10px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+    .vs-sky{position:absolute;inset:0;background:url(logos/hvb/banner.jpg) 42% 36%/cover no-repeat}   /* round 6: his humans-vs-bots panorama; round 8: the crop sits 42 % so the robot moves right and the mountains breathe (one image — the robot cannot be scaled on his own) */
+    .vs-sky-veil{position:absolute;inset:0;background:radial-gradient(ellipse 46% 120% at 36% 42%,rgba(0,0,0,.42) 0%,rgba(0,0,0,.22) 55%,rgba(0,0,0,0) 100%),linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,.4) 58%,rgba(7,7,7,.84) 88%,#070707 100%)}   /* round 8 (his mock-up): a 40 % veil with a ~25 % pool behind the title block, the art still visible; the fade into the body */
+    .vs-strip{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px;padding:10px 16px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);overflow:hidden}
+    .vs-strip::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;background:linear-gradient(90deg,#E8C044 0%,rgba(232,192,68,.5) 45%,rgba(79,209,255,.5) 55%,#4FD1FF 100%);box-shadow:0 0 14px rgba(232,192,68,.35),0 0 14px rgba(79,209,255,.35)}   /* round 8: the gold → blue hairline ties the whole to the two sides below */
     .vs-strip .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.5)}
     .vs-strip .v{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;color:#fff;margin-left:8px}
     /* round 6: Shaka's art — his gold / blue network frames as the card (logos/hvb/card-*.jpg, border + accent line gone) and his figures
@@ -31,12 +32,12 @@ CSS = r'''    /* ---- Humans vs Bots window (2026-10-06): vs-* — human vs arb-
     .vs-card::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(4,6,10,.72) 0%,rgba(4,6,10,.5) 50%,rgba(4,6,10,.22) 100%),linear-gradient(180deg,rgba(4,6,10,.7),rgba(4,6,10,.25) 28%,rgba(4,6,10,0) 45%);pointer-events:none}   /* round 7: darker at the top — the frames' lit corners sat under the label and the percentage */
     .vs-card .hd .n,.vs-card .pct{background:rgba(3,5,9,.62);border-radius:10px;padding:3px 10px;box-shadow:0 0 0 1px rgba(255,255,255,.06)}   /* round 7: the label and the percentage on their own dark pills — "you can't read the percentage" */
     .vs-card .hd{margin:-3px -4px 0}
-    .vs-card .fig{position:absolute;right:3%;top:5%;height:90%;width:auto;max-width:56%;object-fit:contain;object-position:right center;opacity:.6;pointer-events:none;z-index:1;-webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0) 0%,#000 40%);mask-image:linear-gradient(90deg,rgba(0,0,0,0) 0%,#000 40%)}
+    .vs-card .fig{position:absolute;right:3%;top:5%;height:90%;width:auto;max-width:56%;object-fit:contain;object-position:right center;opacity:.5;pointer-events:none;z-index:1;-webkit-mask-image:linear-gradient(90deg,rgba(0,0,0,0) 0%,#000 40%);mask-image:linear-gradient(90deg,rgba(0,0,0,0) 0%,#000 40%)}
     .vs-card>*:not(.fig):not(.bg):not(.bg2){position:relative;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 16px rgba(0,0,0,.8)}
     .vs-card .hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
     .vs-card .hd .n{font-size:13px;letter-spacing:.24em;text-transform:uppercase;font-weight:700;color:rgb(var(--acc))}
     .vs-card .hd .n.gg{color:#C9D96A}   /* BOTH: the gold-green midpoint, solid — gradient text vanished on its dark pill (round 7) */
-    .vs-card .pct{font-family:'Orbitron',monospace;font-weight:900;font-size:30px;line-height:1;color:rgb(var(--acc))}   /* round 4: no glow (Shaka: "makes it kinda fuzzy") */
+    .vs-card .pct{font-family:'Orbitron',monospace;font-weight:900;font-size:34px;line-height:1;color:rgb(var(--acc))}   /* round 4: no glow; round 8: +10 % — "arguably the entire takeaway" */
     .vs-card .pct.gg{color:#C9D96A}
     .vs-card .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.55);margin-top:12px}
     .vs-card .v{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:40px;line-height:1;color:#fff;margin-top:4px}   /* the dashboard tiles' figure (h2.css .h2-tv) */
@@ -45,17 +46,6 @@ CSS = r'''    /* ---- Humans vs Bots window (2026-10-06): vs-* — human vs arb-
     .vs-card .vg .k{margin-top:0}
     .vs-card .vg .v{font-size:28px;margin-top:0}
     .vs-card .vg .s{margin-top:0}
-    .vs-bs{margin-top:10px}
-    .vs-bsbar{height:7px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,.06)}
-    .vs-bsbar i{display:block;height:100%}
-    .vs-bsl{display:flex;justify-content:space-between;gap:10px;margin-top:5px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);flex-wrap:wrap}
-    .vs-hod{margin-top:14px}
-    .vs-hodr,.vs-hodx{display:grid;grid-template-columns:76px 1fr;align-items:center;gap:10px;margin-top:4px}
-    .vs-hodr .k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.55)}
-    .vs-hodr .cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;height:16px}
-    .vs-hodr .cells i{display:block;border-radius:3px}
-    .vs-hodx .cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;font-size:11px;font-weight:600;color:rgba(255,255,255,.4)}
-    @media(max-width:640px){.vs-hodr,.vs-hodx{grid-template-columns:58px 1fr}.vs-hodr .k{font-size:10px}}
     .vs-bar{height:16px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
     .vs-bar>i{display:block;height:100%}
     .vs-bar>i.h{background:linear-gradient(180deg,rgba(var(--tg),1),rgba(var(--tg),.7))}
@@ -63,6 +53,9 @@ CSS = r'''    /* ---- Humans vs Bots window (2026-10-06): vs-* — human vs arb-
     .vs-bar>i.b{background:linear-gradient(180deg,rgba(var(--bot),1),rgba(var(--bot),.7))}
     .vs-key{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;color:rgba(255,255,255,.75)}
     .vs-key i{width:11px;height:11px;border-radius:3px;display:inline-block}
+    .vs-chartcard{position:relative;overflow:hidden;background:#06080d url(logos/hvb/wave.jpg) center 60%/cover no-repeat}   /* round 8: his gold → blue network wave behind the chart, under a veil */
+    .vs-chartcard::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,6,10,.78),rgba(4,6,10,.62) 40%,rgba(4,6,10,.72) 100%);pointer-events:none}
+    .vs-chartcard>*{position:relative}
     .vs-chart{display:block;width:100%;height:170px}
     .vs-chart text{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;fill:rgba(255,255,255,.5)}
     .vs-fold{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.4);text-align:left;cursor:pointer}
@@ -78,7 +71,7 @@ CSS = r'''    /* ---- Humans vs Bots window (2026-10-06): vs-* — human vs arb-
     .vs-mini{display:inline-flex;height:6px;width:72px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);vertical-align:middle;margin-left:8px}
     .vs-mini i{display:block;height:100%}
     .vs-note{font-size:14px;color:rgba(255,255,255,.6);line-height:1.5}
-    @media(max-width:640px){.vs-card{padding:14px 14px 12px}.vs-card .v{font-size:32px}.vs-card .vg .v{font-size:24px}.vs-card .pct{font-size:26px}.vs-strip .v{font-size:19px}.vs-chart{height:140px}.vs-td,.vs-th{padding:8px 6px}.vs-mini{width:46px}}
+    @media(max-width:640px){.vs-card{padding:14px 14px 12px}.vs-card .v{font-size:32px}.vs-card .vg .v{font-size:24px}.vs-card .pct{font-size:29px}.vs-strip .v{font-size:19px}.vs-chart{height:140px}.vs-td,.vs-th{padding:8px 6px}.vs-mini{width:46px}}
     .nh-sky{position:absolute;inset:0;background:url(logos/holders/nh-sky.jpg)", CSS+"    .nh-sky{position:absolute;inset:0;background:url(logos/holders/nh-sky.jpg)")
 
 JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot trading volume =================
@@ -184,27 +177,7 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
         </svg>
       );
     };
-    /* Buys vs sells of the token for one side (round 5): a two-tone bar in the dashboard's up / down colours + the two figures. */
-    const VsBuySell=({b,s})=>{const t=(b.usd||0)+(s.usd||0);if(!(t>0))return null;const pb=b.usd/t*100;return(
-      <div className="vs-bs">
-        <div className="vs-bsbar" role="img" aria-label={`Buys ${fmtUSD(b.usd)}, sells ${fmtUSD(s.usd)}`}><i style={{width:`${pb}%`,background:'#2BE07F'}}></i><i style={{width:`${100-pb}%`,background:'#FF5A78'}}></i></div>
-        <div className="vs-bsl"><span><b style={{color:'#2BE07F'}}>Buys</b> {fmtUSD(b.usd)} <span className="text-white/40">{fmt(b.n)}</span></span><span><b style={{color:'#FF5A78'}}>Sells</b> {fmtUSD(s.usd)} <span className="text-white/40">{fmt(s.n)}</span></span></div>
-      </div>);};
-    /* When they trade (round 5): two rows of 24 cells, the viewer's local hours, each row lit by its own busiest hour. */
-    const VsHod=({hod,rgb,gg})=>{
-      const off=Math.round(-new Date().getTimezoneOffset()/60);   // UTC → local, whole hours
-      const local=Array.from({length:24},(_,h)=>hod[((h-off)%24+24)%24]);
-      const mh=Math.max(1,...local.map(x=>x[0])),mb=Math.max(1,...local.map(x=>x[1]));
-      const lbl=h=>h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
-      const row=(i,max,color)=>local.map((x,h)=>{const a=x[i]/max;return <i key={h} title={`${lbl(h)}: ${fmtUSD(x[i])}`} style={{background:color,opacity:0.08+a*0.92}}></i>;});
-      return(
-        <div className="vs-hod">
-          <div className="vs-hodr"><span className="k">Humans</span><div className="cells">{row(0,mh,gg?'linear-gradient(180deg,#E8C044,#7CFC00)':`rgb(${rgb})`)}</div></div>
-          <div className="vs-hodr"><span className="k">Arb bots</span><div className="cells">{row(1,mb,`rgb(${VS_BOT})`)}</div></div>
-          <div className="vs-hodx"><span></span><div className="cells">{[0,6,12,18].map(h=><span key={h} style={{gridColumn:`${h+1} / span 6`}}>{lbl(h)}</span>)}</div></div>
-          <div className="vs-note mt-1">When they trade {'\u00b7'} your local time {'\u00b7'} each row lit against its own busiest hour</div>
-        </div>);
-    };
+    /* (round 5's Buys / Sells bars and when-they-trade strip were removed in round 8 — the builder still writes `buys` / `sells` / `hod`) */
     const VolumeSplitModal=({token:initial,feeRates,pairs,otherPairs,onClose})=>{
       const[token,setToken]=useState(initial==='UFO'?'UFO':'PTGC');
       const[win,setWin]=useState('30D');   // round 7: opens on 30 days (Shaka)
@@ -304,7 +277,6 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                       <div className="k">Volume</div>
                       <div className="v tabular-nums">{fmtUSD(view.human.usd)}</div>
                       <div className="s">{fmt(view.human.n)} trades{view.wallets.humanTxs>0?(view.wallets.human>0?<> by <b className="text-white">{view.wallets.humanTxsKnown<view.wallets.humanTxs||both?'\u2265':''}{fmt(view.wallets.human)}</b> wallet{view.wallets.human===1?'':'s'}</>:<span className="text-white/40"> {'\u00b7'} wallets being counted</span>):null} through {view.humans.length} router{view.humans.length===1?'':'s'}</div>
-                      {view.hasDir&&<VsBuySell b={view.buys.human} s={view.sells.human}/>}
                       {vg&&<div className="vg"><span><span className="k">Value generated</span><div className="v tabular-nums">{fmtUSD(vg.h)}</div></span><span className="s">{vsPct(share(vg.h,vg.b))} of it {'·'} {feeLabel}</span></div>}
                     </div>
                     <div className="vs-card bo" style={{'--acc':VS_BOT}}>
@@ -314,12 +286,11 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                       <div className="k">Volume</div>
                       <div className="v tabular-nums">{fmtUSD(view.bot.usd)}</div>
                       <div className="s">{fmt(view.bot.n)} trades from {fmt(botN)} bot contract{botN===1?'':'s'}{view.arb.txs>0&&<> {'\u00b7'} <b className="text-white">{fmt(view.arb.txs)}</b> round trip{view.arb.txs===1?'':'s'}<InfoTip label="Round trips" className="-my-2 ml-1" glyphClass="text-[11px]" tone="text-white/50 hover:text-white/85">A round trip is one transaction that buys the token in one pool and sells it in another — the arbitrage itself. Only a bot does that, so these trades count as bots whoever sent them. {fmt(view.arb.n)} of the {fmt(view.bot.n)} bot trades ({fmtUSD(view.arb.usd)}) were part of one.</InfoTip></>}</div>
-                      {view.hasDir&&<VsBuySell b={view.buys.bot} s={view.sells.bot}/>}
                       {vg&&<div className="vg"><span><span className="k">Value generated</span><div className="v tabular-nums">{fmtUSD(vg.b)}</div></span><span className="s">{vsPct(share(vg.b,vg.h))} of it {'·'} {feeLabel}</span></div>}
                     </div>
                   </div>
                   {/* the split over time */}
-                  <div className="mt-3 rounded-2xl border border-white/10 bg-black/40 p-3 sm:p-4">
+                  <div className="vs-chartcard mt-3 rounded-2xl border border-white/10 p-3 sm:p-4">
                     <div className="flex items-center justify-between gap-3">
                       <span className="vs-key"><i style={{background:both?'linear-gradient(90deg,#E8C044,#7CFC00)':`rgb(${rgb})`}}></i>Humans {vsPct(share(view.human.usd,view.bot.usd))}</span>
                       <span className="vs-key"><i style={{background:`rgb(${VS_BOT})`}}></i>Arb bots {vsPct(share(view.bot.usd,view.human.usd))}</span>
@@ -328,7 +299,6 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                       <i className={`h${gg}`} style={{width:`${view.total.usd>0?view.human.usd/view.total.usd*100:0}%`}}></i><i className="b" style={{width:`${view.total.usd>0?view.bot.usd/view.total.usd*100:0}%`}}></i>
                     </div>
                     <div className="mt-3"><VsChart series={view.series} binMs={view.binMs} rgb={rgb} gg={both}/></div>
-                    {view.hod.some(h=>h[0]+h[1]>0)&&<VsHod hod={view.hod} rgb={rgb} gg={both}/>}
                   </div>
                   {/* roll-downs (round 4): closed by default — the bar with the title and the count, the data under it on a click */}
                   <Fold open={showPools} onToggle={()=>setShowPools(s=>!s)} title="By pool" count={`${view.pools.filter(pl=>pl.total>0||pl.human.n+pl.bot.n>0).length} pools`} color={hex}>
