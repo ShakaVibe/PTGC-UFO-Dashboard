@@ -32,7 +32,8 @@ Update it at the end of every session.
 
 **2026-10-06 (Tuesday), closed by Shaka ("lets wrap it up and call it a day"). PUSHED by him — the day ended as
 `5b955fa93` (Charts 13:21, Actions 13:40, round 11 `02323fe3f`, go-live `ae67befe3`, share card `6073ad2a5`, audit fix `5b955fa93`);
-only this final handover update is left uncommitted (one more push, line in the session file). Nothing is half-done.**
+handover pushed as `d88034fbd`; this last audit note is the only thing uncommitted. Closed by Shaka: "NOW we will call it a day.
+VERY good work today!" Nothing is half-done.**
 
 **HUMANS VS BOTS IS LIVE (pushed 2026-10-06 evening; his live look NOT yet reported).** The Volume tile carries a bot icon (the "Classic" robot, `logos/hvb/ic-bot.svg`) right of
 its ⓘ, the Holders pattern; `VOL_SPLIT_LIVE=true`, the preview dot is gone. The window (`VolumeSplitModal`, `.vs-*`) is the version
@@ -59,7 +60,13 @@ router-sent "round trip" in 90 d was really a split sale with a small buy leg (~
 the fix: PTGC 24h humans $13,308 / bots $3,470 (79 / 21); expected PTGC 30d bots ~22 %, UFO 7d ~50 %. His window still showed the
 old file at 18:55 — raw.githubusercontent's 5-minute edge cache; it clears by itself (the window refetches every 5 min).
 
-**Open / owed:** (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
+**90-DAY SELF-AUDIT (both tokens, after the fix, no changes):** the top bot transactions are two-leg loops with buy/sell balance 0.95
+(the 5 % fee) from contracts — textbook; the mixed router + contract transactions are one operator's fixed 33,333,330-PTGC chunk sold
+via PulseX v1 inside its own arb txs (EOA with 159K txs). Of 120 bot contracts ($1.28M), 35 never round-trip (together $8,616 = 0.7 %);
+the largest, 0xdb2ff97c… ($5,611, split buys to a single wallet 0xc4c041e7…), is almost certainly one person's own buying contract —
+the only judgement call left, ~0.4 %. Candidate rule in the session file if he wants the list spotless. Shaka: "thats good".
+
+ (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
 phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron never reached GitHub**
 (deployed 14:00; no `workflow_dispatch` runs at 14:07 / 15:07 UTC, no scheduled event in the Worker's Events) — check Cloudflare →
 ptgcapi → Settings → Triggers (is the `7 * * * *` cron saved and enabled, is `DISPATCH_TOKEN` present) and the Logs at :07; GitHub's
