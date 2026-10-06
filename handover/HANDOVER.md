@@ -51,6 +51,12 @@ a wallet trading ≥ 50×/day through a router is a bot; verified against DexScr
 bot side ~90 %, human side ~85 %. The Telegram announcement is drafted (session file, "Announcement") — post it after the push +
 a live look.
 
+**AUDIT + FIX (after close):** his 24 h card said 70 % bots; the per-transaction audit (`design/volume-split/audit-ptgc-24h-2026-10-06.html`)
+found one $3,787 human sale split over four pools by PulseX's smart router counted as a bot (the wallet rule counted legs, not swaps),
+and that every router-sent "round trip" in 90 d was really a split sale with a small buy leg (~$108K of UFO). Fixed in the builder
+(`tools/swap-volume-audit-fix.py`: transactions per day; router round trips need balanced legs and a same-asset loop); the next hourly
+run re-classes the whole cache. Expected: PTGC 30d bots ~22 %, UFO 7d ~50 %. NOT pushed — commit line in the session file.
+
 **Open / owed:** (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
 phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron never reached GitHub**
 (deployed 14:00; no `workflow_dispatch` runs at 14:07 / 15:07 UTC, no scheduled event in the Worker's Events) — check Cloudflare →

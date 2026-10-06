@@ -48,6 +48,7 @@ const SCHEMA = 3;   // 3 (2026-10-06 round 6): rows carry the Swap's `to` as wel
 const FROM_CAP = Number(process.env.FROM_CAP || 1500);
 const AGG_MIN_RECIPIENTS = 5, AGG_MIN_SHARE = 0.6;
 const ARB_BOT_SHARE = 0.5, ARB_AGG_MAX = 0.2;   // a sender ≥ 50 % round trips is a bot; the aggregator rule needs < 20 %
+const ARB_MIN_BALANCE = 0.5;                    // 2026-10-06 audit: a router-sent round trip counts only if the buy and sell legs are within 2× of each other (arbitrage is balanced; a split sell with a small buy leg is a person)
 const WALLET_BOT_PER_DAY = 50;                   // a wallet trading through a router ≥ 50 times in one UTC day is a bot on the router (round 9 self-check: one did 144 in a day)   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
 
 const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';   // Swap(address,uint,uint,uint,uint,address)
@@ -264,7 +265,19 @@ async function main() {
     if (grp.length < 2) continue;
     for (const [i, j] of [[10, 6], [11, 8]]) {   // [dir slot, amount slot] for PTGC, UFO
       const buys = grp.filter(r => r[j] != null && r[i] > 0), sells = grp.filter(r => r[j] != null && r[i] < 0);
-      if (buys.length && sells.length && new Set([...buys, ...sells].map(r => r[3])).size >= 2) [...buys, ...sells].forEach(r => arbRows.add(r));
+      if (!(buys.length && sells.length && new Set([...buys, ...sells].map(r => r[3])).size >= 2)) continue;
+      // 2026-10-06 audit: a swap ROUTED THROUGH the token is not arbitrage — every leg via a human path (router / aggregator) and the
+      // asset it was bought with is not the asset it was sold for (UFO→PTGC→WPLS = a person selling UFO for PLS). Arbitrage starts
+      // and ends in the same asset, and bots call the pools from their own contracts anyway.
+      const tokAddr = i === 10 ? TOKENS.PTGC.address : TOKENS.UFO.address;
+      const partner = r => { const pl = pools[idx.pools[r[3]]] || {}; return pl.token0 === tokAddr ? pl.token1 : pl.token0; };
+      const viaHuman = grp.every(r => classOf(idx.senders[r[4]]).kind === 'human');
+      const inSet = new Set(buys.map(partner)), outSet = new Set(sells.map(partner));
+      // …and arbitrage buys and sells ABOUT THE SAME amount of the token. A big sell split by the smart router across five pools
+      // with one small buy leg on the way (every router "round trip" in 90 d: ratio ≤ 0.3, $108K of UFO sells) is a person selling.
+      const bAmt = buys.reduce((a, r) => a + r[j], 0), sAmt = sells.reduce((a, r) => a + r[j], 0), balance = Math.min(bAmt, sAmt) / Math.max(bAmt, sAmt);
+      if (viaHuman && (![...inSet].some(a => outSet.has(a)) || balance < ARB_MIN_BALANCE)) continue;
+      [...buys, ...sells].forEach(r => arbRows.add(r));
     }
   }
   // aggregators by behaviour: who does each unlisted sender deliver to? (the whole 90 days) — and how much of it is round trips
@@ -292,9 +305,11 @@ async function main() {
   // bots that use a public router: the wallet behind a human-classed trade (tx.from, or the recipient of a buy) trading ≥ WALLET_BOT_PER_DAY
   // times in one day is a bot — every trade of that wallet becomes a bot's, attributed to the wallet (round 9)
   const walletOf = r => r[12] >= 0 ? idx.wallets[r[12]] : ((r[10] > 0 || r[11] > 0) && r[13] >= 0 && isWallet(idx.wallets[r[13]]) ? idx.wallets[r[13]] : null);
+  // 2026-10-06 audit: count TRANSACTIONS a day, not legs — the PulseX smart router splits one swap across 3-4 pools (a person's
+  // 18 swaps read as 57 "trades" and became a bot's)
   const perDay = {};
-  for (const r of rows) { if (r[5] !== 1) continue; const w = walletOf(r); if (!w) continue; const k = w + '|' + Math.floor(r[0] / 86400000); perDay[k] = (perDay[k] || 0) + 1; }
-  const botWallets = new Set(Object.entries(perDay).filter(([, n]) => n >= WALLET_BOT_PER_DAY).map(([k]) => k.split('|')[0]));
+  for (const r of rows) { if (r[5] !== 1) continue; const w = walletOf(r); if (!w) continue; const k = w + '|' + Math.floor(r[0] / 86400000); (perDay[k] || (perDay[k] = new Set())).add(r[2] + '|' + r[1]); }
+  const botWallets = new Set(Object.entries(perDay).filter(([, set]) => set.size >= WALLET_BOT_PER_DAY).map(([k]) => k.split('|')[0]));
   let viaRouter = 0;
   for (const r of rows) { if (r[5] === 1 && botWallets.has(walletOf(r))) { r[5] = 0; viaRouter++; } }
   if (botWallets.size) console.log(`  ${botWallets.size} wallet(s) trade ≥ ${WALLET_BOT_PER_DAY}× a day through a router → bots (${viaRouter} trades)`);
