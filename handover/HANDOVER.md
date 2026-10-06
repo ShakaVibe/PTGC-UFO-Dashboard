@@ -67,7 +67,7 @@ the largest, 0xdb2ff97c… ($5,611, split buys to a single wallet 0xc4c041e7…)
 the only judgement call left, ~0.4 %. Candidate rule in the session file if he wants the list spotless. Shaka: "thats good".
 
  (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
-phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron never reached GitHub**
+phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron never reached GitHub — diagnosed at close: Cloudflare's scheduler is not invoking the Worker at all (no scheduled events in 7 days, daily cron included), while the handler and the dispatch both work when triggered by hand; next = delete + re-add both cron triggers, else v8 with an external pinger (session file, end)**
 (deployed 14:00; no `workflow_dispatch` runs at 14:07 / 15:07 UTC, no scheduled event in the Worker's Events) — check Cloudflare →
 ptgcapi → Settings → Triggers (is the `7 * * * *` cron saved and enabled, is `DISPATCH_TOKEN` present) and the Logs at :07; GitHub's
 own schedule still delivers ~4 runs a day. (3) The UFO TXNS 24H tile reads ~10,000 vs ~100 real swaps a day — explained to Shaka,
