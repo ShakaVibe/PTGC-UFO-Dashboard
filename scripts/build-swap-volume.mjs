@@ -47,7 +47,8 @@ const HOUR = 3600000;
 const SCHEMA = 3;   // 3 (2026-10-06 round 6): rows carry the Swap's `to` as well — a sender that delivers to many different wallets is an aggregator, not a bot; 2: direction + tx.from; an older cache is rebuilt
 const FROM_CAP = Number(process.env.FROM_CAP || 1500);
 const AGG_MIN_RECIPIENTS = 5, AGG_MIN_SHARE = 0.6;
-const ARB_BOT_SHARE = 0.5, ARB_AGG_MAX = 0.2;   // a sender ≥ 50 % round trips is a bot; the aggregator rule needs < 20 %   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
+const ARB_BOT_SHARE = 0.5, ARB_AGG_MAX = 0.2;   // a sender ≥ 50 % round trips is a bot; the aggregator rule needs < 20 %
+const WALLET_BOT_PER_DAY = 50;                   // a wallet trading through a router ≥ 50 times in one UTC day is a bot on the router (round 9 self-check: one did 144 in a day)   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
 
 const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';   // Swap(address,uint,uint,uint,uint,address)
 const TOKENS = {   // same as index.html TOKENS / ADDR (gotcha 00)
@@ -262,8 +263,13 @@ async function main() {
   }
   // aggregators by behaviour: who does each unlisted sender deliver to? (the whole 90 days) — and how much of it is round trips
   const poolSet = new Set(Object.keys(pools));
+  // a "wallet" is never a pool, a contract that has ever called a pool (routers, aggregators, bots), the burn or zero address
+  // (round 9 self-check: the `to` of a multi-hop buy is the router itself, and UFO's fee lands on the burn address — both had
+  // been counted as wallets, and "trading 230 times a day" turned 3,400 human trades into bots)
+  const notWallet = new Set([...poolSet, ...idx.senders, ...Object.keys(ROUTERS), '0x0000000000000000000000000000000000000369', '0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead']);
+  const isWallet = a => !!a && !notWallet.has(a);
   const recip = {};
-  for (const r of rows) { const sd = idx.senders[r[4]], to = idx.wallets[r[13]]; const o = recip[sd] || (recip[sd] = { n: 0, other: 0, arb: 0, set: new Set() }); o.n++; if (arbRows.has(r)) o.arb++; if (to && to !== sd && !poolSet.has(to)) { o.other++; o.set.add(to); } }
+  for (const r of rows) { const sd = idx.senders[r[4]], to = idx.wallets[r[13]]; const o = recip[sd] || (recip[sd] = { n: 0, other: 0, arb: 0, set: new Set() }); o.n++; if (arbRows.has(r)) o.arb++; if (to && to !== sd && isWallet(to)) { o.other++; o.set.add(to); } }
   for (const [sd, o] of Object.entries(recip)) {
     const arbShare = o.n ? o.arb / o.n : 0;
     if (ROUTERS[sd]) { cache.senders[sd] = { ...(cache.senders[sd] || {}), arbShare }; continue; }
@@ -277,10 +283,21 @@ async function main() {
   }
   // re-class everything with the current knowledge (a sender promoted to human applies to its past trades too)
   for (const r of rows) { r[5] = classOf(idx.senders[r[4]]).kind === 'human' && !arbRows.has(r) ? 1 : 0; if (r[5] === 1 && r[12] < 0 && cache.from[r[2]]) r[12] = ix(idx.wallets, cache.from[r[2]]); }
+  // bots that use a public router: the wallet behind a human-classed trade (tx.from, or the recipient of a buy) trading ≥ WALLET_BOT_PER_DAY
+  // times in one day is a bot — every trade of that wallet becomes a bot's, attributed to the wallet (round 9)
+  const walletOf = r => r[12] >= 0 ? idx.wallets[r[12]] : ((r[10] > 0 || r[11] > 0) && r[13] >= 0 && isWallet(idx.wallets[r[13]]) ? idx.wallets[r[13]] : null);
+  const perDay = {};
+  for (const r of rows) { if (r[5] !== 1) continue; const w = walletOf(r); if (!w) continue; const k = w + '|' + Math.floor(r[0] / 86400000); perDay[k] = (perDay[k] || 0) + 1; }
+  const botWallets = new Set(Object.entries(perDay).filter(([, n]) => n >= WALLET_BOT_PER_DAY).map(([k]) => k.split('|')[0]));
+  let viaRouter = 0;
+  for (const r of rows) { if (r[5] === 1 && botWallets.has(walletOf(r))) { r[5] = 0; viaRouter++; } }
+  if (botWallets.size) console.log(`  ${botWallets.size} wallet(s) trade ≥ ${WALLET_BOT_PER_DAY}× a day through a router → bots (${viaRouter} trades)`);
   const arbRowSet = new Set([...arbRows].map(r => r[2] + '|' + r[1] + '|' + r[3]));
   cache.swaps = rows; cache.cursor = { block: head, ts: Date.now() }; cache.schema = SCHEMA; cache.fromBlock = Math.min(cache.fromBlock || Infinity, from, back ? back[0] : Infinity);
   // the view the aggregation below reads
-  const all = rows.map(r => ({ ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: idx.senders[r[4]], kind: r[5] ? 'human' : 'bot', arb: arbRowSet.has(r[2] + '|' + r[1] + '|' + r[3]), wallet: r[12] >= 0 ? idx.wallets[r[12]] : (r[5] && r[10] + r[11] > 0 && r[13] >= 0 && !poolSet.has(idx.wallets[r[13]]) ? idx.wallets[r[13]] : null), amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
+  // a bot trade that came through a router is attributed to the wallet behind it, labelled "via <router>" — the router stays a human path
+  const senderOf = r => { const sd = idx.senders[r[4]]; if (r[5] === 0 && classOf(sd).kind === 'human') { const w = walletOf(r); return w ? { addr: w, label: `bot wallet via ${classOf(sd).label || 'router'}` } : { addr: sd + ':via', label: `unknown wallets via ${classOf(sd).label || 'router'}` }; } return { addr: sd, label: classOf(sd).label }; };   // ':via' = not an address — the window shows no link
+  const all = rows.map(r => ({ ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: senderOf(r).addr, senderLabel: senderOf(r).label, kind: r[5] ? 'human' : 'bot', arb: arbRowSet.has(r[2] + '|' + r[1] + '|' + r[3]), wallet: r[5] ? walletOf(r) : null, amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
 
   // ---- the public file
   const now = Date.now();
@@ -312,7 +329,7 @@ async function main() {
         if (s.kind === 'human') { htx.add(s.tx); if (s.wallet) { hw.add(s.wallet); htxKnown.add(s.tx); } }
         if (s.arb) { add(o.arb, usd); arbTx.add(s.tx); }
         const pl = o.pools[s.pool] || (o.pools[s.pool] = { name: pools[s.pool].name, human: zero(), bot: zero() }); add(pl[s.kind], usd);
-        const sd = o.senders[s.sender] || (o.senders[s.sender] = { kind: s.kind, label: classOf(s.sender).label, n: 0, usd: 0, arb: 0 }); sd.n++; sd.usd += usd || 0; if (s.arb) sd.arb++;
+        const sd = o.senders[s.sender] || (o.senders[s.sender] = { kind: s.kind, label: s.senderLabel, n: 0, usd: 0, arb: 0 }); sd.n++; sd.usd += usd || 0; if (s.arb) sd.arb++;
       }
       const round = x => Number(x.toPrecision(6));
       o.human.usd = round(o.human.usd); o.bot.usd = round(o.bot.usd); o.tokens.human = round(o.tokens.human); o.tokens.bot = round(o.tokens.bot);

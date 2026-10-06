@@ -323,7 +323,7 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
                           <thead><tr><th className="vs-th">Contract</th><th className="vs-th">Trades</th><th className="vs-th">Volume</th>{!phone&&<th className="vs-th">Of bot volume</th>}<th className="vs-th">Round trips</th></tr></thead>
                           <tbody>{view.bots.map(b=>(
                             <tr key={b.addr} className="border-t border-white/[0.06]">
-                              <td className="vs-td"><a href={`https://scan.pulsechain.com/address/${b.addr}`} target="_blank" rel="noopener noreferrer" className="font-mono text-white/90 hover:text-white hover:underline" title={b.addr}>{vsShort(b.addr)}</a>{b.label&&<span className="text-white/40 text-[12px]"> {b.label}</span>}</td>
+                              <td className="vs-td">{/^0x[0-9a-fA-F]{40}$/.test(b.addr)?<a href={`https://scan.pulsechain.com/address/${b.addr}`} target="_blank" rel="noopener noreferrer" className="font-mono text-white/90 hover:text-white hover:underline" title={b.addr}>{vsShort(b.addr)}</a>:<span className="font-mono text-white/60">{vsShort(b.addr.replace(/:via$/,''))}</span>}{b.label&&<span className="text-white/40 text-[12px]"> {b.label}</span>}</td>
                               <td className="vs-td">{fmt(b.n)}</td>
                               <td className="vs-td">{fmtUSD(b.usd)}</td>
                               {!phone&&<td className="vs-td">{vsPct(view.bot.usd>0?b.usd/view.bot.usd:null)}</td>}
