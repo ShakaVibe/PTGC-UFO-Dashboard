@@ -16,6 +16,12 @@ def rep(old,new):
 CSS = r'''    /* ---- Humans vs Bots window (2026-10-06): vs-* — human vs arb-bot volume. --acc = a side's accent (rgb), --accbg = its gradient ---- */
     .vs-sky{position:absolute;inset:0;background:url(logos/hvb/banner.jpg) 42% 36%/cover no-repeat}   /* round 6: his humans-vs-bots panorama; round 8: the crop sits 42 % so the robot moves right and the mountains breathe (one image — the robot cannot be scaled on his own) */
     .vs-sky-veil{position:absolute;inset:0;background:radial-gradient(ellipse 46% 120% at 36% 42%,rgba(0,0,0,.42) 0%,rgba(0,0,0,.22) 55%,rgba(0,0,0,0) 100%),linear-gradient(180deg,rgba(0,0,0,.4) 0%,rgba(0,0,0,.4) 58%,rgba(7,7,7,.84) 88%,#070707 100%)}   /* round 8 (his mock-up): a 40 % veil with a ~25 % pool behind the title block, the art still visible; the fade into the body */
+    .vs-coins{display:flex;align-items:center;justify-content:center;gap:10px;height:104px}
+    .vs-coin{display:inline-flex}
+    .vs-coin .lg-coin{--u:.5px;--halo:255,120,20;--ring:255,190,80}
+    .vs-coin.g .lg-coin{--halo:110,255,40;--ring:140,255,60}
+    .vs-hg{background-image:linear-gradient(90deg,#FFE37A 0%,#F2C94C 35%,#C9F06A 65%,#8DFF3A 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;text-shadow:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.85))}
+    @media(max-width:640px){.vs-coins{height:84px}.vs-coin .lg-coin{--u:.4px}}
     .vs-strip{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px;padding:10px 16px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);overflow:hidden}
     .vs-strip::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;background:linear-gradient(90deg,#E8C044 0%,rgba(232,192,68,.5) 45%,rgba(79,209,255,.5) 55%,#4FD1FF 100%);box-shadow:0 0 14px rgba(232,192,68,.35),0 0 14px rgba(79,209,255,.35)}   /* round 8: the gold → blue hairline ties the whole to the two sides below */
     .vs-strip .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.5)}
@@ -223,24 +229,24 @@ JS = r'''    /* ================= Volume Split (2026-10-06) — human vs arb-bot
             <div aria-hidden="true" className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[640px] h-[300px] rounded-full blur-3xl opacity-20" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 65%)`}}></div>
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{background:`linear-gradient(90deg, transparent, ${hex}cc, transparent)`}}></div>
             {/* Header — the DAO panel's blue mountains (round 3); his art for this window is owed */}
-            <div className="relative shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 overflow-hidden" style={{minHeight:phone?150:190}}>
+            <div className="relative shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 overflow-hidden" style={{minHeight:phone?210:270}}>
               <div aria-hidden="true" className="vs-sky"></div>
               <div aria-hidden="true" className="vs-sky-veil"></div>
-              <div className="relative flex items-start gap-3 sm:gap-4">
-                <div className="relative shrink-0 flex items-center">
-                  {both?(<><img src={TOKENS.PTGC.logo} alt="" className="relative w-12 h-12 sm:w-20 sm:h-20 -mr-3" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/><img src={TOKENS.UFO.logo} alt="" className="relative w-12 h-12 sm:w-20 sm:h-20" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/></>)
-                  :(<><div aria-hidden="true" className="absolute inset-0 rounded-full blur-xl opacity-50 scale-110" style={{background:`radial-gradient(circle, ${hex} 0%, transparent 60%)`}}></div><img src={logo} alt="" className="relative w-16 h-16 sm:w-24 sm:h-24" style={{filter:'drop-shadow(0 4px 12px rgba(0,0,0,.9))'}}/></>)}
+              {/* round 11 (his mock-up): the dashboard's lit coin (LgCoin — halo, corona, flares) centred over the title, everything stacked and
+                  centred; "Humans" in the token's colour (a bright gold → green on BOTH, no shadow behind gradient text — that is what read dark),
+                  "vs" silver, "Bots" the bots' blue; the subtitle short */}
+              <button type="button" onClick={onClose} aria-label="Close" className="tap-h absolute right-4 top-4 sm:right-6 sm:top-6 z-10 w-9 h-9 rounded-full border border-white/25 bg-black/50 text-white/80 hover:text-white hover:border-white/60 flex items-center justify-center text-lg leading-none">{'\u2715'}</button>
+              <div className="relative flex flex-col items-center text-center" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
+                <div className="vs-coins">
+                  {both?(<><span className="vs-coin"><LgCoin token="PTGC"/></span><span className="vs-coin g"><LgCoin token="UFO"/></span></>)
+                  :(<span className={`vs-coin${token==='UFO'?' g':''}`}><LgCoin token={token}/></span>)}
                 </div>
-                {/* round 10 (his mock-up): the title centred in the banner — "Humans" in the token's colour (gold → green on BOTH), "vs" silver, "Bots" in the bots' blue */}
-                <div className="flex-1 min-w-0 text-center sm:pr-12" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
-                  <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight whitespace-nowrap">
-                    <span className={both?'gold-green-text':''} style={both?{filter:'drop-shadow(0 2px 6px rgba(0,0,0,.9))'}:{color:hex}}>Humans</span>
-                    <span className="text-white/80 mx-2 sm:mx-3">vs</span>
-                    <span style={{color:`rgb(${VS_BOT})`}}>Bots</span>
-                  </h2>
-                  <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} who moves {both?'the Grays’':token+'’s'} volume {'—'} people, or the arbitrage bots</div>
-                </div>
-                <button type="button" onClick={onClose} aria-label="Close" className="tap-h shrink-0 w-9 h-9 rounded-full border border-white/25 bg-black/50 text-white/80 hover:text-white hover:border-white/60 flex items-center justify-center text-lg leading-none">{'✕'}</button>
+                <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight whitespace-nowrap mt-2">
+                  <span className={both?'vs-hg':''} style={both?{}:{color:hex}}>Humans</span>
+                  <span className="text-white/80 mx-2 sm:mx-3">vs</span>
+                  <span style={{color:`rgb(${VS_BOT})`}}>Bots</span>
+                </h2>
+                <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} {both?'PTGC + UFO':token} volume {'—'} people vs bots</div>
               </div>
               <div className="relative mt-5 sm:mt-7 flex flex-wrap items-center gap-2 sm:gap-3">
                 <NhPills items={[{k:'PTGC'},{k:'UFO'},{k:'BOTH'}]} value={token} onChange={setToken} label="Token" rgb={rgb}/>

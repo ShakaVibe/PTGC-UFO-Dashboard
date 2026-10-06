@@ -75,3 +75,45 @@ for f in ['tools/volume-split.py','index.html']:
                   <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} who moves {both?'the Grays’':token+'’s'} volume {'—'} people, or the arbitrage bots</div>
                 </div>""")
     p.write_text(s); print('ok',f)
+import pathlib,sys
+root=pathlib.Path(sys.argv[1])
+for f in ['tools/volume-split.py','index.html']:
+    p=root/f; s=p.read_text()
+    def rep(old,new):
+        global s
+        assert s.count(old)==1,(f,old[:70],s.count(old)); s=s.replace(old,new)
+    a=s.index("""              <div className="relative flex items-start gap-3 sm:gap-4">
+                <div className="relative shrink-0 flex items-center">
+                  {both?(<><img src={TOKENS.PTGC.logo}""")
+    b=s.index("""              <div className="relative mt-5 sm:mt-7 flex flex-wrap items-center gap-2 sm:gap-3">
+                <NhPills items={[{k:'PTGC'},{k:'UFO'},{k:'BOTH'}]}""")
+    new="""              {/* round 11 (his mock-up): the dashboard's lit coin (LgCoin — halo, corona, flares) centred over the title, everything stacked and
+                  centred; "Humans" in the token's colour (a bright gold → green on BOTH, no shadow behind gradient text — that is what read dark),
+                  "vs" silver, "Bots" the bots' blue; the subtitle short */}
+              <button type="button" onClick={onClose} aria-label="Close" className="tap-h absolute right-4 top-4 sm:right-6 sm:top-6 z-10 w-9 h-9 rounded-full border border-white/25 bg-black/50 text-white/80 hover:text-white hover:border-white/60 flex items-center justify-center text-lg leading-none">{'\\u2715'}</button>
+              <div className="relative flex flex-col items-center text-center" style={{textShadow:'0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8)'}}>
+                <div className="vs-coins">
+                  {both?(<><span className="vs-coin"><LgCoin token="PTGC"/></span><span className="vs-coin g"><LgCoin token="UFO"/></span></>)
+                  :(<span className={`vs-coin${token==='UFO'?' g':''}`}><LgCoin token={token}/></span>)}
+                </div>
+                <h2 className="font-orbitron text-2xl sm:text-4xl font-bold tracking-wide leading-tight whitespace-nowrap mt-2">
+                  <span className={both?'vs-hg':''} style={both?{}:{color:hex}}>Humans</span>
+                  <span className="text-white/80 mx-2 sm:mx-3">vs</span>
+                  <span style={{color:`rgb(${VS_BOT})`}}>Bots</span>
+                </h2>
+                <div className="text-white/85 text-[13px] sm:text-base mt-1 font-medium">{P.label} {'·'} {both?'PTGC + UFO':token} volume {'—'} people vs bots</div>
+              </div>
+"""
+    s=s[:a]+new+s[b:]
+    rep("""            <div className="relative shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 overflow-hidden" style={{minHeight:phone?150:190}}>
+              <div aria-hidden="true" className="vs-sky"></div>""",
+        """            <div className="relative shrink-0 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 overflow-hidden" style={{minHeight:phone?210:270}}>
+              <div aria-hidden="true" className="vs-sky"></div>""")
+    rep("""    .vs-strip{position:relative;""","""    .vs-coins{display:flex;align-items:center;justify-content:center;gap:10px;height:104px}
+    .vs-coin{display:inline-flex}
+    .vs-coin .lg-coin{--u:.5px;--halo:255,120,20;--ring:255,190,80}
+    .vs-coin.g .lg-coin{--halo:110,255,40;--ring:140,255,60}
+    .vs-hg{background-image:linear-gradient(90deg,#FFE37A 0%,#F2C94C 35%,#C9F06A 65%,#8DFF3A 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;text-shadow:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.85))}
+    @media(max-width:640px){.vs-coins{height:84px}.vs-coin .lg-coin{--u:.4px}}
+    .vs-strip{position:relative;""")
+    p.write_text(s); print('ok',f)
