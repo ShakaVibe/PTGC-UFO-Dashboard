@@ -43,8 +43,8 @@ Richard Heart on stage as the plate, the RH liquidity with its share of all liqu
 PUSHED by Shaka as `1119ec37f`. THEN the Socials got "RH Core Liquidity" rows for PTGC and UFO (`tools/rh-socials.py`) — PUSHED
 `2c3d15d4c`. THEN AUDIT III: seven sweeps, c1–c65 in `sessions/2026-10-07-audit.md` (+ two harness probes) — PUSHED `822e2a78e`; the roadmap
 artifact got the AUDIT III phase (Version 8). THEN THE P1 BATCH ("go for it. Lets get some items knocked off the list"): c1–c8 + c11 + c25
-built by `tools/audit3-p1.py`, eight files + three probes on the Mac (index.html `4d37f229…`), harness-verified, ticked on the roadmap —
-NOT pushed, commit line in `sessions/2026-10-07.md`. Live looks owed: the Volume ⓘ, the Liquidity RH, the two hub rows, and after the P1
+built by `tools/audit3-p1.py` — PUSHED by Shaka `d60b83082`. THEN BATCH 2 ("do the next thing"): c23 + c24 + c26 + c27 by
+`tools/audit3-p2.py` (index.html `4e3993ba…`), harness-verified, ticked — NOT pushed, commit line in `sessions/2026-10-07.md`. Live looks owed: the Volume ⓘ, the Liquidity RH, the two hub rows, and after the P1
 push the faster load / no phone wiggle on PTGC / the tab-band cue / one holders number. The UFO day-90 real test: the first
 value-generated run after 18:39 UTC (the launch burn was 18:38:55 UTC, so the 17:13 run still printed the old d90).** Shaka's live look at
 Humans vs Bots: "loks good i think"; the Telegram wording handed to him to post. His screenshot of the old "Volume Analytics" modal
@@ -54,7 +54,8 @@ plate (gold half PTGC / green half UFO), the lit coin at 140 px, "PTGC Volume", 
 lit, per-day averages on the windows), Today vs averages as bars with an "avg" tick, a daily volume chart and a By pool table from
 `swap-volume.json` (same `fetchSwapVolume` as HvB), the honesty line. Honest states verified (DS_DOWN → "—", file missing → Retry).
 Commit line + harness detail: `sessions/2026-10-07.md`. **The TXNS 24H item is CLOSED — nothing to fix** (the tile reads 40 = the
-chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of the P1 batch; then c9–c31 (the small P2s) as the next session — c9 first; his live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
+chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of batch 2; then batch 3 (navigation + taps: c9, c31, c28, c29), batch 4 (pipeline: c17, c18, c20, c19, c22),
+batch 5 (speed: c12, c13, c14, c15 — needs a real-browser look); his live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
 $491K, the 4.79B headline must not move); then the live looks owed below.**
 
 ## Before that (end of 2026-10-06)
@@ -1124,15 +1125,21 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--19. **AUDIT III P1 batch (2026-10-07) — ON THE MAC, NOT PUSHED; commit line in `sessions/2026-10-07.md`.** c1–c8 + c11 + c25 via
+-20. **AUDIT III batch 2 (2026-10-07) — ON THE MAC, NOT PUSHED; commit line in `sessions/2026-10-07.md`.** c23 (honesty pass II:
+   LP rows + band "—" for chain pairs / outages, Socials RH card "—" per missing core, KPI 30D burn USD, fetchDex mcap null-through),
+   c24 (Volume window foot: three sources named), c26 ("largest pool per core" wording — the sum is the alternative), c27 (UTC day
+   labels on the HvB chart, "UTC days" on the Volume window). `tools/audit3-p2.py`, probe `c-p2.js`. Live look after the push: LP
+   Pairs band + rows, the RH window's subtitle, the Volume ⓘ foot, the HvB chart dates.
+-19. **AUDIT III P1 batch (2026-10-07) — PUSHED by Shaka `d60b83082`; live look owed.** c1–c8 + c11 + c25 via
    `tools/audit3-p1.py` (idempotent; re-run prints "0 edit(s)"). Verified in the harness: PTGC 390 scrollWidth 390; charts.html 390
    cues + centred tab; holders tile = KPI = card; Leagues RPC_DOWN "—"; Combined Burn card whole at 810; calculators RPC_DOWN
    "UNAVAILABLE"; normal calculators still LIVE. Probes `c-p1.js`, `c-holders.js`, `c-cb.js`. Ticked on the roadmap artifact. After his
    push: the live look (load speed, phone PTGC, tab band on a phone, the 24 h holders line on three surfaces, the Combined Burn card
    footer). If anything regresses: `git revert` that one commit — the script is the whole change.
 -18. **AUDIT III (2026-10-07) — c1–c65 in `sessions/2026-10-07-audit.md`, PUSHED `822e2a78e`, on the roadmap artifact (AUDIT III
-   phase).** Remaining order: c9–c31 (P2 small — c9 next) → the look list c32–c37 → platform c38–c43 → product c50–c65. c1–c8, c11, c25
-   done (-19).
+   phase).** Remaining order as batches: 3 navigation + taps (c9, c31, c28, c29) → 4 pipeline (c17, c18, c20, c19, c22) → 5 speed
+   (c12, c13, c14, c15) → c10 (needs a wallet test), c16, c21, c30 → the look list c32–c37 → platform c38–c43 → product c50–c65.
+   Done: c1–c8, c11, c25 (-19); c23, c24, c26, c27 (-20).
 -17. **Socials → RH Core Liquidity rows for PTGC / UFO (2026-10-07) — PUSHED by Shaka (`2c3d15d4c`), live look owed.** `tools/rh-socials.py` after rh-cores.py;
    probe `probes/sh-rh.js`. Live look: Socials → PTGC column → RH Core Liquidity opens the window on PTGC, Close returns to the hub; same for UFO.
 -16. **The RH Cores window (2026-10-07) — PUSHED by Shaka (`1119ec37f`), live look owed.** The live look: the Liquidity
@@ -1269,7 +1276,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 ## Session log
 
 - `sessions/2026-10-07.md` — the Volume window (mock v1 → built, `tools/volume-window.py`, pushed `43fb8af46`) and the RH Cores window
-  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`, pushed `2c3d15d4c`); Audit III (→ `2026-10-07-audit.md`, pushed `822e2a78e`, roadmap AUDIT III phase); the P1 batch c1–c8 + c11 + c25 (`tools/audit3-p1.py`, harness evidence, commit line); the TXNS 24H item closed; HvB live look ok.
+  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`, pushed `2c3d15d4c`); Audit III (→ `2026-10-07-audit.md`, pushed `822e2a78e`, roadmap AUDIT III phase); the P1 batch c1–c8 + c11 + c25 (`tools/audit3-p1.py`, pushed `d60b83082`); batch 2 c23 + c24 + c26 + c27 (`tools/audit3-p2.py`, commit line); the TXNS 24H item closed; HvB live look ok.
 - `sessions/2026-10-07-audit.md` — Audit III: the merged c1–c65 list and the seven raw sweeps (L, M, P, D, C, S, E) with evidence.
 - `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
   page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,

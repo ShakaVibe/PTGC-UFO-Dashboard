@@ -3587,7 +3587,10 @@
                  case, so market cap stayed at DexScreener's stale value (or 0) while the price
                  was live. Use the implied supply instead. */
               if(_dsPrice <= 0 && _price > 0) return mcapFromPrice(addr, _price, _m);
-              return _m;
+              if(_m > 0) return _m;
+              /* c23 (Audit III): a priced pair with neither marketCap nor fdv — derive from the price (the remembered implied
+                 supply, else starting supply minus the known burn), and null when there is no price either → "—", never "$0" */
+              return _price > 0 ? mcapFromPrice(addr, _price, 0) : null;
             })(),
             liq: (_dsLive || _liqSum > 0) ? _liqSum : null,
             vol: _dsLive ? pairs.reduce((s, p) => s + p.vol, 0) : null,
@@ -6306,7 +6309,7 @@
       rhCores:(token)=>(
         <>
           <p>The RH Cores are the PulseChain core coins: WPLS, PLSX, INC, HEX, eHEX and PRVX.</p>
-          <p>Switch it on to show only the {token} pools paired with one of them.</p>
+          <p>Switch it on to show only the largest {token} pool paired with each of them (a core with a v1 and a v2 pool shows the bigger one).</p>
         </>
       ),
       day:(token)=>(
@@ -8697,10 +8700,14 @@
     };
     const rhCoreLiq=(pairs,core)=>{
       if(!pairs||!pairs.length)return null;   // a18: unknown column → "—"
+      /* the LARGEST pool per core (the pairs arrive sorted by liquidity) — the same rule as the band filter and the RH window (c26) */
       const p=pairs.find(p=>{const q=(p.quoteToken?.symbol||'').toUpperCase(),b=(p.baseToken?.symbol||'').toUpperCase();return q===core||b===core;});
-      return p?(p.liq||0):0;
+      return p?(p.liq>0?p.liq:null):null;   // c23 (Audit III): a pinned core pair that did not load is UNKNOWN → "—", never $0
     };
-    const rhCoreTotal=pairs=>pairs&&pairs.length?RH_CARD_CORES.reduce((s,c)=>s+(rhCoreLiq(pairs,c)||0),0):null;
+    const rhCoreTotal=pairs=>{   // c23: the total only when every core is known
+      if(!pairs||!pairs.length)return null;
+      let s=0;for(const c of RH_CARD_CORES){const v=rhCoreLiq(pairs,c);if(v==null)return null;s+=v;}return s;
+    };
     const RhCoresColumn=({tkn,pairs})=>{
       const T=RH_CARD_THEME[tkn],cfg=TOKENS[tkn],rgb=T.rgb;
       const tot=fmtUSD(rhCoreTotal(pairs));   // a 7-digit total ($1,234,567) steps down so it never crowds the token name
@@ -10073,9 +10080,11 @@
     const LpRowV2=({pair,rank,theme,mainAddr,pts,upColor,feeRate})=>{
       const[logoErr,setLogoErr]=useState(false);
       const[det,setDet]=useState(false);
-      const liq=pair.liq,vol=pair.vol;
+      /* c23 (Audit III): a chain-read pair (`_fromChain`, DexScreener missing it) carries fabricated 0s for volume and
+         txns — the RhCoresModal rule (a14): those are UNKNOWN here, "—", never $0 / 0 / 0 */
+      const liq=pair.liq,vol=(!pair._fromChain&&pair.vol!=null&&isFinite(pair.vol))?pair.vol:null;
       const ratio=liq>0&&vol!=null?(vol/liq).toFixed(3):'\u2014';
-      const buys=pair.txns?.h24?.buys,sells=pair.txns?.h24?.sells,txTotal=(buys!=null&&sells!=null)?buys+sells:null;
+      const buys=pair._fromChain?null:pair.txns?.h24?.buys,sells=pair._fromChain?null:pair.txns?.h24?.sells,txTotal=(buys!=null&&sells!=null)?buys+sells:null;
       const chg=pair.priceChange?.h24,chgKnown=chg!=null&&isFinite(chg);
       /* volume vs the day before (Shaka's mock-up): today's DexScreener 24 h against the previous 24 h of the pool's curve (bins -8..-4, complete ones) — null when the curve is missing or that day was zero */
       const prior=(pts&&pts.length>=8)?pts.slice(-8,-4).reduce((s,p)=>s+(p.v>0?p.v:0),0):0;
@@ -10380,7 +10389,8 @@
       const max=Math.max(1,...series.map(s=>s.h+s.b));
       const n=series.length,bw=(W-padL-padR)/n,gap=Math.min(4,bw*0.25);
       const y=v=>padT+(H-padT-padB)*(1-v/max);
-      const fmtT=t=>{const d=new Date(t);return binMs<86400000&&binMs<6*3600000?d.toLocaleTimeString([],{hour:'numeric'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+      /* c27 (Audit III): the day bins start at UTC midnight, so label them in UTC (a New York visitor saw "Sep 30" on the Oct 1 bin); hour bins keep local time, en-US */
+      const fmtT=t=>{const d=new Date(t);return binMs<86400000&&binMs<6*3600000?d.toLocaleTimeString('en-US',{hour:'numeric'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});};
       const every=n<=24?4:n<=28?4:n<=31?5:15;
       return(
         <svg className="vs-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Volume over time, humans over bots">
@@ -10551,7 +10561,7 @@
                 <LgCoin token={tk}/>
                 <div>
                   <h2 className="font-orbitron text-2xl sm:text-[34px] font-bold tracking-wide leading-tight whitespace-nowrap"><span style={{color:hex}}>{tk}</span><span className="text-white ml-3">RH Cores</span></h2>
-                  <div className="rc-sub">Liquidity in the {tk} pools paired with Richard Heart's PulseChain core coins {'—'} WPLS, PLSX, INC, HEX, eHEX and PRVX</div>
+                  <div className="rc-sub">Liquidity in the largest {tk} pool paired with each Richard Heart core coin {'—'} WPLS, PLSX, INC, HEX, eHEX and PRVX</div>
                   <div className="rc-src">DexScreener {'·'} live</div>
                 </div>
               </div>
@@ -10658,7 +10668,7 @@
                   </div>);})}
               </div>
               <div className={`vw-card vw-chartcard${tk==='UFO'?' ufo':''}`}>
-                <div className="vw-hdr"><span className="t">Daily volume {'·'} past {P.d} days</span><span className="c">{chartAvg!=null?`avg ${fmtUSD(chartAvg)} / day · on-chain`:''}</span></div>
+                <div className="vw-hdr"><span className="t">Daily volume {'·'} past {P.d} UTC days</span><span className="c">{chartAvg!=null?`avg ${fmtUSD(chartAvg)} / day · on-chain`:''}</span></div>
                 {file===null?(
                   <div className="text-center py-8">
                     <div className="text-white/80 font-semibold">Couldn't load the hourly file</div>
@@ -10684,7 +10694,7 @@
                   {pools.length>6&&<button type="button" className="vw-more" onClick={()=>setAllPools(a=>!a)} aria-expanded={allPools}>{allPools?<>show the top 6</>:<>and <b>{pools.length-6} more pool{pools.length-6===1?'':'s'}</b> {'—'} show all</>}</button>}
                 </div>
               )}
-              <div className="vw-conf">The four figures are DexScreener's, summed over every pair {'—'} the same numbers as the Volume tile. The daily chart and the pool table are on-chain swap volume from the hourly file (the Humans vs Bots data), so they will not match DexScreener to the dollar.</div>
+              <div className="vw-conf">24H is DexScreener's, summed over every pair {'—'} the Volume tile's own number. 7D / 30D / 90D are CoinGecko's on-chain daily candles over the 20 largest pools (today counts as a partial day). The daily chart and the pool table are on-chain swap volume from the hourly file (the Humans vs Bots data). Three sources, so they will not match each other to the dollar.</div>
             </div>
           </div>
         </Modal>
@@ -11493,7 +11503,7 @@
       /* the window box is 30 DAYS since 2026-10-05 round 3 (Shaka: "let's move the burn box to a 30 day burn not 7 day") — was d7 */
       const burn7dKnown=bp!=null&&bp.d30!=null;
       const burn7dAmt=burn7dKnown?bp.d30:0;
-      const burn7dUSD=burn7dAmt*(d?.price||0);
+      const burn7dUSD=(burn7dKnown&&d?.price>0)?burn7dAmt*d.price:null;   // c23 (Audit III): no price → "—", never "$0"
       const burnKnown=!!(b&&b.supply>0);
       const burnPctNum=b?.pct||0;
       const burnUSD=(d?.price>0&&b)?b.total*d.price:null;
@@ -13192,9 +13202,10 @@
         return Array.from(seen.values()).sort((a,b)=>b.liq-a.liq);
       },[sorted,showRHCores]);
       
-      // Calculate totals based on filter
-      const filteredVol=filteredSorted.reduce((s,p)=>s+(p.vol||0),0);
-      const filteredLiq=filteredSorted.reduce((s,p)=>s+(p.liq||0),0);
+      // Calculate totals based on filter — c23 (Audit III): null when the tile's own figure is null (a DexScreener outage, a14),
+      // so the band prints "—" like the tile instead of summing the chain pairs' fabricated 0s into "$0"
+      const filteredVol=data?.vol==null?null:filteredSorted.reduce((s,p)=>s+(p._fromChain?0:(p.vol||0)),0);
+      const filteredLiq=data?.liq==null?null:filteredSorted.reduce((s,p)=>s+(p.liq||0),0);
       
       // RH Cores pairs (always computed for modal)
       const rhCoresPairs=useMemo(()=>{
@@ -14315,7 +14326,7 @@
           {/* LP Pairs section */}
           <div className={`max-w-7xl mx-auto px-3 sm:px-6 py-4 ${hdrV2?'p2-lp':''}`} style={hdrV2?{'--lpc':isGold?'212,175,55':'124,252,0'}:undefined} data-c={hdrV2?(isGold?'gold':'green'):undefined}>
             {hdrV2?(
-              <div className="hidden sm:block mb-4"><LpHeaderV2 token={token} cfg={cfg} theme={theme} count={high.length} vol={filteredVol} vgen={cfg.feeRate>0?filteredVol*cfg.feeRate:null} liq={filteredLiq} volChg={lpVolChg} liqChg={lpLiqChg} showRHCores={showRHCores} setShowRHCores={setShowRHCores}/></div>
+              <div className="hidden sm:block mb-4"><LpHeaderV2 token={token} cfg={cfg} theme={theme} count={high.length} vol={filteredVol} vgen={(filteredVol!=null&&cfg.feeRate>0)?filteredVol*cfg.feeRate:null} liq={filteredLiq} volChg={lpVolChg} liqChg={lpLiqChg} showRHCores={showRHCores} setShowRHCores={setShowRHCores}/></div>
             ):(   /* classic desktop header — untouched since the v2 fork above (2026-10-01 afternoon); the v2 hook classes it carried are gone */
             <div className="hidden sm:flex items-center justify-between gap-4 mb-4 px-1">
               <div className="flex items-center gap-3">
@@ -14364,7 +14375,7 @@
               </div>
               {hdrV2&&<div className="p2-lphm tabular-nums" aria-label="Totals">{/* phones (2026-10-02): the band's three figures as one quiet line — the desktop band is LpHeaderV2 */}
                 <span><i>Vol 24h</i><b>{fmtUSD(filteredVol)}</b></span>
-                <span><i>Value Gen</i><b className="g">{cfg.feeRate>0?fmtUSD(filteredVol*cfg.feeRate):'\u2014'}</b></span>
+                <span><i>Value Gen</i><b className="g">{(filteredVol!=null&&cfg.feeRate>0)?fmtUSD(filteredVol*cfg.feeRate):'\u2014'}</b></span>
                 <span><i>Liquidity</i><b>{fmtUSD(filteredLiq)}</b></span>
               </div>}
               <div className="flex gap-2 items-center">
