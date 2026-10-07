@@ -59,7 +59,7 @@
        version here and you MUST regenerate its hash (openssl dgst -sha384 -binary f | openssl base64 -A).
        Tailwind's play CDN generates its script and does not allow cross-origin reads, so it
        cannot carry a hash; it is scheduled to be replaced by a build step. -->
-  <link rel="stylesheet" href="tw.css?v=1">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
+  <link rel="stylesheet" href="tw.css?v=2">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
@@ -731,9 +731,9 @@
       .kp .kp-t .r1,.kp .kp-t .r2{display:contents}
       .kp .kp-t .r1 img.kp-ic{grid-area:a;width:28px;height:28px}
       .kp .kp-t .r1 .kp-chip{grid-area:b;justify-self:start;font-size:10.5px;height:26px;padding:0 8px}
-      .kp .kp-t .r1 .kp-chip.tag{right:34px;bottom:11px;height:20px;font-size:9.5px;padding:0 6px;margin:0}   /* left of the ⓘ, bottom-right */
       .kp .kp-t .r1 .sp{display:none}
-      .kp .kp-t .r1 .kp-chg,.kp .kp-t .r1 .kp-info,.kp .kp-t .r1 .kp-chip.tag{grid-area:1/1/-1/-1;position:absolute;right:10px;bottom:12px}   /* grid-area over the whole tile: an absolutely positioned grid item is otherwise placed by auto-placement and measures against that one cell */
+      .kp .kp-t .r1 .kp-chg,.kp .kp-t .r1 .kp-info,.kp .kp-t .r1 .kp-chip.tag{grid-area:1/1/-1/-1;position:absolute;right:10px;bottom:12px}
+      .kp .kp-t .r1 .kp-chip.tag{right:34px;bottom:11px;height:20px;font-size:9.5px;padding:0 6px;margin:0}   /* left of the ⓘ, bottom-right — AFTER the rule above (same specificity; c30 / M-4: it used to lose and sit on the ⓘ) */   /* grid-area over the whole tile: an absolutely positioned grid item is otherwise placed by auto-placement and measures against that one cell */
       .kp .kp-t .r1 .kp-chg{font-size:14px}
       .kp .kp-t .v{grid-area:d;font-size:24px;margin-top:2px}
       .kp .kp-t .kp-sk{grid-area:e;width:100px;min-width:0;max-width:none;height:26px;justify-self:start}
@@ -747,7 +747,7 @@
     }
     /* LEAGUES (2026-10-04) — the holder-tiers modal (TierInfoModal, PTGC / UFO) and the Socials combined card
        (LeaguesCombinedCard), from design/leagues/ (README = every decision, renders/tiers-v2.png + combined-v8.png). */
-    .lg-m{--a:#F2C94C;--rgb:242,201,76;--halo:255,120,20;--ring:255,190,80;font-family:'Rajdhani',sans-serif;color:#fff;border-radius:20px;border:2px solid var(--a);background:#06070a;overflow:hidden;position:relative;box-shadow:0 0 60px -10px rgba(var(--rgb),.5)}
+    .lg-m{--a:#F2C94C;--rgb:242,201,76;--halo:255,120,20;--ring:255,190,80;font-family:'Rajdhani',sans-serif;color:#fff;border-radius:20px;border:2px solid var(--a);background:#06070a;overflow:hidden auto;position:relative;box-shadow:0 0 60px -10px rgba(var(--rgb),.5)}
     .lg-m.ufo{--a:#7CFC00;--rgb:124,252,0;--halo:110,255,40;--ring:140,255,60}
     .lg-hd{position:relative;height:280px;overflow:hidden}
     .lg-hd .sky{position:absolute;inset:0;background:url(logos/leagues/lg-sea-wide.webp) center 28%/cover no-repeat}
@@ -4755,7 +4755,7 @@
           <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
           <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
             <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
-            <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/35 font-normal font-mono hover:text-white/70">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
+            <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/55 font-normal font-mono hover:text-white/80">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
           </div>
         </div>
         {/* 2026-09-26 skin: the lifted amount is green (Shaka), the split stays in the token colour */}
@@ -5386,6 +5386,7 @@
             @media(prefers-reduced-motion:reduce){.deck-row.deck-new{animation:none}.deck-chip{display:none}}
             .deck-pods{position:absolute;inset:0;pointer-events:none}.deck-pod{pointer-events:auto}
             @media(max-width:900px){.deck-pod{min-width:128px;padding:9px 10px 8px}.deck-pod .deck-tot{font-size:16px}.deck-pod .deck-n{font-size:9.5px;letter-spacing:.12em}.deck-pod .deck-ic{font-size:14px}}
+            @media(min-width:641px) and (max-width:1060px){.deck-tapewrap::after{content:"";position:absolute;top:0;right:0;bottom:0;width:56px;pointer-events:none;background:linear-gradient(to left,rgba(4,6,10,.92),rgba(4,6,10,0))}}   /* c30 / M-8: tablets scroll the 1,040-px tape sideways — say so */
             @media(max-width:640px){
               /* phone: the boxes are a strip across the top of the art (five across, or three-by-two), the ship in
                  the beam under them, the readout under the ship; the tape is two lines per contact — the trade and
@@ -5453,14 +5454,14 @@
                   The headline numbers that used to live here now sit where they belong: the
                   generated figure on the ship (it is the sum of the pods), contacts and chain
                   telemetry on the scan line, and the fee rate in the Lifted column header. */}
-              <div className="relative flex items-center gap-4 px-4 py-2.5 whitespace-nowrap overflow-x-auto" style={{borderBottom:`1px solid ${deckHexA(ac,0.18)}`}}>
+              <div className="relative flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 whitespace-nowrap overflow-x-auto" style={{borderBottom:`1px solid ${deckHexA(ac,0.18)}`}}>{/* c30 / M-9: wraps under 640 so TOP POOLS starts its own line instead of sitting off-screen */}
                 <span className="inline-flex items-center gap-2 shrink-0 text-[12px] uppercase tracking-[0.2em] text-[#7CFC00]" title={statusText}>
                   <i className={`w-[7px] h-[7px] rounded-full ${status==='live'?'bg-[#7CFC00] animate-pulse':status==='retrying'||status==='connecting'?'bg-[#fbbf24]':'bg-[#fb7185]'}`} style={{boxShadow:status==='live'?'0 0 10px #7CFC00':'none'}}></i>
                   <span className="hidden lg:inline">Signal lock · </span>{token}
                 </span>
                 {/* TOP POOLS ticker. Each pool's figure is its share of the fees generated in the
                     window (the ship's number), attributed by share of swap volume — volume in the hover. */}
-                <span className="ml-auto inline-flex items-center gap-4 sm:gap-5 font-mono text-[11px] text-white/40 tracking-[0.06em]">
+                <span className="sm:ml-auto inline-flex items-center gap-4 sm:gap-5 font-mono text-[11px] text-white/40 tracking-[0.06em]">
                   <span className="inline-flex items-baseline gap-2.5 shrink-0">
                     <span className="font-orbitron font-bold text-[12px] tracking-[0.22em]" style={{color:ac,textShadow:`0 0 10px ${deckHexA(ac,0.45)}`}}>TOP POOLS</span>
                     <span className="text-[10px] tracking-[0.18em] uppercase text-white/45">fees generated <b className="font-normal" style={{color:hi}}>{win.toUpperCase()}</b></span>
@@ -5511,7 +5512,7 @@
               </div>
 
               {/* GROUND TAPE */}
-              <div className="relative overflow-x-auto">
+              <div className="relative overflow-x-auto deck-tapewrap">
                 <div className="deck-tape" style={{minWidth:1040}}>
                   <div className="deck-head grid text-[12px] font-semibold tracking-[0.16em] uppercase text-white/75 px-[18px] pt-2.5 pb-2" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.35)}`}}>
                     <span>Time <span style={{color:hi}}>{'↓'}</span></span><span>Type</span><span>Contact / TX</span><span className="text-right pr-1.5 whitespace-nowrap">Amount <span className="deck-head-lift normal-case tracking-normal text-white/45">lifted @ <b className="font-semibold" style={{color:hi}}>{(cfg.feeRate*100).toFixed(2)}%</b></span></span>
@@ -5567,7 +5568,7 @@
       return(
         <div className={`${theme.card} border ${theme.border} rounded-lg p-3 sm:p-4 hover:border-opacity-60 ${v2?'p2-lprow':''}`}>
           <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
-            <div className="col-span-1 flex justify-center">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} className="w-10 h-10 rounded-full"/>:(!logoErr&&logo?<img src={logo} className="w-10 h-10 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center font-bold">{other?.symbol?.[0]}</div>)}</div>
+            <div className="col-span-1 flex justify-center">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} alt="" className="w-10 h-10 rounded-full"/>:(!logoErr&&logo?<img src={logo} alt="" className="w-10 h-10 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center font-bold">{other?.symbol?.[0]}</div>)}</div>
             <div className="col-span-2"><div className={`font-semibold ${theme.text}`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div><div className="text-gray-500 text-sm">{pair.dexId ? pair.dexId.charAt(0).toUpperCase() + pair.dexId.slice(1) : 'PulseX'}{pair.labels?.length > 0 ? ` ${pair.labels[0]}` : ''}</div></div>
             <div className="col-span-2 text-right"><div className="text-white text-xs">Volume</div><div className="text-white font-semibold">{fmtUSD(vol)}</div></div>
             <div className="col-span-2 text-right"><div className="text-white text-xs">Liquidity</div><div className="text-white">{fmtUSD(liq)}</div></div>
@@ -5577,7 +5578,7 @@
             <div className="col-span-2 flex justify-end gap-2"><button onClick={()=>setDet(!det)} aria-label="Pool details" aria-expanded={det} className="text-lg hover:scale-110">{'\u2139\uFE0F'}</button><a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DexScreener" className="text-lg hover:scale-110">{'\u{1F4C8}'}</a><a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DEXTools" className="text-lg hover:scale-110">{'\u{1F4CA}'}</a></div>
           </div>
           <div className="sm:hidden">
-            <div className="flex items-center gap-3 mb-2">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} className="w-8 h-8 rounded-full"/>:(!logoErr&&logo?<img src={logo} className="w-8 h-8 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>)}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up?'text-green-400':'text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
+            <div className="flex items-center gap-3 mb-2">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} alt="" className="w-8 h-8 rounded-full"/>:(!logoErr&&logo?<img src={logo} alt="" className="w-8 h-8 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>)}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up?'text-green-400':'text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
             <div className="grid grid-cols-4 gap-2 text-center text-xs"><div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div><div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div><div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div><div><div className="text-gray-400">V/L</div><div className="text-white">{ratio}</div></div></div>
           </div>
           {det&&(
@@ -9760,7 +9761,7 @@
           {T('mcap','MARKET CAP',fmtUSD(data?.mcap),{cls:changeKnown?(priceUp?'':'dn'):'na',tip:changeTip,node:changeKnown?`${arrow(priceUp)} ${Math.abs(data.change).toFixed(2)}%`:'—'},{hot:true})}
           {T('vol','VOLUME 24H',fmtUSD(data?.vol),volChg!=null?{cls:volChg>=0?'':'dn',node:<>{arrow(volChg>=0)} {Math.abs(volChg).toFixed(1)}% <span className="h2-vs">vs 7d avg</span></>}:null,
             {badge:<><button type="button" onClick={openVolume} aria-label="Volume by period" className="tap-h"><H2Info/></button>{openVolSplit&&<button type="button" onClick={openVolSplit} aria-label="Humans vs Bots — who moves the volume" title="Humans vs Bots" className="tap-h"><span className="h2-hd h2-bot" style={{"--ic":"url(logos/hvb/ic-bot.svg)"}} aria-hidden="true"></span></button>}</>})}{/* Humans vs Bots LIVE 2026-10-06: the Classic bot icon right of the ⓘ, like the Holders people icon */}
-          {T('liq','LIQUIDITY',fmtUSD(data?.liq),null,{badge:<button type="button" onClick={openRH} aria-label="Liquidity with RH Core coins" className="tap-h h2-rh">RH</button>})}
+          {T('liq','LIQUIDITY',fmtUSD(data?.liq),(data&&data._fromChain&&data.liq!=null)?{cls:'na',node:'chain · core pools only'}:null,{badge:<button type="button" onClick={openRH} aria-label="Liquidity with RH Core coins" className="tap-h h2-rh">RH</button>})}
           {T('ratio','LIQ / MCAP',liqMcapRatio==='—'?'—':`${liqMcapRatio}%`,null)}
           {T('hold','HOLDERS',fmt(holdersNow),holderChange!==null?(holderChange===0?{cls:'na',node:'— 0'}:{cls:holderChange>=0?'':'dn',node:`${holderChange>=0?'↑':'↓'} ${holderChange>=0?'+':''}${fmt(holderChange)}`}):null,
             {badge:<><button type="button" onClick={openHolders} aria-label="Holders by period" className="tap-h"><H2Info/></button>{openNewHolders&&<button type="button" onClick={openNewHolders} aria-label="Holders details — who joined and who left" title="Holders Details" className="tap-h"><span className="h2-hd" style={{"--ic":`url(logos/holders/nh-ic-new.webp?v=${NH_ART_V})`}} aria-hidden="true"></span></button>}</>})}
@@ -16706,7 +16707,7 @@
                         <span className="ar-ptgc text-[#D4AF37] font-bold text-lg text-right">{fmtAbbr(tx.ptgcAmount)} <span className="text-[#D4AF37]/50 text-sm font-normal">PTGC</span></span>
                         <span className="ar-usd text-white font-bold text-lg text-right">{fmtDollar(tx.usdAmount||0)}</span>
                         <span className="ar-hash inline-flex items-center justify-end gap-1">
-                          {tx.txHash?<><a href={`https://scan.pulsechain.com/tx/${tx.txHash}`} target="_blank" rel="noopener noreferrer" className="text-purple-500/40 hover:text-purple-400 font-mono text-xs transition">{truncateWallet(tx.txHash)}</a><CopyBtn text={tx.txHash} className="text-purple-500/30 hover:text-purple-400"/></>:<span></span>}
+                          {tx.txHash?<><a href={`https://scan.pulsechain.com/tx/${tx.txHash}`} target="_blank" rel="noopener noreferrer" className="text-purple-400/70 hover:text-purple-300 font-mono text-xs transition">{truncateWallet(tx.txHash)}</a><CopyBtn text={tx.txHash} className="text-purple-500/30 hover:text-purple-400"/></>:<span></span>}
                         </span>
                       </div>
                     ))}
