@@ -13,6 +13,7 @@ const [route='#/',W='375',H='812',out='shot',actions='']=process.argv.slice(2);
 const html0=fs.readFileSync(path.join(REPO,process.env.HTML||'index.html'),'utf8');
 const html=html0
   .replace(/<script src="https:\/\/cdn\.tailwindcss\.com\/3\.4\.16"><\/script>/,'<link rel="stylesheet" href="/__tw.css">')
+  .replace(/<link rel="stylesheet" href="tw\.css\?v=\d+">/,'<link rel="stylesheet" href="/__tw.css">')   // c13: the pages link the committed tw.css; the harness renders with its fresh build
   .replace(/<script src="https:\/\/unpkg\.com\/react@18\.3\.1\/umd\/react\.production\.min\.js"[^>]*><\/script>/,'<script src="/__react.js"></script>')
   .replace(/<script src="https:\/\/unpkg\.com\/react-dom@18\.3\.1\/umd\/react-dom\.production\.min\.js"[^>]*><\/script>/,'<script src="/__react-dom.js"></script>')
   .replace(/<script src="https:\/\/unpkg\.com\/@babel\/standalone@7\.26\.4\/babel\.min\.js"[^>]*><\/script>/,'<script src="/__babel.js"></script>')
