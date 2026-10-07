@@ -1313,7 +1313,8 @@
     
     // ===== ALL-TIME HIGH PRICES =====
     // Update these values from the Moon Math calculator in Portfolio
-    // These are fallbacks; coingeckoDataCache ATH will be used if available
+    // These are floors: fetch-coingecko-data.js writes PTGC's CoinGecko ATH into the file (c22, 2026-10-07) and the readers take
+    // the max; UFO's is NEVER written (gotcha 0: the pre-migration high is the one that counts)
     const ATH_PRICES = {
       PTGC: 0.00133,    // from Moon Math calculator in portfolio.html
       UFO: 0.000113     // from Moon Math calculator in portfolio.html
@@ -3674,7 +3675,10 @@
        scripts/build-value-generated.mjs. If missing/stale, the dashboard falls back to the
        live on-chain scan, so this is safe to ship in any order. */
     const VALUE_GEN_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/value-generated.json';
-    const VALUE_GEN_STALE_MS=6*60*60*1000; // measured 2026-09-18: GitHub runs the hourly pipeline ~5x/day (gaps up to 5 h), so 6 h = one missed run -> fall back to live
+    /* c17 (Audit III, 2026-10-07): the pipeline is HOURLY for real since the Worker's cron (2026-10-06) — a healthy hourly file
+       is ≤ ~75 min old. Past this the dashboard starts the live chain scan, so it is two missed hours plus slack, not one.
+       (Was 6 h, sized for "~5 runs a day, gaps up to 5 h" measured 2026-09-18.) */
+    const VALUE_GEN_STALE_MS=3*60*60*1000;
     /* RESILIENCE (Aug 27 incident): a stale snapshot used to be discarded entirely, so a
        stalled builder meant every visitor stared at dashes for the multi-minute live scan.
        Now a stale-but-valid file is SHOWN immediately as interim data (with an "as of" label)
@@ -3763,10 +3767,11 @@
        the pipeline ~5x/day with gaps up to 5 h (gotcha 21), so a healthy file can be ~11 h old.
        Past 14 h (a missed rebuild) the tiles carry an "as of" label; past 36 h (three missed
        rebuilds) the file is treated as missing and the localStorage / live-scan path runs. */
-    const ALLOC_STALE_MS=14*60*60*1000;
-    const ALLOC_DEAD_MS=36*60*60*1000;
+    const ALLOC_STALE_MS=8*60*60*1000;    // c17: the step is gated at 6 h and the pipeline is hourly, so a healthy file is ≤ ~7.3 h (was 14 h)
+    const ALLOC_DEAD_MS=24*60*60*1000;    // c17: three missed rebuilds (was 36 h)
     const allocStampedAt=j=>{const t=j&&j.lastUpdated?Date.parse(j.lastUpdated):NaN;return isFinite(t)?t:null;};
-    const BURN_HISTORY_STALE_MS=8*60*60*1000;     // the pipeline lands ~5x/day (gaps up to 5 h, measured 2026-09-18) — amber only past a missed run
+    const BURN_HISTORY_STALE_MS=2.5*60*60*1000;   // c17: hourly file — amber past two missed runs (was 8 h for the old ~5-runs-a-day beat)
+    const HOURLY_AMBER_MS=2.5*60*60*1000;         // c17: the one amber threshold for the hourly files (DAO Buys, Holders Details, Humans vs Bots)
     const BURN_HISTORY_MAX_AGE_MS=7*24*60*60*1000; // a week-old window is not "the last 24 hours"
     const burnHistoryAgeMs=()=>{const t=burnHistoryCache&&burnHistoryCache.lastUpdated?Date.parse(burnHistoryCache.lastUpdated):NaN;return isFinite(t)?Math.max(0,Date.now()-t):null;};
     const fetchBurnHistory=async()=>{
@@ -7026,7 +7031,7 @@
 
       const asOf=file&&file.generatedAt?new Date(file.generatedAt):null;
       const ageMs=asOf?Date.now()-asOf.getTime():null;
-      const stale=ageMs!=null&&ageMs>6*3600000;
+      const stale=ageMs!=null&&ageMs>HOURLY_AMBER_MS;   // c17: was a literal 6 h
       const pill=(on)=>`tap-h px-2 rounded-md border text-[10px] font-bold tracking-wider uppercase transition-colors ${on?'border-white/40 text-white':'border-white/10 text-white/40 hover:text-white/70'}`;
       return(
         <Modal onClose={onClose} label="DAO Treasury PTGC buys" className="z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay bg-black/85">
@@ -10226,7 +10231,7 @@
      * ======================================================================== */
     const NEW_HOLDERS_LIVE=true;   // LIVE 2026-10-04 (Shaka: "lets go ahead and make it live"). false = hidden behind the dot (2026-10-02 → 10-04)
     const NEW_HOLDERS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/new-holders.json';
-    const NH_MAX_AGE=36*3600*1000,NH_TTL=5*60*1000,NH_AMBER_MS=6*3600*1000;
+    const NH_MAX_AGE=36*3600*1000,NH_TTL=5*60*1000,NH_AMBER_MS=HOURLY_AMBER_MS;   // c17: amber at 2.5 h (was 6 h)
     const NH_ART_V=2;   // bump when logos/holders/* change under the same names (gotcha 38) — 2: the New / Left icons became Shaka's green-plus / red-minus people (2026-10-02)
     const NH_WINDOWS=[{k:'24H',h:24,label:'Past 24 hours'},{k:'7D',h:24*7,label:'Past 7 days'},{k:'30D',h:24*30,label:'Past 30 days'}];
     let _nhFile=null,_nhAt=0,_nhP=null;
@@ -10303,7 +10308,7 @@
     const HVB_ART_V=1;   // bump when logos/hvb/sh-bot.webp changes under the same name (gotcha 38)
     const VOL_SPLIT_LIVE=true;   // LIVE 2026-10-06 (Shaka: "lets make it live!"). false = hidden behind the faint bottom-right dot (2026-10-06 preview rounds 1-13)
     const SWAP_VOL_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/swap-volume.json';
-    const VS_MAX_AGE=36*3600*1000,VS_TTL=5*60*1000,VS_AMBER_MS=3*3600*1000;
+    const VS_MAX_AGE=36*3600*1000,VS_TTL=5*60*1000,VS_AMBER_MS=HOURLY_AMBER_MS;   // c17: amber at 2.5 h (was 3 h)
     const VS_BOT='79,209,255';   // the bots' colour (electric cyan) — never a token colour, so a bar reads at a glance
     const VS_PERIODS=[{k:'24H',p:'24h',h:24,label:'Past 24 hours'},{k:'7D',p:'7d',h:168,label:'Past 7 days'},{k:'30D',p:'30d',h:720,label:'Past 30 days'},{k:'90D',p:'90d',h:2160,label:'Past 90 days'}];
     let _vsFile,_vsAt=0,_vsP=null;
@@ -12994,7 +12999,7 @@
                    contract or a broken run fails this),
                (c) the file itself is fresh (< 24h; it is rebuilt hourly). */
           const cgAgeMs = coingeckoDataCache && coingeckoDataCache.lastUpdated ? (Date.now()-Date.parse(coingeckoDataCache.lastUpdated)) : Infinity;
-          const cgFresh = isFinite(cgAgeMs) && cgAgeMs < 24*3600*1000;
+          const cgFresh = isFinite(cgAgeMs) && cgAgeMs < 12*3600*1000;   // c17: the file is hourly — 12 h is a long outage, not a normal gap (was 24 h)
           const gateVol = (windowDays, val) => {
             if (!cgFresh) return null;
             if (val == null || !isFinite(val) || val <= 0) return null;
@@ -13243,7 +13248,7 @@
       const hdrDaysOld=(_hdrFirstPool&&isFinite(_hdrFirstPool))?Math.max(0,Math.floor((Date.now()-_hdrFirstPool)/86400000)):null;
       
       // X's to ATH: try coingecko cache first, then hardcoded fallback
-      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      const athPrice=Math.max(coingeckoDataCache?.[token]?.ath||0,ATH_PRICES[token]||0);   // c22: the file's ATH (PTGC only, written since 2026-10-07) can only raise the hand constant
       const xToATH=data?.price>0&&athPrice>data.price?(athPrice/data.price).toFixed(1):'\u2014';
       // X's to a Penny
       const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';

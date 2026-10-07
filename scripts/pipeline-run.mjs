@@ -19,6 +19,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 const SUMMARY = path.join(process.env.RUNNER_TEMP || '/tmp', 'pipeline-summary.json');
+const STATUS = 'data/pipeline-status.json';   // c20 (Audit III): the per-step record that outlives the runner (the freshness strip's file)
 const KEY_ENV = { COINGECKO_API_KEY: process.env.COINGECKO_API_KEY || '' };
 
 // name → script, env, gate (file + min hours; none = every run). The name is what ONLY= takes.
@@ -39,7 +40,9 @@ const STEPS = {
 };
 const LANES = [
   { name: 'coingecko-key', steps: ['charts', 'charts-intraday', 'coingecko'] },
-  { name: 'rpc',           steps: ['value-generated', 'burn-history', 'treasury', 'dao-buys', 'ufo-ptgc-burns', 'token-allocation', 'lv-snapshot', 'new-holders', 'swap-volume'] },
+  // c19 (Audit III, 2026-10-07): value-generated LAST — it rescans the 90-day window every hour (~6 min) and held the eight quick
+  // files behind it (burn-summary, treasury, dao-buys, new-holders, swap-volume all stamped 7–8 min after dispatch).
+  { name: 'rpc',           steps: ['burn-history', 'treasury', 'dao-buys', 'ufo-ptgc-burns', 'token-allocation', 'lv-snapshot', 'new-holders', 'swap-volume', 'value-generated'] },
   { name: 'pair-volume',   steps: ['pair-volume'] },
 ];
 
@@ -54,7 +57,7 @@ function runChild(step, cmd, args, env, tail) {
     const feed = (buf, chunk, isErr) => {
       buf += chunk.toString();
       const lines = buf.split('\n'); buf = lines.pop();
-      for (const l of lines) { log(step, l); tail.push((isErr ? 'stderr: ' : '') + l); if (tail.length > 12) tail.shift(); }
+      for (const l of lines) { log(step, l); tail.push((isErr ? 'stderr: ' : '') + l); if (tail.length > 12) tail.shift(); if (/::warning::/.test(l)) tail.carried = true; }   // c20: a carry-forward exits 0 — remember the warning
       return buf;
     };
     child.stdout.on('data', c => { bufOut = feed(bufOut, c, false); });
@@ -83,7 +86,7 @@ async function runLane(lane, results) {
     log(step, `▶ ${def.run}`);
     const code = await runChild(step, process.execPath, [def.run], { ...KEY_ENV, ...(def.env || {}) }, tail);
     const seconds = Math.round((Date.now() - t0) / 1000);
-    results[step] = { outcome: code === 0 ? 'success' : 'failure', code, seconds, tail, lane: lane.name };
+    results[step] = { outcome: code === 0 ? 'success' : 'failure', code, seconds, tail, lane: lane.name, carried: !!tail.carried };
     log(step, `${code === 0 ? '✓' : '✗'} exit ${code} after ${seconds} s`);
   }
 }
@@ -96,8 +99,41 @@ async function main() {
   await Promise.all(LANES.map(l => runLane(l, results)));
   const summary = { startedAt: new Date(t0).toISOString(), seconds: Math.round((Date.now() - t0) / 1000), steps: results };
   fs.writeFileSync(SUMMARY, JSON.stringify(summary, null, 2));
+  writeStatus(summary);
   const failed = Object.entries(results).filter(([, r]) => r.outcome === 'failure').map(([k]) => k);
   console.log(`pipeline-run: done in ${summary.seconds} s — ${Object.values(results).filter(r => r.outcome === 'success').length} ok, ${Object.values(results).filter(r => r.outcome === 'skipped').length} skipped, ${failed.length} failed${failed.length ? ` (${failed.join(', ')})` : ''}`);
+}
+
+/* c20 (Audit III, 2026-10-07): data/pipeline-status.json — what the job summary says, kept across runs. Per step: this run's
+   outcome / seconds / why, and the last time it succeeded or failed (carried over from the previous file when the step was
+   skipped or did not run), the failing step's last lines, and `carried` when the step printed a ::warning:: (dao-buys keeping
+   the previous file exits 0 and used to show as a plain ✅). Readers: the freshness strip (roadmap g4), anyone curious. */
+function writeStatus(summary) {
+  let prev = {}; try { prev = JSON.parse(fs.readFileSync(STATUS, 'utf8')).steps || {}; } catch (e) {}
+  const now = new Date().toISOString();
+  const steps = {};
+  for (const name of Object.keys(STEPS)) {
+    const r = summary.steps[name], p = prev[name] || {};
+    const s = { outcome: r ? r.outcome : 'not-run', seconds: r ? r.seconds : 0, lane: r ? r.lane : (LANES.find(l => l.steps.includes(name)) || {}).name };
+    if (r && r.outcome === 'skipped' && r.why) s.why = r.why;
+    s.lastSuccessAt = r && r.outcome === 'success' ? now : (p.lastSuccessAt || null);
+    s.lastFailureAt = r && r.outcome === 'failure' ? now : (p.lastFailureAt || null);
+    const said = (r && r.tail || []).filter(l => !/^(stderr: )?\s+at /.test(l));   // the message, not the stack frames
+    s.lastError = r && r.outcome === 'failure' ? said.slice(-2).join(' ⏎ ').slice(0, 300) : (r && r.outcome === 'success' ? null : (p.lastError || null));
+    s.carried = !!(r && r.carried);
+    steps[name] = s;
+  }
+  const env = process.env;
+  const status = {
+    schema: 1, generatedAt: now, seconds: summary.seconds,
+    trigger: env.GITHUB_EVENT_NAME || 'local', only: env.ONLY || null, force: env.FORCE === 'true',
+    runUrl: env.GITHUB_RUN_ID ? `${env.GITHUB_SERVER_URL || 'https://github.com'}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}` : null,
+    lanes: LANES.map(l => ({ name: l.name, steps: l.steps })),
+    counts: { ok: Object.values(steps).filter(s => s.outcome === 'success').length, skipped: Object.values(steps).filter(s => s.outcome === 'skipped').length, failed: Object.values(steps).filter(s => s.outcome === 'failure').length, carried: Object.values(steps).filter(s => s.carried).length },
+    steps
+  };
+  fs.writeFileSync(STATUS + '.tmp', JSON.stringify(status, null, 2)); fs.renameSync(STATUS + '.tmp', STATUS);
+  console.log(`pipeline-run: wrote ${STATUS}`);
 }
 
 function report() {
@@ -108,8 +144,8 @@ function report() {
   const md = [`### Data Pipeline — ${s.seconds} s, ${rows.filter(([, r]) => r.outcome === 'success').length} ok · ${rows.filter(([, r]) => r.outcome === 'skipped').length} skipped · ${failed.length} failed`, '',
     '| step | lane | outcome | time | note |', '|---|---|---|---:|---|'];
   for (const [k, r] of rows) {
-    const icon = r.outcome === 'success' ? '✅' : r.outcome === 'failure' ? '❌' : '⏭️';
-    const note = r.outcome === 'skipped' ? (r.why || '') : r.outcome === 'failure' ? `exit ${r.code} — ${(r.tail || []).slice(-2).join(' ⏎ ').replace(/\|/g, '\\|').slice(0, 200)}` : '';
+    const icon = r.outcome === 'success' ? (r.carried ? '⚠️' : '✅') : r.outcome === 'failure' ? '❌' : '⏭️';   // c20: ⚠️ = exited 0 but printed a ::warning:: (kept the previous file)
+    const note = r.outcome === 'skipped' ? (r.why || '') : r.outcome === 'failure' ? `exit ${r.code} — ${(r.tail || []).slice(-2).join(' ⏎ ').replace(/\|/g, '\\|').slice(0, 200)}` : (r.carried ? 'carried forward (see ::warning:: in the log)' : '');
     md.push(`| ${k} | ${r.lane} | ${icon} ${r.outcome} | ${r.seconds} s | ${note} |`);
   }
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md.join('\n') + '\n');

@@ -2406,7 +2406,7 @@
       const mcap=data?.mcap||0;
       /* MIGRATION: the pre-migration high is the mark to beat (see ATH_PRICES above).
          a67: identical to index.html's rule, so both headers print the same "X's to ATH". */
-      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      const athPrice=Math.max(coingeckoDataCache?.[token]?.ath||0,ATH_PRICES[token]||0);   // c22: the file's ATH can only raise the floor
       
       const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'Mx';if(n>=1e4)return(n/1e3).toFixed(0)+'Kx';if(n>=1e3)return(n/1e3).toFixed(1)+'Kx';if(n>=100)return Math.round(n).toLocaleString()+'x';if(n>=10)return n.toFixed(1)+'x';return n.toFixed(2)+'x';};
       const fmtMcap=v=>{if(!v||isNaN(v))return'\u2014';if(v>=1e12)return'$'+(v/1e12).toFixed(2)+'T';if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(2)+'K';return fmtDollar(v);};
@@ -3519,7 +3519,7 @@ if(p>0)setRwdPtgcPrice(p);
             const moonBagGain=moonBagNew-moonBagCurrent;
             const moonTotalLiq=moonResultsList.reduce((s,r)=>s+(r.poolLiq||0),0);
             /* MIGRATION: ATH continuity across the migration (see CalculatorsTab athPrice). */
-            const mAthPrice=coingeckoDataCache?.[moonToken]?.ath||ATH_PRICES[moonToken]||0;
+            const mAthPrice=Math.max(coingeckoDataCache?.[moonToken]?.ath||0,ATH_PRICES[moonToken]||0);   // c22
             const mMcap=mCirc>0?mPrice*mCirc:null;
             
             return(
@@ -5104,7 +5104,7 @@ if(p>0)setRwdPtgcPrice(p);
       const _hdrFirstPool=data?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m,Infinity);
       const hdrDaysOld=(_hdrFirstPool&&isFinite(_hdrFirstPool))?Math.max(0,Math.floor((Date.now()-_hdrFirstPool)/86400000)):null;
       /* MIGRATION: ATH continuity across the migration (see CalculatorsTab athPrice). */
-      const athPrice=coingeckoDataCache?.[token]?.ath||ATH_PRICES[token]||0;
+      const athPrice=Math.max(coingeckoDataCache?.[token]?.ath||0,ATH_PRICES[token]||0);   // c22: the file's ATH can only raise the floor
       const xToATH=data?.price>0&&athPrice>data.price?(athPrice/data.price).toFixed(1):'\u2014';
       const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';
       const hdrFmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};

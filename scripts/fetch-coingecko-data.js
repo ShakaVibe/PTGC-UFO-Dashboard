@@ -113,12 +113,17 @@ function changeFromDailySeries(symbol, days) {
   } catch (e) { return null; }
 }
 
+/* c22 (Audit III): CoinGecko's all-time high per token, from the same /coins call the price changes use. Published for PTGC
+   only — UFO's ATH is the ORIGINAL contract's on purpose (index.html gotcha 0) and must not be overridden by the new listing. */
+const ATH_SEEN = {};
 async function fetchPriceChanges(address, name) {
   console.log(`  Price changes: ${name} (${address.slice(0, 10)}...)`);
   try {
     const data = await fetchAPI(`/coins/pulsechain/contract/${address}`);
     if (!data?.market_data) return null;
     const md = data.market_data;
+    const ath = Number(md.ath && md.ath.usd);
+    if (ath > 0) ATH_SEEN[name] = ath;
     const pc = {
       h24:  md.price_change_percentage_24h  || null,
       d7:   md.price_change_percentage_7d   || null,
@@ -284,7 +289,8 @@ function loadHistory(filename) {
 function saveData(filename, data) {
   if (!fs.existsSync(CONFIG.outputDir)) fs.mkdirSync(CONFIG.outputDir, { recursive: true });
   const fp = path.join(CONFIG.outputDir, filename);
-  fs.writeFileSync(fp, JSON.stringify(data, null, 2));
+  fs.writeFileSync(fp + '.tmp', JSON.stringify(data, null, 2));   // c22: tmp + rename — a job timeout never stages a half-written file
+  fs.renameSync(fp + '.tmp', fp);
   console.log(`Saved: ${fp}`);
 }
 
@@ -533,6 +539,10 @@ async function main() {
       priceChanges: t.priceChanges,
       complete:     { ...t.complete }
     };
+    if (name === 'PTGC') {   // c22: the file's ATH never goes down (a CoinGecko hiccup must not lower "X's to ATH"); UFO is never written
+      const ath = Math.max(ATH_SEEN.PTGC || 0, (p && p.ath) || 0);
+      if (ath > 0) out.ath = ath;
+    }
     const carriedFrom = {};
     const carry = (figure, key) => {
       if (t.complete[figure] && valid[name]) return;
@@ -554,7 +564,7 @@ async function main() {
 
   // Save current snapshot
   saveData('coingecko-data.json', {
-    lastUpdated: timestamp,
+    lastUpdated: new Date().toISOString(),   // c22: stamped at the SAVE, not the start of a ~3.5-min run (the histories keep `timestamp` for their hour bucket)
     PTGC: section('PTGC'),
     UFO:  section('UFO'),
     rhCores: rhCoreData
