@@ -15,6 +15,8 @@ Update it at the end of every session.
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
   build `tools/rh-cores.py` (run AFTER volume-window.py), decisions `design/rh-cores/README.md`.
+- **Audit III (2026-10-07):** `sessions/2026-10-07-audit.md` — 65 merged items (c1–c65) with evidence; top of that file = the list.
+  Not on the roadmap artifact yet. First eight are small P1 fixes (c1 `data-presets="react"` = the compile 15 s → 3 s).
 - **Charts page (2026-10-05 / 10-06):** the Calculators treatment (same plate, "Grays Charts") — `tools/charts-v2.py`, `cp-*` CSS in charts.html; then
   `charts-gt.py` (GeckoTerminal back-off), `charts-v3.py` (no sub-tab box, the Share badge at the right, UFO-green titles) and **`charts-fast.py` +
   `scripts/build-charts-intraday.js` → `data/charts-intraday.json` (hourly pipeline step `charts-intraday`): 24H / 7D / 14D paint from the prebuilt
@@ -37,9 +39,9 @@ Update it at the end of every session.
 **2026-10-07 (Wednesday). THE VOLUME WINDOW REBUILT — PUSHED by Shaka as `43fb8af46`, his live look owed. THEN THE RH CORES WINDOW
 REBUILT (his screenshot of the old "LP with RH Core Coins" modal → mock v1 → "make it live.") — `tools/rh-cores.py`, `RhCoresModal`,
 Richard Heart on stage as the plate, the RH liquidity with its share of all liquidity, the cores' stacked bar, six framed pair rows —
-PUSHED by Shaka as `1119ec37f`. THEN the Socials got "RH Core Liquidity" rows for PTGC and UFO (`tools/rh-socials.py`, level with
-the Combined row, opening the new window; the Combined row untouched) — written to the Mac, NOT pushed; commit line in
-`sessions/2026-10-07.md`. Live looks owed: the Volume ⓘ, the Liquidity RH, the two hub rows.** Shaka's live look at
+PUSHED by Shaka as `1119ec37f`. THEN the Socials got "RH Core Liquidity" rows for PTGC and UFO (`tools/rh-socials.py`) — PUSHED
+`2c3d15d4c`. THEN AUDIT III: seven sweeps, c1–c65 in `sessions/2026-10-07-audit.md` (+ two harness probes) — on the Mac, NOT pushed.
+Live looks owed: the Volume ⓘ, the Liquidity RH, the two hub rows. The UFO day-90 real test: the 15:14 UTC run and later.** Shaka's live look at
 Humans vs Bots: "loks good i think"; the Telegram wording handed to him to post. His screenshot of the old "Volume Analytics" modal
 ("still a dated look… Mock it up for me to see first") → mock v1 (`design/volume-analytics/`) → "that looks great, lets make the logo
 Bigger. and then make it live." → built by `tools/volume-window.py`: the Humans vs Bots shell with the dashboard's own banner as the
@@ -47,7 +49,8 @@ plate (gold half PTGC / green half UFO), the lit coin at 140 px, "PTGC Volume", 
 lit, per-day averages on the windows), Today vs averages as bars with an "avg" tick, a daily volume chart and a By pool table from
 `swap-volume.json` (same `fetchSwapVolume` as HvB), the honesty line. Honest states verified (DS_DOWN → "—", file missing → Retry).
 Commit line + harness detail: `sessions/2026-10-07.md`. **The TXNS 24H item is CLOSED — nothing to fix** (the tile reads 40 = the
-chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of the hub rows + live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
+chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of the audit; his read of the c-list and the word on adding it to the roadmap; the eight P1 fixes (c1–c8, all S) are
+the obvious first session; his live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
 $491K, the 4.79B headline must not move); then the live looks owed below.**
 
 ## Before that (end of 2026-10-06)
@@ -1108,7 +1111,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--17. **Socials → RH Core Liquidity rows for PTGC / UFO (2026-10-07) — BUILT, on the Mac, not pushed.** `tools/rh-socials.py` after rh-cores.py;
+-18. **AUDIT III (2026-10-07) — c1–c65 in `sessions/2026-10-07-audit.md`.** Order: c1–c8 (P1, all S: the compile attribute, the phone
+   overflow, the tab-band cue, the 500-snapshot cap before ~Oct 20, the holders number, Leagues "Burned 0", the clipped Combined Burn
+   card, the Growth tab) → c9–c31 (P2 small) → the look list c32–c37 → platform c38–c43 → product c50–c65. Add to the roadmap artifact
+   as an "AUDIT III" phase when Shaka says.
+-17. **Socials → RH Core Liquidity rows for PTGC / UFO (2026-10-07) — PUSHED by Shaka (`2c3d15d4c`), live look owed.** `tools/rh-socials.py` after rh-cores.py;
    probe `probes/sh-rh.js`. Live look: Socials → PTGC column → RH Core Liquidity opens the window on PTGC, Close returns to the hub; same for UFO.
 -16. **The RH Cores window (2026-10-07) — PUSHED by Shaka (`1119ec37f`), live look owed.** The live look: the Liquidity
    tile's RH on PTGC and UFO (the plate, the hero + share bar, the stacked bar, the six rows with real DexScreener logos, the links), a
@@ -1244,7 +1251,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 ## Session log
 
 - `sessions/2026-10-07.md` — the Volume window (mock v1 → built, `tools/volume-window.py`, pushed `43fb8af46`) and the RH Cores window
-  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`); the TXNS 24H item closed; HvB live look ok.
+  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`, pushed `2c3d15d4c`); Audit III (→ `2026-10-07-audit.md`); the TXNS 24H item closed; HvB live look ok.
+- `sessions/2026-10-07-audit.md` — Audit III: the merged c1–c65 list and the seven raw sweeps (L, M, P, D, C, S, E) with evidence.
 - `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
   page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,
   loads that supersede each other, the GT gate skipping aborted calls; harness; the UFO day-90 live check (real test = Oct 7).
