@@ -152,6 +152,25 @@
 .h2-phone .h2-buy .h2-bt span.h2-hr{width:calc(64*var(--u));margin:calc(5*var(--u)) 0}
 .h2-phone .h2-sw img{width:calc(36*var(--u));height:calc(36*var(--u))}
 .h2-phone .h2-sw span{font-size:max(calc(14*var(--u)),.6rem);letter-spacing:.2em}
+/* --- tap targets + focus (Audit III c28 / c29, 2026-10-07 — moved here from index.html so calculators / charts / portfolio get them) ---
+   u8: a thumb-sized hit area for the small icon controls; the glyph stays its size, only the tappable box grows to 32 px.
+   .hit = the same idea for controls whose layout must not move (tile badges, the LP icons, pills): an invisible 32×32 box centred on it. */
+.tap{min-width:32px;min-height:32px;display:inline-flex;align-items:center;justify-content:center}
+.tap-h{min-height:32px;display:inline-flex;align-items:center}
+.hit{position:relative}.hit::before{content:"";position:absolute;left:50%;top:50%;width:max(100%,32px);height:max(100%,32px);transform:translate(-50%,-50%)}
+.h2-back,.h2 .h2-addr button,.h2-tile .h2-tb>button,.h2-tile .h2-tb>a{position:relative}
+.h2-tile .h2-tb{z-index:1}   /* the badge row paints above the tile's absolute value line (which came later in the DOM and swallowed the badges' lower pixels) */
+.h2-back::before,.h2 .h2-addr button::before{content:"";position:absolute;left:50%;top:50%;width:max(100%,32px);height:max(100%,32px);transform:translate(-50%,-50%)}
+.h2-tile .h2-tb>button::before,.h2-tile .h2-tb>a::before{content:"";position:absolute;left:50%;top:50%;width:calc(100% + 6px);height:max(100%,32px);transform:translate(-50%,-50%)}   /* the badges sit ~6 px apart: 3 px each side is all a hit box can take without stealing the neighbour's taps (a real 32 needs wider spacing — a design call) */
+/* u7: focus ring for the explainer buttons and popover (keyboard users), not on tap. */
+.tap:focus-visible,.tap-h:focus-visible{outline:2px solid rgba(255,255,255,0.6);outline-offset:2px;border-radius:6px}
+/* u9: the same ring on every control a keyboard can reach. :focus-visible only — a tap or click never shows it. Dialog containers take programmatic focus and are excluded. */
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:not([role="dialog"]):focus-visible{outline:2px solid rgba(255,255,255,0.6);outline-offset:2px}
+/* the tab strips clip vertically (overflow-y-hidden), so their ring sits inside the box */
+nav button:focus-visible,nav a:focus-visible{outline-offset:-2px;border-radius:6px}
+/* c29: "Reduce motion" — the BUY shimmer, the switch hover and the skeleton pulse stop on every page that loads this file */
+@media(prefers-reduced-motion:reduce){.h2 .h2-buy::after{animation:none}.h2 .h2-buy,.h2 .h2-sw{transition:none}.h2 .h2-buy:hover,.h2 .h2-sw:hover{transform:none}.h2-tile .h2-sk{animation:none}}
+
 /* --- tab row (sticky) --- */
 /* the tab row sits on Shaka's gold band (2026-10-01, `logos/header/tabs-bg.jpg`, reference/shaka-tabs-mockup.png): the art shows at
    the two ends, a dark veil keeps the middle readable; gold hairlines top and bottom; the active tab is a glowing gold pill */

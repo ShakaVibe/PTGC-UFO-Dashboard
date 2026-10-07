@@ -15,7 +15,7 @@
   <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
   <!-- html2canvas removed 2026-09-16: never called on this page. -->
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="h2.css?v=2">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
+  <link rel="stylesheet" href="h2.css?v=3">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
@@ -24,6 +24,7 @@
     ::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
     .animate-pulse-slow{animation:pulse 1.5s ease-in-out infinite}
+    @media(prefers-reduced-motion:reduce){.animate-pulse-slow{animation:none}}   /* c29 (Audit III) */
     /* v2 header, the portfolio-only pieces (2026-10-03; h2.css has the rest): two coins, the gold→green PORTFOLIO title,
        PTGC / UFO / PLS quotes in the stat slots, the page's three buttons as glass pills */
     .h2 .h2-pfcoins{display:flex;align-items:center;flex:none}
@@ -56,7 +57,7 @@
 <body>
   <div id="root"></div>
   <!-- the v2 site header pieces (h2-header.jsx) — shared with calculators.html; Babel runs it before the block below -->
-  <script type="text/babel" data-presets="react" src="h2-header.jsx?v=2"></script>
+  <script type="text/babel" data-presets="react" src="h2-header.jsx?v=3"></script>
   <script type="text/babel" data-presets="react">
     const {useState,useEffect,useMemo}=React;
     
@@ -1093,10 +1094,10 @@
                 <div className="bg-[#111]/80 border border-white/10 rounded-xl p-4">
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="flex-1">
-                      <input value={inputAddr} onChange={e=>setInputAddr(e.target.value)} placeholder="Paste wallet address (0x...)" className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-white font-mono text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none transition-all" onKeyDown={e=>e.key==='Enter'&&addWallet()}/>
+                      <input value={inputAddr} onChange={e=>setInputAddr(e.target.value)} placeholder="Paste wallet address (0x...)" className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-white font-mono text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60 transition-all" onKeyDown={e=>e.key==='Enter'&&addWallet()}/>
                     </div>
-                    <input value={inputName} onChange={e=>setInputName(e.target.value)} placeholder="Label (optional)" className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none"/>
-                    <select value={inputGroup} onChange={e=>setInputGroup(e.target.value)} className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm focus:border-[#D9CA5D]/50 focus:outline-none">
+                    <input value={inputName} onChange={e=>setInputName(e.target.value)} placeholder="Label (optional)" className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60"/>
+                    <select value={inputGroup} onChange={e=>setInputGroup(e.target.value)} className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60">
                       <option value="Default">Default Group</option>
                       {Object.keys(groups).filter(g=>g!=='Default').map(g=><option key={g} value={g}>{g}</option>)}
                       <option value="__new">+ New Group</option>
@@ -1105,7 +1106,7 @@
                   </div>
                   {inputGroup==='__new'&&(
                     <div className="mt-3 flex gap-2">
-                      <input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="New group name..." className="flex-1 bg-black/50 border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none"/>
+                      <input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="New group name..." className="flex-1 bg-black/50 border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus-visible:outline-white/60"/>
                       <button onClick={()=>{if(newGroupName.trim()){setInputGroup(newGroupName.trim());setNewGroupName('')}}} className="px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20">Create</button>
                     </div>
                   )}
@@ -1170,15 +1171,15 @@
                     <div className="space-y-2">
                       <div>
                         <div className="text-[#D9CA5D] text-xs font-bold uppercase mb-1">PTGC Price</div>
-                        <input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(p=>({...p,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#D9CA5D]/30 rounded-lg px-3 py-2 text-[#D9CA5D] text-sm font-mono placeholder-white/20 focus:border-[#D9CA5D]/60 focus:outline-none"/>
+                        <input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(p=>({...p,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#D9CA5D]/30 rounded-lg px-3 py-2 text-[#D9CA5D] text-sm font-mono placeholder-white/20 focus:border-[#D9CA5D]/60 focus:outline-none focus-visible:outline-white/60"/>
                       </div>
                       <div>
                         <div className="text-[#7CFC00] text-xs font-bold uppercase mb-1">UFO Price</div>
-                        <input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(p=>({...p,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#7CFC00]/30 rounded-lg px-3 py-2 text-[#7CFC00] text-sm font-mono placeholder-white/20 focus:border-[#7CFC00]/60 focus:outline-none"/>
+                        <input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(p=>({...p,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#7CFC00]/30 rounded-lg px-3 py-2 text-[#7CFC00] text-sm font-mono placeholder-white/20 focus:border-[#7CFC00]/60 focus:outline-none focus-visible:outline-white/60"/>
                       </div>
                       <div>
                         <div className="text-blue-400 text-xs font-bold uppercase mb-1">PLS Price</div>
-                        <input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(p=>({...p,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(6):'0.00'} className="w-full bg-black/50 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-400 text-sm font-mono placeholder-white/20 focus:border-blue-500/60 focus:outline-none"/>
+                        <input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(p=>({...p,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(6):'0.00'} className="w-full bg-black/50 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-400 text-sm font-mono placeholder-white/20 focus:border-blue-500/60 focus:outline-none focus-visible:outline-white/60"/>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3">
@@ -1682,7 +1683,7 @@
                   <button onClick={()=>setShowLoadModal(false)} className="text-white/60 hover:text-white text-2xl">{'\u00D7'}</button>
                 </div>
                 <p className="text-white/60 text-base mb-3">Paste your portfolio code below:</p>
-                <input value={codeInput} onChange={e=>setCodeInput(e.target.value)} placeholder="GRAY-..." className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-3 text-white font-mono text-base placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none mb-3" onKeyDown={e=>e.key==='Enter'&&handleLoadCode()}/>
+                <input value={codeInput} onChange={e=>setCodeInput(e.target.value)} placeholder="GRAY-..." className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-3 text-white font-mono text-base placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60 mb-3" onKeyDown={e=>e.key==='Enter'&&handleLoadCode()}/>
                 {codeError&&<div className="text-red-400 text-base mb-3">{codeError}</div>}
                 <button onClick={handleLoadCode} className="w-full py-3 rounded-lg font-bold text-lg bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90 transition-all">Load Portfolio</button>
                 <p className="text-white/40 text-sm text-center mt-3">This will replace your current portfolio</p>
@@ -1704,7 +1705,7 @@
                 </div>
                 <div className="mb-5">
                   <div className="text-white/40 text-sm uppercase mb-1">Label</div>
-                  <input value={editWalletName} onChange={e=>setEditWalletName(e.target.value)} placeholder="Enter a name for this wallet..." className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-3 text-white text-base placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none" autoFocus onKeyDown={e=>e.key==='Enter'&&saveEditWallet()}/>
+                  <input value={editWalletName} onChange={e=>setEditWalletName(e.target.value)} placeholder="Enter a name for this wallet..." className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-3 text-white text-base placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60" autoFocus onKeyDown={e=>e.key==='Enter'&&saveEditWallet()}/>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={()=>setEditingWallet(null)} className="flex-1 py-2.5 rounded-lg font-bold text-base bg-white/10 text-white hover:bg-white/20 transition-all">Cancel</button>

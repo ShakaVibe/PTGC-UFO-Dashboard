@@ -117,6 +117,7 @@ const SiteHeaderV2=(p)=>{
   const priceUp=changeKnown&&data.change>=0;
   const chgCls=changeKnown?(priceUp?'up':'dn'):'na';
   const chgTxt=changeKnown?`${priceUp?'+':'−'}${Math.abs(data.change).toFixed(2)}%`:'—';
+  const chgTip=changeKnown?undefined:'24h change unavailable — DexScreener did not answer; the price is read from the pool.';   // c28: the dashboard's tooltip, mirrored
   const addr=`${address.slice(0,6)}...${address.slice(-4)}`;
   const dayPill=hdrDaysOld!=null
     ?<span className="h2-daypill"><H2Cal/><span className="h2-dayl">DAY</span><span className="orb h2-tref2 h2-dayn tn">{hdrDaysOld.toLocaleString('en-US')}</span></span>
@@ -130,11 +131,11 @@ const SiteHeaderV2=(p)=>{
   </>);
   const priceBlock=(cls)=>(loading?<H2Sk w="70%" h="1em" className={cls+' mx-auto opacity-60'}/>:renderPrice(data?.price,`h2-tprice tn h2-sh ${cls}`));
   const chgRow=(inline)=>(
-    <div className={`h2-chg tn ${chgCls}`}>{loading?<H2Sk w="4em" h=".9em" className="opacity-60"/>:<>{changeKnown&&<H2Tri down={!priceUp} uid={inline?'p':''}/>}{chgTxt}{inline&&<span className="h2-chgl">24h</span>}</>}</div>);
+    <div className={`h2-chg tn ${chgCls}`} title={chgTip}>{loading?<H2Sk w="4em" h=".9em" className="opacity-60"/>:<>{changeKnown&&<H2Tri down={!priceUp} uid={inline?'p':''}/>}{chgTxt}{inline&&<span className="h2-chgl">24h</span>}</>}</div>);
   const mini=(cls)=>(
     <div className={cls}>
       <img src={logo} alt=""/><span className="h2-mname h2-tref">{token}</span>
-      <span className="h2-mright">{loading?<H2Sk w={72} h={14}/>:<>{renderPrice(data?.price,'h2-mprice h2-tprice tn')}<span className={`h2-mchg tn ${chgCls}`}>{chgTxt}</span></>}</span>
+      <span className="h2-mright">{loading?<H2Sk w={72} h={14}/>:<>{renderPrice(data?.price,'h2-mprice h2-tprice tn')}<span className={`h2-mchg tn ${chgCls}`} title={chgTip}>{chgTxt}</span></>}</span>
     </div>);
   const vars={'--hsd':sc.hsd,'--hsp':sc.hsp};
   const btns=<H2Btns token={token} logo={logo} otherLogo={otherLogo} onBuy={onBuy} onSwitch={onSwitch}/>;

@@ -16,7 +16,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
   <!-- html2canvas removed 2026-09-16: never called on this page (the share card is screenshot-only). -->
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="h2.css?v=2">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
+  <link rel="stylesheet" href="h2.css?v=3">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
@@ -34,6 +34,7 @@
     .metallic-gold,.metallic-gold sub{background:linear-gradient(180deg,#FAEAA0 0%,#F0DC78 18%,#E0B843 38%,#D4AF37 55%,#A8841C 78%,#7A5C12 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}
     @keyframes growBtnPulse{0%,100%{box-shadow:0 0 14px rgba(124,252,0,0.15),0 0 22px rgba(212,175,55,0.12),inset 0 1px 0 rgba(255,255,255,0.06)}50%{box-shadow:0 0 22px rgba(124,252,0,0.4),0 0 32px rgba(212,175,55,0.25),inset 0 1px 0 rgba(255,255,255,0.12)}}
     .animate-grow-btn{animation:growBtnPulse 2.5s ease-in-out infinite}
+    @media(prefers-reduced-motion:reduce){.animate-fire,.animate-pulse-slow,.animate-grow-btn,.buy-btn::after{animation:none}.buy-btn{transition:none}.buy-btn:hover{transform:none}}   /* c29 (Audit III) */
     /* CALCULATORS PAGE SKIN (2026-10-05) — design/calculators/mock-calc-v3.html + README. His art as a FIXED plate under a 62 %
        veil (50 % was "not enough"), the title in the Socials Hub's metallic style, his buttons with his icons, the disclaimer
        cards framed. cp-* only; the calculators' own markup is untouched except the title block and the tab buttons. */
@@ -81,7 +82,7 @@
 <body>
   <div id="root"></div>
   <!-- the v2 site header (SiteHeaderV2) — shared with portfolio.html; Babel runs it before the block below -->
-  <script type="text/babel" data-presets="react" src="h2-header.jsx?v=2"></script>
+  <script type="text/babel" data-presets="react" src="h2-header.jsx?v=3"></script>
   <script type="text/babel" data-presets="react">
     const {useState,useEffect,useMemo}=React;
     /* Header design (2026-10-03): 'classic' = the sticky header + nav strip below; 'v2' = SiteHeaderV2 (h2-header.jsx), the
@@ -1472,7 +1473,7 @@
         {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{prefix}</span>}
         <input type="number" value={value} step={step} min={min}
           onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
-          className={`w-full ${prefix ? 'pl-7' : 'pl-3'} ${suffix ? 'pr-8' : 'pr-3'} py-2.5 rounded-lg bg-black/50 text-white text-base font-bold font-mono focus:outline-none transition`}
+          className={`w-full ${prefix ? 'pl-7' : 'pl-3'} ${suffix ? 'pr-8' : 'pr-3'} py-2.5 rounded-lg bg-black/50 text-white text-base font-bold font-mono focus:outline-none focus-visible:outline-white/60 transition`}
           style={{ border: `1px solid ${glowColor}0.25)` }} />
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{suffix}</span>}
       </div>
@@ -2063,7 +2064,7 @@
                                 type="number" min="0" max="100" step="1"
                                 value={v}
                                 onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) updateAllocation(row.id, n); }}
-                                className="w-full pl-2 pr-5 py-1 rounded bg-black/50 text-white text-sm font-bold focus:outline-none transition"
+                                className="w-full pl-2 pr-5 py-1 rounded bg-black/50 text-white text-sm font-bold focus:outline-none focus-visible:outline-white/60 transition"
                                 style={{ border: `1px solid ${glowColor}0.45)` }}
                               />
                               <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40 text-[10px] pointer-events-none">%</span>
@@ -3152,7 +3153,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{cfg.name} Token Amount</div>
                       <div className="relative">
                         <img src={cfg.logo} alt={cfg.name} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-6 h-6" style={{filter:`drop-shadow(0 0 4px ${glowColor}0.4))`}}/>
-                        <input type="text" inputMode="numeric" value={displayTokenAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setTokenAmount(raw)}} placeholder="Enter any amount" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="text" inputMode="numeric" value={displayTokenAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setTokenAmount(raw)}} placeholder="Enter any amount" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex items-center justify-between mt-2 ml-1">
                         {bagAmount>0&&price>0?<span className="text-white/40 text-sm font-semibold">Current value: <span className={theme.text}>{fmtDollar(bagCurrentValue)}</span></span>:<span/>}
@@ -3167,7 +3168,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{selectedPairSymbol} Target Price {pairedCurrentPrice>0&&<span className="text-white/35 normal-case tracking-normal font-normal">(current: <Price p={pairedCurrentPrice} c="text-white/50 font-semibold"/>)</span>}</div>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                        <input type="number" step="any" min="0" value={targetPairedPrice} onChange={e=>setTargetPairedPrice(e.target.value)} placeholder="Enter target price" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="number" step="any" min="0" value={targetPairedPrice} onChange={e=>setTargetPairedPrice(e.target.value)} placeholder="Enter target price" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       {pairedXNeeded>0&&<div className="text-[#7CFC00] text-sm mt-2 ml-1 font-semibold">{fmtX(pairedXNeeded.toFixed(1))} from current {selectedPairSymbol} price</div>}
                       {/* One-tap targets anchored to the CURRENT price — works for any pair
@@ -3184,7 +3185,7 @@ if(p>0)setRwdPtgcPrice(p);
                     <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">{cfg.name} X Factor</div>
                       <div className="relative">
-                        <input type="number" step="any" min="0" value={xFactor} onChange={e=>setXFactor(e.target.value)} placeholder="Enter X factor" className="w-full px-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="number" step="any" min="0" value={xFactor} onChange={e=>setXFactor(e.target.value)} placeholder="Enter X factor" className="w-full px-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 text-xl font-bold">X</span>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-3">
@@ -3291,7 +3292,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">I want my bag to be worth</div>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                        <input type="text" inputMode="numeric" value={displayGoalValue} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setGoalValue(raw)}} placeholder="Enter a dollar goal" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="text" inputMode="numeric" value={displayGoalValue} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setGoalValue(raw)}} placeholder="Enter a dollar goal" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 pb-2">
@@ -3582,7 +3583,7 @@ if(p>0)setRwdPtgcPrice(p);
                     <span className="text-white/30 text-sm font-semibold uppercase">My Bag:</span>
                     <div className="relative">
                       <img src={mCfg.logo} alt={mCfg.name} className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5"/>
-                      <input type="text" inputMode="numeric" value={displayMoonBag} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonBagAmount(raw)}} placeholder="0" className="w-44 pl-10 pr-3 py-2 rounded-lg bg-black/40 text-white text-base font-bold focus:outline-none transition placeholder:text-white/10" style={{border:`1px solid ${moonGlow}0.3)`}}/>
+                      <input type="text" inputMode="numeric" value={displayMoonBag} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonBagAmount(raw)}} placeholder="0" className="w-44 pl-10 pr-3 py-2 rounded-lg bg-black/40 text-white text-base font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10" style={{border:`1px solid ${moonGlow}0.3)`}}/>
                     </div>
                     {moonBag>0&&mPrice>0&&<span className={`text-sm font-semibold ${moonThemeText}`}>{fmtDollar(moonBagCurrent)}</span>}
                     <button onClick={loadMoonBagFromPortfolio} disabled={moonBagLoading} className={`text-sm font-semibold transition flex items-center gap-1 whitespace-nowrap ${moonBagLoading?'opacity-40 cursor-not-allowed':''} ${moonThemeText}`} style={{opacity:moonBagLoading?0.4:0.7}}>
@@ -3631,22 +3632,22 @@ if(p>0)setRwdPtgcPrice(p);
                                   {/* Dollar input */}
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-lg font-bold">$</span>
-                                    <input type="text" inputMode="numeric" value={indDirectAmt} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonDirectAmount(raw);setMoonDirectXInput('');setMoonDirectPriceInput('');setMoonDirectMcapInput('');}} placeholder="Buy amount..." className="w-36 pl-8 pr-3 py-3 rounded-lg bg-black/40 text-white text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid ${moonGlow}0.4)`}}/>
+                                    <input type="text" inputMode="numeric" value={indDirectAmt} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonDirectAmount(raw);setMoonDirectXInput('');setMoonDirectPriceInput('');setMoonDirectMcapInput('');}} placeholder="Buy amount..." className="w-36 pl-8 pr-3 py-3 rounded-lg bg-black/40 text-white text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid ${moonGlow}0.4)`}}/>
                                   </div>
                                   {/* X input */}
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">X's</span>
-                                    <input type="text" inputMode="decimal" value={directXDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonDirectXInput(raw);setMoonDirectPriceInput('');setMoonDirectMcapInput('');const xVal=parseFloat(raw)||0;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else if(raw===''){setMoonDirectAmount('');}}} onBlur={()=>{if(directImpact)setMoonDirectXInput('');}} placeholder="X's..." className="w-28 pl-10 pr-3 py-3 rounded-lg bg-black/40 text-green-400 text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid rgba(74,222,128,${moonDirectXInput?'0.6':'0.25'})`}}/>
+                                    <input type="text" inputMode="decimal" value={directXDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonDirectXInput(raw);setMoonDirectPriceInput('');setMoonDirectMcapInput('');const xVal=parseFloat(raw)||0;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else if(raw===''){setMoonDirectAmount('');}}} onBlur={()=>{if(directImpact)setMoonDirectXInput('');}} placeholder="X's..." className="w-28 pl-10 pr-3 py-3 rounded-lg bg-black/40 text-green-400 text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid rgba(74,222,128,${moonDirectXInput?'0.6':'0.25'})`}}/>
                                   </div>
                                   {/* Price input */}
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">$</span>
-                                    <input type="text" inputMode="decimal" value={directPriceDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonDirectPriceInput(raw);setMoonDirectXInput('');setMoonDirectMcapInput('');const pVal=parseFloat(raw)||0;if(pVal>0&&mPrice>0){const xVal=pVal/mPrice;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else{setMoonDirectAmount('');}}else if(raw===''){setMoonDirectAmount('');}}} onBlur={()=>{if(directImpact)setMoonDirectPriceInput('');}} placeholder="Price..." className={`w-44 pl-7 pr-3 py-3 rounded-lg bg-black/40 text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base ${moonThemeText}`} style={{border:`2px solid ${moonDirectPriceInput?moonGlow+'0.6)':moonGlow+'0.2)'}`}}/>
+                                    <input type="text" inputMode="decimal" value={directPriceDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonDirectPriceInput(raw);setMoonDirectXInput('');setMoonDirectMcapInput('');const pVal=parseFloat(raw)||0;if(pVal>0&&mPrice>0){const xVal=pVal/mPrice;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else{setMoonDirectAmount('');}}else if(raw===''){setMoonDirectAmount('');}}} onBlur={()=>{if(directImpact)setMoonDirectPriceInput('');}} placeholder="Price..." className={`w-44 pl-7 pr-3 py-3 rounded-lg bg-black/40 text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base ${moonThemeText}`} style={{border:`2px solid ${moonDirectPriceInput?moonGlow+'0.6)':moonGlow+'0.2)'}`}}/>
                                   </div>
                                   {/* Market Cap input */}
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">MC</span>
-                                    <input type="text" inputMode="numeric" value={directMcapDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonDirectMcapInput(raw);setMoonDirectXInput('');setMoonDirectPriceInput('');const mcVal=parseFloat(raw)||0;if(mcVal>0&&mCirc>0&&mPrice>0){const targetPrice=mcVal/mCirc;const xVal=targetPrice/mPrice;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else{setMoonDirectAmount('');}}else if(raw===''){setMoonDirectAmount('');}}} onBlur={()=>{if(directImpact)setMoonDirectMcapInput('');}} placeholder="Market Cap..." className="w-44 pl-10 pr-3 py-3 rounded-lg bg-black/40 text-cyan-400 text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid rgba(34,211,238,${moonDirectMcapInput?'0.6':'0.2'})`}}/>
+                                    <input type="text" inputMode="numeric" value={directMcapDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonDirectMcapInput(raw);setMoonDirectXInput('');setMoonDirectPriceInput('');const mcVal=parseFloat(raw)||0;if(mcVal>0&&mCirc>0&&mPrice>0){const targetPrice=mcVal/mCirc;const xVal=targetPrice/mPrice;if(xVal>1){const dollars=calcDollarsForDirectX(xVal,mTotalTokenLiq,mPrice);setMoonDirectAmount(String(dollars));}else{setMoonDirectAmount('');}}else if(raw===''){setMoonDirectAmount('');}}} onBlur={()=>{if(directImpact)setMoonDirectMcapInput('');}} placeholder="Market Cap..." className="w-44 pl-10 pr-3 py-3 rounded-lg bg-black/40 text-cyan-400 text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid rgba(34,211,238,${moonDirectMcapInput?'0.6':'0.2'})`}}/>
                                   </div>
                                   {/* CLEAR button */}
                                   {(moonDirectAmount||moonDirectXInput||moonDirectPriceInput||moonDirectMcapInput)&&(
@@ -3697,11 +3698,11 @@ if(p>0)setRwdPtgcPrice(p);
                           <div className="flex items-center gap-2 flex-1 justify-center flex-wrap">
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-lg font-bold">$</span>
-                              <input type="text" inputMode="numeric" value={moonApplyAllAmount?(parseFloat(moonApplyAllAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):''} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonApplyAllAmount(raw);setMoonApplyAllX('');setMoonXInputs({});setMoonPriceInputs({});if(raw){const next={};moonResultsList.forEach(r=>{if(moonReserves[r.pairAddress]&&(moonCoreLiq[r.coreSymbol]||0)>0)next[r.pairAddress]=raw;});setMoonAmounts(next);}else{setMoonAmounts({});}}} placeholder="$ each core..." className="w-36 pl-8 pr-3 py-2.5 rounded-lg bg-black/40 text-white text-lg font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-sm" style={{border:`2px solid ${moonGlow}0.4)`}}/>
+                              <input type="text" inputMode="numeric" value={moonApplyAllAmount?(parseFloat(moonApplyAllAmount)||0).toLocaleString('en-US',{maximumFractionDigits:0}):''} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonApplyAllAmount(raw);setMoonApplyAllX('');setMoonXInputs({});setMoonPriceInputs({});if(raw){const next={};moonResultsList.forEach(r=>{if(moonReserves[r.pairAddress]&&(moonCoreLiq[r.coreSymbol]||0)>0)next[r.pairAddress]=raw;});setMoonAmounts(next);}else{setMoonAmounts({});}}} placeholder="$ each core..." className="w-36 pl-8 pr-3 py-2.5 rounded-lg bg-black/40 text-white text-lg font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-sm" style={{border:`2px solid ${moonGlow}0.4)`}}/>
                             </div>
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">X's</span>
-                              <input type="text" inputMode="decimal" value={moonApplyAllX} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonApplyAllX(raw);setMoonApplyAllAmount('');setMoonXInputs({});setMoonPriceInputs({});const xVal=parseFloat(raw)||0;if(xVal>1){const next={};moonResultsList.forEach(r=>{if(moonReserves[r.pairAddress]&&(moonCoreLiq[r.coreSymbol]||0)>0&&r.corePriceUSD>0){const d=calcDollarsForCoreX(xVal,(moonCoreLiq[r.coreSymbol]||0),r.corePriceUSD);next[r.pairAddress]=String(d);}});setMoonAmounts(next);}else if(raw===''){setMoonAmounts({});}}} placeholder="X's each..." className="w-28 pl-10 pr-3 py-2.5 rounded-lg bg-black/40 text-orange-400 text-lg font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-sm" style={{border:'2px solid rgba(251,146,60,0.25)'}}/>
+                              <input type="text" inputMode="decimal" value={moonApplyAllX} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonApplyAllX(raw);setMoonApplyAllAmount('');setMoonXInputs({});setMoonPriceInputs({});const xVal=parseFloat(raw)||0;if(xVal>1){const next={};moonResultsList.forEach(r=>{if(moonReserves[r.pairAddress]&&(moonCoreLiq[r.coreSymbol]||0)>0&&r.corePriceUSD>0){const d=calcDollarsForCoreX(xVal,(moonCoreLiq[r.coreSymbol]||0),r.corePriceUSD);next[r.pairAddress]=String(d);}});setMoonAmounts(next);}else if(raw===''){setMoonAmounts({});}}} placeholder="X's each..." className="w-28 pl-10 pr-3 py-2.5 rounded-lg bg-black/40 text-orange-400 text-lg font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-sm" style={{border:'2px solid rgba(251,146,60,0.25)'}}/>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {[{v:'100000',l:'$100K'},{v:'500000',l:'$500K'},{v:'1000000',l:'$1M'},{v:'5000000',l:'$5M'},{v:'10000000',l:'$10M'},{v:'100000000',l:'$100M'}].map(p=>(
@@ -3760,17 +3761,17 @@ if(p>0)setRwdPtgcPrice(p);
                                     {/* Dollar input */}
                                     <div className="relative">
                                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-lg font-bold">$</span>
-                                      <input type="text" inputMode="numeric" value={displayVal} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonAmounts(prev=>{const next={...prev};if(raw===''){delete next[row.pairAddress];}else{next[row.pairAddress]=raw;}return next;});setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});setMoonPriceInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});setMoonApplyAllAmount('');setMoonApplyAllX('');}} placeholder="Amount..." className="w-36 pl-8 pr-3 py-3 rounded-lg bg-black/40 text-white text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid ${hasOverride?moonGlow+'0.7)':moonGlow+'0.4)'}`}}/>
+                                      <input type="text" inputMode="numeric" value={displayVal} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setMoonAmounts(prev=>{const next={...prev};if(raw===''){delete next[row.pairAddress];}else{next[row.pairAddress]=raw;}return next;});setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});setMoonPriceInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});setMoonApplyAllAmount('');setMoonApplyAllX('');}} placeholder="Amount..." className="w-36 pl-8 pr-3 py-3 rounded-lg bg-black/40 text-white text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid ${hasOverride?moonGlow+'0.7)':moonGlow+'0.4)'}`}}/>
                                     </div>
                                     {/* X input */}
                                     <div className="relative">
                                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">X's</span>
-                                      <input type="text" inputMode="decimal" value={coreXDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonXInputs(prev=>({...prev,[row.pairAddress]:raw}));setMoonPriceInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});setMoonApplyAllAmount('');setMoonApplyAllX('');const xVal=parseFloat(raw)||0;if(xVal>1&&row.coreTotalLiq>0&&row.corePriceUSD>0){const dollars=calcDollarsForCoreX(xVal,row.coreTotalLiq,row.corePriceUSD);setMoonAmounts(prev=>({...prev,[row.pairAddress]:String(dollars)}));}else if(raw===''){setMoonAmounts(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}}} onBlur={()=>{if(computedCoreX)setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} placeholder="X's..." className="w-28 pl-10 pr-3 py-3 rounded-lg bg-black/40 text-orange-400 text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid rgba(251,146,60,${userXVal?'0.6':'0.25'})`}}/>
+                                      <input type="text" inputMode="decimal" value={coreXDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonXInputs(prev=>({...prev,[row.pairAddress]:raw}));setMoonPriceInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});setMoonApplyAllAmount('');setMoonApplyAllX('');const xVal=parseFloat(raw)||0;if(xVal>1&&row.coreTotalLiq>0&&row.corePriceUSD>0){const dollars=calcDollarsForCoreX(xVal,row.coreTotalLiq,row.corePriceUSD);setMoonAmounts(prev=>({...prev,[row.pairAddress]:String(dollars)}));}else if(raw===''){setMoonAmounts(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}}} onBlur={()=>{if(computedCoreX)setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} placeholder="X's..." className="w-28 pl-10 pr-3 py-3 rounded-lg bg-black/40 text-orange-400 text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base" style={{border:`2px solid rgba(251,146,60,${userXVal?'0.6':'0.25'})`}}/>
                                     </div>
                                     {/* Price input */}
                                     <div className="relative">
                                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">$</span>
-                                      <input type="text" inputMode="decimal" value={corePriceDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonPriceInputs(prev=>({...prev,[row.pairAddress]:raw}));setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});const pVal=parseFloat(raw)||0;if(pVal>0&&row.corePriceUSD>0){const xVal=pVal/row.corePriceUSD;if(xVal>1){const dollars=calcDollarsForCoreX(xVal,row.coreTotalLiq,row.corePriceUSD);setMoonAmounts(prev=>({...prev,[row.pairAddress]:String(dollars)}));}else{setMoonAmounts(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}}else if(raw===''){setMoonAmounts(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}}} onBlur={()=>{if(computedCorePrice)setMoonPriceInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} placeholder="Price..." className={`w-44 pl-7 pr-3 py-3 rounded-lg bg-black/40 ${moonThemeText} text-xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:text-base`} style={{border:`2px solid ${userPriceVal?moonGlow+'0.6)':moonGlow+'0.2)'}`}}/>
+                                      <input type="text" inputMode="decimal" value={corePriceDisplay} onChange={e=>{const raw=e.target.value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');setMoonPriceInputs(prev=>({...prev,[row.pairAddress]:raw}));setMoonXInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});const pVal=parseFloat(raw)||0;if(pVal>0&&row.corePriceUSD>0){const xVal=pVal/row.corePriceUSD;if(xVal>1){const dollars=calcDollarsForCoreX(xVal,row.coreTotalLiq,row.corePriceUSD);setMoonAmounts(prev=>({...prev,[row.pairAddress]:String(dollars)}));}else{setMoonAmounts(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}}else if(raw===''){setMoonAmounts(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}}} onBlur={()=>{if(computedCorePrice)setMoonPriceInputs(prev=>{const next={...prev};delete next[row.pairAddress];return next;});}} placeholder="Price..." className={`w-44 pl-7 pr-3 py-3 rounded-lg bg-black/40 ${moonThemeText} text-xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:text-base`} style={{border:`2px solid ${userPriceVal?moonGlow+'0.6)':moonGlow+'0.2)'}`}}/>
                                     </div>
                                     {/* Pool weight badge */}
                                     {poolWeightPct&&<span className="text-white/15 text-xs font-semibold flex-shrink-0" title="Pool weight">{poolWeightPct}</span>}
@@ -4137,7 +4138,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">Holding Amount</div>
                       <div className="relative">
                         <img src={cfg.logo} alt={cfg.name} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-6 h-6" style={{filter:`drop-shadow(0 0 4px ${glowColor}0.4))`}}/>
-                        <input type="text" inputMode="numeric" value={displayRwdTokenAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdTokenAmount(raw)}} placeholder="Enter total held" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="text" inputMode="numeric" value={displayRwdTokenAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdTokenAmount(raw)}} placeholder="Enter total held" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex items-center justify-between mt-2 ml-1">
                         {rwdBag>0&&price>0?<span className="text-white/40 text-sm font-semibold">Value: <span className={theme.text}>{fmtDollar(rwdBag*price)}</span>{!isPTGC&&<span className="text-white/20 text-sm ml-2">(tokens in LP don't earn reflections)</span>}</span>:<span/>}
@@ -4152,7 +4153,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">Staking Amount</div>
                       <div className="relative">
                         <img src={cfg.logo} alt={cfg.name} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-6 h-6" style={{filter:`drop-shadow(0 0 4px ${glowColor}0.4))`}}/>
-                        <input type="text" inputMode="numeric" value={displayRwdStakedAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdStakedAmount(raw)}} placeholder="Enter staked amount" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="text" inputMode="numeric" value={displayRwdStakedAmount} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setRwdStakedAmount(raw)}} placeholder="Enter staked amount" className="w-full pl-12 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex items-center justify-between mt-2 ml-1">
                         {rwdStaked>0&&totalStakedPool>0?<span className="text-white/30 text-sm">Your share of staked pool: <span className="text-white/50 font-semibold">{(userShareOfStaked*100).toFixed(4)}%</span></span>:<span className="text-white/20 text-sm">Stakers earn additional rewards from {(stakerPct*100)}% fee</span>}
@@ -4170,7 +4171,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">Enter Daily Volume</div>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-xl font-bold">$</span>
-                        <input type="text" inputMode="numeric" value={displayVolume} onChange={e=>{setRwdVolSource('custom');const raw=e.target.value.replace(/[^0-9]/g,'');setRwdVolume(raw)}} placeholder="Daily volume in USD" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
+                        <input type="text" inputMode="numeric" value={displayVolume} onChange={e=>{setRwdVolSource('custom');const raw=e.target.value.replace(/[^0-9]/g,'');setRwdVolume(raw)}} placeholder="Daily volume in USD" className="w-full pl-10 pr-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/10 placeholder:font-normal placeholder:text-lg" style={{border:`3px solid ${glowColor}0.7)`}}/>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-3">
                         {[
@@ -4206,7 +4207,7 @@ if(p>0)setRwdPtgcPrice(p);
                     
                     <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${glowColor}0.1),${glowColor}0.03))`,border:`1px solid ${glowColor}0.25)`}}>
                       <div className="text-white/50 text-sm uppercase tracking-wide mb-2 font-semibold">Select Time Span</div>
-                      <select value={rwdTimeSpan} onChange={e=>setRwdTimeSpan(e.target.value)} className="w-full px-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none transition appearance-none cursor-pointer" style={{border:`3px solid ${glowColor}0.7)`,backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 16px center',backgroundSize:'20px'}}>
+                      <select value={rwdTimeSpan} onChange={e=>setRwdTimeSpan(e.target.value)} className="w-full px-4 py-4 rounded-xl bg-black/50 text-white text-2xl font-bold focus:outline-none focus-visible:outline-white/60 transition appearance-none cursor-pointer" style={{border:`3px solid ${glowColor}0.7)`,backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 16px center',backgroundSize:'20px'}}>
                         <option value="daily" style={{background:'#111'}}>Daily</option>
                         <option value="weekly" style={{background:'#111'}}>Weekly</option>
                         <option value="monthly" style={{background:'#111'}}>Monthly</option>
@@ -4691,7 +4692,7 @@ if(p>0)setRwdPtgcPrice(p);
                   <div className="flex items-center gap-4 mb-3 justify-center">
                     <div className="relative w-72">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-2xl font-bold">$</span>
-                      <input type="text" inputMode="numeric" value={displayFreshUSD} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshUSD(raw)}} placeholder="Amount" className="w-full pl-11 pr-14 py-3 rounded-xl bg-black/50 text-white text-2xl font-bold text-center focus:outline-none transition placeholder:text-white/15 placeholder:text-lg" style={{border:'2px solid rgba(255,255,255,0.3)'}}/>
+                      <input type="text" inputMode="numeric" value={displayFreshUSD} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshUSD(raw)}} placeholder="Amount" className="w-full pl-11 pr-14 py-3 rounded-xl bg-black/50 text-white text-2xl font-bold text-center focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/15 placeholder:text-lg" style={{border:'2px solid rgba(255,255,255,0.3)'}}/>
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">USD</span>
                     </div>
                     <div className="flex gap-2">
@@ -4776,14 +4777,14 @@ if(p>0)setRwdPtgcPrice(p);
                             <img src={ptgcCfg.logo} alt="PTGC" className="w-5 h-5"/>
                             <div className="relative w-44">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">$</span>
-                              <input type="text" inputMode="numeric" value={displayFreshVolPtgc} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshVolCustom(raw)}} placeholder="PTGC vol/day" className="w-full pl-7 pr-3 py-2 rounded-lg bg-black/50 text-[#D4AF37] text-base font-bold text-center focus:outline-none transition placeholder:text-white/15 placeholder:text-xs" style={{border:'1.5px solid rgba(212,175,55,0.3)'}}/>
+                              <input type="text" inputMode="numeric" value={displayFreshVolPtgc} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshVolCustom(raw)}} placeholder="PTGC vol/day" className="w-full pl-7 pr-3 py-2 rounded-lg bg-black/50 text-[#D4AF37] text-base font-bold text-center focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/15 placeholder:text-xs" style={{border:'1.5px solid rgba(212,175,55,0.3)'}}/>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <img src={ufoCfg.logo} alt="UFO" className="w-5 h-5"/>
                             <div className="relative w-44">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm font-bold">$</span>
-                              <input type="text" inputMode="numeric" value={displayFreshVolUfo} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshVolCustomUfo(raw)}} placeholder="UFO vol/day" className="w-full pl-7 pr-3 py-2 rounded-lg bg-black/50 text-[#7CFC00] text-base font-bold text-center focus:outline-none transition placeholder:text-white/15 placeholder:text-xs" style={{border:'1.5px solid rgba(124,252,0,0.3)'}}/>
+                              <input type="text" inputMode="numeric" value={displayFreshVolUfo} onChange={e=>{const raw=e.target.value.replace(/[^0-9]/g,'');setFreshVolCustomUfo(raw)}} placeholder="UFO vol/day" className="w-full pl-7 pr-3 py-2 rounded-lg bg-black/50 text-[#7CFC00] text-base font-bold text-center focus:outline-none focus-visible:outline-white/60 transition placeholder:text-white/15 placeholder:text-xs" style={{border:'1.5px solid rgba(124,252,0,0.3)'}}/>
                             </div>
                           </div>
                         </div>
@@ -4960,7 +4961,7 @@ if(p>0)setRwdPtgcPrice(p);
           onClick={onReveal}
           aria-label="."
           title=""
-          className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none"
+          className="fixed bottom-1.5 right-1.5 w-2 h-2 rounded-full z-50 focus:outline-none focus-visible:outline-white/60"
           style={{background:'#7CFC00',opacity:0.18,border:'none',padding:0,lineHeight:0}}
         />
         {/* ===== END SECRET-ACCESS ===== */}
@@ -5070,10 +5071,7 @@ if(p>0)setRwdPtgcPrice(p);
         return()=>{cancelled=true;};
       },[token,gated]);
       
-      const goBack=()=>{
-        try{localStorage.setItem('ptgc_last_token',token)}catch(e){}
-        window.location.href='./index.html';
-      };
+      const goBack=()=>navTo('dashboard');   // c9 (Audit III): the dashboard this page came from, not Home (navTo writes the handoff key)
       
       const navTo=(page)=>{
         try{localStorage.setItem('ptgc_last_token',token)}catch(e){}
