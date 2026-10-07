@@ -56,8 +56,9 @@ more (not done; a candidate). THEN BATCH 4 ("go"): the pipeline — c17 + c18 + 
 `1ec3b6cc…`, pipeline-run.mjs writes `data/pipeline-status.json`, the yml edited ON the Mac by the script because the bridge refuses
 `.github/`) — PUSHED `468c308a5` 19:41 UTC; the 20:07 run's check is scheduled (Claude). THEN BATCH 5a ("keep going"): c13 + c12 +
 c14 by `tools/audit3-p5.py` — **the Tailwind play CDN is replaced by the committed `tw.css`** (built by `npm run css`; see the rule
-in gotcha 8 / -23), the data reads revalidate instead of `?t=`, a boot shell in #root + the header-art preload — NOT pushed, commit
-line in `sessions/2026-10-07.md`; live check by Claude after the push. Live looks: ALL DONE by Claude in the browser (see below). The UFO day-90 real test: the first
+in gotcha 8 / -23), the data reads revalidate instead of `?t=`, a boot shell in #root + the header-art preload — PUSHED `685bad0b4`,
+LIVE-VERIFIED by Claude on every page. THEN BATCH 5b: c15 — 21 WebP files under new names (4.9 → 2.1 MB; 512 px token logos) +
+`tools/audit3-p5b.py` swapping the references — NOT pushed, commit line in `sessions/2026-10-07.md`. Live looks: ALL DONE by Claude in the browser (see below). The UFO day-90 real test: the first
 value-generated run after 18:39 UTC (the launch burn was 18:38:55 UTC, so the 17:13 run still printed the old d90).** Shaka's live look at
 Humans vs Bots: "loks good i think"; the Telegram wording handed to him to post. His screenshot of the old "Volume Analytics" modal
 ("still a dated look… Mock it up for me to see first") → mock v1 (`design/volume-analytics/`) → "that looks great, lets make the logo
@@ -66,7 +67,7 @@ plate (gold half PTGC / green half UFO), the lit coin at 140 px, "PTGC Volume", 
 lit, per-day averages on the windows), Today vs averages as bars with an "avg" tick, a daily volume chart and a By pool table from
 `swap-volume.json` (same `fetchSwapVolume` as HvB), the honesty line. Honest states verified (DS_DOWN → "—", file missing → Retry).
 Commit line + harness detail: `sessions/2026-10-07.md`. **The TXNS 24H item is CLOSED — nothing to fix** (the tile reads 40 = the
-chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of batch 5a + Claude's live check of every page (the CSS swap) + the 20:07 run's check;
+chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of batch 5b + Claude's live look at the plates / trophies / logos + the 20:07 pipeline run's check;
 batch 5 (speed: c12, c13, c14, c15 — needs a real-browser look); his live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
 $491K, the 4.79B headline must not move); then the live looks owed below.**
 
@@ -1146,7 +1147,12 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--23. **AUDIT III batch 5a (2026-10-07) — ON THE MAC, NOT PUSHED; commit line in `sessions/2026-10-07.md`.** c13 the play CDN →
+-24. **AUDIT III batch 5b (2026-10-07) — ON THE MAC, NOT PUSHED; commit line in `sessions/2026-10-07.md`.** c15: the 16 plates
+   + 3 trophies as WebP and `logos/ptgc|ufo/logo-512.webp` for `TOKENS.*.logo` on every page, references swapped by
+   `tools/audit3-p5b.py` (the Logos windows' download entries keep the PNG/JPG originals). Still JPG: the header set (dash-bg,
+   tabs-bg — preloaded), bg-burn, cosmic-ground; the Logos thumbnails (P-9). Live look after the push: the plates on each surface,
+   the trophies, the logos on a phone.
+-23. **AUDIT III batch 5a (2026-10-07) — PUSHED `685bad0b4`, live-verified by Claude on every page.** c13 the play CDN →
    `tw.css?v=1` on all five pages (RULE: `cd tools/harness && npm run css` after any class change, commit tw.css; bump `?v=` when
    it changes); c12 `{cache:'no-cache'}` on the repo data reads (index 12, calculators 3, ledger 6), the NH re-read paused while
    hidden; c14 the boot shell in `#root` + preload of the three header images on dashboard routes. Live check after the push:
@@ -1176,9 +1182,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    push: the live look (load speed, phone PTGC, tab band on a phone, the 24 h holders line on three surfaces, the Combined Burn card
    footer). If anything regresses: `git revert` that one commit — the script is the whole change.
 -18. **AUDIT III (2026-10-07) — c1–c65 in `sessions/2026-10-07-audit.md`, PUSHED `822e2a78e`, on the roadmap artifact (AUDIT III
-   phase).** Remaining order as batches: 5b images (c15) → 5 speed
-   (c12, c13, c14, c15) → c10 (needs a wallet test), c16, c21, c30 → the look list c32–c37 → platform c38–c43 → product c50–c65.
-   Done: c1–c8, c11, c25 (-19); c23, c24, c26, c27 (-20); c9, c28, c29, c31 (-21); c17, c18, c19, c20, c22 (-22); c12, c13, c14 (-23).
+   phase).** Batches 1–5b shipped on the day (see -19 … -24). Remaining: c10 (needs a wallet test), c16, c21, c30 → the look list
+   c32–c37 → platform c38–c43 → product c50–c65.
+   Done: c1–c8, c11, c25 (-19); c23, c24, c26, c27 (-20); c9, c28, c29, c31 (-21); c17, c18, c19, c20, c22 (-22); c12, c13, c14 (-23);
+   c15 (-24). Left: c10 (needs a wallet test), c16, c21, c30, the look list c32–c37, platform c38–c43, product c50–c65.
 -17. **Socials → RH Core Liquidity rows for PTGC / UFO (2026-10-07) — PUSHED by Shaka (`2c3d15d4c`), live look owed.** `tools/rh-socials.py` after rh-cores.py;
    probe `probes/sh-rh.js`. Live look: Socials → PTGC column → RH Core Liquidity opens the window on PTGC, Close returns to the hub; same for UFO.
 -16. **The RH Cores window (2026-10-07) — PUSHED by Shaka (`1119ec37f`), live look owed.** The live look: the Liquidity
@@ -1315,7 +1322,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 ## Session log
 
 - `sessions/2026-10-07.md` — the Volume window (mock v1 → built, `tools/volume-window.py`, pushed `43fb8af46`) and the RH Cores window
-  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`, pushed `2c3d15d4c`); Audit III (→ `2026-10-07-audit.md`, pushed `822e2a78e`, roadmap AUDIT III phase); the P1 batch c1–c8 + c11 + c25 (`tools/audit3-p1.py`, pushed `d60b83082`); batch 2 c23 + c24 + c26 + c27 (`tools/audit3-p2.py`, pushed `d8b1c6a2f`); batch 3 c9 + c31 + c28 + c29 (`tools/audit3-p3.py`, pushed `742b07829`, live-verified in the browser); batch 4 the pipeline c17 + c18 + c20 + c19 + c22 (`tools/audit3-p4.py`, pushed `468c308a5`); batch 5a c13 + c12 + c14 (`tools/audit3-p5.py`, tw.css, commit line); the TXNS 24H item closed; HvB live look ok.
+  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`, pushed `2c3d15d4c`); Audit III (→ `2026-10-07-audit.md`, pushed `822e2a78e`, roadmap AUDIT III phase); the P1 batch c1–c8 + c11 + c25 (`tools/audit3-p1.py`, pushed `d60b83082`); batch 2 c23 + c24 + c26 + c27 (`tools/audit3-p2.py`, pushed `d8b1c6a2f`); batch 3 c9 + c31 + c28 + c29 (`tools/audit3-p3.py`, pushed `742b07829`, live-verified in the browser); batch 4 the pipeline c17 + c18 + c20 + c19 + c22 (`tools/audit3-p4.py`, pushed `468c308a5`); batch 5a c13 + c12 + c14 (`tools/audit3-p5.py`, tw.css, pushed `685bad0b4`, live-verified); batch 5b c15 (21 WebP files, `tools/audit3-p5b.py`, commit line); the TXNS 24H item closed; HvB live look ok.
 - `sessions/2026-10-07-audit.md` — Audit III: the merged c1–c65 list and the seven raw sweeps (L, M, P, D, C, S, E) with evidence.
 - `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
   page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,
