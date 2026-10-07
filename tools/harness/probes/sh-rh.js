@@ -1,0 +1,3 @@
+// Socials → RH Core Liquidity rows (2026-10-07): the three columns' row titles in order, which tab is active, and the open dialog's label
+(()=>{const cols=[...document.querySelectorAll('.sh-cols>*')].map(c=>[...c.querySelectorAll('button')].map(b=>(b.querySelector('.sh-rt')||b).textContent.trim().split('\n')[0]).filter(Boolean));
+const d=document.querySelector('[role=dialog]');return JSON.stringify({rows:cols.map(c=>c.filter(t=>/RH Core|Humans|Token Allocation|Leagues|Targets|Grays/.test(t))),dialog:d?d.getAttribute('aria-label'):null,tok:(document.querySelector('.rc-hc h2')||{}).textContent||null,socialVisible:!!document.querySelector('.sh')});})()

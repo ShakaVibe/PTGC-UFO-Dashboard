@@ -37,7 +37,9 @@ Update it at the end of every session.
 **2026-10-07 (Wednesday). THE VOLUME WINDOW REBUILT — PUSHED by Shaka as `43fb8af46`, his live look owed. THEN THE RH CORES WINDOW
 REBUILT (his screenshot of the old "LP with RH Core Coins" modal → mock v1 → "make it live.") — `tools/rh-cores.py`, `RhCoresModal`,
 Richard Heart on stage as the plate, the RH liquidity with its share of all liquidity, the cores' stacked bar, six framed pair rows —
-written to the Mac, NOT pushed, NOT seen live; commit line + harness in `sessions/2026-10-07.md`.** Shaka's live look at
+PUSHED by Shaka as `1119ec37f`. THEN the Socials got "RH Core Liquidity" rows for PTGC and UFO (`tools/rh-socials.py`, level with
+the Combined row, opening the new window; the Combined row untouched) — written to the Mac, NOT pushed; commit line in
+`sessions/2026-10-07.md`. Live looks owed: the Volume ⓘ, the Liquidity RH, the two hub rows.** Shaka's live look at
 Humans vs Bots: "loks good i think"; the Telegram wording handed to him to post. His screenshot of the old "Volume Analytics" modal
 ("still a dated look… Mock it up for me to see first") → mock v1 (`design/volume-analytics/`) → "that looks great, lets make the logo
 Bigger. and then make it live." → built by `tools/volume-window.py`: the Humans vs Bots shell with the dashboard's own banner as the
@@ -45,7 +47,7 @@ plate (gold half PTGC / green half UFO), the lit coin at 140 px, "PTGC Volume", 
 lit, per-day averages on the windows), Today vs averages as bars with an "avg" tick, a daily volume chart and a By pool table from
 `swap-volume.json` (same `fetchSwapVolume` as HvB), the honesty line. Honest states verified (DS_DOWN → "—", file missing → Retry).
 Commit line + harness detail: `sessions/2026-10-07.md`. **The TXNS 24H item is CLOSED — nothing to fix** (the tile reads 40 = the
-chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of the RH window + live look at BOTH windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
+chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of the hub rows + live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
 $491K, the 4.79B headline must not move); then the live looks owed below.**
 
 ## Before that (end of 2026-10-06)
@@ -1106,7 +1108,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--16. **The RH Cores window (2026-10-07) — BUILT, on the Mac, not pushed, not seen live.** His push, then the live look: the Liquidity
+-17. **Socials → RH Core Liquidity rows for PTGC / UFO (2026-10-07) — BUILT, on the Mac, not pushed.** `tools/rh-socials.py` after rh-cores.py;
+   probe `probes/sh-rh.js`. Live look: Socials → PTGC column → RH Core Liquidity opens the window on PTGC, Close returns to the hub; same for UFO.
+-16. **The RH Cores window (2026-10-07) — PUSHED by Shaka (`1119ec37f`), live look owed.** The live look: the Liquidity
    tile's RH on PTGC and UFO (the plate, the hero + share bar, the stacked bar, the six rows with real DexScreener logos, the links), a
    phone. Build = `tools/rh-cores.py` after `tools/volume-window.py`; design `design/rh-cores/README.md`; probe `probes/rc-state.js`.
    Not built (ask): a PTGC / UFO switch inside the window; the token amounts in each pool.
@@ -1240,7 +1244,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 ## Session log
 
 - `sessions/2026-10-07.md` — the Volume window (mock v1 → built, `tools/volume-window.py`, pushed `43fb8af46`) and the RH Cores window
-  (mock v1 → built, `tools/rh-cores.py`); the TXNS 24H item closed; HvB live look ok.
+  (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`); the TXNS 24H item closed; HvB live look ok.
 - `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
   page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,
   loads that supersede each other, the GT gate skipping aborted calls; harness; the UFO day-90 live check (real test = Oct 7).
