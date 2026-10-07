@@ -16,7 +16,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
   <!-- html2canvas removed 2026-09-16: never called on this page (the share card is screenshot-only). -->
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="h2.css?v=1">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
+  <link rel="stylesheet" href="h2.css?v=2">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
   <style>
     body{font-family:'Rajdhani',sans-serif;background:#0a0a0a;min-height:100vh}
     .font-orbitron{font-family:'Orbitron',monospace}
@@ -81,8 +81,8 @@
 <body>
   <div id="root"></div>
   <!-- the v2 site header (SiteHeaderV2) — shared with portfolio.html; Babel runs it before the block below -->
-  <script type="text/babel" src="h2-header.jsx?v=1"></script>
-  <script type="text/babel">
+  <script type="text/babel" data-presets="react" src="h2-header.jsx?v=2"></script>
+  <script type="text/babel" data-presets="react">
     const {useState,useEffect,useMemo}=React;
     /* Header design (2026-10-03): 'classic' = the sticky header + nav strip below; 'v2' = SiteHeaderV2 (h2-header.jsx), the
        dashboard's art banner + gold tab band. Flip = 'v2' here, in index.html, charts.html and portfolio.html in the SAME push.
@@ -1509,7 +1509,7 @@
       };
 
       // Live data for both tokens — pre-fetched once on mount so switching is instant
-      const [allData, setAllData] = React.useState({ PTGC: null, UFO: null });
+      const [allData, setAllData] = React.useState({ PTGC: undefined, UFO: undefined });   // c8: undefined = loading, null = failed, object = data (nullable fields)
       React.useEffect(() => {
         const loadOne = async (tk) => {
           const c = TOKENS[tk];
@@ -1519,16 +1519,20 @@
               fetchBurn(c.address, c.decimals),
             ]);
             const processed = lvProcessPairs(pairs, c.address);
-            const circulating = c.totalSupply - (burn?.total || 0);
+            /* c8 (Audit III, 2026-10-07): a failed burn read used to print the UNBURNED supply (and a ~16 % high MCap) under a green LIVE
+               badge (the a6 rule for the other tabs). null = unknown → "—" and the Unavailable badge; never the catch's zeros. */
+            const burnKnown = !!(burn && burn.supply > 0);
+            const circulating = burnKnown ? c.totalSupply - burn.total : null;
+            const price = processed?.price > 0 ? processed.price : null;
             return {
-              price: processed?.price || 0,
-              totalLP: processed?.totalLiquidity || 0,
+              price,
+              totalLP: processed?.totalLiquidity > 0 ? processed.totalLiquidity : null,
               supply: circulating,
-              mcap: (processed?.price || 0) * circulating,
+              mcap: price != null && circulating != null ? price * circulating : null,
             };
           } catch (e) {
             console.error('Growth calc fetch error for ' + tk + ':', e);
-            return { price: 0, totalLP: 0, supply: 0, mcap: 0 };
+            return null;   // c8: failed, not zeros
           }
         };
         (async () => {
@@ -1537,7 +1541,8 @@
         })();
       }, []);
       const liveData = allData[growthToken];
-      const loadingLive = liveData === null;
+      const loadingLive = liveData === undefined;
+      const liveOk = !!(liveData && liveData.price != null && liveData.supply != null && liveData.totalLP != null);   // c8: every baseline known
 
       // Scenario state — initialized from per-token defaults; reset on token toggle below.
       const [lpYear0, setLpYear0]       = React.useState(GROWTH_DEFAULTS[props.cfg.name].lpYear0);
@@ -1598,9 +1603,9 @@
       const lvRatio = scenariosAreLive ? (tokenScenarios[lvScenarioKey] || 0) : 0;
 
       // Baseline values — derived from liveData (no longer user-editable)
-      const currentPrice = liveData?.price || 0;
-      const currentLP = liveData?.totalLP || 0;
-      const supply = liveData?.supply || 0;
+      const currentPrice = liveData?.price ?? NaN;   // c8: NaN prints "—" through fmt$/fmtUsers/fmtPrice, never a 0 that looks like a fact
+      const currentLP = liveData?.totalLP ?? NaN;
+      const supply = liveData?.supply ?? NaN;
 
       // ===== Format Helpers (IDENTICAL to original) =====
       const fmt$ = (v) => {
@@ -1884,10 +1889,7 @@
           <div className={`bg-[#111]/80 border ${theme.border} rounded-2xl overflow-hidden`}>
             <div className="px-6 pt-3 pb-0.5 flex items-center justify-between">
               <span className="text-white/60 text-base font-bold uppercase tracking-widest">Token</span>
-              <span className="text-white/30 text-xs font-bold uppercase tracking-widest">
-                {loadingLive ? 'Fetching live data\u2026' : 'Live'}
-                {!loadingLive && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 ml-1.5 align-middle animate-pulse"></span>}
-              </span>
+              <LiveBadge loading={loadingLive} data={liveOk} size="text-xs"/>{/* c8: three states like the other tabs — Loading / Unavailable / Live */}
             </div>
             <div className="px-5 pb-4 sm:px-6 sm:pb-5">
               {/* Token buttons */}
@@ -1926,7 +1928,7 @@
                   <div key={t.label} className="bg-black/40 border border-white/5 rounded-lg px-4 py-2.5 text-center">
                     <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">{t.label}</div>
                     <div className={`text-2xl font-bold ${t.cls}`}>
-                      {loadingLive ? <span className="text-white/30 text-sm">{'Loading\u2026'}</span> : t.val}
+                      {loadingLive ? <span className="text-white/30 text-sm">{'Loading\u2026'}</span> : t.val}{/* c8: a null baseline prints "—" via the formatters */}
                     </div>
                   </div>
                 ))}

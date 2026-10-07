@@ -275,7 +275,7 @@
   </style>
   <!-- the v2 header skin (h2-*) lives in h2.css since 2026-10-03 — shared with calculators / charts / portfolio. The
        link sits exactly where the inline block was (between the hc-* and p2-* blocks) so the cascade is unchanged. -->
-  <link rel="stylesheet" href="h2.css?v=1">
+  <link rel="stylesheet" href="h2.css?v=2">
   <style>
     /* ===== DASHBOARD PANELS v2 (2026-09-30) — the four panels under the KPI tiles (and the UFO page's
        "PTGC Burned by UFO") in the look Shaka approved in design/dashboard-panels/ (README there = every
@@ -854,7 +854,7 @@
     .p2 .p2-ctl>[role="group"]{margin-left:0!important}
     .p2 .p2-daobtns{position:relative;z-index:0}
     .p2 .p2-daobtns::before{content:'';position:absolute;left:-52px;right:-44px;top:-32px;bottom:-32px;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 55% 50%,rgba(0,0,0,.86) 0%,rgba(0,0,0,.62) 42%,rgba(0,0,0,.3) 60%,rgba(0,0,0,0) 74%)}   /* DAO Treasury: the same pool behind PTGC Buys + Ledger (Shaka) */
-    @media(max-width:639.98px){.p2 .p2-ctl{position:relative;right:auto;top:auto;flex-direction:row;justify-content:flex-end;width:100%;margin-top:8px}.p2 .p2-ctl::before{left:-20px;right:-20px;top:-14px;bottom:-14px}.p2 .p2-vghead{padding-right:0}}   /* phones: the stack would cover the title row's logo and camera — back to a row under the title */
+    @media(max-width:639.98px){.p2 .p2-ctl{position:relative;right:auto;top:auto;flex-direction:row;justify-content:flex-end;width:100%;margin-top:8px}.p2 .p2-ctl::before{left:-20px;right:-20px;top:-14px;bottom:-14px}.p2 .p2-vghead{padding-right:0}.p2 .p2-daobtns::before{left:-16px;right:-12px}}   /* c2 (Audit III): the glow's right:-44px reached past the viewport — the PTGC page scrolled sideways 11 px on every phone */   /* phones: the stack would cover the title row's logo and camera — back to a row under the title */
     .p2 .p2-vghead{position:relative;z-index:0;flex-wrap:wrap;align-items:baseline;gap:4px 12px!important;padding-right:190px;margin-top:2px}   /* figure + "from $… of volume" on one baseline (Shaka, 2026-10-01 evening: the volume of the selected window, right of the total) */
     .p2 .p2-vghead::before{content:'';position:absolute;left:-48px;right:150px;top:-30px;bottom:-22px;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 38% 50%,rgba(0,0,0,.72) 0%,rgba(0,0,0,.45) 42%,rgba(0,0,0,0) 72%)}
     .p2 .p2-vghead .p2-hl.sm{font-size:44px!important}
@@ -1192,7 +1192,7 @@
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel">
+  <script type="text/babel" data-presets="react">
     const {useState,useEffect,useMemo,useRef,useLayoutEffect}=React;
     
     /* ===================== CANONICAL ADDRESSES =====================
@@ -1679,8 +1679,10 @@
 
     // BigInt -> token float without blowing through Number's 2^53 precision.
     /* CAUTION: do NOT write 10n**12n here. Babel (which compiles this page in-browser via
-       type="text/babel") transpiles the ** operator into Math.pow(), and Math.pow throws
-       "Cannot convert a BigInt value to a number" on BigInt operands. Use a literal. */
+       type="text/babel") used to transpile the ** operator into Math.pow(), and Math.pow throws
+       "Cannot convert a BigInt value to a number" on BigInt operands. Since 2026-10-07 (Audit III c1)
+       the tag carries data-presets="react" — JSX only, no ES5 down-level, the compile is ~5× faster —
+       so ** would survive, but keep the literal: it is what the harness's compile.js checks. */
     const WEI_SCALE_1E12=1000000000000n;
     const weiToTokens=(bg)=>Number(bg/WEI_SCALE_1E12)/1e6;
 
@@ -5629,7 +5631,7 @@
           )}
           <div className={`flex flex-col sm:flex-row items-center gap-4 sm:gap-6 ${masked?'':'lg:pr-24'}`}>
             <img src={cfg.logo} alt={token} className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 object-contain"/>
-            <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button aria-label="Copy contract address" onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString()}</span></div></div>)}</div>
+            <div className="text-center sm:text-left"><div className={`font-orbitron text-2xl sm:text-3xl lg:text-4xl font-bold ${isGold?'metallic-gold':text}`}>{token}</div><div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1">{masked?<span className="text-white/30 text-xs font-mono italic">contract hidden</span>:<><span className="text-white/40 text-xs font-mono">{cfg.address.slice(0,6)}...{cfg.address.slice(-4)}</span><button aria-label="Copy contract address" onClick={handleCopy} title="Copy" className="text-white/40 hover:text-white/70 transition inline-flex items-center">{copied?<svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}</button></>}</div>{!masked&&daysOld!=null&&(<div className="mt-2 text-center sm:text-left"><div className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{daysOld.toLocaleString('en-US')}</span></div></div>)}</div>
             <div className="flex-1 text-center sm:text-right">{masked?(
               <>
                 <div className="text-white/25 font-bold text-xl sm:text-2xl lg:text-3xl tracking-widest">———</div>
@@ -5812,7 +5814,7 @@
                 {masked
                   ?<span style={{fontStyle:'italic',opacity:0.5}}>contract hidden</span>
                   :<><span>{cfg.address.slice(0,6)}{'…'}{cfg.address.slice(-4)}</span><button type="button" className="hc-copy" onClick={handleCopy} aria-label={`Copy the ${token} contract address`}>{copied?HC_DONE_ICON:HC_COPY_ICON}</button></>}
-                {!masked&&daysOld!=null&&<span className="hc-day">DAY {daysOld.toLocaleString()}</span>}
+                {!masked&&daysOld!=null&&<span className="hc-day">DAY {daysOld.toLocaleString('en-US')}</span>}
               </div>
             </div>
           </div>
@@ -6364,6 +6366,20 @@
         <div className="scroll-cue scroll-cue-r" data-on={cue.r?'1':'0'} aria-hidden="true"><span>{'\u203A'}</span></div>
       </>
     );
+    /* c3 (Audit III): the same two cues drawn for the v2 gold tab band (h2.css .h2-cue — a dark fade over the art, the chevron in the
+       accent); h2-header.jsx carries a copy for the sibling pages (gotcha 36: mirror). h2CenterActiveTab scrolls the row, never the page. */
+    const H2Cues=({cue})=>(
+      <>
+        <div className="h2-cue h2-cue-l" data-on={cue.l?'1':'0'} aria-hidden="true"><span>{'\u2039'}</span></div>
+        <div className="h2-cue h2-cue-r" data-on={cue.r?'1':'0'} aria-hidden="true"><span>{'\u203A'}</span></div>
+      </>
+    );
+    const h2CenterActiveTab=(nav)=>{
+      if(!nav)return;const el=nav.querySelector('[aria-current="page"]');if(!el)return;
+      const vis=el.offsetLeft>=nav.scrollLeft&&el.offsetLeft+el.offsetWidth<=nav.scrollLeft+nav.clientWidth;
+      if(vis)return;   // already in view — never shove a row that fits (desktop)
+      nav.scrollLeft=Math.max(0,el.offsetLeft-(nav.clientWidth-el.offsetWidth)/2);
+    };
 
     /* ===== u12: loading skeletons =====
        The dashboard used to replace EVERYTHING — header, nav, back button — with a centred
@@ -8408,7 +8424,7 @@
     /* The three period tiles + the "today vs daily growth rate" caption. p = {current,d1Ago,d7Ago,d30Ago,d90Ago}. */
     const HoldersPeriodTiles=({p,z,rgb})=>{
       const cur=p&&p.current!=null?p.current:null;
-      const chg24h=cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null;
+      const chg24h=p&&p.today!==undefined?p.today:(cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null);   // c5: the dashboard's one number when given
       const rows=[['7D',p?p.d7Ago:null,7],['30D',p?p.d30Ago:null,30],['90D',p?p.d90Ago:null,90]];
       const tileSt={borderRadius:16,position:'relative',overflow:'hidden',padding:z.tp,background:`linear-gradient(180deg,rgba(${rgb},0.10),rgba(4,7,10,0.92))`,border:`1px solid rgba(${rgb},0.35)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${rgb},0.5)`};
       return(
@@ -8433,7 +8449,7 @@
                       <div className="tabular-nums" style={{fontSize:z.tv,fontWeight:700,lineHeight:1.05,marginTop:6,color:holdCol(net),textShadow:'0 2px 10px rgba(0,0,0,0.8)'}}>{holdArrow(net)} {holdSgn(net)}</div>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,paddingTop:6,borderTop:'1px solid rgba(255,255,255,0.08)'}}>
                         <span className="tabular-nums" style={{fontSize:z.tq,fontWeight:600,color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap'}}>{r.avg>=0?'+':''}{r.avg.toFixed(1)}/day avg</span>
-                        <span className="tabular-nums" style={{fontSize:z.tq+2,fontWeight:700,whiteSpace:'nowrap',color:holdCol(r.pct)}}>{r.pct==null?'—':`${holdArrow(r.pct)} ${Math.abs(r.pct).toFixed(1)}%`}</span>
+                        <span className="tabular-nums" style={{fontSize:z.tq+2,fontWeight:700,whiteSpace:'nowrap',color:chg24h===0?'rgba(255,255,255,0.45)':holdCol(r.pct)}}>{r.pct==null?'—':chg24h===0?'— quiet today':`${holdArrow(r.pct)} ${Math.abs(r.pct).toFixed(1)}%`}</span>
                       </div>
                     </>}
                 </div>
@@ -8473,11 +8489,11 @@
       );
     };
     /* One token's panel on the combined card. d = holdersShareData[tkn] = {holders,tiers,periods} or null. */
-    const HoldersTokenPanel=({tkn,d,z,tall})=>{
+    const HoldersTokenPanel=({tkn,d,z,tall,today24})=>{
       const T=HOLD_THEME[tkn],cfg=TOKENS[tkn];
       const holders=d&&d.holders!=null?d.holders:null;
-      const p=d?d.periods:null;
-      const chg24h=p&&p.current!=null&&p.d1Ago!=null?p.current-p.d1Ago:null;
+      const p=d?(today24!==undefined?{...d.periods,today:today24}:d.periods):null;
+      const chg24h=today24!==undefined?today24:(p&&p.current!=null&&p.d1Ago!=null?p.current-p.d1Ago:null);   // c5
       const series=holdersSeries(tkn,holders,30);
       const chartW=(tall?z.W-2*z.pad:(z.W-2*z.pad-20)/2)-2*z.pp;
       return(
@@ -8536,8 +8552,8 @@
               :<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}><div>{title}<div style={{marginTop:12}}>{combined}</div></div>{brand}</div>}
             <div style={{flex:1,minHeight:0}}></div>
             <div style={{display:'flex',flexDirection:tall?'column':'row',gap:tall?18:20}}>
-              <HoldersTokenPanel tkn="PTGC" d={P} z={z} tall={tall}/>
-              <HoldersTokenPanel tkn="UFO" d={U} z={z} tall={tall}/>
+              <HoldersTokenPanel tkn="PTGC" d={P} z={z} tall={tall} today24={today24?today24.PTGC:undefined}/>
+              <HoldersTokenPanel tkn="UFO" d={U} z={z} tall={tall} today24={today24?today24.UFO:undefined}/>
             </div>
             {tall?brand:null}
           </div>
@@ -8545,7 +8561,7 @@
       );
     };
     /* Socials → Holders. data / loading / error are the Dashboard's holdersShareData state (loaded once per open, a18). */
-    const HoldersSocialModal=({data,loading,error,onRetry,onClose})=>{
+    const HoldersSocialModal=({data,loading,error,onRetry,onClose,today24})=>{
       const[shape,setShape]=useState('wide');
       const z=HOLD_SHAPES[shape];
       const controls=<SocialShapeSwitch shape={shape} setShape={setShape} ring="border-yellow-400/40" on="border-[#111]" onText="text-[#111]" offText="text-yellow-200/70 hover:text-white hover:bg-white/10" grad={HOLD_COMBO.pill} glow="rgba(200,220,80,0.6)"/>;
@@ -8560,14 +8576,15 @@
     };
     /* ⓘ Holder Analytics → 📷: one token, in its colour. Reads the same state the modal prints (holdersByPeriod,
        holders, holderTiers) — nothing is fetched for it. */
-    const HoldersSingleCard=({token,holders,holdersByPeriod,tiers,shape='wide',days=30})=>{
+    const HoldersSingleCard=({token,holders,holdersByPeriod,tiers,shape='wide',days=30,today24})=>{
       const z=HOLD1_SHAPES[shape]||HOLD1_SHAPES.wide,tall=shape==='tall';
       const T=HOLD_THEME[token]||HOLD_THEME.PTGC,cfg=TOKENS[token];
       const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
       const hp=holdersByPeriod||{};
       const cur=hp.current!=null?hp.current:(holders!=null?holders:null);
       const p={current:cur,d1Ago:hp.d1Ago!=null?hp.d1Ago:null,d7Ago:hp.d7Ago!=null?hp.d7Ago:null,d30Ago:hp.d30Ago!=null?hp.d30Ago:null,d90Ago:hp.d90Ago!=null?hp.d90Ago:null};
-      const chg24h=cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null;
+      if(today24!==undefined)p.today=today24;   // c5: the dashboard's one 24 h number
+      const chg24h=today24!==undefined?today24:(cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null);
       const thenWin=days===7?p.d7Ago:days===90?p.d90Ago:p.d30Ago;   // the window's own "then" for the headline line
       const n30=cur!=null&&thenWin!=null?cur-thenWin:null;
       const pct30=n30!=null&&thenWin>0?n30/thenWin*100:null;
@@ -8641,7 +8658,7 @@
       );
     };
     /* The ⓘ on the Holders box (both dashboards). `days` = the trend window, the old modal's 7D / 30D / 90D toggle. */
-    const HoldersSingleModal=({token,holders,holdersByPeriod,tiers,onClose})=>{
+    const HoldersSingleModal=({token,holders,holdersByPeriod,tiers,onClose,today24})=>{
       const[shape,setShape]=useState('wide');
       const[days,setDays]=useState(30);
       const z=HOLD1_SHAPES[shape];
@@ -8659,7 +8676,7 @@
       );
       return(
         <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label={`${token} holder analytics`} filename={`${token.toLowerCase()}-holders-${days}d-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
-          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={tiers} shape={shape} days={days}/>
+          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={tiers} today24={today24} shape={shape} days={days}/>
         </ShareCardModal>
       );
     };
@@ -9584,6 +9601,11 @@
       useEffect(()=>{document.documentElement.dataset.tok=token;},[token]);   // 2026-10-06: the Socials Hub title reads html[data-tok] (gold on PTGC, green on UFO)
       const[scrolled,setScrolled]=useState(false);
       const artRef=useRef(null),artRef2=useRef(null);   // desktop / phone banner — whichever is displayed
+      /* c3 (Audit III): the tab row hides its scrollbar, so on a phone nothing said Charts / Live Feed / Portfolio / Affiliates existed
+         (u8's cue lived only in the classic header). The cue fades + chevrons; the active tab is scrolled to the middle on each change. */
+      const tabRef=useRef(null);
+      const tabCue=useScrollCue(tabRef,[token,scrolled,activeTab,loading]);
+      useEffect(()=>{h2CenterActiveTab(tabRef.current);},[activeTab,token]);
       useEffect(()=>{
         const on=()=>{const a=artRef.current,b=artRef2.current;const h=(a&&a.offsetHeight)||(b&&b.offsetHeight)||300;setScrolled(window.scrollY>h-40);};
         on();window.addEventListener('scroll',on,{passive:true});
@@ -9594,7 +9616,7 @@
       const chgTip=changeKnown?undefined:'24h change unavailable — DexScreener did not answer; the price is read from the pool.';
       const addr=`${cfg.address.slice(0,6)}...${cfg.address.slice(-4)}`;
       const dayPill=hdrDaysOld!=null
-        ?<InfoTip label={`Day ${hdrDaysOld.toLocaleString()}`} className="-my-1" trigger={<span className="h2-daypill"><H2Cal/><span className="h2-dayl">DAY</span><span className="orb h2-tref2 h2-dayn tn">{hdrDaysOld.toLocaleString()}</span></span>}>{EXPLAINERS.day(token)}</InfoTip>
+        ?<InfoTip label={`Day ${hdrDaysOld.toLocaleString('en-US')}`} className="-my-1" trigger={<span className="h2-daypill"><H2Cal/><span className="h2-dayl">DAY</span><span className="orb h2-tref2 h2-dayn tn">{hdrDaysOld.toLocaleString('en-US')}</span></span>}>{EXPLAINERS.day(token)}</InfoTip>
         :(loading?<Sk w="calc(205*var(--u))" h="calc(45*var(--u))" className="rounded-full opacity-60"/>:null);
       const addrRow=(
         <div className="h2-addr tn">{addr}<button type="button" onClick={copyAddress} aria-label={copied?'Copied':'Copy contract address'} className="tap -my-2 -mx-1" style={{fontSize:'.85em'}}>{copied?'✓':<H2Copy/>}</button></div>);
@@ -9673,7 +9695,7 @@
         <div className="h2 h2-tabs" data-tok={token} style={vars}>
             {scrolled&&<div className="lg:hidden">{mini('h2-phone-mini')}</div>}
             <div className="h2-tabband">{/* the gold band with the tabs; the sticky wrapper around it is black padding (Shaka, 2026-10-01) */}
-            <nav aria-label="Dashboard sections" className="h2-tabrow">
+            <nav ref={tabRef} aria-label="Dashboard sections" className="h2-tabrow">
               {scrolled&&<div className="hidden lg:flex">{mini('h2-mini')}</div>}
               {tab('dashboard','Dashboard')}
               {tab('kpi','KPI Report')}
@@ -9685,6 +9707,7 @@
               <button type="button" onClick={onAffiliates} className="h2-tab h2-aff">Affiliates</button>
               <FreshnessBadge lastUpdate={fresh.lastUpdate} refreshing={fresh.refreshing} error={fresh.error} loading={fresh.loading} onRefresh={fresh.onRefresh} className="h2-fresh"/>
             </nav>
+            <H2Cues cue={tabCue}/>
             </div>
         </div>
       </>);
@@ -11746,7 +11769,7 @@
        prices are out or failed. The toggle on the toolbar drives it; the pill IN the image mirrors it. */
     const CombinedLeaguesModal=({open,close})=>{
       const[prices,setPrices]=useState({ptgc:0,ufo:0});
-      const[burns,setBurns]=useState({ptgc:0,ufo:0});
+      const[burns,setBurns]=useState({ptgc:null,ufo:null});   // c6: null = unknown, never 0
       const[supplyMode,setSupplyMode]=useState('start'); // 'start' (default) | 'circ'
       const[loading,setLoading]=useState(true);
       const[priceTry,setPriceTry]=useState(0);   // a18: bump to re-run the price fetch
@@ -11767,7 +11790,7 @@
             if(!pP)pP=await priceFromChain(TOKENS.PTGC.mainPair,TOKENS.PTGC.address);
             if(!uP)uP=await priceFromChain(TOKENS.UFO.mainPair,TOKENS.UFO.address);   // chain = fallback only
             setPrices({ptgc:pP,ufo:uP});
-            setBurns({ptgc:ptgcBurn?.total||0,ufo:ufoBurn?.total||0});
+            setBurns({ptgc:ptgcBurn&&ptgcBurn.supply>0?ptgcBurn.total:null,ufo:ufoBurn&&ufoBurn.supply>0?ufoBurn.total:null});   // c6
           }catch(e){
             console.error('Error fetching prices:',e);
           }
@@ -11779,7 +11802,8 @@
       const priceFailed=!loading&&(!(prices.ptgc>0)||!(prices.ufo>0));
 
       // Supply basis for the tier math: starting supply, or starting − burned when in circulating mode
-      const circ=supplyMode==='circ';
+      const burnsKnown=burns.ptgc!=null&&burns.ufo!=null;
+      const circ=supplyMode==='circ'&&burnsKnown;   // c6: the circulating basis needs both burns; unknown → the card stays on starting supply
       const ptgcBase=circ?Math.max(0,TOKENS.PTGC.totalSupply-burns.ptgc):TOKENS.PTGC.totalSupply;
       const ufoBase=circ?Math.max(0,TOKENS.UFO.totalSupply-burns.ufo):TOKENS.UFO.totalSupply;
       
@@ -11904,9 +11928,10 @@
       const now=new Date();
       const date=`${now.getMonth()+1}-${now.getDate()}-${String(now.getFullYear()).slice(-2)}`;
       const startingSupply=cfg.totalSupply;
-      const burnedQty=burn?.total||0;
-      const currentSupply=Math.max(0,startingSupply-burnedQty);
-      const circ=supplyMode==='circ';
+      const burnKnown=!!(burn&&burn.supply>0);   // c6 (Audit III): a failed burn read is "—", never "Burned 0" / circulating = starting (gotcha 20)
+      const burnedQty=burnKnown?burn.total:null;
+      const currentSupply=burnKnown?Math.max(0,startingSupply-burnedQty):null;
+      const circ=supplyMode==='circ'&&burnKnown;
       const basis=circ?currentSupply:startingSupply;
       /* a67: the same eight tiers as the Leagues card and BURN_C, on the selected basis. */
       const tiers=BURN_C.map(c=>({name:c.n,emoji:c.e,threshold:basis*tierFraction(c)}));
@@ -11914,7 +11939,7 @@
       const pc=isPTGC?'#D4AF37':'#7CFC00';
       const formatTablePrice=(val)=>{
         if(!val||isNaN(val)||val===0)return'—';
-        if(val>=1)return'$'+Math.floor(val).toLocaleString();
+        if(val>=1)return'$'+Math.floor(val).toLocaleString('en-US');
         return'$'+val.toFixed(2);
       };
       return(
@@ -11932,7 +11957,7 @@
             {/* the Starting / Circulating tiles are buttons too — clicking one picks that basis, same as the toggle (Shaka, 2026-10-04 evening) */}
             <div className="lg-tiles" role="group" aria-label="Supply basis">
               <button type="button" onClick={()=>setSupplyMode('start')} aria-pressed={!circ} aria-label="Tiers on starting supply" className={`lg-t${circ?' dim':' sel'}`}><img src={lgIcon('coins')} alt=""/><div className="l">Starting supply</div><div className="v tabular-nums">{fmt(startingSupply)}</div></button>
-              <div className="lg-t burn"><img src="logos/panels/vg-flame.webp" alt=""/><div className="l">Burned</div><div className="v tabular-nums">{fmt(burnedQty)}</div></div>
+              <div className="lg-t burn"><img src="logos/panels/vg-flame.webp" alt=""/><div className="l">Burned</div><div className="v tabular-nums">{burnKnown?fmt(burnedQty):'\u2014'}</div></div>
               <button type="button" onClick={()=>setSupplyMode('circ')} aria-pressed={circ} aria-label="Tiers on circulating supply" className={`lg-t circ${circ?' sel':' dim'}`}><img src={lgIcon('circ')} alt=""/><div className="l">Circulating supply</div><div className="v tabular-nums">{fmt(currentSupply)}</div></button>
             </div>
             <div className="lg-tb">
@@ -12461,6 +12486,10 @@
       const[showNewHolders,setShowNewHolders]=useState(false);   // Holders Details (2026-10-02): the faint dot while hidden, the button beside the ⓘ once NEW_HOLDERS_LIVE
       const[showVolSplit,setShowVolSplit]=useState(false);       // Volume Split (2026-10-06): human vs arb-bot volume — the faint dot while hidden (VOL_SPLIT_LIVE)
       const nhFile=useNewHoldersFile(NEW_HOLDERS_LIVE);          // data/new-holders.json, read only once the window is live — the Holders tile's change line comes from it then
+      /* c5 (Audit III): ONE 24 h holders number for every surface — the file's net once Holders Details is live (gotcha 40: the tile
+         already printed it), PulseScan's delta before. The KPI Report, the Holders ⓘ card and the Socials Holders card read this too. */
+      const holders24h=NEW_HOLDERS_LIVE?(nhFile?nhNet(nhFile,token,24):null):holderChange;
+      const holders24hBoth=NEW_HOLDERS_LIVE?{PTGC:nhFile?nhNet(nhFile,'PTGC',24):null,UFO:nhFile?nhNet(nhFile,'UFO',24):null}:undefined;
       const[holdersByPeriod,setHoldersByPeriod]=useState({current:null,d7Ago:null,d30Ago:null,d90Ago:null,avg7d:null,avg30d:null,avg90d:null});
       const[showXsShareModal,setShowXsShareModal]=useState(false);
       const[showBurnShareModal,setShowBurnShareModal]=useState(false);
@@ -13364,7 +13393,7 @@
                   {/* u7: the whole Day pill is the tap target for its explainer — a separate ⓘ
                       widened this block enough to push the price onto its own line at 375px. */}
                   {loading&&hdrDaysOld==null&&<div className="mt-1.5 -mb-1"><Sk w={104} h={30} className="rounded-full"/></div>}
-                  {hdrDaysOld!=null&&(<div className="mt-1.5 -mb-1"><InfoTip label={`Day ${hdrDaysOld.toLocaleString()}`} className="-my-1" trigger={<span className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{hdrDaysOld.toLocaleString()}</span><span className="text-white/35 text-[10px] leading-none ml-0.5" aria-hidden="true">{'ⓘ'}</span></span>}>{EXPLAINERS.day(token)}</InfoTip></div>)}
+                  {hdrDaysOld!=null&&(<div className="mt-1.5 -mb-1"><InfoTip label={`Day ${hdrDaysOld.toLocaleString('en-US')}`} className="-my-1" trigger={<span className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2 ${isGold?'border-[#D4AF37]/40 bg-[#D4AF37]/10':'border-[#7CFC00]/40 bg-[#7CFC00]/10'}`} style={{boxShadow:`0 0 16px -5px ${cfg.colorHex}`}}><span className="w-1.5 h-1.5 rounded-full" style={{background:cfg.colorHex,boxShadow:`0 0 6px ${cfg.colorHex}`}}></span><span className="text-white/45 text-[9px] font-bold uppercase tracking-[0.2em]">Day</span><span className={`font-orbitron text-sm font-bold leading-none tabular-nums ${isGold?'text-[#D4AF37]':'text-[#7CFC00]'}`}>{hdrDaysOld.toLocaleString('en-US')}</span><span className="text-white/35 text-[10px] leading-none ml-0.5" aria-hidden="true">{'ⓘ'}</span></span>}>{EXPLAINERS.day(token)}</InfoTip></div>)}
                 </div>
 
                 {/* hairline divider */}
@@ -13532,7 +13561,7 @@
           {activeTab==='dashboard'&&!loading&&(<>
           {/* v2: the seven KPI tiles with 30-day sparklines (KpiTilesV2); the classic strip is untouched below */}
           {hdrV2?<KpiTilesV2 token={token} data={data} loading={loading} changeKnown={changeKnown} priceUp={priceUp} changeTxt={changeTxt} changeTip={changeTip}
-            volumeByPeriod={volumeByPeriod} liqMcapRatio={liqMcapRatio} holdersByPeriod={holdersByPeriod} holders={holders} holderChange={NEW_HOLDERS_LIVE?(nhFile?nhNet(nhFile,token,24):null):holderChange}
+            volumeByPeriod={volumeByPeriod} liqMcapRatio={liqMcapRatio} holdersByPeriod={holdersByPeriod} holders={holders} holderChange={holders24h}
             tokensInLPKnown={tokensInLPKnown} tokensInLP={tokensInLP} tokensInLPPct={tokensInLPPct} txnsKnown={txnsKnown} txnChange24h={txnChange24h} burnHistoryCache={burnHistoryCache}
             openVolume={()=>setShowVolumeModal(true)} openRH={()=>setShowRHModal(true)} openHolders={()=>setShowHoldersSingleModal(true)} openNewHolders={NEW_HOLDERS_LIVE?()=>setShowNewHolders(true):null} openVolSplit={VOL_SPLIT_LIVE?()=>setShowVolSplit(true):null}/>:(<>
           {/* Top KPI strip - silver-bordered metric cards */}
@@ -14383,7 +14412,7 @@
             /* u5: the card's 7D Value Generated is `valueGen7d` — the same model object the
                Value Generated panel renders (computeValueGen, built once per render below). */
             <div className="max-w-[1264px] mx-auto px-3 sm:px-6 py-2">
-              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>gotoTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
+              <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holders24h} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>gotoTab('dashboard')} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
             </div>
           )}
           
@@ -14504,7 +14533,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-[1264px] flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holders24h} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
               </div>
             </Modal>
           )}
@@ -14521,7 +14550,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-[1264px] flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holderChange} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holders24h} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>closeModalAndReturn(setShowKPI)} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
               </div>
             </Modal>
           )}
@@ -14564,7 +14593,7 @@
           />
 
           {/* Holder Analytics — the ⓘ on the Holders box opens this token's card (HoldersSingleModal, 2026-09-26): 7D/30D/90D trend, Wide/Tall. Reads the panel's own state. */}
-          {showHoldersSingleModal&&<HoldersSingleModal token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={holderTiers} onClose={()=>closeModalAndReturn(setShowHoldersSingleModal)}/>}
+          {showHoldersSingleModal&&<HoldersSingleModal token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={holderTiers} today24={holders24h} onClose={()=>closeModalAndReturn(setShowHoldersSingleModal)}/>}
           {/* Holders Details (2026-10-02): who became / stopped being a holder. Hidden behind the faint bottom-right dot until NEW_HOLDERS_LIVE; then the button beside the ⓘ. */}
           {showNewHolders&&<NewHoldersModal token={token} price={data&&data.price>0?data.price:0} onClose={()=>setShowNewHolders(false)}/>}
           {!NEW_HOLDERS_LIVE&&activeTab==='dashboard'&&<NhDot token={token} onOpen={()=>setShowNewHolders(true)}/>}
@@ -14598,8 +14627,8 @@
             /* OB / RJ (share-card fonts) are module-level now — see the u4 block above Dashboard. */
 
             return(
-              <ShareCardModal onClose={()=>closeModalAndReturn(setShowCombinedBurnModal)} width={600} height={540} label="Combined burn stats share card" filename={`combined-burn-${new Date().toISOString().slice(0,10)}.png`}>
-                  <div id="combined-burn-card" style={{position:'relative',width:'600px',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
+              <ShareCardModal onClose={()=>closeModalAndReturn(setShowCombinedBurnModal)} width={600} height={810} screenshot label="Combined burn stats share card" filename={`combined-burn-${new Date().toISOString().slice(0,10)}.png`}>{/* c7 (Audit III): 805 px of content sat in a 540 px frame — the UFO rows and the total were cut; screenshot-only because the gradient total cannot be exported (gotcha 5). The redo is backlog -4. */}
+                  <div id="combined-burn-card" style={{position:'relative',width:'600px',minHeight:'810px',display:'flex',flexDirection:'column',borderRadius:'16px',overflow:'hidden',background:'#0a0900'}}>
                     <div style={{position:'absolute',top:'-80px',left:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(212,175,55,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',bottom:'-80px',right:'-60px',width:'300px',height:'300px',borderRadius:'50%',background:'rgba(124,252,0,0.07)',filter:'blur(50px)',pointerEvents:'none'}}/>
                     <div style={{position:'absolute',inset:0,borderRadius:'16px',border:'2px solid transparent',backgroundImage:'linear-gradient(#0a0900,#0a0900),linear-gradient(135deg,#D4AF37,#7CFC00)',backgroundOrigin:'border-box',backgroundClip:'padding-box,border-box',pointerEvents:'none'}}/>
@@ -15006,7 +15035,7 @@
           )}
           
           {/* Combined Holders Share Modal — Socials → Holders (2026-09-26 build, gotcha 31). Loader above (holdersShareData); the card draws its own SVG trend. */}
-          {showHoldersShareModal&&<HoldersSocialModal data={holdersShareData} loading={holdersShareLoading} error={holdersShareError} onRetry={()=>setHoldersShareTry(n=>n+1)} onClose={()=>closeModalAndReturn(setShowHoldersShareModal)}/>}
+          {showHoldersShareModal&&<HoldersSocialModal data={holdersShareData} loading={holdersShareLoading} error={holdersShareError} today24={holders24hBoth} onRetry={()=>setHoldersShareTry(n=>n+1)} onClose={()=>closeModalAndReturn(setShowHoldersShareModal)}/>}
           {showNhShare&&<NhShareSocial mode={showNhShare} token={token} price={data&&data.price>0?data.price:0} onClose={()=>closeModalAndReturn(setShowNhShare)}/>}
           {showHvbShare&&<HvbShareSocial mode={showHvbShare} feeRates={{PTGC:TOKENS.PTGC.feeRate||0.05,UFO:TOKENS.UFO.feeRate||0.06}} onClose={()=>closeModalAndReturn(setShowHvbShare)}/>}
           

@@ -57,19 +57,47 @@ const H2Stat=({label,value,loading,skW})=>(
 const H2_PAGES=[['dashboard','Dashboard'],['kpi','KPI Report'],['social','Socials'],['calculators','Calculators'],['charts','Charts'],['feed','Live Feed','NEW'],['portfolio','Portfolio'],['affiliates','Affiliates']];
 /* The sticky tab row: a black wrapper around the gold band (h2.css .h2-tabs). `mini` = the token · price
    line, shown when `miniOn` (the dashboard shows it once its banner has scrolled away; same here). */
-const H2TabBand=({token,vars,active,navTo,mini,miniOn})=>(
+/* c3 (Audit III, 2026-10-07): the scroll cue for the gold band — MIRRORS index.html's useScrollCue / H2Cues / h2CenterActiveTab. */
+const h2UseScrollCue=(ref,deps)=>{
+  const[cue,setCue]=React.useState({l:false,r:false});
+  React.useEffect(()=>{
+    const el=ref.current;if(!el)return;
+    const upd=()=>{const l=el.scrollLeft>2,r=el.scrollLeft+el.clientWidth<el.scrollWidth-2;setCue(c=>(c.l===l&&c.r===r)?c:{l,r});};
+    upd();el.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',upd);
+    let ro=null;if(window.ResizeObserver){ro=new ResizeObserver(upd);ro.observe(el);}
+    const t=setTimeout(upd,300);
+    return()=>{el.removeEventListener('scroll',upd);window.removeEventListener('resize',upd);if(ro)ro.disconnect();clearTimeout(t);};
+  },deps);
+  return cue;
+};
+const H2Cues=({cue})=>(<>
+  <div className="h2-cue h2-cue-l" data-on={cue.l?'1':'0'} aria-hidden="true"><span>{'\u2039'}</span></div>
+  <div className="h2-cue h2-cue-r" data-on={cue.r?'1':'0'} aria-hidden="true"><span>{'\u203A'}</span></div>
+</>);
+const h2CenterActiveTab=(nav)=>{
+  if(!nav)return;const el=nav.querySelector('[aria-current="page"]');if(!el)return;
+  const vis=el.offsetLeft>=nav.scrollLeft&&el.offsetLeft+el.offsetWidth<=nav.scrollLeft+nav.clientWidth;
+  if(vis)return;
+  nav.scrollLeft=Math.max(0,el.offsetLeft-(nav.clientWidth-el.offsetWidth)/2);
+};
+const H2TabBand=({token,vars,active,navTo,mini,miniOn})=>{
+  const tabRef=React.useRef(null);
+  const cue=h2UseScrollCue(tabRef,[token,active,miniOn]);
+  React.useEffect(()=>{h2CenterActiveTab(tabRef.current);},[active,token]);
+  return(
   <div className="h2 h2-tabs" data-tok={token} style={vars}>
     {miniOn&&mini&&<div className="lg:hidden">{mini('h2-phone-mini')}</div>}
     <div className="h2-tabband">
-      <nav aria-label="Site sections" className="h2-tabrow">
+      <nav ref={tabRef} aria-label="Site sections" className="h2-tabrow">
         {miniOn&&mini&&<div className="hidden lg:flex">{mini('h2-mini')}</div>}
         {H2_PAGES.map(([key,label,badge])=>(
           <button type="button" key={key} aria-current={active===key?'page':undefined} onClick={active===key?undefined:()=>navTo(key)} className={'h2-tab'+(key==='portfolio'?' h2-pf':key==='affiliates'?' h2-aff':'')}>
             {key==='portfolio'?<span>{label}</span>:label}{badge&&<span className="h2-new">{badge}</span>}
           </button>))}
       </nav>
+      <H2Cues cue={cue}/>
     </div>
-  </div>);
+  </div>);};
 /* The one-token page header (calculators.html, charts.html's twin): the dashboard's banner — coin,
    name, address, Day pill, price + 24h change, the three stats, BUY / SELL + SWITCH — then the band.
    Every figure is the page's own (same variables the classic header prints); `renderPrice(p,cls)` is
@@ -91,7 +119,7 @@ const SiteHeaderV2=(p)=>{
   const chgTxt=changeKnown?`${priceUp?'+':'−'}${Math.abs(data.change).toFixed(2)}%`:'—';
   const addr=`${address.slice(0,6)}...${address.slice(-4)}`;
   const dayPill=hdrDaysOld!=null
-    ?<span className="h2-daypill"><H2Cal/><span className="h2-dayl">DAY</span><span className="orb h2-tref2 h2-dayn tn">{hdrDaysOld.toLocaleString()}</span></span>
+    ?<span className="h2-daypill"><H2Cal/><span className="h2-dayl">DAY</span><span className="orb h2-tref2 h2-dayn tn">{hdrDaysOld.toLocaleString('en-US')}</span></span>
     :(loading?<H2Sk w="calc(205*var(--u))" h="calc(45*var(--u))" className="rounded-full opacity-60"/>:null);
   const addrRow=(
     <div className="h2-addr tn">{addr}<button type="button" onClick={copyAddress} aria-label={copied?'Copied':'Copy contract address'} className="-my-2 -mx-1" style={{fontSize:'.85em'}}>{copied?'✓':<H2Copy/>}</button></div>);

@@ -486,9 +486,24 @@ async function main() {
     });
   }
 
-  // Trim to last 500 snapshots
+  // c4 (Audit III, 2026-10-07): retention by TIME, not count. "Last 500 snapshots" was written for 4–5 runs a day (~100 days);
+  // at the hourly beat it was 21 days and the dashboard's 30-day sparklines (H2_DAYS) would have lost their window around Oct 20.
+  // Keep everything newer than 100 days; thin older-than-7-days points to one per hour so the files stay ~100–300 KB.
+  const KEEP_MS = 100 * 86400000, THIN_AFTER_MS = 7 * 86400000, cutoff = Date.now() - KEEP_MS;
   for (const h of [liquidityHistory, transactionHistory, tokensInLPHistory]) {
-    if (h.snapshots.length > 500) h.snapshots = h.snapshots.slice(-500);
+    const kept = [];
+    let lastHour = null;
+    for (const s of h.snapshots) {
+      const t = Date.parse(s.timestamp);
+      if (!isFinite(t) || t < cutoff) continue;
+      if (Date.now() - t > THIN_AFTER_MS) {
+        const hour = Math.floor(t / 3600000);
+        if (hour === lastHour) { kept[kept.length - 1] = s; continue; }   // keep the latest point of each hour
+        lastHour = hour;
+      }
+      kept.push(s);
+    }
+    h.snapshots = kept;
   }
 
   // Save histories

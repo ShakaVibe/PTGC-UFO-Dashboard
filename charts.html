@@ -13,7 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js" integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="h2.css?v=1">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
+<link rel="stylesheet" href="h2.css?v=2">   <!-- the v2 header skin, shared with index.html (2026-10-03) -->
 <style>
   /* v2 header (charts-only glue): the token · price line waits for the scroll, the change triangle follows the sign */
   #hdrV2:not([hidden]){display:contents}   /* no box of its own, so the band's position:sticky answers to <body>, as on the dashboard (gotcha 36) */
@@ -483,6 +483,17 @@ function h2Boot() {
   // the token · price line shows on the band once the banner has scrolled away (the dashboard's rule)
   const onScroll = () => { const a = v.querySelector('.h2-desk'), b = v.querySelector('.h2-phone'); const h = (a && a.offsetHeight) || (b && b.offsetHeight) || 300; v.classList.toggle('h2-scrolled', window.scrollY > h - 40); };
   onScroll(); window.addEventListener('scroll', onScroll, { passive: true });
+  // c3 (Audit III, 2026-10-07): the band's scroll cue + the active tab centred — the static twin of index.html's H2Cues / h2CenterActiveTab
+  const band = v.querySelector('.h2-tabband'), row = v.querySelector('.h2-tabrow');
+  if (band && row && !band.querySelector('.h2-cue')) {
+    const mk = (side, ch) => { const d = document.createElement('div'); d.className = 'h2-cue h2-cue-' + side; d.setAttribute('aria-hidden', 'true'); d.dataset.on = '0'; d.innerHTML = '<span>' + ch + '</span>'; band.appendChild(d); return d; };
+    const L = mk('l', '\u2039'), R = mk('r', '\u203A');
+    const upd = () => { L.dataset.on = row.scrollLeft > 2 ? '1' : '0'; R.dataset.on = row.scrollLeft + row.clientWidth < row.scrollWidth - 2 ? '1' : '0'; };
+    row.addEventListener('scroll', upd, { passive: true }); window.addEventListener('resize', upd);
+    const cur = row.querySelector('[aria-current="page"]');
+    if (cur) { const vis = cur.offsetLeft >= row.scrollLeft && cur.offsetLeft + cur.offsetWidth <= row.scrollLeft + row.clientWidth; if (!vis) row.scrollLeft = Math.max(0, cur.offsetLeft - (row.clientWidth - cur.offsetWidth) / 2); }
+    upd(); setTimeout(upd, 300);
+  }
 }
 function h2All(sel, fn) { const v = document.getElementById('hdrV2'); if (v) v.querySelectorAll(sel).forEach(fn); }
 function h2ApplyTheme(t, other) {
@@ -508,7 +519,7 @@ function h2ApplyValues(data) {
   h2All('.js-h2-ath', e => e.textContent = atATH ? 'AT ATH' : fmtX(xToATH));
   h2All('.js-h2-penny', e => e.textContent = abovePenny ? '\u2713' : fmtX(xToPenny));
   h2All('.js-h2-day', e => e.hidden = !(days != null));
-  h2All('.js-h2-dayn', e => e.textContent = days != null ? days.toLocaleString() : '\u2014');
+  h2All('.js-h2-dayn', e => e.textContent = days != null ? days.toLocaleString('en-US') : '\u2014');
 }
 let currentHdrToken = (() => {
   try {
