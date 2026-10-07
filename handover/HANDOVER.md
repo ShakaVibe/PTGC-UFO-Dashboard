@@ -32,8 +32,8 @@ Update it at the end of every session.
 
 **2026-10-06 (Tuesday), closed by Shaka ("lets wrap it up and call it a day"). PUSHED by him — the day ended as
 `5b955fa93` (Charts 13:21, Actions 13:40, round 11 `02323fe3f`, go-live `ae67befe3`, share card `6073ad2a5`, audit fix `5b955fa93`);
-handover pushed as `d88034fbd`; this last audit note is the only thing uncommitted. Closed by Shaka: "NOW we will call it a day.
-VERY good work today!" Nothing is half-done.**
+handover pushed as `d88034fbd`; the last handover notes (self-audit, cron fix) are the only thing uncommitted — one push, line in
+the session file. Closed by Shaka 2026-10-07 00:15 UTC ("great lets update the handover and call it a session"). Nothing is half-done.**
 
 **HUMANS VS BOTS IS LIVE (pushed 2026-10-06 evening; his live look NOT yet reported).** The Volume tile carries a bot icon (the "Classic" robot, `logos/hvb/ic-bot.svg`) right of
 its ⓘ, the Holders pattern; `VOL_SPLIT_LIVE=true`, the preview dot is gone. The window (`VolumeSplitModal`, `.vs-*`) is the version
@@ -67,10 +67,7 @@ the largest, 0xdb2ff97c… ($5,611, split buys to a single wallet 0xc4c041e7…)
 the only judgement call left, ~0.4 %. Candidate rule in the session file if he wants the list spotless. Shaka: "thats good".
 
  (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
-phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron never reached GitHub — diagnosed at close: Cloudflare's scheduler is not invoking the Worker at all (no scheduled events in 7 days, daily cron included), while the handler and the dispatch both work when triggered by hand; next = delete + re-add both cron triggers, else v8 with an external pinger (session file, end)**
-(deployed 14:00; no `workflow_dispatch` runs at 14:07 / 15:07 UTC, no scheduled event in the Worker's Events) — check Cloudflare →
-ptgcapi → Settings → Triggers (is the `7 * * * *` cron saved and enabled, is `DISPATCH_TOKEN` present) and the Logs at :07; GitHub's
-own schedule still delivers ~4 runs a day. (3) The UFO TXNS 24H tile reads ~10,000 vs ~100 real swaps a day — explained to Shaka,
+phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron — FIXED 2026-10-07 00:07 UTC.** Cloudflare's scheduler had never bound the triggers (no scheduled events in 7 days, the daily cron included) while the handler and the dispatch worked by hand; deleting both cron rows in Settings → Triggers and adding them back did it — the 00:07 `workflow_dispatch` run started on its own. The pipeline is hourly for real now; the 08:00 sync cron was re-added too. (3) The UFO TXNS 24H tile reads ~10,000 vs ~100 real swaps a day — explained to Shaka,
 awaiting his yes to fix. (4) The banner robot cannot be shrunk alone (one image) — a re-export if he wants him smaller. (5) UFO day-90
 real test 2026-10-07 after ~07:30 PDT. (6) Live looks still owed from 2026-10-04 / 10-05 (Calculators, KPI phone, KPI backgrounds).
 (7) Decision -13(c), the orphan `data` branch.
@@ -1081,6 +1078,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    body is `DashboardSkeleton`; Home uses `HomeCardSkeleton`. Both skeletons copy the real
    containers' classes so nothing moves when data lands — if you change a tile's padding or line
    height, change the skeleton too (measure with `SLOW=9000` in the harness).
+
+- **Cloudflare cron triggers can sit unbound (2026-10-06).** Both ptgcapi crons were listed in Settings → Triggers with "Next" times,
+  yet Observability showed no scheduled events in 7 days and nothing fired — the daily sync included; the handler and the dispatch
+  worked when triggered by hand (`/__scheduled?cron=7+*+*+*+*` from the editor's HTTP tab). A redeploy did NOT help. Deleting both
+  cron rows and adding them back did: the next :07 fired. Tell-tale: a "Next" time already in the past on the Triggers page.
 
 ## Next up (in order)
 
