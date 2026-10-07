@@ -11,6 +11,8 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
+- **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
+  mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **Charts page (2026-10-05 / 10-06):** the Calculators treatment (same plate, "Grays Charts") — `tools/charts-v2.py`, `cp-*` CSS in charts.html; then
   `charts-gt.py` (GeckoTerminal back-off), `charts-v3.py` (no sub-tab box, the Share badge at the right, UFO-green titles) and **`charts-fast.py` +
   `scripts/build-charts-intraday.js` → `data/charts-intraday.json` (hourly pipeline step `charts-intraday`): 24H / 7D / 14D paint from the prebuilt
@@ -28,7 +30,21 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (end of 2026-10-06)
+## Current state (2026-10-07, in progress)
+
+**2026-10-07 (Wednesday), morning. THE VOLUME WINDOW REBUILT — written to the Mac, NOT pushed, NOT seen live.** Shaka's live look at
+Humans vs Bots: "loks good i think"; the Telegram wording handed to him to post. His screenshot of the old "Volume Analytics" modal
+("still a dated look… Mock it up for me to see first") → mock v1 (`design/volume-analytics/`) → "that looks great, lets make the logo
+Bigger. and then make it live." → built by `tools/volume-window.py`: the Humans vs Bots shell with the dashboard's own banner as the
+plate (gold half PTGC / green half UFO), the lit coin at 140 px, "PTGC Volume", 7D / 30D / 90D pills, four framed period tiles (24H
+lit, per-day averages on the windows), Today vs averages as bars with an "avg" tick, a daily volume chart and a By pool table from
+`swap-volume.json` (same `fetchSwapVolume` as HvB), the honesty line. Honest states verified (DS_DOWN → "—", file missing → Retry).
+Commit line + harness detail: `sessions/2026-10-07.md`. **The TXNS 24H item is CLOSED — nothing to fix** (the tile reads 40 = the
+chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push + live look at the window (PTGC,
+UFO, the pills, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
+$491K, the 4.79B headline must not move); then the live looks owed below.**
+
+## Before that (end of 2026-10-06)
 
 **2026-10-06 (Tuesday), closed by Shaka ("lets wrap it up and call it a day"). PUSHED by him — the day ended as
 `5b955fa93` (Charts 13:21, Actions 13:40, round 11 `02323fe3f`, go-live `ae67befe3`, share card `6073ad2a5`, audit fix `5b955fa93`);
@@ -67,8 +83,8 @@ the largest, 0xdb2ff97c… ($5,611, split buys to a single wallet 0xc4c041e7…)
 the only judgement call left, ~0.4 %. Candidate rule in the session file if he wants the list spotless. Shaka: "thats good".
 
  (1) His live look at the Volume tile icon, the window, the 📷 card (PTGC / UFO / BOTH), the Socials rows, Mac +
-phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron — FIXED 2026-10-07 00:07 UTC.** Cloudflare's scheduler had never bound the triggers (no scheduled events in 7 days, the daily cron included) while the handler and the dispatch worked by hand; deleting both cron rows in Settings → Triggers and adding them back did it — the 00:07 `workflow_dispatch` run started on its own. The pipeline is hourly for real now; the 08:00 sync cron was re-added too. (3) The UFO TXNS 24H tile reads ~10,000 vs ~100 real swaps a day — explained to Shaka,
-awaiting his yes to fix. (4) The banner robot cannot be shrunk alone (one image) — a re-export if he wants him smaller. (5) UFO day-90
+phone — then the Telegram post (if the window says "Couldn't load": Actions → Data Pipeline → Run workflow → `only=swap-volume`). (2) **Worker v7's cron — FIXED 2026-10-07 00:07 UTC.** Cloudflare's scheduler had never bound the triggers (no scheduled events in 7 days, the daily cron included) while the handler and the dispatch worked by hand; deleting both cron rows in Settings → Triggers and adding them back did it — the 00:07 `workflow_dispatch` run started on its own. The pipeline is hourly for real now; the 08:00 sync cron was re-added too. (3) CLOSED 2026-10-07: the UFO TXNS 24H tile reads 40 = the chain's count; the ~10,000 was DexScreener's
+bad h24 count on one pair, passed — nothing to fix. (4) The banner robot cannot be shrunk alone (one image) — a re-export if he wants him smaller. (5) UFO day-90
 real test 2026-10-07 after ~07:30 PDT. (6) Live looks still owed from 2026-10-04 / 10-05 (Calculators, KPI phone, KPI backgrounds).
 (7) Decision -13(c), the orphan `data` branch.
 
@@ -1086,13 +1102,17 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-15. **The Volume window (2026-10-07) — BUILT, on the Mac, not pushed, not seen live.** His push, then the live look: the Volume tile's ⓘ on
+   PTGC and UFO (the big coin, the four tiles, the bars, the chart on 7D / 30D / 90D, By pool + "show all"), a phone. Build =
+   `tools/volume-window.py` on a clean index.html; design `design/volume-analytics/README.md`; probe `probes/vw-state.js`. Not built
+   (ask): a USD / TOK toggle, a 📷 share card, a 24H view with hourly bars.
 -14. **HUMANS VS BOTS (2026-10-06) — LIVE, pushed `6073ad2a5`; his live look + the Telegram post are the next steps.** Volume tile bot
    icon → `VolumeSplitModal`; the 📷 share card + the Socials rows; tile badges in the token colour. Actions → Data
    Pipeline → Run workflow → `only=swap-volume` if the live file is still schema < 3 (the window accepts any schema ≥ 1, the
    builder's first schema-3 run rebuilds 90 d in ~100 s), then his live look + the Telegram post. Owed: the TXNS 24H tile fix (his
    yes), the banner robot re-export (optional), a phone look at the card. Design + method: `design/volume-split/README.md`,
    `mock-share-v1.html`; build scripts `tools/volume-split.py` (+ the round edit scripts in `_to_delete/hvb-round*.py`, applied),
-   `tools/hvb-share.py`.
+   `tools/hvb-share.py`. The TXNS 24H tile: CLOSED 2026-10-07, nothing to fix (see Current state).
 -13. **The Actions review (2026-10-06 afternoon) — PUSHED 13:40; worker v7 DEPLOYED 14:00 but its cron has NOT fired (see Current state); one decision open.**
    (a) **Deploy worker v7** (`handover/ptgcapi-worker-v7.js`) so the pipeline really runs hourly: GitHub → Settings → Developer
    settings → Personal access tokens → Fine-grained → Generate: owner ShakaVibe, "Only select repositories" = PTGC-UFO-Dashboard,
@@ -1211,6 +1231,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
+- `sessions/2026-10-07.md` — the Volume window (mock v1 → built, `tools/volume-window.py`); the TXNS 24H item closed; HvB live look ok.
 - `sessions/2026-10-06.md` — the Charts page: the sub-tab box gone, the Share badge restyled right, UFO-green metallic titles on every
   page (`html[data-tok]`), and the load-speed deep dive: prebuilt `data/charts-intraday.json` (new hourly step), paint-then-top-up,
   loads that supersede each other, the GT gate skipping aborted calls; harness; the UFO day-90 live check (real test = Oct 7).

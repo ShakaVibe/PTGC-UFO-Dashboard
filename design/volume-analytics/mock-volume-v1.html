@@ -1,0 +1,174 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Volume window — mock v1 (PTGC / UFO · ?token=UFO · ?period=7D)</title>
+<style>
+@font-face{font-family:Orbitron;src:url(../../tools/harness/node_modules/@fontsource/orbitron/files/orbitron-latin-700-normal.woff2);font-weight:700}
+@font-face{font-family:Orbitron;src:url(../../tools/harness/node_modules/@fontsource/orbitron/files/orbitron-latin-500-normal.woff2);font-weight:500}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2);font-weight:700}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-600-normal.woff2);font-weight:600}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-500-normal.woff2);font-weight:500}
+*{box-sizing:border-box}
+html,body{margin:0;background:#0b0b0b;font-family:Rajdhani,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+/* the dashboard behind the overlay, as it is on the site */
+.page{min-height:100vh;background:#0b0b0b url(../../logos/header/dash-bg.jpg) 50% 0/1600px auto no-repeat;position:relative}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+/* ---- the window: the Humans vs Bots shell (max-w-4xl, token-colour edge, the dark halo) ---- */
+.win{--a:#E8C044;--rgb:232,192,68;--halo:255,120,20;--ring:255,190,80;position:relative;width:100%;max-width:896px;max-height:calc(100vh - 32px);overflow-y:auto;overflow-x:hidden;background:#070707;border-radius:24px;border:1px solid rgba(var(--rgb),.33);box-shadow:0 0 80px -20px rgba(var(--rgb),.4),0 30px 80px rgba(0,0,0,.8)}
+.win.ufo{--a:#9DFF3A;--rgb:124,252,0;--halo:110,255,40;--ring:140,255,60}
+.win>.glow{position:absolute;left:50%;top:-128px;width:640px;height:300px;transform:translateX(-50%);border-radius:50%;filter:blur(64px);opacity:.2;background:radial-gradient(circle,var(--a) 0%,transparent 65%);pointer-events:none}
+.win>.hair{position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(var(--rgb),.8),transparent)}
+/* header — the dashboard's own banner as the plate: the gold half for PTGC, the green half for UFO (one image, cropped) */
+.hd{position:relative;overflow:hidden;min-height:250px;padding:20px 24px 14px}
+.hd .sky{position:absolute;inset:0;background:url(../../logos/header/dash-bg.jpg) 14% 40%/auto 150% no-repeat}
+.ufo .hd .sky{background-position:90% 40%}
+.hd .veil{position:absolute;inset:0;background:radial-gradient(ellipse 46% 120% at 50% 42%,rgba(0,0,0,.42) 0%,rgba(0,0,0,.22) 55%,rgba(0,0,0,0) 100%),linear-gradient(180deg,rgba(0,0,0,.5) 0%,rgba(0,0,0,.52) 58%,rgba(7,7,7,.88) 88%,#070707 100%)}
+.x{position:absolute;right:24px;top:24px;z-index:3;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.5);color:rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+.hc{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;text-shadow:0 2px 10px rgba(0,0,0,.95),0 0 24px rgba(0,0,0,.8)}
+/* the lit coin (LgCoin) */
+.coins{display:flex;align-items:center;justify-content:center;height:104px}
+.lg-coin{--u:.5px;position:relative;width:calc(195*var(--u));height:calc(195*var(--u));flex:none}
+.lg-coin .halo{position:absolute;inset:calc(-70*var(--u));border-radius:50%;background:radial-gradient(circle,rgba(var(--halo),.22) 45%,rgba(var(--halo),.06) 60%,rgba(0,0,0,0) 72%)}
+.lg-coin .corona{position:absolute;left:calc(-162*var(--u));top:calc(-162*var(--u));width:calc(520*var(--u));height:calc(520*var(--u));max-width:none;mix-blend-mode:screen;pointer-events:none}
+.lg-coin .fl{position:absolute;left:calc(104*var(--u));top:calc(-8*var(--u));width:calc(30*var(--u));height:calc(9*var(--u));border-radius:50%;background:radial-gradient(closest-side,#fff,rgba(255,220,130,.7) 45%,rgba(255,180,60,0))}
+.lg-coin .flv{position:absolute;left:calc(118*var(--u));top:calc(-18*var(--u));width:calc(2*var(--u));height:calc(30*var(--u));background:linear-gradient(180deg,rgba(255,240,200,0),#fff 50%,rgba(255,240,200,0))}
+.lg-coin .flh{position:absolute;left:calc(100*var(--u));top:calc(-4*var(--u));width:calc(40*var(--u));height:calc(1.5*var(--u));background:linear-gradient(90deg,rgba(255,240,200,0),#fff 50%,rgba(255,240,200,0))}
+.lg-coin>img.lg{position:relative;width:100%;height:100%;border-radius:50%;filter:brightness(1.08) contrast(1.05);box-shadow:0 0 calc(10*var(--u)) calc(2*var(--u)) rgba(var(--ring),.55)}
+h2{font-family:Orbitron;font-weight:700;font-size:36px;letter-spacing:.04em;line-height:1.15;margin:8px 0 0;white-space:nowrap}
+h2 .t{color:var(--a)}h2 .w{color:#fff;margin-left:12px}
+.sub{color:rgba(255,255,255,.85);font-size:16px;font-weight:500;margin-top:4px}
+.ctl{position:relative;margin-top:26px;display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.tg{--tg:var(--rgb);display:inline-flex;height:30px;align-items:center;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:3px;backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.tg>button{font:700 10px Orbitron;letter-spacing:.14em;text-transform:uppercase;line-height:1;height:100%;padding:0 11px;border:0;border-radius:6px;color:rgba(255,255,255,.5);background:none;cursor:pointer}
+.tg>button[aria-pressed=true]{color:#fff;background:linear-gradient(180deg,rgba(var(--tg),.32),rgba(var(--tg),.14));box-shadow:inset 0 0 0 1px rgba(var(--tg),.6),inset 0 1px 0 rgba(255,255,255,.18),0 0 14px -2px rgba(var(--tg),.55);text-shadow:0 0 8px rgba(var(--tg),.55)}
+.asof{margin-left:auto;font-size:11px;color:rgba(255,255,255,.6);font-variant-numeric:tabular-nums;text-shadow:0 1px 6px rgba(0,0,0,.9)}
+/* body */
+.bd{position:relative;padding:0 24px 24px}
+.k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.55)}
+/* the four period tiles — the Leagues window's framed tiles (lg-t) in the token colour; the live 24H one glows, the windows sit quieter */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tile{position:relative;border-radius:14px;border:1.5px solid rgba(var(--rgb),.45);background:linear-gradient(180deg,rgba(var(--rgb),.10),rgba(6,7,10,.9) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);padding:12px 14px 11px;min-width:0}
+.tile.live{border-color:rgba(var(--rgb),.85);background:linear-gradient(180deg,rgba(var(--rgb),.2),rgba(6,7,10,.9) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 22px -6px rgba(var(--rgb),.6)}
+.tile .l{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.tile .l .p{font:700 11px Orbitron;letter-spacing:.2em;color:var(--a)}
+.tile .l .ic{width:22px;height:22px;object-fit:contain;opacity:.9}
+.tile .v{font-size:32px;font-weight:700;line-height:1;margin-top:9px;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tile .s{font-size:13.5px;font-weight:500;color:rgba(255,255,255,.6);margin-top:6px;white-space:nowrap}
+.tile .s b{color:#fff;font-weight:600}
+.dn{color:#FF2E3B}.up{color:#4ADE80}
+/* today vs averages — bars, not just arrows: the bar is today, the white tick is the average */
+.card{margin-top:12px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.4);padding:14px 18px 14px}
+.card .hdr{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card .hdr .t{font:700 13px Orbitron;letter-spacing:.22em;text-transform:uppercase;color:var(--a)}
+.card .hdr .c{font-size:13px;color:rgba(255,255,255,.5);font-weight:600}
+.cmp{display:grid;grid-template-columns:150px 1fr 96px;align-items:center;gap:14px;margin-top:12px}
+.cmp .n{font-size:16px;font-weight:600;color:rgba(255,255,255,.85)}
+.cmp .n small{display:block;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.5)}
+.cmp .tr{position:relative;height:12px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);overflow:visible}
+.cmp .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,rgba(var(--rgb),.55),var(--a));box-shadow:0 0 12px rgba(var(--rgb),.45)}
+.cmp .tr b{position:absolute;top:-5px;bottom:-5px;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.8);left:50%}
+.cmp .tr b::after{content:'avg';position:absolute;left:50%;top:-16px;transform:translateX(-50%);font:600 10px Rajdhani;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5)}
+.cmp .pc{font-size:22px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmp .pc .tri{font-size:14px;margin-right:4px}
+/* the chart card — his gold → blue wave under a veil (the Humans vs Bots chart) */
+.chartcard{position:relative;overflow:hidden;background:#06080d url(../../logos/hvb/wave.jpg) center 60%/cover no-repeat}
+.ufo .chartcard{background-image:url(../../logos/panels/bg-vg.jpg);background-position:center 70%}
+.chartcard::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,6,10,.78),rgba(4,6,10,.62) 40%,rgba(4,6,10,.72) 100%)}
+.chartcard>*{position:relative}
+.chart{display:block;width:100%;height:190px;margin-top:8px}
+.chart text{font:600 12px Rajdhani;fill:rgba(255,255,255,.5)}
+.key{display:flex;gap:18px;margin-top:4px}
+.key span{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;color:rgba(255,255,255,.75)}
+.key i{width:11px;height:11px;border-radius:3px;display:inline-block;background:var(--a)}
+.key i.avg{width:14px;height:0;border-top:2px dashed rgba(255,255,255,.75);border-radius:0}
+/* by pool */
+table{width:100%;border-collapse:collapse;margin-top:4px}
+th{font-size:12px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;color:rgba(255,255,255,.55);padding:9px 8px;text-align:right;white-space:nowrap}
+td{padding:9px 8px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:16px;font-weight:600;color:rgba(255,255,255,.9);border-top:1px solid rgba(255,255,255,.06)}
+th:first-child,td:first-child{text-align:left}
+td .rk{display:inline-flex;width:24px;height:24px;border-radius:50%;align-items:center;justify-content:center;font:700 10px Orbitron;color:var(--a);border:1px solid rgba(var(--rgb),.6);margin-right:10px;vertical-align:middle;background:rgba(var(--rgb),.08)}
+.mini{display:inline-flex;height:6px;width:90px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);vertical-align:middle;margin-left:10px}
+.mini i{display:block;height:100%;background:var(--a)}
+.more{text-align:center;font-size:13px;font-weight:600;color:rgba(255,255,255,.5);padding-top:10px}
+.more b{color:var(--a);font-weight:700}
+.conf{margin:14px 4px 0;font-size:12.5px;line-height:1.55;color:rgba(255,255,255,.42);text-align:center}
+.conf::before{content:"";display:block;width:120px;height:1px;margin:0 auto 12px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent)}
+@media(max-width:640px){
+  .ov{padding:0}.win{max-width:none;max-height:none;min-height:100vh;border-radius:0}
+  .hd{min-height:210px;padding:16px 16px 12px}.x{right:16px;top:16px}.coins{height:84px}.lg-coin{--u:.4px}h2{font-size:24px}.sub{font-size:13px}.ctl{margin-top:18px}
+  .bd{padding:0 16px 20px}.tiles{grid-template-columns:1fr 1fr;gap:10px}.tile .v{font-size:27px}.tile .s{font-size:12.5px}
+  .cmp{grid-template-columns:96px 1fr 78px;gap:10px}.cmp .n{font-size:14px}.cmp .pc{font-size:19px}
+  .chart{height:150px}th,td{padding:8px 6px;font-size:15px}.mini{width:48px}.nophone{display:none}
+}
+</style></head><body>
+<div class="page"></div>
+<div class="ov"><div class="win" id="win">
+  <div class="glow"></div><div class="hair"></div>
+  <div class="hd">
+    <div class="sky"></div><div class="veil"></div>
+    <div class="x">✕</div>
+    <div class="hc">
+      <div class="coins"><div class="lg-coin"><div class="halo"></div><img class="corona" id="corona" src="../../logos/header/coin-corona.webp" alt=""><div class="fl"></div><div class="flv"></div><div class="flh"></div><img class="lg" id="logo" src="../../06_PTGC_V1_transparent_bg.png" alt=""></div></div>
+      <h2><span class="t" id="tok">PTGC</span><span class="w">Volume</span></h2>
+      <div class="sub" id="sub">Trading volume across every PTGC pool on PulseChain</div>
+    </div>
+    <div class="ctl">
+      <div class="tg" id="pills"><button>7D</button><button aria-pressed="true">30D</button><button>90D</button></div>
+      <div class="asof">as of 4m ago</div>
+    </div>
+  </div>
+  <div class="bd">
+    <div class="tiles" id="tiles"></div>
+    <div class="card">
+      <div class="hdr"><span class="t">Today vs averages</span><span class="c" id="cmpc">24H volume against each window's daily average</span></div>
+      <div id="cmp"></div>
+    </div>
+    <div class="card chartcard">
+      <div class="hdr"><span class="t" id="ct">Daily volume · past 30 days</span><span class="c" id="cc">avg $36,012 / day</span></div>
+      <svg class="chart" id="chart"></svg>
+      <div class="key"><span><i></i>Volume per day</span><span><i class="avg"></i>Window average</span></div>
+    </div>
+    <div class="card">
+      <div class="hdr"><span class="t">By pool</span><span class="c" id="pc">past 30 days · 33 pools</span></div>
+      <table><thead><tr><th>Pool</th><th class="nophone">Trades</th><th>Volume</th><th>Share</th></tr></thead><tbody id="pools"></tbody></table>
+      <div class="more" id="more"></div>
+    </div>
+    <div class="conf">The four figures are DexScreener's, summed over every pair — the same numbers as the Volume tile. The daily chart and the pool table are on-chain swap volume from the hourly file (the Humans vs Bots data), so they will not match DexScreener to the dollar.</div>
+  </div>
+</div></div>
+<script>
+const Q=new URLSearchParams(location.search);const TOKEN=(Q.get('token')||'PTGC').toUpperCase();let PERIOD=Q.get('period')||'30D';
+const D={
+ PTGC:{logo:'../../06_PTGC_V1_transparent_bg.png',corona:'../../logos/header/coin-corona.webp',icon:'../../logos/panels/lp-bars-gold.webp',
+  vol:{'24H':9662,'7D':162262,'30D':1080371,'90D':3510657},poolsN:{'7D':31,'30D':33,'90D':36},
+  pools:{'7D':[["pTGC/WPLS",78163,1140],["pTGC/HEX",22056,318],["pTGC/WETH",19361,301],["pTGC/PLSX",16559,290],["pTGC/DAI",4206,92],["pTGC/ATROPA",3803,112]],
+         '30D':[["pTGC/WPLS",580224,4235],["pTGC/HEX",134219,1115],["pTGC/PLSX",126788,1009],["pTGC/WETH",121602,1057],["pTGC/DAI",16187,367],["pTGC/ATROPA",13633,417]],
+         '90D':[["pTGC/WPLS",1911000,14100],["pTGC/HEX",452000,3900],["pTGC/PLSX",410000,3400],["pTGC/WETH",398000,3500],["pTGC/DAI",52000,1100],["pTGC/ATROPA",44000,1300]]},
+  days:[["07-09",53039],["07-10",44019],["07-11",50664],["07-12",15323],["07-13",34692],["07-14",19083],["07-15",288113],["07-16",68072],["07-17",22033],["07-18",15155],["07-19",30272],["07-20",12731],["07-21",26736],["07-22",14436],["07-23",57493],["07-24",15119],["07-25",16747],["07-26",18067],["07-27",15855],["07-28",28434],["07-29",35125],["07-30",39162],["07-31",42731],["08-01",24215],["08-02",13682],["08-03",18544],["08-04",12710],["08-05",28221],["08-06",12138],["08-07",24716],["08-08",14003],["08-09",31184],["08-10",16271],["08-11",19349],["08-12",45130],["08-13",31579],["08-14",24282],["08-15",13847],["08-16",25674],["08-17",19399],["08-18",48622],["08-19",88995],["08-20",70384],["08-21",88203],["08-22",26590],["08-23",21818],["08-24",31878],["08-25",43338],["08-26",68429],["08-27",30253],["08-28",41258],["08-29",60407],["08-30",59646],["08-31",130246],["09-01",50019],["09-02",169432],["09-03",42295],["09-04",24620],["09-05",70425],["09-06",19112],["09-07",19416],["09-08",19982],["09-09",31257],["09-10",27872],["09-11",64813],["09-12",16608],["09-13",21589],["09-14",16733],["09-15",20030],["09-16",28952],["09-17",26189],["09-18",16218],["09-19",33934],["09-20",38111],["09-21",20047],["09-22",49952],["09-23",198868],["09-24",38748],["09-25",26524],["09-26",19983],["09-27",18521],["09-28",25147],["09-29",141681],["09-30",11782],["10-01",20064],["10-02",24442],["10-03",25454],["10-04",54105],["10-05",8118],["10-06",16052]]},
+ UFO:{logo:'../../07_Ufo_transparent.png',corona:'../../logos/header/coin-corona-green.webp',icon:'../../logos/panels/lp-bars-green.webp',
+  vol:{'24H':1658,'7D':54144,'30D':267008,'90D':1038864},poolsN:{'7D':19,'30D':22,'90D':24},
+  pools:{'7D':[["UFO/HEX",15803,290],["UFO/PRVX",10344,180],["UFO/WPLS",5537,96],["UFO/WETH",5251,110],["UFO/DAI",4558,70],["UFO/eHEX",4063,64]],
+         '30D':[["UFO/HEX",82715,605],["UFO/WPLS",41965,360],["UFO/PRVX",39806,413],["UFO/PLSX",25486,214],["UFO/WETH",18143,283],["INC/UFO",14518,135]],
+         '90D':[["UFO/HEX",318000,2500],["UFO/WPLS",172000,1500],["UFO/PRVX",141000,1500],["UFO/PLSX",98000,900],["UFO/WETH",72000,1100],["INC/UFO",54000,500]]},
+  days:[["07-09",3892],["07-10",47540],["07-11",7413],["07-12",8871],["07-13",5954],["07-14",9180],["07-15",25007],["07-16",7344],["07-17",7630],["07-18",15123],["07-19",6202],["07-20",5412],["07-21",6548],["07-22",2417],["07-23",6209],["07-24",6699],["07-25",5078],["07-26",11526],["07-27",4183],["07-28",8561],["07-29",19072],["07-30",39141],["07-31",20101],["08-01",14480],["08-02",11631],["08-03",14029],["08-04",7450],["08-05",15218],["08-06",8918],["08-07",14700],["08-08",10611],["08-09",7399],["08-10",18400],["08-11",10215],["08-12",9282],["08-13",19675],["08-14",3791],["08-15",9126],["08-16",5397],["08-17",4337],["08-18",33537],["08-19",17159],["08-20",9604],["08-21",19492],["08-22",15010],["08-23",4953],["08-24",6641],["08-25",15065],["08-26",18311],["08-27",18582],["08-28",56049],["08-29",10096],["08-30",9248],["08-31",10292],["09-01",2332],["09-02",25980],["09-03",8509],["09-04",16342],["09-05",6172],["09-06",3778],["09-07",3843],["09-08",6631],["09-09",9937],["09-10",5357],["09-11",8000],["09-12",3621],["09-13",3317],["09-14",4237],["09-15",6914],["09-16",16556],["09-17",7171],["09-18",7900],["09-19",3884],["09-20",5666],["09-21",6991],["09-22",16245],["09-23",13122],["09-24",2596],["09-25",4077],["09-26",4240],["09-27",4118],["09-28",5507],["09-29",62380],["09-30",4414],["10-01",7813],["10-02",1149],["10-03",12017],["10-04",18294],["10-05",9307],["10-06",2400]]}
+};
+const T=D[TOKEN];const win=document.getElementById('win');if(TOKEN==='UFO')win.classList.add('ufo');
+document.getElementById('tok').textContent=TOKEN;document.getElementById('logo').src=T.logo;document.getElementById('corona').src=T.corona;
+document.getElementById('sub').textContent=`Trading volume across every ${TOKEN} pool on PulseChain`;
+const usd=n=>'$'+Math.round(n).toLocaleString('en-US');
+const DAYS={'7D':7,'30D':30,'90D':90};const avg=p=>T.vol[p]/DAYS[p];
+const pct=(a,b)=>{const d=(a-b)/b*100;return `<span class="${d<0?'dn':'up'}"><span class="tri">${d<0?'▼':'▲'}</span>${Math.abs(d).toFixed(1)}%</span>`};
+/* tiles */
+document.getElementById('tiles').innerHTML=['24H','7D','30D','90D'].map(p=>`<div class="tile${p==='24H'?' live':''}"><div class="l"><span class="p">${p}</span><img class="ic" src="${T.icon}" alt=""></div><div class="v">${usd(T.vol[p])}</div><div class="s">${p==='24H'?pct(T.vol['24H'],avg('7D'))+' vs 7D avg':'<b>'+usd(avg(p))+'</b> / day'}</div></div>`).join('');
+/* today vs averages */
+document.getElementById('cmp').innerHTML=['7D','30D','90D'].map(p=>{const a=avg(p),r=T.vol['24H']/a,w=Math.min(r,2)/2*100;return `<div class="cmp"><div class="n">vs ${p} average<small>${usd(a)} / day</small></div><div class="tr"><i style="width:${w}%"></i><b></b></div><div class="pc">${pct(T.vol['24H'],a)}</div></div>`}).join('');
+/* chart + pools follow the pills */
+function draw(){const svg=document.getElementById('chart'),W=svg.clientWidth||848,H=svg.clientHeight||190;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const n=DAYS[PERIOD],days=T.days.slice(-n),padB=22,padT=16,max=Math.max(...days.map(d=>d[1])),gap=n>40?1.5:n>10?4:10,bw=Math.min(64,(W-gap*(n-1))/n),x0=(W-(bw*n+gap*(n-1)))/2,a=days.reduce((s,d)=>s+d[1],0)/n,ay=padT+(H-padT-padB)*(1-a/max);
+ let s='';days.forEach((d,i)=>{const h=(H-padT-padB)*d[1]/max,x=x0+i*(bw+gap),y=H-padB-h;s+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="${Math.min(3,bw/3)}" fill="rgba(${getComputedStyle(win).getPropertyValue('--rgb')},${d[1]===max?1:.78})"/>`;});
+ s+=`<line x1="0" x2="${W}" y1="${ay}" y2="${ay}" stroke="rgba(255,255,255,.75)" stroke-width="1.5" stroke-dasharray="5 5"/>`;
+ const pk=days.findIndex(d=>d[1]===max);s+=`<text x="${Math.max(34,Math.min(x0+pk*(bw+gap)+bw/2,W-60))}" y="${padT-4}" text-anchor="middle">${usd(max)}</text>`;
+ const step=n>40?15:n>10?5:1;days.forEach((d,i)=>{if(i%step===0)s+=`<text x="${Math.max(18,x0+i*(bw+gap)+bw/2)}" y="${H-5}" text-anchor="middle">${d[0].replace(/^(\d\d)-(\d\d)$/,(m,a,b)=>['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+a-1]+' '+(+b))}</text>`;});
+ document.getElementById('chart').innerHTML=s;
+ document.getElementById('ct').textContent=`Daily volume · past ${n} days`;document.getElementById('cc').textContent=`avg ${usd(a)} / day · on-chain`;
+ const ps=T.pools[PERIOD],tot=T.vol[PERIOD];document.getElementById('pools').innerHTML=ps.map((p,i)=>`<tr><td><span class="rk">${i+1}</span>${p[0]}</td><td class="nophone">${p[2].toLocaleString()}</td><td>${usd(p[1])}</td><td>${(p[1]/tot*100).toFixed(1)}%<span class="mini"><i style="width:${p[1]/ps[0][1]*100}%"></i></span></td></tr>`).join('');
+ document.getElementById('pc').textContent=`past ${n} days · ${T.poolsN[PERIOD]} pools`;document.getElementById('more').innerHTML=`and <b>${T.poolsN[PERIOD]-ps.length} more pools</b> — show all`;
+ [...document.querySelectorAll('#pills button')].forEach(b=>b.setAttribute('aria-pressed',b.textContent===PERIOD));}
+document.querySelectorAll('#pills button').forEach(b=>b.onclick=()=>{PERIOD=b.textContent;draw();});draw();addEventListener('resize',draw);
+</script></body></html>
