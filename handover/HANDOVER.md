@@ -35,7 +35,7 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (2026-10-07, in progress)
+## Current state (end of 2026-10-07)
 
 **2026-10-07 (Wednesday). THE VOLUME WINDOW REBUILT — PUSHED by Shaka as `43fb8af46`, his live look owed. THEN THE RH CORES WINDOW
 REBUILT (his screenshot of the old "LP with RH Core Coins" modal → mock v1 → "make it live.") — `tools/rh-cores.py`, `RhCoresModal`,
@@ -63,8 +63,9 @@ LIVE-VERIFIED by Claude on every page. THEN BATCH 5b: c15 — 21 WebP files unde
 per a14; Shaka asked twice, the distinction explained. **The 20:07 run on the batch-4 runner:** `data/pipeline-status.json` live — 9 ok,
 3 skipped, 1 failed (pair-volume: the outage, named), value-generated last; `PTGC.ath` 0.00132623 written. THEN BATCH 6 ("keep
 working"): c30 + the Liquidity "chain · core pools only" note + the calculators "$0" cap — **includes the URGENT fix for the Leagues
-window not scrolling on phones since c13 (M-11)** — `tools/audit3-p6.py`, tw.css `?v=2` — NOT pushed, commit line in
-`sessions/2026-10-07.md`. Live looks: ALL DONE by Claude in the browser (see below). The UFO day-90 real test: the first
+window not scrolling on phones since c13 (M-11)** — PUSHED `7cfa416d8` 20:29 UTC, live-verified. **DAY CLOSED by Shaka ~20:35 UTC**
+("so should we wrap up?") with DexScreener's API still empty (he reproduced it: `search?q=SOL` → `pairs:[]`); the dashboard
+repopulates by itself when it returns. 28 of 65 audit items shipped in six pushes; only the handover notes are uncommitted. Live looks: ALL DONE by Claude in the browser (see below). The UFO day-90 real test: the first
 value-generated run after 18:39 UTC (the launch burn was 18:38:55 UTC, so the 17:13 run still printed the old d90).** Shaka's live look at
 Humans vs Bots: "loks good i think"; the Telegram wording handed to him to post. His screenshot of the old "Volume Analytics" modal
 ("still a dated look… Mock it up for me to see first") → mock v1 (`design/volume-analytics/`) → "that looks great, lets make the logo
@@ -73,7 +74,9 @@ plate (gold half PTGC / green half UFO), the lit coin at 140 px, "PTGC Volume", 
 lit, per-day averages on the windows), Today vs averages as bars with an "avg" tick, a daily volume chart and a By pool table from
 `swap-volume.json` (same `fetchSwapVolume` as HvB), the honesty line. Honest states verified (DS_DOWN → "—", file missing → Retry).
 Commit line + harness detail: `sessions/2026-10-07.md`. **The TXNS 24H item is CLOSED — nothing to fix** (the tile reads 40 = the
-chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT: his push of batch 6 (the Leagues scroll fix) + Claude's live look; DexScreener's recovery (a check is scheduled);
+chain's 39; yesterday's 10,761 was DexScreener's bad h24 count on one pair, passed). **NEXT (a fresh session): confirm DexScreener came back (numbers on the tiles, pair-volume green on the next hourly run); then
+c16 (the small kpi-history file — also lets lv-snapshot go hourly), c21 (the orphan data branch), c10 (needs his wallet test), the
+look list c32–c37 with mock-ups, and the product ideas c50–c65 for him to pick from;
 batch 5 (speed: c12, c13, c14, c15 — needs a real-browser look); his live look at both windows (the Volume ⓘ and the Liquidity RH on PTGC and UFO, the hub rows, phone); the UFO day-90 real test after the first pipeline run past ~14:30 UTC (the UFO 90D burn box must drop from
 $491K, the 4.79B headline must not move); then the live looks owed below.**
 
@@ -1157,7 +1160,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--25. **AUDIT III batch 6 (2026-10-07) — ON THE MAC, NOT PUSHED; commit line in `sessions/2026-10-07.md`.** c30 (M-4, M-8, M-9,
+-25. **AUDIT III batch 6 (2026-10-07) — PUSHED `7cfa416d8`, live-verified (the Leagues window scrolls at 375).** c30 (M-4, M-8, M-9,
    M-10, M-11, M-12 colours, M-13, M-16) + the Liquidity tile's "chain · core pools only" line when DexScreener is out + the
    calculators Market Cap "—". **M-11 is urgent: the Leagues window stopped scrolling on phones when c13 put tw.css ahead of the
    inline styles.** tw.css `?v=2`. Not done from c30: the deck label sizes (M-12's 8–9 px — his layout), M-14 / M-15 (product).
