@@ -11718,7 +11718,7 @@
         <>
           {/* the controls, one centred row over the cards (2026-10-05) */}
           <div className="flex justify-center items-center gap-3 mb-4">
-          {/* no 📷 here since 2026-10-05 (Shaka: "they can screen shot the images"); the 1200×675 share image is still what the Socials → Combined KPI Report row opens */}
+          {/* no 📷 here since 2026-10-05 (Shaka: "they can screen shot the images"); since 2026-10-08 the Socials → Combined KPI Report row opens these same cards too — nothing opens the 1200×675 TwitterCard any more */}
           {!showBoth?(
             <button type="button" onClick={()=>{loadOtherToken();setShowBoth(true);}} aria-label={`Add the ${otherToken} card`} className={`kp-btn tap-h ${otherToken==='PTGC'?'gold':''}`}>
               <img src={otherCfg.logo} alt=""/><span>ADD {otherToken}</span>
@@ -14550,8 +14550,11 @@
           )}
           
           
-          {/* Combined KPI Report (Socials → Combined): both tokens, straight into the share image. Deleted by accident in
-              42f244912 (2026-09-29) — the row set showCombinedKPI and nothing read it; restored 2026-10-05. */}
+          {/* Combined KPI Report (Socials → Combined): both tokens' KpiCardV2 side by side — the same cards as the menu's
+              KPI Report with the other token added. Deleted by accident in 42f244912 (2026-09-29) — the row set
+              showCombinedKPI and nothing read it; restored 2026-10-05. Until 2026-10-08 it passed startInTwitterMode, which
+              mounted the new cards and then flipped to the 2025 TwitterCard share image once UFO's data landed — the "old
+              look flashes up" bug; the flag is gone, the share-image branch in KPIContent is now unreachable. */}
           {showCombinedKPI&&(
             <Modal className="z-50 flex items-center justify-center p-4 overflow-auto" onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} label="Combined KPI report">
               <div className="absolute inset-0 bg-black/85 backdrop-blur-md"></div>
@@ -14562,7 +14565,7 @@
                 ✕
               </button>
               <div className="relative z-10 w-full max-w-[1264px] flex flex-col items-center gap-3" onClick={e=>e.stopPropagation()}>
-                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holders24h} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} startInTwitterMode={true} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
+                <KPIContent token={token} cfg={cfg} data={data} burn={burn} burnPeriods={burnPeriods} holders={holdersByPeriod?.current??holders} holderChange={holders24h} pls={pls} burnHistoryCache={burnHistoryCache} onClose={()=>{setShowCombinedKPI(false);if(socialReturn){gotoTab('social');setSocialReturn(false)}}} startWithBoth={true} volumeByPeriod={volumeByPeriod} valueGen7d={valueGen7d} vgPrices={vgPricesNow}/>
               </div>
             </Modal>
           )}

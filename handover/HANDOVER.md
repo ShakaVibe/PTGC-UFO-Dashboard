@@ -24,7 +24,7 @@ Update it at the end of every session.
   file at once, live GeckoTerminal only tops up; a new load supersedes the one in flight.** Every page's metallic "Grays …" / "Socials Hub" title turns
   UFO green via `html[data-tok]` (stamped by the headers).
 - **Calculators page (2026-10-05):** his art as the plate + "Grays Calculators" title + his icon buttons + framed disclaimers — `tools/calc-v2.py` (`cp-*` CSS in calculators.html), assets `logos/calculators/`, decisions `design/calculators/README.md`.
-- **KPI Report tab (2026-10-05):** `KpiCardV2` (`.kp-*`, container queries) — assets `logos/kpi/`, build script `tools/kpi-v2.py`, mock-up + every decision `design/kpi/README.md`. The 📷 share image (`TwitterCard`) is still the old look.
+- **KPI Report tab (2026-10-05):** `KpiCardV2` (`.kp-*`, container queries) — assets `logos/kpi/`, build script `tools/kpi-v2.py`, mock-up + every decision `design/kpi/README.md`. The old 📷 share image (`TwitterCard`) is unreachable since 2026-10-08 — the Socials Combined row opens the new cards too.
 - **Leagues (2026-10-04):** the holder-tiers modal (`TierInfoModal`, `.lg-*`) and the Socials combined card (`LeaguesCombinedCard`, `.lgc`) — assets `logos/leagues/`, mock-ups + every decision `design/leagues/README.md`.
 - Repo layout: `index.html` is the whole app (React 18 + Babel-standalone + Tailwind play
   CDN, compiled in the browser). `scripts/` + `.github/workflows/data-pipeline.yml` are the
@@ -35,7 +35,15 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (end of 2026-10-07)
+## Current state (2026-10-08)
+
+**2026-10-08 (Thursday): the Socials → Combined → "Combined KPI Report" row showed the new `KpiCardV2` pair and then flipped to the
+2025 `TwitterCard` share image once UFO's data landed (`startInTwitterMode`, the 2026-10-05 "share image only from the Socials row"
+decision). Fixed: the row opens the two new cards side by side like the menu's KPI Report + ADD UFO; nothing opens the TwitterCard
+any more (its code stays, unreachable — clean up or rebuild in the new look if he asks). Harness probe `probes/kpi-combined.js`
+(README line). `sessions/2026-10-08.md`. Written to the Mac, NOT pushed, NOT seen live.**
+
+## Before that (end of 2026-10-07)
 
 **2026-10-07 (Wednesday). THE VOLUME WINDOW REBUILT — PUSHED by Shaka as `43fb8af46`, his live look owed. THEN THE RH CORES WINDOW
 REBUILT (his screenshot of the old "LP with RH Core Coins" modal → mock v1 → "make it live.") — `tools/rh-cores.py`, `RhCoresModal`,
