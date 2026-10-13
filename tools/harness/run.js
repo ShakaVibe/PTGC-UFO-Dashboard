@@ -196,6 +196,9 @@ const dsAnswer=(url)=>{
       const gen=process.env.PAIRVOL==='old'?now-40*3600000:now;
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({schema:1,generatedAt:new Date(gen).toISOString(),binMs:B,bins:28,binStart,pools})});
     }
+    /* PF_V1=1 (round 15): the old-UFO-contract reflections shards — wallet 0x1111… earned 5B there; PF_V1=down: every shard 404s */
+    if(process.env.PF_V1&&/data\/ufo-v1-earned\/([0-9a-f])\.json/.test(u)){if(process.env.PF_V1==='down')return r.fulfill({status:404,body:'nope'});const c=u.match(/ufo-v1-earned\/([0-9a-f])\.json/)[1];
+      return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(c==='1'?{'1111111111111111111111111111111111111111':5000000000}:{})});}
     if(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/.*)/.test(u)){const f=u.match(/main\/(data\/[^?]*)/)[1];const p=path.join(REPO,f);if(fs.existsSync(p))return r.fulfill({status:200,contentType:'application/json',body:fs.readFileSync(p)});return r.fulfill({status:404,body:''});}
     /* AFFIL_DATA=1 serves a shaped /public/commissions body (one referrer, one buy, one
        receipt) instead of the empty default, so the affiliates page renders with data — the

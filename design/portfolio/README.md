@@ -298,3 +298,14 @@ names the mode ("… uses your custom prices" / "… the all-time-high prices") 
   14,850 PTGC out (95 % + 2.5 % + 1 % + 0.5 % of 15,000) while the wallet's balanceOf fell 15,000.0 — the missing 1 % is the
   holders' share of his 5 % fee, which reflection tokens pay without a Transfer event. Three UFO sells: balance fell by the
   emitted legs + exactly (5 % fee leg ÷ 5) = the holders' 1 % of his 6 % fee. The gross-up stays.
+
+## Round 15 (2026-10-13)
+1. **More chart dots** (Shaka): claims are a BLUE dot, liquidity adds / removes a YELLOW one (the table's colours); buys /
+   receives green, sells / sends red. Several kinds in one step sit side by side; the tooltip lists each transaction.
+2. **UFO rewards now include the OLD UFO contract.** The new-contract scan counted the Jul 9 migration airdrop as tokens
+   received — but that airdrop was each wallet's old balance at the Jul 6 snapshot, old reflections included, so they showed
+   as principal. `tools/ufo-v1-earned.py` (method + every on-chain check in its header) built `data/ufo-v1-earned/{0-f}.json`
+   once: 7,457 wallets, 50.08B UFO earned there. The UFO card's Earned by source shows **New UFO contract** + **Old UFO
+   contract**; Lifetime earned, the principal / reflections ring and the per-wallet table include it. If the file can't be
+   read, the old box says "unavailable" and the totals are the new contract alone. Harness: PF_V1=1 / PF_V1=down; probe
+   `pf2-v1.js`.

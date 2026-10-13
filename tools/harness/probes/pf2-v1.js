@@ -1,0 +1,1 @@
+(()=>{const q=s=>[...document.querySelectorAll(s)];const u=q('.pf2-ebs')[1];return{ufoEbs:u?u.innerText.replace(/\n/g,' | '):null,earned:q('.pf2-bx.big').map(b=>b.innerText.replace(/\n/g,' | ')),ring:q('.pf2-lg2,.pf2-dn').map(x=>x.innerText.replace(/\n/g,' | ')).slice(0,2)};})()

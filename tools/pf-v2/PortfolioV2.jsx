@@ -186,6 +186,7 @@
       /* step 2 (value history, option C): the counted wallets' real balances from the chain */
       const hAddrs=counted.map(w=>w.address.toLowerCase());
       const[hPeriod,setHPeriod]=useState('30D');
+      const v1=usePfUfoV1(hAddrs);   // round 15: UFO reflections earned on the OLD contract (see usePfUfoV1)
       const[txs,setTxs]=useState(null);   // round 14: Recent Transactions → the value chart's buy / sell dots
       const liveP=anyData?usd(agg.ptgc.totalHolding,prices.ptgc):null,liveU=anyData?usd(agg.ufo.balance,prices.ufo):null;
       const liveV=liveP==null&&liveU==null?null:(liveP||0)+(liveU||0);
@@ -217,6 +218,15 @@
       const okW=counted.map(w=>portfolioData[w.address.toLowerCase()]).filter(d=>d&&!d.error);
       const ptRecv=okW.length&&okW.every(d=>typeof d.ptgc.received==='number')?okW.reduce((a,d)=>a+d.ptgc.received,0):null;
       const ufRecv=(()=>{if(!okW.length)return null;let t=0;for(const w of counted){const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)continue;if(!(d.ufo.balance>0))continue;const r=(window.pfUfoRecv||{})[a];if(typeof r!=='number')return null;t+=r;}return t;})();
+      /* round 15: + the OLD UFO contract's reflections (to the 2026-07-06 migration). They are lifetime, so every counted wallet adds
+         its share, sold-out ones too (ufoOld). For the split of today's bag only wallets still holding UFO count (ufoOldHeld): the
+         migration airdrop sits inside ufRecv, and the old reflections are the part of it that was earned — so
+         share = (new + old reflections) ÷ (received + new reflections), never above 1. If the file can't be read the page shows the
+         new contract alone and says so. */
+      const v1Sum=held=>v1.state!=='ok'?null:counted.reduce((t,w)=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return t;if(held&&!(d.ufo.balance>0))return t;return t+v1.of(a);},0);
+      const ufoOld=v1Sum(false),ufoOldHeld=v1Sum(true);
+      const ufoNew=ufoRefl;
+      const ufoEarned=ufoNew==null?null:v1.state==='loading'?null:ufoNew+(ufoOld||0);
       /* round 7 (option A of mock-rewards-v1): REWARDS = staking + locking + reflections (UFO: reflections only).
          Reward yield = everything earned ÷ the tokens the wallets BROUGHT IN. Checked on chain 2026-10-13: a lock claim is a
          Transfer from the staking contract, PTGC's totalReceived rises by exactly the claim and lockClaimed by the same amount —
@@ -225,14 +235,15 @@
       const ptIn=ptRecv==null?null:ptRecv-pt.claimed-pt.lockClaimed;
       const ptYield=ptIn>0?ptEarned/ptIn*100:null;
       const ufoYield=ufoRefl==null||!(ufRecv>0)?null:ufoRefl/ufRecv*100;
-      const ufoShare=ufoRefl==null||ufRecv==null||!((ufRecv+ufoRefl)>0)?null:ufoRefl/(ufRecv+ufoRefl);
+      const ufoShare=ufoEarned==null||ufRecv==null||!((ufRecv+ufoNew)>0)?null:Math.min(1,(ufoNew+(ufoOldHeld||0))/(ufRecv+ufoNew));
       const ufoReflNow=ufoShare==null?null:uf.balance*ufoShare,ufoPrin=ufoShare==null?null:uf.balance-ufoReflNow;
       const fmtY=y=>y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
       const ptgcEarned=pt.claimed+pt.lockClaimed+pt.reflections;
       const fmtLock=t=>{if(!t)return'—';const now=Date.now()/1000;if(t<=now)return'Unlockable';const d=Math.floor((t-now)/86400);if(d>365)return Math.floor(d/365)+'y '+Math.floor((d%365)/30)+'m';if(d>30)return Math.floor(d/30)+'m '+d%30+'d';if(d>0)return d+'d';const h=Math.floor((t-now)/3600);return h>0?h+'h':Math.max(1,Math.floor((t-now)/60))+'m';};
       const reflBox=()=>uf.reflState==='pending'?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>scanning{'…'}</div><div className="s">{uf.reflPending} wallet{uf.reflPending>1?'s':''}</div></>
         :uf.reflState==='failed'?<><div className="v" style={{fontSize:16,color:'#FFD38A'}}>unavailable</div><div className="s"><button onClick={retryFailedReflScans}>Retry</button></div></>
-        :<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>;
+        :ufoEarned==null?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>loading{'…'}</div><div className="s">old UFO contract</div></>
+        :<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div></>;
       return(
         <div className="pf2"><div className="pf2-in">
           {/* ---- title, add capsule, toolbar, the deck ---- */}
@@ -378,7 +389,10 @@
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source</div>
-                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
+                {ufoEarned==null?<div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div></div></div>
+                  :<div className="pf2-src3 two">{[['New UFO contract',ufoNew,'since its Jul 9, 2026 launch'],['Old UFO contract',v1.state==='failed'?null:ufoOld,'up to the Jul 6, 2026 snapshot']].map(([n,v,w])=>(
+                    <div key={n} className="pf2-src rf"><div className="l">{n}</div>{v==null?<><div className="v" style={{fontSize:16,color:'#FFD38A'}}>unavailable</div><div className="p">{w}</div></>
+                      :<><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(usd(v,dp.ufo))}</div><div className="p">{ufoEarned>0?Math.round(v/ufoEarned*1000)/10:0}% of earned {'\u00B7'} {w}</div></>}</div>))}</div>}
               </div>
             </section>
           </div>
@@ -393,7 +407,7 @@
               <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}><b className="oh">PER-WALLET BREAKDOWN</b><span>{counted.length} wallet{counted.length===1?'':'s'}</span><span className="chev">{'▾'}</span></button>
               {bdOpen&&<div className="pf2-foldb" style={{overflowX:'auto'}}>
                 <table className="pf2-tbl"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING</th><th>UFO</th><th>REFLECTIONS</th></tr></thead><tbody>
-                  {counted.map(w=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;const r=d.ufo.reflections;return(
+                  {counted.map(w=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;const r=d.ufo.reflections==null?d.ufo.reflections:d.ufo.reflections+(v1.state==='ok'?v1.of(a):0);return(
                     <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{pfAbbr(d.ptgc.totalHolding)}</td><td className="pos">{pfAbbr(d.ptgc.totalPending)}</td><td className="u">{pfAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:pfAbbr(r)}</td></tr>);})}
                 </tbody></table></div>}
             </section>
@@ -410,7 +424,7 @@
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
             <p><b>PTGC</b> holdings are the wallet's full balance; the PTGC staking contract tells us how much of it is staked or locked, and what rewards are waiting to be claimed. <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
-            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
+            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned. UFO reflections include the <b>old UFO contract</b>: what each wallet earned there up to the migration snapshot of Jul 6, 2026 (its snapshot balance, which the Jul 9 airdrop paid out, minus everything it bought or was sent there, plus everything it sold or sent).</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></div>
