@@ -89,6 +89,8 @@ const rpcAnswer=(body)=>{
          three locks (one unlockable, one ~13 h away, one years away), so the rewards + locks panel has something to draw */
       else if(process.env.PF_STAKE&&d==='0x15612933'){const now=Math.floor(Date.now()/1000);result='0x'+[10_000_000_000n*10n**18n,0n,BigInt(now-86400*400),1_000_000_000n*10n**18n,200_000_000n*10n**18n,6_000_000_000n*10n**18n,0n].map(v=>v.toString(16).padStart(64,'0')).join('');}
       else if(process.env.PF_STAKE&&d==='0xdf034586')result=pad(3);
+      else if(process.env.PF_STAKE&&d==='0x4df9cfb3')result=pad(10_000_000_000n*10n**18n);   // PTGC totalReceived (round 6 yield test)
+      else if(process.env.PF_STAKE&&d==='0xc64a041b')result=pad(2_000_000_000n*10n**18n);    // PTGC totalSend
       else if(process.env.PF_STAKE&&d==='0x1ce33368'){const i=Number(BigInt('0x'+q.params[0].data.slice(-64)));const now=Math.floor(Date.now()/1000);const L=[[1_000_000_000n,now-86400*200,now-3600],[2_000_000_000n,now-86400*30,now+13*3600],[3_000_000_000n,now-86400*100,now+86400*365*8]][i-1]||[0n,0,0];result='0x'+[L[0]*10n**18n,BigInt(L[1]),BigInt(L[2])].map(v=>v.toString(16).padStart(64,'0')).join('');}
       else if(process.env.PF_STAKE&&d==='0xf40f0f52')result=pad(500_000_000n*10n**18n);
       else if(process.env.PF_STAKE&&d==='0xddeecc24')result=pad(50_000_000n*10n**18n);

@@ -144,8 +144,27 @@
       };
       const pt=agg.ptgc,uf=agg.ufo;
       const ufoRefl=uf.reflState==='ok'?uf.reflections:null;
-      const ufoPrin=ufoRefl==null?null:Math.max(0,uf.balance-ufoRefl);
-      const ufoYield=ufoRefl==null||!(ufoPrin>0)?null:ufoRefl/ufoPrin*100;
+      /* round 6 (Shaka: "make sure your math is right … what if they earned a lot of reflections early on, and they sold most of
+         that … the yield would look super high because it's against the current total"). Reflections here are LIFETIME
+         (balance + everything sent − everything received), so dividing by today's bag is wrong once anything was sold.
+         Yield = lifetime reflections ÷ every token the wallets ever RECEIVED (bought / transferred in) — selling cannot move
+         it. The UFO split of TODAY's bag is pro-rata: the share of all tokens ever obtained that came from reflections,
+         R ÷ (received + R), applied to the current holdings (sells are assumed to take principal and reflections alike), so
+         it can never show more reflections than were earned or a negative principal. */
+      const okW=counted.map(w=>portfolioData[w.address.toLowerCase()]).filter(d=>d&&!d.error);
+      const ptRecv=okW.length&&okW.every(d=>typeof d.ptgc.received==='number')?okW.reduce((a,d)=>a+d.ptgc.received,0):null;
+      const ufRecv=(()=>{if(!okW.length)return null;let t=0;for(const w of counted){const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)continue;if(!(d.ufo.balance>0))continue;const r=(window.pfUfoRecv||{})[a];if(typeof r!=='number')return null;t+=r;}return t;})();
+      /* round 7 (option A of mock-rewards-v1): REWARDS = staking + locking + reflections (UFO: reflections only).
+         Reward yield = everything earned ÷ the tokens the wallets BROUGHT IN. Checked on chain 2026-10-13: a lock claim is a
+         Transfer from the staking contract, PTGC's totalReceived rises by exactly the claim and lockClaimed by the same amount —
+         so claims sit inside "received" (and outside reflections). Brought in = received − staking claims − lock claims. */
+      const ptEarned=pt.claimed+pt.lockClaimed+pt.reflections;
+      const ptIn=ptRecv==null?null:ptRecv-pt.claimed-pt.lockClaimed;
+      const ptYield=ptIn>0?ptEarned/ptIn*100:null;
+      const ufoYield=ufoRefl==null||!(ufRecv>0)?null:ufoRefl/ufRecv*100;
+      const ufoShare=ufoRefl==null||ufRecv==null||!((ufRecv+ufoRefl)>0)?null:ufoRefl/(ufRecv+ufoRefl);
+      const ufoReflNow=ufoShare==null?null:uf.balance*ufoShare,ufoPrin=ufoShare==null?null:uf.balance-ufoReflNow;
+      const fmtY=y=>y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
       const ptgcEarned=pt.claimed+pt.lockClaimed+pt.reflections;
       const fmtLock=t=>{if(!t)return'—';const now=Date.now()/1000;if(t<=now)return'Unlockable';const d=Math.floor((t-now)/86400);if(d>365)return Math.floor(d/365)+'y '+Math.floor((d%365)/30)+'m';if(d>30)return Math.floor(d/30)+'m '+d%30+'d';if(d>0)return d+'d';const h=Math.floor((t-now)/3600);return h>0?h+'h':Math.max(1,Math.floor((t-now)/60))+'m';};
       const reflBox=()=>uf.reflState==='pending'?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>scanning{'…'}</div><div className="s">{uf.reflPending} wallet{uf.reflPending>1?'s':''}</div></>
@@ -225,35 +244,29 @@
               <div className="pf2-tkh"><img className="lg" src={TOKENS.PTGC.logo} alt=""/>
                 <div className="nm"><div className="t">PTGC</div><div className="sb">The Grays Currency</div><PfCreatures tokens={pt.totalHolding} token="PTGC"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
-              <div className="pf2-t4 t5">
+              <div className="pf2-t4 t3">
                 <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
-                <div className="pf2-bx blu"><div className="lb">Liquid</div><div className="v">{pfAbbr(pt.walletFree)}</div><div className="s">{fmtDollar(usd(pt.walletFree,dp.ptgc))}</div></div>
-                <div className="pf2-bx pur"><div className="lb">Staked</div><div className="v">{pfAbbr(pt.staked)}</div><div className="s">{fmtDollar(usd(pt.staked,dp.ptgc))}</div></div>
-                <div className="pf2-bx pnk"><div className="lb">Locked &amp; staked</div><div className="v">{pfAbbr(pt.locked)}</div><div className="s">{fmtDollar(usd(pt.locked,dp.ptgc))}</div></div>
-                <div className="pf2-bx rf"><div className="lb">Reflections</div><div className="v">{pfAbbr(pt.reflections)}</div><div className="s">{fmtDollar(usd(pt.reflections,dp.ptgc))}</div></div>
+                <div className="pf2-bx rf"><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div>
+                <div className="pf2-bx rf" title="Everything earned (staking + locking + reflections) ÷ the PTGC these wallets brought in"><div className="lb">Reward yield</div><div className="v">{fmtY(ptYield)}</div><div className="s">on PTGC brought in</div></div>
               </div>
-              {pt.totalHolding>0?(()=>{const parts=[['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899'],['Liquid',pt.walletFree,'#F2D35B']].filter(x=>x[1]>0);return(
+              {pt.totalHolding>0?(()=>{const parts=[['Liquid',pt.walletFree,'#F2D35B'],['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
-                  <div className="pf2-lgd">{parts.map(x=><div key={x[0]}><i style={{background:x[2]}}></i>{x[0]}<b>{pfAbbr(x[1])}</b><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
+                  <div className="pf2-lg2">{parts.map(x=><div className="r" key={x[0]}><i style={{background:x[2]}}></i><span>{x[0]}</span><b>{pfAbbr(x[1])}</b><span className="usd">{fmtDollar(usd(x[1],dp.ptgc))}</span><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
               <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')}/></div>
-              <div className="pf2-le"><img className="ic" src="logos/portfolio/pf-earned.webp" alt=""/><span className="lb">Total lifetime earned</span><span className="n">{fmtComma(Math.floor(ptgcEarned),0)}</span><span className="k">PTGC</span><span className="d"></span><span className="usd">{fmtDollar(usd(ptgcEarned,dp.ptgc))}</span></div>
-              <div className="pf2-extw"><div className="pf2-ext">
-                <span>Earned: staking <b>{pfAbbr(pt.claimed)}</b> {'\u00B7'} locking <b>{pfAbbr(pt.lockClaimed)}</b> {'\u00B7'} reflections <b>{pfAbbr(pt.reflections)}</b></span>
-              </div>
-              {/* round 4 (Shaka: "I want them just under the PTGC side … the claimable should be above … the lock positions in a
-                  drop down … add this icon to the claimable part … we don't need to repeat [the staking split]") */}
-              {(pt.totalPending>0||pt.staked>0)&&(
-                <div className="pf2-clm">
-                  <img src="logos/portfolio/pf-claim.webp" alt=""/>
-                  <div className="rows">
-                    <div className="h">Claimable rewards</div>
-                    <div className="row"><span><i style={{background:'#B26BFF'}}></i>Staking rewards</span><b style={{color:'#C38BFF'}}>{pfAbbr(pt.pendingStake)}</b><em>{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</em></div>
-                    <div className="row"><span><i style={{background:'#EC4899'}}></i>Lock rewards</span><b style={{color:'#F472B6'}}>{pfAbbr(pt.pendingLocks)}</b><em>{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</em></div>
-                    <div className="row tot"><span>Total claimable</span><b className="pos">{pfAbbr(pt.totalPending)}</b><em className="pos">{fmtDollar(usd(pt.totalPending,dp.ptgc))}</em></div>
-                  </div>
+              <div className="pf2-ebs">
+                <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
+                <div className="pf2-src3">
+                  {[['Staking','st',pt.claimed],['Locking','lk',pt.lockClaimed],['Reflections','rf',pt.reflections]].map(([n,c,v])=>(
+                    <div key={n} className={`pf2-src ${c}`}><div className="l">{n}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(usd(v,dp.ptgc))}</div><div className="p">{pfPct(v,ptEarned)} of earned</div></div>))}
                 </div>
-              )}
+                {(pt.totalPending>0||pt.staked>0)&&(
+                  <div className="pf2-rtc"><img src="logos/portfolio/pf-claim.webp" alt=""/>
+                    <div className="b"><div className="t">Ready to claim <b>{pfAbbr(pt.totalPending)} PTGC</b><span>{fmtDollar(usd(pt.totalPending,dp.ptgc))}</span></div>
+                      <div className="sub"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(pt.pendingStake)}</b> {fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pt.pendingLocks)}</b> {fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></div></div>
+                  </div>)}
+              </div>
+              <div className="pf2-extw">
               {pt.locks.length>0&&(()=>{
                 const now=Date.now()/1000;
                 const locks=[];counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(d&&!d.error)d.ptgc.locks.forEach(l=>locks.push({...l,who:w.name||truncAddr(w.address)}));});
@@ -286,18 +299,24 @@
               <div className="pf2-tkh"><img className="lg" src={TOKENS.UFO.logo} alt=""/>
                 <div className="nm"><div className="t">UFO</div><div className="sb">UFO Token</div><PfCreatures tokens={uf.balance} token="UFO"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
-              <div className="pf2-t4">
+              <div className="pf2-t4 t3">
                 <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
-                <div className="pf2-bx"><div className="lb">Principal</div><div className="v">{ufoPrin==null?'—':pfAbbr(ufoPrin)}</div><div className="s">{ufoPrin==null?'after the scan':fmtDollar(usd(ufoPrin,dp.ufo))}</div></div>
-                <div className="pf2-bx grn"><div className="lb">Reflections</div>{reflBox()}</div>
-                <div className="pf2-bx grn"><div className="lb">Reflection yield</div><div className="v">{ufoYield==null?'—':(ufoYield>0&&ufoYield<0.01?'<0.01':ufoYield.toFixed(ufoYield<1?3:2))+(ufoYield==null?'':'%')}</div><div className="s">of principal</div></div>
+                <div className="pf2-bx grn"><div className="lb">Lifetime earned</div>{reflBox()}</div>
+                <div className="pf2-bx grn" title="Reflections (UFO\u2019s only reward) ÷ the UFO these wallets brought in"><div className="lb">Reward yield</div><div className="v">{fmtY(ufoYield)}</div><div className="s">on UFO brought in</div></div>
               </div>
-              {uf.balance>0&&ufoRefl!=null?(
-                <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoRefl,'#22D3EE']]}/>
-                  <div className="pf2-lgd"><div><i style={{background:'#7CFC00'}}></i>Principal<b>{pfAbbr(ufoPrin)}</b><em>{pfPct(ufoPrin,uf.balance)}</em></div><div><i style={{background:'#22D3EE'}}></i>Reflections<b>{pfAbbr(ufoRefl)}</b><em>{pfPct(ufoRefl,uf.balance)}</em></div></div></div>
+              {uf.balance>0&&ufoShare!=null?(
+                <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoReflNow,'#22D3EE']]}/>
+                  <div className="pf2-lg2">
+                    <div className="r"><i style={{background:'#7CFC00'}}></i><span>Principal</span><b>{pfAbbr(ufoPrin)}</b><span className="usd">{fmtDollar(usd(ufoPrin,dp.ufo))}</span><em>{pfPct(ufoPrin,uf.balance)}</em></div>
+                    <div className="r"><i style={{background:'#22D3EE'}}></i><span>From reflections</span><b>{pfAbbr(ufoReflNow)}</b><span className="usd">{fmtDollar(usd(ufoReflNow,dp.ufo))}</span><em>{pfPct(ufoReflNow,uf.balance)}</em></div>
+                    <div className="r sub"><span></span><span>split of today{'\u2019'}s bag, pro rata</span><b></b><span className="usd"></span><em></em></div>
+                  </div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
-              <div className="pf2-le"><img className="ic" src="logos/portfolio/pf-earned.webp" alt=""/><span className="lb">Total lifetime earned</span>{ufoRefl==null?<span className="msg">{uf.reflState==='failed'?'unavailable':'scanning…'}</span>:<><span className="n">{fmtComma(Math.floor(ufoRefl),0)}</span><span className="k">UFO</span><span className="d"></span><span className="usd">{fmtDollar(usd(ufoRefl,dp.ufo))}</span></>}</div>
+              <div className="pf2-ebs">
+                <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
+                <div className="pf2-src3 one"><div className="pf2-src ur"><div className="l">Reflections {'\u2014'} the only UFO reward</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>}</div></div>
+              </div>
               <div className="pf2-extw"><div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div></div>
             </section>
           </div>
@@ -343,6 +362,7 @@
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
             <p><b>PTGC</b> holdings are the wallet's full balance; the PTGC staking contract tells us how much of it is staked or locked, and what rewards are waiting to be claimed. <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
+            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). <b>Reward yield</b> is that {'\u00F7'} the tokens the wallets brought in (everything received, minus the reward claims that arrived from the staking contract), so selling never inflates it. A move between two of your own wallets counts as brought in at both ends, which pulls the yield down slightly. UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></div>

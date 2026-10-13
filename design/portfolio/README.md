@@ -152,3 +152,51 @@ where the yellow meets the purple".
   gold gradient + gold hairline; the token count prints whole numbers so it stays on one line.
 - Donut: a 2-unit dark gap between arcs and one glow on the group — the last arc no longer paints over the first.
 Harness: `PF_HIST=1` makes past balances grow toward today with a sell ~10 days back. Render `renders/r5-history.jpg`.
+
+## Token cards — three layouts without the duplicates (`mock-cards-v1.html` → `renders/cards-v1-1440.jpg`)
+Shaka: "some of it is duplicated — we have the boxes that say Staked, and then a purple dot next to the graph that says
+Staked … same with Liquid … maybe the boxes need to be total holdings, reflections and reflection yield, and under that the pie
+chart with the other detail lines that make up the chart". His real numbers. The donut / bar legend now carries tokens, $ and %
+for each part (PTGC also a "Total staked" sub-line), so no figure appears twice. New figure: PTGC reflection yield =
+reflections ÷ (holdings − reflections), the same rule as UFO's (13.55 % on his bag).
+- **A** — three tiles (Total · Reflections · Reflection yield), then the donut + the full legend.
+- **B** — a wide Total tile + Reflections + Yield, then a stacked bar instead of the donut, legend under it.
+- **C** — the total INSIDE a bigger donut, the legend beside it, Reflections + Yield as two tiles below.
+(The mock shows the cards un-aligned; the build keeps the shared row grid.)
+
+## Round 6 (2026-10-13): option A built + a reflection yield that selling cannot inflate
+Shaka: "I like A, let's do it. But make sure your math is right — what if they earned a lot of reflections early on, and they
+sold most of that PTGC — that would make the yield look super high because it's against the current total" + "don't do the
+total staked number at the bottom".
+- Tiles (both tokens): Total holdings · Reflections · Reflection yield. PTGC donut legend: Liquid / Staked (not locked) /
+  Locked & staked with tokens · $ · % (no Total-staked line). UFO legend: Principal / From reflections, tokens · $ · %.
+- **The maths.** Reflections are LIFETIME (balance + sent − received). Old yield = R ÷ (balance − R) → infinite / huge after a
+  sell. New: **yield = R ÷ everything ever received** (PTGC: the token's own totalReceived counter, now kept on the wallet data
+  as `received`; UFO: the received sum the reflections scan already computes, stashed in `window.pfUfoRecv`). Bought 100,
+  earned 10, sold 100 → 10 % (old: ∞). UFO split of today's bag = pro rata R ÷ (received + R) of the current holdings (never
+  negative, never more than earned). Moves between your own wallets count as received at both ends → the yield reads a little
+  LOW, never high. How it works explains it. Render `renders/r6-cards-A.jpg`.
+
+## Rewards — three layouts (`mock-rewards-v1.html` → `renders/rewards-v1-1440.jpg`)
+Shaka, before pushing round 6 (screenshot of the classic page's LIFETIME EARNED: Staking · Locking · Reflections boxes + the
+total bar): "wait … rethink all this … before we even showed lifetime earned for each one". Plus his question: rename
+"Reflections" to "Rewards"? (PTGC's reflections figure is reflections only — staking / lock claims arrive as transfers;
+staking + locking + reflections = lifetime earned.) His real figures (staking 4.79B, locking 363.21M, reflections 4.44B,
+total 9.59B / $372,596.53, claimable 34.78M); the reward yield is shown as xx.x % — computed at build.
+- **A** — tiles Total · Lifetime earned · Reward yield; one "Earned by source" box (three source boxes with tokens, $, share)
+  with Ready to claim (chest) as its last line; the old total bar and "Earned:" line go.
+- **B** — the classic Lifetime Earned panel back under the tiles (three boxes + gold total bar with the coins icon); tiles Total ·
+  Reward yield · Ready to claim. UFO repeats its one number (box + bar).
+- **C** — tiles as A; one Rewards row at the foot: an "Earned by source" split bar + rows, and the chest with Ready to claim.
+Reward yield (all three) = everything earned ÷ the tokens the wallets brought in (received minus the reward claims that arrived as
+transfers — to be checked on chain at build, so it is neither double-counted nor inflated by selling).
+
+## Round 7 (2026-10-13): rewards option A built
+Shaka: "let's go A then … and when I see it live I can make adjustments". Tiles Total holdings · **Lifetime earned** (PTGC staking +
+locking + reflections; UFO reflections) · **Reward yield**. The lifetime bar, the "Earned:" line and the separate claimable box are
+replaced by ONE gold **Earned by source** box (rising-coins icon): Staking / Locking / Reflections boxes (tokens, $, share of
+earned) and a **Ready to claim** line with the chest (total + staking / locks split). UFO: one "Reflections — the only UFO reward"
+box. Lock positions drop-down unchanged.
+**Checked on chain** (block 27789531, wallet 0x559b…bf7c, a lock claim): the claim is a Transfer from the staking contract;
+PTGC totalReceived rose by 539.104 and lockClaimed by 539.104 — claims sit in "received", not in reflections. So reward yield =
+(claimed + lockClaimed + reflections) ÷ (received − claimed − lockClaimed). Render `renders/r7-rewards-A.jpg`.

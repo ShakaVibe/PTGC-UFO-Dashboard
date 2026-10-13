@@ -99,6 +99,17 @@ once('const updateWalletV2=', rep(
     "      const togglePfV2="))
 once('<PortfolioV2 updateWallet=', rep('{pfV2?<PortfolioV2 ', '{pfV2?<PortfolioV2 updateWallet={updateWalletV2} '))
 
+# 7. round 6: what the safe reflection yield needs — the PTGC "received" total (already read; now kept on the wallet's data)
+#    and the UFO received total the reflections scan computes (stashed per address in window.pfUfoRecv). The classic page
+#    renders neither, so its output is unchanged.
+once('received:tRecv,', rep(
+    "          lifetimeEarned:uiClaimed+uiLockClaimed,\n",
+    "          lifetimeEarned:uiClaimed+uiLockClaimed,\n          received:tRecv,   // Portfolio v2 round 6: the reflection-yield denominator\n"))
+once('(window.pfUfoRecv=window.pfUfoRecv||{})', rep(
+    "      const reflWei=balanceWei-(inWei-outWei);\n",
+    "      try{(window.pfUfoRecv=window.pfUfoRecv||{})[address.toLowerCase()]=toNum(inWei);}catch(e){}   // Portfolio v2 round 6: yield denominator\n"
+    "      const reflWei=balanceWei-(inWei-outWei);\n"))
+
 # 5. the dot + classic-only footer
 once('<PfV2Dot ', rep(
     '          {/* Footer */}\n          <footer className="text-center py-6 border-t border-white/10 mt-4">',
