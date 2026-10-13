@@ -157,6 +157,16 @@ const dsAnswer=(url)=>{
        comes back instantly). This is what delays first paint when the primary endpoint hangs:
        rpcFetch's own per-endpoint timeout is 8 s, longer than the 5 s bootReady race (a62). */
     if(/rpc\.pulsechain|g4mm4|publicnode/.test(u)){rpcCount.n++;if(process.env.RPC_DOWN)return r.fulfill({status:503,body:'down'});if(process.env.SLOW_RPC)await new Promise(res=>setTimeout(res,+process.env.SLOW_RPC));let body={};try{body=JSON.parse(r.request().postData()||'{}');}catch(e){}return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(rpcAnswer(body))});}
+    /* PF_TX=1 (2026-10-13, Portfolio v2 Recent Transactions): PulseScan's token-transfer list — a buy (swap), a UFO sell with its
+       fee leg (one tx), a lock claim from the staking contract, a move between two of the saved wallets, a plain receive */
+    if(/api\.scan\.pulsechain\.com\/api\/v2\/addresses\/0x[0-9a-fA-F]{40}\/token-transfers/.test(u)&&process.env.PF_TX){
+      const w=u.match(/addresses\/(0x[0-9a-fA-F]{40})/)[1].toLowerCase(),isU=/token=0x49eD/i.test(u),tok=isU?'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6':'0x94534EeEe131840b1c0F61847c572228bdfDDE93';
+      const P='0x'+'ab'.repeat(20),S='0xC71f597a2AC39E47F07102E849d18489C96f39EF',O='0x2222222222222222222222222222222222222222';
+      const ago=h=>new Date(Date.now()-h*3600e3).toISOString(),it=(h,f,t,m,v,hx)=>({tx_hash:'0x'+hx.repeat(64).slice(0,64),timestamp:ago(h),from:{hash:f},to:{hash:t},method:m,total:{decimals:'18',value:(BigInt(Math.round(v))*10n**18n).toString()}});
+      const items=w!=='0x1111111111111111111111111111111111111111'?[]:isU?[it(3,w,P,'swapExactTokensForETH',9_500_000,'a1'),it(3,w,tok,'swapExactTokensForETH',500_000,'a1'),it(30,P,w,'swapExactETHForTokens',40_000_000,'a2')]
+        :[it(1,S,w,'withdrawRewardLock',539_104,'b1'),it(5,P,w,'swapExactETHForTokens',12_456_789,'b2'),it(20,w,O,'transfer',100_000_000,'b3'),it(50,'0x9999999999999999999999999999999999999999',w,'transfer',2_345_678,'b4')];
+      return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items})});
+    }
     if(/api\.dexscreener\.com/.test(u)&&process.env.DS_DOWN)return r.fulfill({status:503,body:'down'});
     if(/api\.dexscreener\.com/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(dsAnswer(u))});
     if(/dd\.dexscreener\.com|dexscreener\.com/.test(u))return r.fulfill({status:200,contentType:'image/png',body:fs.readFileSync(path.join(REPO,'07_Ufo_transparent.png'))});

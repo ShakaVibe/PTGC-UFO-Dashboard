@@ -211,3 +211,19 @@ two points, green (more tokens) / red (fewer); the tooltip names the move ("▼ 
 the chart. Net per step (a buy and a sell inside one step cancel); exact per-transaction dots need the transfer list (comes with
 Recent Transactions). (7) Answered: the chart already prices REAL past balances at the price of that day — not today's tokens at
 today's price. (8) UFO reflections source box in PTGC's gold. Render `renders/r8-history-markers.jpg`.
+
+## Round 9 (2026-10-13)
+Shaka: "remove the Reward yield, I don't think it's accurate, then the two other boxes can get larger including the font sizes;
+add the coins logo to total holdings, and use the attached image for lifetime earned; make the UFO reflections box the same height
+as PTGC's; add in the recent transactions".
+- Tiles: two big ones (icon left, 31 px figure, 18 px $): Total holdings with his gold coin stack (`logos/leagues/lg-ic-coins.webp`),
+  Lifetime earned with `logos/portfolio/pf-lifetime.webp` — **a copy of the rising-coins icon as a placeholder: his "attached image"
+  did not come through** (only the screenshot did). Swap the file when it arrives (new name or a ?v bump — gotcha 38).
+  Reward yield tile + How-it-works line removed (PfYield and the maths stay in the code, unused).
+- UFO reflections source box gets "100% of earned" → same 120 px height as PTGC's boxes.
+- **Recent Transactions** built (`tools/pf-v2/PfTx.jsx`): PulseScan `/api/v2/addresses/{w}/token-transfers?type=ERC-20&token=…`
+  per counted wallet × PTGC/UFO (CORS open, tested live; latest 50 each), 3 in flight, cached 5 min in localStorage
+  `grays_pf_tx_v1`; legs of one tx netted per wallet (a UFO sell's fee leg folds in). Types: Claim (paid by the staking contract —
+  staked PTGC never leaves the wallet), Stake, Buy / Sell (the tx called a swap / multicall / execute / zap), Move (between two of
+  his wallets, shown once as "A → B"), Receive / Send. Value = amount × that hour's / day's price, today's price when newer than the
+  price files. 10 rows, Show more (40), Refresh, a "x of y reads failed — retry" line. Phone: two-line rows. Harness `PF_TX=1`.

@@ -92,6 +92,8 @@
       );
     };
     /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
+    const PF_IC_HOLD='logos/leagues/lg-ic-coins.webp?v=1';   // round 9: his gold coin stack (the Leagues "Starting supply" icon)
+    const PF_IC_EARN='logos/portfolio/pf-lifetime.webp';      // round 9: his lifetime-earned icon (placeholder = the rising coins until his file lands)
     const PfYield=({cls,tok,y,earned,putIn,what})=>{
       const[open,setOpen]=useState(false);
       const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
@@ -259,10 +261,9 @@
               <div className="pf2-tkh"><img className="lg" src={TOKENS.PTGC.logo} alt=""/>
                 <div className="nm"><div className="t">PTGC</div><div className="sb">The Grays Currency</div><PfCreatures tokens={pt.totalHolding} token="PTGC"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
-              <div className="pf2-t4 t3">
-                <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
-                <div className="pf2-bx rf"><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div>
-                <PfYield cls="rf" tok="PTGC" y={ptYield} earned={ptEarned} putIn={ptIn} what="staking, locking and reflections"/>
+              <div className="pf2-t4 t2">
+                <div className="pf2-bx gold big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div></div>
+                <div className="pf2-bx rf big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div></div>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Liquid',pt.walletFree,'#F2D35B'],['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
@@ -314,10 +315,9 @@
               <div className="pf2-tkh"><img className="lg" src={TOKENS.UFO.logo} alt=""/>
                 <div className="nm"><div className="t">UFO</div><div className="sb">UFO Token</div><PfCreatures tokens={uf.balance} token="UFO"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
-              <div className="pf2-t4 t3">
-                <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
-                <div className="pf2-bx grn"><div className="lb">Lifetime earned</div>{reflBox()}</div>
-                <PfYield cls="grn" tok="UFO" y={ufoYield} earned={ufoRefl} putIn={ufRecv} what="reflections"/>
+              <div className="pf2-t4 t2">
+                <div className="pf2-bx grn big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div></div>
+                <div className="pf2-bx grn big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div>{reflBox()}</div></div>
               </div>
               {uf.balance>0&&ufoShare!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoReflNow,'#22D3EE']]}/>
@@ -330,17 +330,14 @@
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-ebs">
                 <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
-                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>}</div></div>
+                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
               </div>
             </section>
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
           <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod}/>
-          <section className="pf2-pn pf2-sec">
-            <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2></div>
-            <div className="pf2-soon"><b>Coming next.</b> Receives, sends, swaps, stakes and claims across your wallets.</div>
-          </section>
+          <PfRecentTx wallets={counted} prices={prices}/>
 
           {/* ---- the two folds ---- */}
           <div className="pf2-folds">
@@ -376,7 +373,7 @@
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
             <p><b>PTGC</b> holdings are the wallet's full balance; the PTGC staking contract tells us how much of it is staked or locked, and what rewards are waiting to be claimed. <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
-            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). <b>Reward yield</b> is how much you have earned for every token you put in: lifetime earned {'\u00F7'} the tokens you bought or moved into these wallets (reward payouts don{'\u2019'}t count as putting in). Put in 1,000,000 and earned 250,000 {'\u2192'} 25 %. Selling never changes it. Moving tokens between two of your own wallets counts as putting in twice, which makes it read a little low, never high. UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
+            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></div>

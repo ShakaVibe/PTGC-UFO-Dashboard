@@ -36,7 +36,7 @@ def rep(old, new, count=1):
     return f
 
 css = open(os.path.join(HERE, 'pf2.css'), encoding='utf-8').read().rstrip('\n')
-jsx = '\n\n'.join(open(os.path.join(HERE, n), encoding='utf-8').read().rstrip('\n') for n in ('PfLeagues.jsx', 'PfHistory.jsx', 'PortfolioV2.jsx'))
+jsx = '\n\n'.join(open(os.path.join(HERE, n), encoding='utf-8').read().rstrip('\n') for n in ('PfLeagues.jsx', 'PfHistory.jsx', 'PfTx.jsx', 'PortfolioV2.jsx'))
 # round 2: the Leagues window's CSS, taken from index.html each run (one design for both pages)
 ix = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
 a = ix.index('    .lg-m{'); b = ix.index('    /* the combined card (Socials', a)

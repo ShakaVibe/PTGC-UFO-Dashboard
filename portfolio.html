@@ -376,6 +376,27 @@
     .pf2-vhs .chg small{font-size:13px;font-weight:600;opacity:.85}
     .pf2-vhs .hl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
     .pf2-vhs .hl b{display:block;font-size:18px;margin-top:3px}.pf2-vhs .hl small{color:rgba(255,255,255,.5);font-size:12.5px}
+    /* round 9: two bigger tiles with his icons (Reward yield removed) */
+    .pf2-t4.t2{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .pf2-bx.big{display:flex;align-items:center;gap:14px;text-align:left;padding:14px 16px}
+    .pf2-bx.big .bic{width:58px;height:58px;flex:none;object-fit:contain;filter:drop-shadow(0 0 8px rgba(242,190,40,.3)) drop-shadow(0 3px 5px rgba(0,0,0,.6))}
+    .pf2-bx.big>div{min-width:0}
+    .pf2-bx.big .lb{font-size:13px;letter-spacing:.07em}
+    .pf2-bx.big .v{font-size:31px;margin-top:6px}
+    .pf2-bx.big .s{font-size:18px;margin-top:5px;font-weight:600}
+    /* round 9: recent transactions */
+    .pf2-rtl{margin-left:auto;font-size:13.5px;color:rgba(255,255,255,.55)}
+    .pf2-rt .pf2-sech .pf2-lnk.q{font-size:13px}
+    .pf2-txt{width:100%;border-collapse:collapse;margin-top:12px;font-size:15px}
+    .pf2-txt th{text-align:left;font-size:11px;letter-spacing:.08em;font-weight:700;color:rgba(255,255,255,.55);padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03)}
+    .pf2-txt td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.88);white-space:nowrap}
+    .pf2-txt .r{text-align:right}.pf2-txt td.w{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+    .pf2-ty{display:inline-flex;align-items:center;gap:6px;font-weight:700}.pf2-ty i{font-style:normal;width:16px;text-align:center}
+    .pf2 .tp{color:#E8D46A;font-weight:700}.pf2 .tu{color:#9BFF4A;font-weight:700}
+    .pf2-txl{color:#6FA8FF;text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:12.5px}.pf2-txl:hover{text-decoration:underline}
+    .pf2-txm{display:none}
+    .pf2-txf{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px}
+    .pf2-txf .src{margin-left:auto;font-size:12.5px;color:rgba(255,255,255,.4)}
     /* step-2 placeholders: value history + recent transactions */
     .pf2-sec{margin-top:18px;padding:18px 20px}
     .pf2-sech{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
@@ -452,6 +473,11 @@
       .pf2-lgbf{font-size:13.5px}
       .pf2-le{gap:8px 10px}.pf2-le .lb{flex-basis:100%}
       .pf2-sec{padding:14px}
+      .pf2-t4.t2{gap:8px}.pf2-bx.big{flex-direction:column;text-align:center;gap:6px;padding:12px 8px}.pf2-bx.big .bic{width:44px;height:44px}.pf2-bx.big .v{font-size:22px}.pf2-bx.big .s{font-size:14px}.pf2-bx.big .lb{font-size:10.5px}
+      .pf2-txt{display:none}.pf2-txm{display:block;margin-top:8px}
+      .pf2-txm>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px 2px;border-bottom:1px solid rgba(255,255,255,.07);font-size:14.5px}
+      .pf2-txm .a{text-align:right;font-weight:700}.pf2-txm .d{color:rgba(255,255,255,.55);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pf2-txm .d.r{text-align:right}
+      .pf2-txf .src{margin-left:0}
       .pf2-src3{gap:6px}.pf2-src .v{font-size:17px}.pf2-src .s{font-size:12.5px}.pf2-src .l{font-size:9.5px;letter-spacing:.04em}.pf2-src .p{font-size:11px}.pf2-rtc img{width:44px;height:44px}
       .pf2-vhb{grid-template-columns:1fr}.pf2-hc{grid-template-columns:44px minmax(0,1fr);grid-template-rows:190px 24px auto}.pf2-hwait{height:214px}.pf2-pp{width:100%}.pf2-pp button{flex:1;min-width:0}.pf2-spk{width:76px;height:40px}.pf2-hy span{font-size:11px}.pf2-hx span{font-size:11px}.pf2-hx span:nth-child(even){display:none}
       .pf2-mmg{grid-template-columns:1fr}
@@ -1509,6 +1535,109 @@
       );
     };
 
+    /* ===== Portfolio v2 — RECENT TRANSACTIONS (2026-10-13, round 9) =====
+       PulseScan's token-transfer list per counted wallet and token (PTGC, UFO) — /api/v2/addresses/{w}/token-transfers, CORS
+       open, the latest 50 per call (tested live: ~1–10 s a call). Up to 3 calls in flight; answers cached 5 min in
+       localStorage (PFT_LS) so a reload paints at once. Transfers of one tx + token are netted for the wallet (a UFO sell is
+       the pair leg + the fee leg to the token contract → one "Sell"). Types: Claim (from the PTGC staking contract — staking
+       or lock reward), Stake (to it), Buy / Sell (the tx called a swap), Move (between two of YOUR wallets),
+       Receive / Send (anything else). Value = amount × that hour's / day's price (the history's price files). */
+    const PFT_LS='grays_pf_tx_v1';
+    const PFT_API='https://api.scan.pulsechain.com/api/v2/addresses/';
+    const PFT_STAKING='0xc71f597a2ac39e47f07102e849d18489c96f39ef';
+    const PFT_TTL=5*60e3;
+    const pftCache=(()=>{let c=null;return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_LS)||'{}')||{};}catch(e){c={};}return c;},save(){try{localStorage.setItem(PFT_LS,JSON.stringify(c));}catch(e){try{c={};localStorage.removeItem(PFT_LS);}catch(e2){}}}};})();
+    const pftFetch=async(addr,tok,force)=>{
+      const k=addr+'|'+tok,c=pftCache.get(),hit=c[k];
+      if(!force&&hit&&Date.now()-hit.at<PFT_TTL)return hit.items;
+      const ac=new AbortController();const to=setTimeout(()=>ac.abort(),25000);
+      try{
+        const r=await fetch(`${PFT_API}${addr}/token-transfers?type=ERC-20&token=${PFH_TOK[tok]}`,{signal:ac.signal});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        const j=await r.json();
+        const items=(j.items||[]).map(x=>({h:x.tx_hash,t:Date.parse(x.timestamp),f:(x.from&&x.from.hash||'').toLowerCase(),to:(x.to&&x.to.hash||'').toLowerCase(),m:x.method||'',v:(()=>{try{return Number(BigInt(x.total.value))/Math.pow(10,+x.total.decimals||18);}catch(e){return 0;}})()}));
+        c[k]={at:Date.now(),items};pftCache.save();return items;
+      }catch(e){if(hit)return hit.items;throw e;}finally{clearTimeout(to);}
+    };
+    const pftClassify=(legs,addr,own,tok)=>{
+      let net=0;legs.forEach(l=>{if(l.to===addr)net+=l.v;if(l.f===addr)net-=l.v;});
+      const tokAddr=PFH_TOK[tok].toLowerCase();
+      const others=legs.map(l=>l.to===addr?l.f:l.to).filter(a=>a&&a!==addr&&a!==tokAddr);
+      const m=(legs[0]&&legs[0].m||'').toLowerCase();
+      let type;
+      if(legs.some(l=>l.f===PFT_STAKING))type='Claim';   // staked PTGC never leaves the wallet, so anything paid out by the staking contract is a reward
+      else if(legs.some(l=>l.to===PFT_STAKING))type='Stake';
+      else if(/swap|multicall|execute|zap/.test(m))type=net>=0?'Buy':'Sell';
+      else if(others.length&&others.every(a=>own.has(a)))type='Move';
+      else type=net>=0?'Receive':'Send';
+      return{type,net};
+    };
+    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],Stake:['#F2D35B','⦿'],Unstake:['#F2D35B','↺'],Move:['#B26BFF','⇄']};
+    const PfRecentTx=({wallets,prices})=>{
+      const pxNow=React.useRef(prices);pxNow.current=prices;
+      const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});
+      const[more,setMore]=useState(false);
+      const[nonce,setNonce]=useState(0);
+      const key=wallets.map(w=>w.address.toLowerCase()).sort().join(',');
+      useEffect(()=>{
+        if(!wallets.length){setSt({state:'empty',rows:[],failed:0,done:0,total:0});return;}
+        let live=true;
+        (async()=>{
+          const own=new Set(wallets.map(w=>w.address.toLowerCase()));
+          const names={};wallets.forEach(w=>{names[w.address.toLowerCase()]=w.name||(w.address.slice(0,6)+'…'+w.address.slice(-4));});
+          const jobs=[];wallets.forEach(w=>['PTGC','UFO'].forEach(tok=>jobs.push({addr:w.address.toLowerCase(),tok})));
+          setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
+          const got=[];let failed=0,done=0,q=0;
+          const px=await pfhPrices().catch(()=>null);
+          const build=()=>{
+            const rows=[];
+            got.forEach(({addr,tok,items})=>{
+              const by={};items.forEach(it=>{(by[it.h]=by[it.h]||[]).push(it);});
+              Object.values(by).forEach(legs=>{const{type,net}=pftClassify(legs,addr,own,tok);if(Math.abs(net)<1e-9&&type!=='Move')return;
+                const t=legs[0].t;let p=px?pfhPriceAt(px,tok,t):null;
+                /* newer than the price files (they refresh hourly) → today's price */
+                if(p==null){const last=px&&px.hourly[tok]&&px.hourly[tok].length?px.hourly[tok][px.hourly[tok].length-1][0]:0;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(t>=last&&cur>0)p=cur;}
+                const cp=legs.map(l=>l.to===addr?l.f:l.to).find(a=>a&&a!==addr);
+                rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,amt:net,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
+            });
+            /* a Move shows once (the receiving side), not twice */
+            const seen=new Set();const out=[];
+            rows.sort((a,b)=>b.t-a.t).forEach(r=>{if(r.type==='Move'){const k=r.h+r.tok;if(seen.has(k))return;seen.add(k);if(r.amt<0){r.amt=-r.amt;}}out.push(r);});
+            return out;
+          };
+          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const items=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
+          await Promise.all([worker(),worker(),worker()]);
+          if(!live)return;
+          const rows=build();
+          setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
+        })();
+        return()=>{live=false;};
+      },[key,nonce]);
+      const show=st.rows.slice(0,more?40:10);
+      const fmtT=t=>{const d=new Date(t);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
+      const ty=t=>{const[c,g]=PFT_TYPE[t]||['#fff','•'];return <span className="pf2-ty" style={{color:c}}><i>{g}</i>{t}</span>;};
+      const amt=r=><span className={r.type==='Move'?'':r.amt>=0?'pos':'neg'}>{r.type==='Move'?'':r.amt>=0?'+':'−'}{pfAbbr(Math.abs(r.amt))}</span>;
+      const tx=h=><a className="pf2-txl" href={`https://scan.pulsechain.com/tx/${h}`} target="_blank" rel="noopener noreferrer">{h.slice(0,6)}{'…'}{h.slice(-4)} {'↗'}</a>;
+      return(
+        <section className="pf2-pn pf2-sec pf2-rt">
+          <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>
+            {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
+            <button className="pf2-lnk q" onClick={()=>setNonce(n=>n+1)}>{'↻'} Refresh</button></div>
+          {st.state==='loading'&&<div className="pf2-soon">Reading your wallets{'’'} PTGC and UFO transfers from PulseScan{'…'}</div>}
+          {st.state==='failed'&&<div className="pf2-soon">Couldn{'’'}t reach PulseScan right now. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></div>}
+          {st.state==='none'&&<div className="pf2-soon">No PTGC or UFO transfers in the counted wallets yet.</div>}
+          {st.state==='ok'&&st.rows.length>0&&<>
+            <table className="pf2-txt"><thead><tr><th>TIME</th><th>WALLET</th><th>TYPE</th><th>TOKEN</th><th className="r">AMOUNT</th><th className="r">VALUE</th><th>TX</th></tr></thead>
+              <tbody>{show.map(r=><tr key={r.id}><td>{fmtT(r.t)}</td><td className="w">{r.who}</td><td>{ty(r.type)}</td><td className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</td><td className="r">{amt(r)}</td><td className="r">{fmtDollar(r.usd)}</td><td>{tx(r.h)}</td></tr>)}</tbody></table>
+            <div className="pf2-txm">{show.map(r=><div key={r.id}><span>{ty(r.type)} <b className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</b></span><span className="a">{amt(r)}</span><span className="d">{fmtT(r.t)} {'·'} {r.who}</span><span className="d r">{fmtDollar(r.usd)} {tx(r.h)}</span></div>)}</div>
+            <div className="pf2-txf">{st.rows.length>10&&<button className="pf2-lnk" onClick={()=>setMore(!more)}>{more?'Show fewer':`Show more (${Math.min(40,st.rows.length)})`}</button>}
+              {st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
+              <span className="src">From PulseScan {'·'} the latest 50 transfers per wallet and token</span></div>
+          </>}
+        </section>
+      );
+    };
+
     /* ===== PORTFOLIO v2 (2026-10-13) — the page body of design/portfolio/mock-portfolio-v4.html, built by tools/pf-v2.py =====
        HIDDEN: PF_V2_LIVE=false → the classic body stays the default and a faint dot bottom-right (PfV2Dot) flips this device
        to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
@@ -1603,6 +1732,8 @@
       );
     };
     /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
+    const PF_IC_HOLD='logos/leagues/lg-ic-coins.webp?v=1';   // round 9: his gold coin stack (the Leagues "Starting supply" icon)
+    const PF_IC_EARN='logos/portfolio/pf-lifetime.webp';      // round 9: his lifetime-earned icon (placeholder = the rising coins until his file lands)
     const PfYield=({cls,tok,y,earned,putIn,what})=>{
       const[open,setOpen]=useState(false);
       const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
@@ -1770,10 +1901,9 @@
               <div className="pf2-tkh"><img className="lg" src={TOKENS.PTGC.logo} alt=""/>
                 <div className="nm"><div className="t">PTGC</div><div className="sb">The Grays Currency</div><PfCreatures tokens={pt.totalHolding} token="PTGC"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
-              <div className="pf2-t4 t3">
-                <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
-                <div className="pf2-bx rf"><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div>
-                <PfYield cls="rf" tok="PTGC" y={ptYield} earned={ptEarned} putIn={ptIn} what="staking, locking and reflections"/>
+              <div className="pf2-t4 t2">
+                <div className="pf2-bx gold big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div></div>
+                <div className="pf2-bx rf big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div></div>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Liquid',pt.walletFree,'#F2D35B'],['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
@@ -1825,10 +1955,9 @@
               <div className="pf2-tkh"><img className="lg" src={TOKENS.UFO.logo} alt=""/>
                 <div className="nm"><div className="t">UFO</div><div className="sb">UFO Token</div><PfCreatures tokens={uf.balance} token="UFO"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
-              <div className="pf2-t4 t3">
-                <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
-                <div className="pf2-bx grn"><div className="lb">Lifetime earned</div>{reflBox()}</div>
-                <PfYield cls="grn" tok="UFO" y={ufoYield} earned={ufoRefl} putIn={ufRecv} what="reflections"/>
+              <div className="pf2-t4 t2">
+                <div className="pf2-bx grn big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div></div>
+                <div className="pf2-bx grn big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div>{reflBox()}</div></div>
               </div>
               {uf.balance>0&&ufoShare!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoReflNow,'#22D3EE']]}/>
@@ -1841,17 +1970,14 @@
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-ebs">
                 <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
-                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>}</div></div>
+                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
               </div>
             </section>
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
           <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod}/>
-          <section className="pf2-pn pf2-sec">
-            <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2></div>
-            <div className="pf2-soon"><b>Coming next.</b> Receives, sends, swaps, stakes and claims across your wallets.</div>
-          </section>
+          <PfRecentTx wallets={counted} prices={prices}/>
 
           {/* ---- the two folds ---- */}
           <div className="pf2-folds">
@@ -1887,7 +2013,7 @@
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
             <p><b>PTGC</b> holdings are the wallet's full balance; the PTGC staking contract tells us how much of it is staked or locked, and what rewards are waiting to be claimed. <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
-            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). <b>Reward yield</b> is how much you have earned for every token you put in: lifetime earned {'\u00F7'} the tokens you bought or moved into these wallets (reward payouts don{'\u2019'}t count as putting in). Put in 1,000,000 and earned 250,000 {'\u2192'} 25 %. Selling never changes it. Moving tokens between two of your own wallets counts as putting in twice, which makes it read a little low, never high. UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
+            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></div>
