@@ -94,3 +94,17 @@ Shaka: "Lets BUILD BUT… I do not want to make it live yet … hide it behind a
 built from the page's own data, behind `PF_V2_LIVE=false` + the faint dot (localStorage `grays_pf_v2_preview`). Value
 History + Recent Transactions are "Coming next" panels (step 2). Renders: `renders/build1-v2-1440.jpg`, `build1-v2-390.jpg`,
 `build1-v2-rpcdown.jpg` (harness stub data — every wallet reads the same canned balance). Detail: `handover/sessions/2026-10-13.md`.
+
+## Round 2 on the built page (2026-10-13, his first live look)
+"1) the ptgc and ufo boxes do not align good enough, 2) there does not need to be boxes around each sea creature,
+3) the view tiers should say leagues, and the leagues sheet should look like the leagues sheet we use … on the dashboards"
++ "we need to be able to edit a saved wallet so we can change the name".
+1. The two token cards share one set of row tracks (CSS subgrid): header · tiles · donut · league · lifetime · extras line up
+   and both cards end level (`probes/pf2-align.js`); the creature row spans the card under the name (one line for six tiers).
+2. The creatures are bare sea art 34 px + "×n" — no chip boxes.
+3. "Leagues" button → `PfTierInfoModal`, a port of index.html's TierInfoModal (sea header with whale + shark, lit coin,
+   Starting / Burned / Circulating tiles, eight rows, Close); its lg-* CSS is copied from index.html by the build script on
+   every run. Burned read live (balance of 0x…369 + totalSupply). Numbers via `pfAbbr` (= index fmtAbbr, never "1000.00M").
+4. Edit: a pencil beside every wallet's name (always visible) → the Edit window — address + Copy, Name, Group (+ new
+   group), Save / Cancel / Remove wallet; Esc closes (`probes/pf2-edit.js`). The card's corner × stays.
+Renders: `renders/r2-cards.jpg`, `r2-leagues.jpg`, `r2-edit.jpg`.

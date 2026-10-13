@@ -35,14 +35,36 @@ def rep(old, new, count=1):
         return t.replace(old, new)
     return f
 
-css = open(os.path.join(HERE, 'pf2.css'), encoding='utf-8').read()
-jsx = open(os.path.join(HERE, 'PortfolioV2.jsx'), encoding='utf-8').read()
+css = open(os.path.join(HERE, 'pf2.css'), encoding='utf-8').read().rstrip('\n')
+jsx = (open(os.path.join(HERE, 'PfLeagues.jsx'), encoding='utf-8').read().rstrip('\n') + '\n\n'
+       + open(os.path.join(HERE, 'PortfolioV2.jsx'), encoding='utf-8').read().rstrip('\n'))
+# round 2: the Leagues window's CSS, taken from index.html each run (one design for both pages)
+ix = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
+a = ix.index('    .lg-m{'); b = ix.index('    /* the combined card (Socials', a)
+css += ('\n    /* ---- the Leagues window (lg-*), copied from index.html by tools/pf-v2.py — edit it THERE, then re-run ---- */\n'
+        + ix[a:b].rstrip('\n'))
 
-# 1. CSS
-once('/* ===== Portfolio v2 (2026-10-13', rep('  </style>\n</head>', css.rstrip('\n') + '\n  </style>\n</head>'))
+CSS_A, CSS_B = '    /* ===== Portfolio v2 (2026-10-13, design', '\n  </style>\n</head>'
+JSX_A, JSX_B = '    /* Portfolio v2, round 2 (2026-10-13): the Leagues window', '\n\n    const PortfolioPage=({onBack})=>{'
+JSX_A0 = '    /* ===== PORTFOLIO v2 (2026-10-13)'   # step-1 builds started the block here
 
-# 2. the component
-once('/* ===== PORTFOLIO v2 (2026-10-13)', rep('    const PortfolioPage=({onBack})=>{', jsx.rstrip('\n') + '\n\n    const PortfolioPage=({onBack})=>{'))
+def sync(start_markers, end, block, what):
+    """Insert the block before `end`, or replace what an earlier run inserted (so edits to tools/pf-v2/* flow in)."""
+    global s, edits
+    starts = [s.find(m) for m in start_markers if s.find(m) >= 0]
+    if starts:
+        i = min(starts); j = s.index(end, i)
+        if s[i:j] != block:
+            s = s[:i] + block + s[j:]; edits += 1
+    else:
+        anchor = '\n  </style>\n</head>' if what == 'css' else '    const PortfolioPage=({onBack})=>{'
+        new = ('\n' + block + anchor) if what == 'css' else (block + '\n\n' + anchor)
+        if s.count(anchor) != 1: sys.exit(f'pf-v2: anchor for {what} not found')
+        s = s.replace(anchor, new); edits += 1
+
+# 1. CSS  2. the components (Leagues window + PortfolioV2)
+sync([CSS_A], CSS_B, css, 'css')
+sync([JSX_A, JSX_A0], JSX_B, jsx, 'jsx')
 
 # 3. state + toggle
 once('const[pfV2,setPfV2]', rep(
@@ -70,6 +92,13 @@ def wrap(t):
     return (t[:i] + '          {/* Portfolio v2 (2026-10-13): the new body behind the faint dot; the classic body below is untouched */}\n'
             + '          {pfV2?<PortfolioV2 ' + PROPS + '/>:(<>\n' + body + '          </>)}\n          \n' + t[j:])
 once('{pfV2?<PortfolioV2 ', wrap)
+
+# 6. round 2: updateWallet (edit a wallet's name + group from the v2 Edit window)
+once('const updateWalletV2=', rep(
+    "      const togglePfV2=",
+    "      const updateWalletV2=(addr,patch)=>setWallets(prev=>prev.map(w=>w.address.toLowerCase()===addr?{...w,...patch}:w));   // Portfolio v2 round 2: the Edit window\n"
+    "      const togglePfV2="))
+once('<PortfolioV2 updateWallet=', rep('{pfV2?<PortfolioV2 ', '{pfV2?<PortfolioV2 updateWallet={updateWalletV2} '))
 
 # 5. the dot + classic-only footer
 once('<PfV2Dot ', rep(

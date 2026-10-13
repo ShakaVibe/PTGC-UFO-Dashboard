@@ -47,14 +47,43 @@
         <div className="pf2-lgb">
           <div className="pf2-lgbh"><span className="lb">League</span>
             {L.cur?<span className="cur"><img src={pfSea(L.cur.emoji)} alt=""/>{L.cur.name}</span>:<span className="cur" style={{color:'rgba(255,255,255,.55)'}}>below {L.next.name}</span>}
-            <button className="lnk" onClick={onTiers}>View tiers {'›'}</button></div>
+            <button className="lnk" onClick={onTiers}>Leagues</button></div>
           {L.next?(
             <>
               <div className="pf2-bar">{L.cur?<img src={pfSea(L.cur.emoji)} alt=""/>:<span style={{width:28}}/>}<div className="pf2-trk" role="progressbar" aria-valuenow={Math.round(L.pct)} aria-valuemin="0" aria-valuemax="100" aria-label={`Progress to ${L.next.name}`}><div className="pf2-fl" style={{width:L.pct+'%'}}></div><i className="pf2-tip" style={{left:L.pct+'%'}}></i></div><img className="nx" src={pfSea(L.next.emoji)} alt=""/></div>
-              <div className="pf2-lgbf"><span><b>{L.pct.toFixed(1)}%</b> to <b className="c2">{L.next.name}</b></span><span>need <b>{fmtAbbr(L.need)}</b>{cost!=null&&<> {'≈'} {fmtDollar(cost,0)}</>}</span></div>
+              <div className="pf2-lgbf"><span><b>{L.pct.toFixed(1)}%</b> to <b className="c2">{L.next.name}</b></span><span>need <b>{pfAbbr(L.need)}</b>{cost!=null&&<> {'≈'} {fmtDollar(cost,0)}</>}</span></div>
             </>
           ):<div className="pf2-top c2">Top league reached {'—'} {L.cur.name}</div>}
         </div>
+      );
+    };
+    /* round 2: edit a saved wallet — its label and its group (the classic page's Edit Wallet only renamed) */
+    const PfEditWallet=({w,groups,save,remove,close})=>{
+      const[name,setName]=useState(w.name||'');
+      const[grp,setGrp]=useState(w.group||'Default');
+      const[newG,setNewG]=useState('');
+      const[copied,setCopied]=useState(false);
+      const g=grp==='__new'?newG.trim():grp;
+      const ok=!(grp==='__new'&&!g);
+      const go=()=>{if(ok)save({name:name.trim(),group:g||'Default'});};
+      return(
+        <PfModal className="z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80" onClose={close} label="Edit wallet">
+          <div className="pf2-ew" onClick={e=>e.stopPropagation()}>
+            <button className="x" onClick={close} aria-label="Close">{'\u00D7'}</button>
+            <h2>EDIT WALLET</h2>
+            <div className="lb">Address</div>
+            <div className="adr"><span className="mono">{w.address}</span><button onClick={()=>{try{navigator.clipboard.writeText(w.address);setCopied(true);setTimeout(()=>setCopied(false),1500);}catch(e){}}}>{copied?'Copied':'Copy'}</button></div>
+            <label className="lb" htmlFor="pf2-ew-n">Name</label>
+            <input id="pf2-ew-n" className="in" value={name} onChange={e=>setName(e.target.value)} placeholder="Give this wallet a name…" autoFocus onKeyDown={e=>e.key==='Enter'&&go()}/>
+            <label className="lb" htmlFor="pf2-ew-g">Group</label>
+            <select id="pf2-ew-g" className="in" value={grp} onChange={e=>setGrp(e.target.value)}>
+              {[...new Set(['Default',...groups,w.group||'Default'])].map(x=><option key={x} value={x}>{x}</option>)}
+              <option value="__new">+ New group</option>
+            </select>
+            {grp==='__new'&&<input className="in" value={newG} onChange={e=>setNewG(e.target.value)} placeholder="New group name…" aria-label="New group name" onKeyDown={e=>e.key==='Enter'&&go()}/>}
+            <div className="bt"><button className="rm" onClick={remove}>Remove wallet</button><span style={{flex:1}}></span><button className="q" onClick={close}>Cancel</button><button className="sv" onClick={go} disabled={!ok}>Save</button></div>
+          </div>
+        </PfModal>
       );
     };
     const PortfolioV2=(p)=>{
@@ -66,6 +95,8 @@
       const[det,setDet]=useState(false);
       const[bdOpen,setBdOpen]=useState(false);
       const[addMsg,setAddMsg]=useState('');
+      const[lgTok,setLgTok]=useState(null);
+      const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
       const simulated=moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='');
       const gNames=Object.keys(groups);
       useEffect(()=>{if(grp!=='All'&&!groups[grp])setGrp('All');},[gNames.join('|')]);
@@ -104,7 +135,7 @@
       const fmtLock=t=>{if(!t)return'—';const now=Date.now()/1000;if(t<=now)return'Unlockable';const d=Math.floor((t-now)/86400);if(d>365)return Math.floor(d/365)+'y '+Math.floor((d%365)/30)+'m';if(d>30)return Math.floor(d/30)+'m '+d%30+'d';return d+'d';};
       const reflBox=()=>uf.reflState==='pending'?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>scanning{'…'}</div><div className="s">{uf.reflPending} wallet{uf.reflPending>1?'s':''}</div></>
         :uf.reflState==='failed'?<><div className="v" style={{fontSize:16,color:'#FFD38A'}}>unavailable</div><div className="s"><button onClick={retryFailedReflScans}>Retry</button></div></>
-        :<><div className="v">{fmtAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>;
+        :<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>;
       return(
         <div className="pf2"><div className="pf2-in">
           {/* ---- title, add capsule, toolbar, the deck ---- */}
@@ -143,7 +174,7 @@
               const ps=v>0?(pv||0)/v:null;
               return(
                 <div key={a} className={`pf2-wc ${on?'on':'off'}${st==='bad'?' bad':''}`}>
-                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><span className={`pf2-dot ${st==='ok'?'':st}`} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
+                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
                   <div className="ad mono">{w.name?<>{truncAddr(w.address)} {'·'} {w.group||'Default'}</>:<>{(w.group||'Default').toUpperCase()}</>}</div>
                   {st==='bad'?<button className="retry" onClick={()=>fetchWalletData(w.address)}>Read failed {'·'} retry</button>
                   :v==null?<div className="v dim">{st==='run'?'loading…':'—'}</div>
@@ -152,7 +183,7 @@
                     <div className="pf2-split" aria-hidden="true">{ps!=null&&<><i className="p" style={{width:ps*100+'%'}}></i><i className="u" style={{width:(1-ps)*100+'%'}}></i></>}</div>
                     <div className="r3"><span className="p">PTGC {ps==null?'—':Math.round(ps*100)+'%'}</span><span className="u">UFO {ps==null?'—':Math.round((1-ps)*100)+'%'}</span></div>
                   </>}
-                  <div className="acts"><button onClick={()=>{p.setEditingWallet(a);p.setEditWalletName(w.name||'');}} aria-label={`Rename ${label}`}>{'✎'} rename</button><button onClick={()=>removeWallet(w.address)} aria-label={`Remove ${label}`}>{'✕'}</button></div>
+                  <div className="acts"><button onClick={()=>removeWallet(w.address)} aria-label={`Remove ${label}`} title="Remove this wallet">✕</button></div>
                 </div>
               );
             })}
@@ -180,33 +211,33 @@
                 <div className="nm"><div className="t">PTGC</div><div className="sb">The Grays Currency</div><PfCreatures tokens={pt.totalHolding} token="PTGC"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
               <div className="pf2-t4">
-                <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{fmtAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
-                <div className="pf2-bx blu"><div className="lb">Liquid</div><div className="v">{fmtAbbr(pt.walletFree)}</div><div className="s">{fmtDollar(usd(pt.walletFree,dp.ptgc))}</div></div>
-                <div className="pf2-bx pur"><div className="lb">Staked</div><div className="v">{fmtAbbr(pt.staked)}</div><div className="s">{fmtDollar(usd(pt.staked,dp.ptgc))}</div></div>
-                <div className="pf2-bx rf"><div className="lb">Reflections</div><div className="v">{fmtAbbr(pt.reflections)}</div><div className="s">{fmtDollar(usd(pt.reflections,dp.ptgc))}</div></div>
+                <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
+                <div className="pf2-bx blu"><div className="lb">Liquid</div><div className="v">{pfAbbr(pt.walletFree)}</div><div className="s">{fmtDollar(usd(pt.walletFree,dp.ptgc))}</div></div>
+                <div className="pf2-bx pur"><div className="lb">Staked</div><div className="v">{pfAbbr(pt.staked)}</div><div className="s">{fmtDollar(usd(pt.staked,dp.ptgc))}</div></div>
+                <div className="pf2-bx rf"><div className="lb">Reflections</div><div className="v">{pfAbbr(pt.reflections)}</div><div className="s">{fmtDollar(usd(pt.reflections,dp.ptgc))}</div></div>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899'],['Liquid',pt.walletFree,'#F2D35B']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
-                  <div className="pf2-lgd">{parts.map(x=><div key={x[0]}><i style={{background:x[2]}}></i>{x[0]}<b>{fmtAbbr(x[1])}</b><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
+                  <div className="pf2-lgd">{parts.map(x=><div key={x[0]}><i style={{background:x[2]}}></i>{x[0]}<b>{pfAbbr(x[1])}</b><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
-              <PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>p.setShowPtgcLeagues(true)}/>
+              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')}/></div>
               <div className="pf2-le"><span className="lb">Total lifetime earned</span><span className="n">{fmtComma(Math.floor(ptgcEarned),2)}</span><span className="k">PTGC</span><span className="d"></span><span className="usd">{fmtDollar(usd(ptgcEarned,dp.ptgc))}</span></div>
-              <div className="pf2-ext">
-                <button onClick={()=>setDet(!det)} aria-expanded={det}>Claimable rewards <b>{fmtAbbr(pt.totalPending)} PTGC</b></button>
+              <div className="pf2-extw"><div className="pf2-ext">
+                <button onClick={()=>setDet(!det)} aria-expanded={det}>Claimable rewards <b>{pfAbbr(pt.totalPending)} PTGC</b></button>
                 <button onClick={()=>setDet(!det)} aria-expanded={det}>Lock positions <b>{pt.locks.length}</b></button>
-                <span>Earned: staking <b>{fmtAbbr(pt.claimed)}</b> {'·'} locking <b>{fmtAbbr(pt.lockClaimed)}</b> {'·'} reflections <b>{fmtAbbr(pt.reflections)}</b></span>
+                <span>Earned: staking <b>{pfAbbr(pt.claimed)}</b> {'·'} locking <b>{pfAbbr(pt.lockClaimed)}</b> {'·'} reflections <b>{pfAbbr(pt.reflections)}</b></span>
               </div>
               {det&&(
                 <div className="pf2-det">
                   <div className="h">CLAIMABLE NOW</div>
-                  <div className="row"><span>Staking rewards</span><b>{fmtAbbr(pt.pendingStake)} <span className="na">{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span></b></div>
-                  <div className="row"><span>Lock rewards</span><b>{fmtAbbr(pt.pendingLocks)} <span className="na">{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></b></div>
+                  <div className="row"><span>Staking rewards</span><b>{pfAbbr(pt.pendingStake)} <span className="na">{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span></b></div>
+                  <div className="row"><span>Lock rewards</span><b>{pfAbbr(pt.pendingLocks)} <span className="na">{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></b></div>
                   {pt.locks.length>0&&<>
                     <div className="h" style={{marginTop:10}}>LOCK POSITIONS {'·'} <a href="https://goptgc.com" target="_blank" rel="noopener noreferrer">verify on goptgc.com before unlocking</a></div>
-                    {pt.locks.map((l,i)=><div className="row" key={i}><span><b>{fmtAbbr(l.amount)}</b> PTGC <span className="na">{fmtDollar(usd(l.amount,dp.ptgc))}</span></span><span className={l.endTime<=Date.now()/1000?'pos':''}>{fmtLock(l.endTime)}</span><span className="pos">+{fmtAbbr(l.pending)}</span></div>)}
+                    {pt.locks.map((l,i)=><div className="row" key={i}><span><b>{pfAbbr(l.amount)}</b> PTGC <span className="na">{fmtDollar(usd(l.amount,dp.ptgc))}</span></span><span className={l.endTime<=Date.now()/1000?'pos':''}>{fmtLock(l.endTime)}</span><span className="pos">+{pfAbbr(l.pending)}</span></div>)}
                   </>}
                 </div>
-              )}
+              )}</div>
             </section>
 
             <section className="pf2-tk u">
@@ -214,18 +245,18 @@
                 <div className="nm"><div className="t">UFO</div><div className="sb">UFO Token</div><PfCreatures tokens={uf.balance} token="UFO"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
               <div className="pf2-t4">
-                <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{fmtAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
-                <div className="pf2-bx"><div className="lb">Principal</div><div className="v">{ufoPrin==null?'—':fmtAbbr(ufoPrin)}</div><div className="s">{ufoPrin==null?'after the scan':fmtDollar(usd(ufoPrin,dp.ufo))}</div></div>
+                <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
+                <div className="pf2-bx"><div className="lb">Principal</div><div className="v">{ufoPrin==null?'—':pfAbbr(ufoPrin)}</div><div className="s">{ufoPrin==null?'after the scan':fmtDollar(usd(ufoPrin,dp.ufo))}</div></div>
                 <div className="pf2-bx grn"><div className="lb">Reflections</div>{reflBox()}</div>
                 <div className="pf2-bx grn"><div className="lb">Reflection yield</div><div className="v">{ufoYield==null?'—':(ufoYield>0&&ufoYield<0.01?'<0.01':ufoYield.toFixed(ufoYield<1?3:2))+(ufoYield==null?'':'%')}</div><div className="s">of principal</div></div>
               </div>
               {uf.balance>0&&ufoRefl!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoRefl,'#22D3EE']]}/>
-                  <div className="pf2-lgd"><div><i style={{background:'#7CFC00'}}></i>Principal<b>{fmtAbbr(ufoPrin)}</b><em>{pfPct(ufoPrin,uf.balance)}</em></div><div><i style={{background:'#22D3EE'}}></i>Reflections<b>{fmtAbbr(ufoRefl)}</b><em>{pfPct(ufoRefl,uf.balance)}</em></div></div></div>
+                  <div className="pf2-lgd"><div><i style={{background:'#7CFC00'}}></i>Principal<b>{pfAbbr(ufoPrin)}</b><em>{pfPct(ufoPrin,uf.balance)}</em></div><div><i style={{background:'#22D3EE'}}></i>Reflections<b>{pfAbbr(ufoRefl)}</b><em>{pfPct(ufoRefl,uf.balance)}</em></div></div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
-              <PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>p.setShowUfoLeagues(true)}/>
+              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-le"><span className="lb">Total lifetime earned</span>{ufoRefl==null?<span className="msg">{uf.reflState==='failed'?'unavailable':'scanning…'}</span>:<><span className="n">{fmtComma(Math.floor(ufoRefl),2)}</span><span className="k">UFO</span><span className="d"></span><span className="usd">{fmtDollar(usd(ufoRefl,dp.ufo))}</span></>}</div>
-              <div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div>
+              <div className="pf2-extw"><div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div></div>
             </section>
           </div>
 
@@ -246,7 +277,7 @@
               {bdOpen&&<div className="pf2-foldb" style={{overflowX:'auto'}}>
                 <table className="pf2-tbl"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING</th><th>UFO</th><th>REFLECTIONS</th></tr></thead><tbody>
                   {counted.map(w=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;const r=d.ufo.reflections;return(
-                    <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{fmtAbbr(d.ptgc.totalHolding)}</td><td className="pos">{fmtAbbr(d.ptgc.totalPending)}</td><td className="u">{fmtAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:fmtAbbr(r)}</td></tr>);})}
+                    <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{pfAbbr(d.ptgc.totalHolding)}</td><td className="pos">{pfAbbr(d.ptgc.totalPending)}</td><td className="u">{pfAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:pfAbbr(r)}</td></tr>);})}
                 </tbody></table></div>}
             </section>
             <section className="pf2-pn pf2-fold">
@@ -264,6 +295,8 @@
           </>}
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
+        {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
+        {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
           <div className="pf2-modal" onClick={()=>setHow(false)} role="dialog" aria-modal="true" aria-label="How it works"><div onClick={e=>e.stopPropagation()}>
             <button className="x" onClick={()=>setHow(false)} aria-label="Close">{'×'}</button>

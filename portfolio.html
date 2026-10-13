@@ -128,10 +128,29 @@
     .pf2-split i.p{background:linear-gradient(90deg,#B8901A,#F2D35B)}.pf2-split i.u{background:linear-gradient(90deg,#3FB81C,#7CFC00)}
     .pf2-wc .r3{display:flex;justify-content:space-between;margin-top:5px;font-size:12.5px;color:rgba(255,255,255,.55)}
     .pf2-wc .r3 .p{color:#E8D46A}.pf2-wc .r3 .u{color:#9BFF4A}
-    .pf2-wc .acts{position:absolute;right:8px;bottom:-1px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
-    .pf2-wc:hover .acts,.pf2-wc:focus-within .acts{opacity:1}
-    .pf2-wc .acts button{border:0;background:rgba(0,0,0,.75);color:rgba(255,255,255,.7);font-size:12px;padding:2px 6px;border-radius:5px}
-    .pf2-wc .acts button:hover{color:#fff}
+    /* round 2: the edit pencil sits beside the name, always visible (Shaka could not find the hover-only rename) */
+    .pf2-ed{flex:none;border:0;background:transparent;color:rgba(255,255,255,.45);font-size:14px;line-height:1;padding:3px 4px;border-radius:5px}
+    .pf2-ed:hover,.pf2-ed:focus-visible{color:#F6E98A;background:rgba(217,202,93,.12)}
+    .pf2-wc .acts{position:absolute;right:6px;bottom:4px;display:flex}
+    .pf2-wc .acts button{border:0;background:transparent;color:rgba(255,255,255,.3);font-size:11px;padding:2px 5px;border-radius:5px}
+    .pf2-wc .acts button:hover{color:#FF8D94;background:rgba(255,75,85,.12)}
+    .pf2-wc .r3{padding-right:16px}
+    /* the edit window */
+    .pf2-ew{position:relative;max-width:460px;width:100%;border-radius:16px;border:1px solid rgba(217,202,93,.55);background:linear-gradient(180deg,#14120a,#0a0a0c);padding:20px 20px 16px;color:#fff;font-family:'Rajdhani',sans-serif;box-shadow:0 0 30px rgba(217,202,93,.15)}
+    .pf2-ew h2{margin:0 0 14px;font-family:'Orbitron',sans-serif;font-weight:900;font-size:17px;letter-spacing:.06em;color:#F6E98A}
+    .pf2-ew .x{position:absolute;right:12px;top:10px;border:0;background:transparent;color:rgba(255,255,255,.7);font-size:24px;line-height:1}
+    .pf2-ew .lb{display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);margin:12px 0 5px}
+    .pf2-ew .adr{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.4)}
+    .pf2-ew .adr .mono{flex:1;min-width:0;word-break:break-all;color:rgba(255,255,255,.75);font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+    .pf2-ew .adr button{flex:none;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.8);font-size:12.5px;font-weight:700;border-radius:6px;padding:3px 9px}
+    .pf2-ew .in{display:block;width:100%;height:40px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:#070a10;color:#fff;padding:0 12px;font:inherit;font-size:16px;margin-top:0}
+    .pf2-ew .in+.in{margin-top:8px}
+    .pf2-ew select.in option{background:#111}
+    .pf2-ew .bt{display:flex;gap:8px;align-items:center;margin-top:18px}
+    .pf2-ew .bt button{height:38px;border-radius:9px;padding:0 16px;font-weight:700;font-size:15px;border:1px solid rgba(255,255,255,.18);background:transparent;color:rgba(255,255,255,.8)}
+    .pf2-ew .bt .sv{border:0;background:linear-gradient(180deg,#FFE27A,#F2C94C 50%,#D9A520);color:#1a1200}
+    .pf2-ew .bt .sv:disabled{opacity:.4}
+    .pf2-ew .bt .rm{border-color:rgba(255,75,85,.4);color:#FF9AA0;font-size:13.5px;padding:0 11px}
     .pf2-wc .retry{margin-top:8px;font-size:12.5px;font-weight:700;color:#FFB4B9;border:1px solid rgba(255,75,85,.45);background:rgba(255,75,85,.1);border-radius:6px;padding:3px 8px}
     .pf2-more{display:none}
     .pf2-empty{grid-column:1/-1;text-align:center;padding:34px 10px;color:rgba(255,255,255,.55);font-size:16px;border:1px dashed rgba(255,255,255,.14);border-radius:12px}
@@ -152,13 +171,22 @@
     .pf2-st .v{font-size:31px;font-weight:700;line-height:1.05;margin-top:4px;white-space:nowrap}
     .pf2-st .s{font-size:15.5px;font-weight:700;margin-top:2px}
     /* the two token cards */
-    .pf2-tok2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px;align-items:start}
+    .pf2-tok2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;margin-top:18px;align-items:start}
+    /* round 2 (Shaka: "the ptgc and ufo boxes do not align good enough"): the two cards share ONE set of row tracks (subgrid) —
+       header · tiles · donut · league · lifetime · extras — so every band lines up across them and both cards end level */
+    @supports (grid-template-rows:subgrid){
+      .pf2-tok2{grid-template-rows:repeat(6,auto);align-items:stretch}
+      .pf2-tk{grid-row:span 6;display:grid;grid-template-rows:subgrid;row-gap:0}
+      .pf2-tk>.pf2-dn,.pf2-tk>.pf2-wait{align-self:center}
+    }
     .pf2-tk{padding:18px;border-radius:14px;overflow:hidden;min-width:0}
     .pf2-tk.p{border:1.5px solid rgba(217,202,93,.8);background:radial-gradient(420px 220px at 72% 6%,rgba(120,60,200,.28),transparent 70%),linear-gradient(180deg,rgba(18,14,24,.96),rgba(8,8,12,.96));box-shadow:0 0 26px rgba(217,202,93,.12),0 10px 30px rgba(0,0,0,.5)}
     .pf2-tk.u{border:1.5px solid rgba(124,252,0,.7);background:radial-gradient(420px 220px at 72% 6%,rgba(40,140,60,.25),transparent 70%),linear-gradient(180deg,rgba(10,22,14,.96),rgba(6,10,8,.96));box-shadow:0 0 26px rgba(124,252,0,.12),0 10px 30px rgba(0,0,0,.5)}
-    .pf2-tkh{display:flex;align-items:flex-start;gap:14px}
-    .pf2-tkh img.lg{width:60px;height:60px;border-radius:50%;flex:none;margin-top:2px}
-    .pf2-tkh .nm{flex:1;min-width:0}
+    .pf2-tkh{display:grid;grid-template-columns:60px minmax(0,1fr) auto;column-gap:14px;align-items:start}
+    .pf2-tkh img.lg{grid-column:1;grid-row:1/3;width:60px;height:60px;border-radius:50%;margin-top:2px}
+    .pf2-tkh .nm{display:contents}
+    .pf2-tkh .t{grid-column:2;grid-row:1}.pf2-tkh .sb{grid-column:2;grid-row:2}.pf2-tkh .px{grid-column:3;grid-row:1/3}
+    .pf2-tkh .pf2-crw{grid-column:2/-1;grid-row:3}
     .pf2-tkh .t{font-family:'Orbitron',sans-serif;font-weight:900;font-size:30px;line-height:1;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
     .pf2-tk.p .t{background-image:linear-gradient(180deg,#FFF3B0,#F2D35B 45%,#C9921A 70%,#F2C94C)}
     .pf2-tk.u .t{background-image:linear-gradient(180deg,#E9FFC8,#9BFF3C 45%,#4CB800 72%,#8DFF3A)}
@@ -166,10 +194,9 @@
     .pf2-tkh .px{text-align:right;flex:none}
     .pf2-tkh .px .a{font-size:22px;font-weight:700}
     .pf2-tkh .px .c{font-size:16px;font-weight:700;margin-top:2px}
-    .pf2-crw{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-    .pf2-crw span{display:inline-flex;align-items:center;gap:3px;height:34px;padding:0 10px 0 4px;border-radius:9px;background:radial-gradient(ellipse at 30% 50%,rgba(255,255,255,.08),rgba(0,0,0,.55) 75%);border:1px solid rgba(255,255,255,.12);font-weight:700;font-size:16px}
-    .pf2-tk.p .pf2-crw span{border-color:rgba(217,202,93,.3)}.pf2-tk.u .pf2-crw span{border-color:rgba(124,252,0,.28)}
-    .pf2-crw img{width:30px;height:30px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+    .pf2-crw{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:10px}
+    .pf2-crw span{display:inline-flex;align-items:center;gap:3px;font-weight:700;font-size:17px;text-shadow:0 1px 3px #000}   /* round 2: no box round each creature (Shaka) */
+    .pf2-crw img{width:34px;height:34px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.75))}
     .pf2-t4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px}
     .pf2-bx{border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.42);padding:11px 8px 12px;text-align:center;min-width:0}
     .pf2-bx .lb{font-size:11.5px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.62)}
@@ -191,7 +218,8 @@
     .pf2-lgd em{font-style:normal;color:rgba(255,255,255,.5);font-size:14.5px;text-align:right}
     .pf2-wait{padding:26px 6px;text-align:center;color:rgba(255,255,255,.5);font-size:15.5px}
     /* leagues block */
-    .pf2-lgb{border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.45);padding:12px 14px;margin:0 0 12px}
+    .pf2-lgw{margin:0 0 12px}
+    .pf2-lgb{border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.45);padding:12px 14px}
     .pf2-tk.p .pf2-lgb{border-color:rgba(217,202,93,.35)}.pf2-tk.u .pf2-lgb{border-color:rgba(124,252,0,.3)}
     .pf2-lgbh{display:flex;align-items:center;gap:12px}
     .pf2-lgbh .lb{font-size:12.5px}
@@ -219,7 +247,8 @@
     .pf2-le .d{width:1px;height:18px;background:rgba(255,255,255,.25)}
     .pf2-le .usd{font-size:19px;font-weight:700;color:#8DFF3A}
     .pf2-le .msg{font-size:15px;color:rgba(255,255,255,.55)}
-    .pf2-ext{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+    .pf2-extw{margin-top:10px}
+    .pf2-ext{display:flex;gap:8px;flex-wrap:wrap}
     .pf2-ext>span,.pf2-ext>button{font-size:13px;color:rgba(255,255,255,.6);border:1px dashed rgba(255,255,255,.18);border-radius:7px;padding:5px 10px;background:transparent}
     .pf2-ext>button:hover{border-color:rgba(255,255,255,.4);color:#fff}
     .pf2-ext b{color:#fff;font-weight:700}
@@ -270,7 +299,7 @@
     .pf2-dotbtn{position:fixed;right:10px;bottom:10px;z-index:70;width:12px;height:12px;border-radius:50%;border:0;padding:0;background:rgba(255,255,255,.14);opacity:.5;cursor:pointer}
     .pf2-dotbtn:hover{opacity:1;background:rgba(242,211,91,.6)}
     @media (max-width:1100px){.pf2-deck{grid-template-columns:repeat(4,minmax(0,1fr))}.pf2-st .v{font-size:26px}}
-    @media (max-width:980px){.pf2-tok2{grid-template-columns:1fr}.pf2-row3{grid-template-columns:1fr}.pf2-deck{grid-template-columns:repeat(3,minmax(0,1fr))}.pf2-folds{grid-template-columns:1fr}}
+    @media (max-width:980px){.pf2-tok2{grid-template-columns:1fr;row-gap:12px}.pf2-tk{grid-row:auto!important;display:block!important}.pf2-row3{grid-template-columns:1fr}.pf2-deck{grid-template-columns:repeat(3,minmax(0,1fr))}.pf2-folds{grid-template-columns:1fr}}
     @media (max-width:860px){.pf2-add{flex-wrap:wrap;padding:10px;gap:8px;border-radius:12px}
       .pf2-add .f{height:42px;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:0 11px;background:rgba(0,0,0,.35)}
       .pf2-add .f.a1{flex-basis:100%;padding-left:9px}.pf2-add .f.l,.pf2-add .f.g{width:auto;flex:1}
@@ -282,7 +311,6 @@
       .pf2-tools .sp{display:none}.pf2-seg{order:5}.pf2-srch{order:6;flex:1;width:auto}.pf2-how{order:4;margin-left:auto}
       .pf2-deck{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       .pf2-wc{padding:10px}.pf2-wc .nm{font-size:15px}.pf2-wc .v{font-size:19px}.pf2-wc .r3{font-size:11.5px}
-      .pf2-wc .acts{opacity:1;position:static;justify-content:flex-end;margin-top:6px}
       .pf2-deck.cut .pf2-wc:nth-child(n+7){display:none}
       .pf2-more{display:flex;grid-column:1/-1;height:38px;align-items:center;justify-content:center;border:1px dashed rgba(217,202,93,.45);border-radius:9px;color:#F6E98A;font-weight:700;font-size:14.5px;background:transparent}
       .pf2-row3,.pf2-tok2{gap:12px}
@@ -290,14 +318,13 @@
       .pf2-st .ic,.pf2-st .ic img{width:48px;height:48px}.pf2-st .ic.w,.pf2-st .ic.w img{width:58px;height:58px}
       .pf2-st .v{font-size:26px}
       .pf2-tk{padding:14px}
-      .pf2-tkh{display:grid;grid-template-columns:48px minmax(0,1fr) auto;column-gap:12px;align-items:center}
-      .pf2-tkh .nm{display:contents}
-      .pf2-tkh img.lg{grid-column:1;grid-row:1/3;margin:0;width:48px;height:48px}
-      .pf2-tkh .t{grid-column:2;grid-row:1;align-self:end;font-size:24px}
-      .pf2-tkh .sb{grid-column:2;grid-row:2;align-self:start;margin-top:4px;font-size:14px}
-      .pf2-tkh .px{grid-column:3;grid-row:1/3}.pf2-tkh .px .a{font-size:18px}.pf2-tkh .px .c{font-size:14px}
-      .pf2-tkh .pf2-crw{grid-column:1/-1;grid-row:3;margin-top:12px}
-      .pf2-crw span{height:30px;font-size:14.5px;padding:0 8px 0 3px}.pf2-crw img{width:26px;height:26px}
+      .pf2-tkh{grid-template-columns:48px minmax(0,1fr) auto;column-gap:12px;align-items:center}
+      .pf2-tkh img.lg{margin:0;width:48px;height:48px}
+      .pf2-tkh .t{align-self:end;font-size:24px}
+      .pf2-tkh .sb{align-self:start;margin-top:4px;font-size:14px}
+      .pf2-tkh .px .a{font-size:18px}.pf2-tkh .px .c{font-size:14px}
+      .pf2-tkh .pf2-crw{grid-column:1/-1;margin-top:12px;gap:4px 12px}
+      .pf2-crw span{font-size:15px}.pf2-crw img{width:30px;height:30px}
       .pf2-t4{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       .pf2-dn{grid-template-columns:104px minmax(0,1fr);gap:14px}.pf2-dn svg{width:100px;height:100px}
       .pf2-lgd div{font-size:15px;grid-template-columns:12px minmax(0,1fr) auto 50px;gap:7px}
@@ -308,6 +335,59 @@
       .pf2-tbl{font-size:13px}
     }
     @media (prefers-reduced-motion:reduce){.pf2-tg::after,.pf2-foldh .chev,.pf2-wc .acts{transition:none}}
+    /* ---- the Leagues window (lg-*), copied from index.html by tools/pf-v2.py — edit it THERE, then re-run ---- */
+    .lg-m{--a:#F2C94C;--rgb:242,201,76;--halo:255,120,20;--ring:255,190,80;font-family:'Rajdhani',sans-serif;color:#fff;border-radius:20px;border:2px solid var(--a);background:#06070a;overflow:hidden auto;position:relative;box-shadow:0 0 60px -10px rgba(var(--rgb),.5)}
+    .lg-m.ufo{--a:#7CFC00;--rgb:124,252,0;--halo:110,255,40;--ring:140,255,60}
+    .lg-hd{position:relative;height:280px;overflow:hidden}
+    .lg-hd .sky{position:absolute;inset:0;background:url(logos/leagues/lg-sea-wide.webp) center 28%/cover no-repeat}
+    .lg-hd .whale{position:absolute;left:-30px;top:86px;width:255px;max-width:none;transform:rotate(20deg);filter:drop-shadow(0 8px 14px rgba(0,0,0,.7));z-index:1;pointer-events:none}   /* his cut-out whale, 20° clockwise (Shaka, 2026-10-04 evening) */
+    .lg-hd .shark{position:absolute;right:-6px;top:84px;width:185px;max-width:none;transform:rotate(-12deg);filter:drop-shadow(0 8px 14px rgba(0,0,0,.7));z-index:1;pointer-events:none}   /* his shark at the right, facing the whale, a step smaller (Shaka) */
+    .lg-hd .fade{position:absolute;inset:0;background:radial-gradient(ellipse 34% 40% at 50% 62%,rgba(0,0,0,.5),rgba(0,0,0,0)),linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,0) 30%,rgba(6,7,10,.15) 72%,#06070a 100%)}
+    .lg-hd .tg{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:2}
+    .lg-coin{position:relative;width:calc(195*var(--u));height:calc(195*var(--u));flex:none}
+    .lg-coin .halo{position:absolute;inset:calc(-70*var(--u));border-radius:50%;background:radial-gradient(circle,rgba(var(--halo),.22) 45%,rgba(var(--halo),.06) 60%,rgba(0,0,0,0) 72%)}
+    .lg-coin .corona{position:absolute;left:calc(-162*var(--u));top:calc(-162*var(--u));width:calc(520*var(--u));height:calc(520*var(--u));max-width:none;mix-blend-mode:screen;pointer-events:none}   /* max-width:none — Tailwind's preflight caps img at 100 % of the coin and the corona became a small ring beside it */
+    .lg-coin .fl{position:absolute;left:calc(104*var(--u));top:calc(-8*var(--u));width:calc(30*var(--u));height:calc(9*var(--u));border-radius:50%;background:radial-gradient(closest-side,#fff,rgba(255,220,130,.7) 45%,rgba(255,180,60,0))}
+    .lg-coin .flv{position:absolute;left:calc(118*var(--u));top:calc(-18*var(--u));width:calc(2*var(--u));height:calc(30*var(--u));background:linear-gradient(180deg,rgba(255,240,200,0),#fff 50%,rgba(255,240,200,0))}
+    .lg-coin .flh{position:absolute;left:calc(100*var(--u));top:calc(-4*var(--u));width:calc(40*var(--u));height:calc(1.5*var(--u));background:linear-gradient(90deg,rgba(255,240,200,0),#fff 50%,rgba(255,240,200,0))}
+    .lg-coin>img.lg{position:relative;width:100%;height:100%;max-width:none;border-radius:50%;filter:brightness(1.08) contrast(1.05);box-shadow:0 0 calc(10*var(--u)) calc(2*var(--u)) rgba(var(--ring),.55)}
+    .lg-hd .lg-coin{--u:.574px;position:absolute;left:50%;top:60px;transform:translateX(-50%)}
+    .lg-pl{position:absolute;left:0;right:0;top:192px;text-align:center;text-shadow:0 2px 8px #000,0 0 18px rgba(0,0,0,.9)}
+    .lg-pl .d{font-size:16px;color:rgba(255,255,255,.85);font-weight:500;letter-spacing:.02em;display:inline-flex;align-items:center;gap:2px}
+    .lg-pl .p{font-size:40px;font-weight:700;line-height:1.05;color:var(--a);margin-top:2px;font-variant-numeric:tabular-nums}
+    .lg-tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:0 14px 14px;margin-top:-6px;position:relative;z-index:1}
+    .lg-t{--c:var(--rgb);font:inherit;color:inherit;width:100%;border-radius:12px;border:1.5px solid rgba(var(--c),.75);background:linear-gradient(180deg,rgba(var(--c),.16),rgba(6,7,10,.9) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 18px -6px rgba(var(--c),.55);padding:12px 8px 11px;text-align:center;transition:box-shadow .25s,opacity .25s,filter .25s;min-width:0}
+    .lg-t.burn{--c:255,96,48}.lg-t.circ{--c:72,150,255}
+    .lg-t.sel{border-width:2px;border-color:rgba(var(--c),1);box-shadow:0 0 26px -2px rgba(var(--c),.8),0 0 60px -14px rgba(var(--c),.6),inset 0 1px 0 rgba(255,255,255,.18);background:linear-gradient(180deg,rgba(var(--c),.26),rgba(6,7,10,.9) 60%)}
+    .lg-t.dim{opacity:.62;filter:saturate(.7)}
+    button.lg-t{cursor:pointer}button.lg-t.dim:hover{opacity:.85}
+    .lg-t img{display:block;margin:0 auto;width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 3px 6px rgba(0,0,0,.8))}
+    .lg-t .l{font-family:'Orbitron',monospace;font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin-top:8px;color:rgb(var(--c))}
+    .lg-t.burn .l{color:#FF7A50}.lg-t.circ .l{color:#7FB8FF}
+    .lg-t .v{font-size:19px;font-weight:700;color:#fff;margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+    .lg-tb{padding:4px 14px 14px;border-top:1px solid rgba(var(--rgb),.35);position:relative;z-index:1}
+    .lg-cap{display:flex;align-items:center;justify-content:center;gap:4px;font-family:'Orbitron',monospace;font-weight:500;font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#7FB8FF;padding:10px 0 8px}
+    .lg-m.ufo .lg-cap{color:#A8FF6A}
+    .lg-th,.lg-r{display:grid;grid-template-columns:54px 1fr 1fr 120px;align-items:center;gap:8px;padding:0 10px}
+    .lg-th{padding:6px 10px 8px;font-family:'Orbitron',monospace;font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--a)}
+    .lg-th b:nth-child(4){text-align:right}
+    .lg-r{height:58px;border-radius:12px;border:1px solid rgba(72,150,255,.35);background:linear-gradient(180deg,rgba(14,22,38,.85),rgba(6,8,14,.9));margin-top:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+    .lg-m.ufo .lg-r{border-color:rgba(124,252,0,.28)}
+    .lg-r.top{border-color:var(--a);box-shadow:0 0 18px -4px rgba(var(--rgb),.6),inset 0 1px 0 rgba(255,255,255,.1)}
+    .lg-r img.sea-ic{width:46px;height:46px;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,.8))}
+    .lg-r .nm{font-size:21px;font-weight:600;color:#fff}
+    .lg-r .tk{font-size:22px;font-weight:600;color:rgba(255,255,255,.9);white-space:nowrap;font-variant-numeric:tabular-nums}
+    .lg-r .pr{font-size:23px;font-weight:700;color:#3DE38A;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+    .lg-cl{margin:4px 14px 14px;height:48px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;width:calc(100% - 28px);font-family:'Orbitron',monospace;font-weight:700;font-size:15px;letter-spacing:.06em;color:#1a1200;background:linear-gradient(180deg,#FFE27A 0%,#F2C94C 50%,#D9A520 100%);box-shadow:0 0 22px -4px rgba(var(--rgb),.6),inset 0 1px 0 rgba(255,255,255,.5);position:relative;z-index:1;cursor:pointer}
+    .lg-m.ufo .lg-cl{background:linear-gradient(180deg,#B4FF86 0%,#6DF04A 50%,#3FC71F 100%);color:#07200a}
+    .lg-ft{position:absolute;left:0;right:0;bottom:0;height:120px;background:url(logos/leagues/lg-sea-wide.webp) center 95%/cover no-repeat;opacity:.45;-webkit-mask:linear-gradient(180deg,transparent,#000);mask:linear-gradient(180deg,transparent,#000);pointer-events:none;z-index:0}
+    @media(max-width:479.98px){
+      .lg-hd{height:240px}.lg-hd .lg-coin{--u:.46px;top:58px}.lg-hd .whale{width:190px;left:-26px;top:78px}.lg-hd .shark{width:135px;right:-8px;top:76px}.lg-pl{top:164px}.lg-pl .p{font-size:32px}.lg-pl .d{font-size:14px}
+      .lg-tiles{gap:7px;padding:0 10px 10px}.lg-t{padding:9px 4px 8px}.lg-t img{width:36px;height:36px}.lg-t .l{font-size:8px;letter-spacing:.06em}.lg-t .v{font-size:13px}
+      .lg-tb{padding:2px 10px 10px}.lg-cap{font-size:9.5px;letter-spacing:.2em}
+      .lg-th,.lg-r{grid-template-columns:42px 1fr 1fr 92px;gap:6px;padding:0 8px}.lg-r{height:50px}.lg-r img.sea-ic{width:36px;height:36px}.lg-r .nm{font-size:17px}.lg-r .tk{font-size:18px}.lg-r .pr{font-size:19px}
+      .lg-cl{margin:2px 10px 10px;width:calc(100% - 20px);height:44px}
+    }
   </style>
 </head>
 <body>
@@ -1024,6 +1104,87 @@
       );
     };
 
+    /* Portfolio v2, round 2 (2026-10-13): the Leagues window = the dashboard's TierInfoModal look (index.html, 2026-10-04
+       redesign: his sea + whale + shark header, the lit coin, Starting / Burned / Circulating tiles, eight sea-art rows, Close).
+       Ported here because portfolio.html does not load index.html's code; its lg-* CSS is copied in by tools/pf-v2.py
+       straight from index.html, so the two stay one design. The burn is read live (balance of 0x…369 + totalSupply), the same
+       read as index.html's fetchBurn; a failed read prints "—" and keeps the starting basis (gotcha 20). */
+    const PF_BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
+    const pfTierFraction=c=>c.p>0?Number((c.p/100).toPrecision(15)):0.00000001;   // = index.html tierFraction (SHELL_CARD_PCT)
+    const PF_BURN_ADDR='0x0000000000000000000000000000000000000369';
+    const PF_TOKEN_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
+    const pfFetchBurn=async token=>{try{const to=PF_TOKEN_ADDR[token];const[b,s]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x70a08231000000000000000000000000'+PF_BURN_ADDR.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x18160ddd'},'latest'],id:2})]);if(!b||!s||b.result==null||s.result==null)return null;const burned=Number(BigInt(b.result))/1e18,supply=Number(BigInt(s.result))/1e18;return supply>0?{total:burned,supply}:null;}catch(e){return null;}};
+    /* = index.html fmtAbbr (a67: the unit is picked AFTER rounding — never "1000.00M"); the classic page keeps its own */
+    const pfAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=999.995e9)return(num/1e12).toFixed(2)+'T';if(num>=999.995e6)return(num/1e9).toFixed(2)+'B';if(num>=999.995e3)return(num/1e6).toFixed(2)+'M';if(num>=999.995)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
+    const pfFmtInt=n=>n==null||isNaN(n)?'—':Math.floor(Number(n)).toLocaleString('en-US');
+    const PfModal=({onClose,label,className='',children})=>{
+      const ref=React.useRef(null);const cl=React.useRef(onClose);cl.current=onClose;
+      useEffect(()=>{const prev=document.activeElement,ov=document.body.style.overflow;document.body.style.overflow='hidden';
+        const key=e=>{if(e.key==='Escape'&&cl.current){e.preventDefault();cl.current();}};document.addEventListener('keydown',key);
+        try{ref.current&&ref.current.focus({preventScroll:true});}catch(e){}
+        return()=>{document.removeEventListener('keydown',key);document.body.style.overflow=ov;try{prev&&prev.focus&&prev.focus({preventScroll:true});}catch(e){}};},[]);
+      return ReactDOM.createPortal(<div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className={`fixed inset-0 outline-none ${className}`} onClick={e=>{e.stopPropagation();cl.current&&cl.current();}}>{children}</div>,document.body);
+    };
+    const PfSupplyToggle=({mode,setMode,color,color2})=>{   // = index.html SupplyBasisToggle (size md)
+      const opts=[{k:'start',label:'Starting Supply'},{k:'circ',label:'Circulating Supply'}];const idx=mode==='circ'?1:0;
+      return(
+        <div role="tablist" aria-label="Supply basis" className="relative inline-grid grid-cols-2 rounded-full p-1 select-none" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 18px rgba(0,0,0,0.35)'}}>
+          <div className="absolute top-1 bottom-1 rounded-full transition-transform duration-300 ease-out" style={{left:'4px',width:'calc(50% - 4px)',transform:`translateX(${idx*100}%)`,background:`linear-gradient(180deg, ${color} 0%, ${color2||(color+'cc')} 100%)`,boxShadow:`0 0 14px ${color}66, 0 1px 0 rgba(255,255,255,0.35) inset`}}/>
+          {opts.map(o=>{const active=(mode==='circ'?'circ':'start')===o.k;return(
+            <button key={o.k} role="tab" aria-selected={active} onClick={()=>setMode(o.k)} className={`relative z-10 rounded-full font-semibold tracking-wider uppercase whitespace-nowrap transition-colors duration-200 px-3.5 py-1.5 text-[11px] sm:text-xs ${active?'text-black':'text-white/55 hover:text-white'}`}>{o.label}</button>);})}
+        </div>);
+    };
+    const PfLgCoin=({token})=>(
+      <div className="lg-coin"><div className="halo" aria-hidden="true"></div><img className="corona" src={H2_ASSETS.corona[token]||H2_ASSETS.corona.PTGC} alt="" aria-hidden="true"/><div className="fl" aria-hidden="true"></div><div className="flv" aria-hidden="true"></div><div className="flh" aria-hidden="true"></div><img className="lg" src={TOKENS[token].logo} alt={token}/></div>);
+    const PF_LG_ART_V=1;   // = index.html LG_ART_V
+    const PfTierInfoModal=({token,price,close})=>{
+      const[mode,setMode]=useState('start');
+      const[burn,setBurn]=useState(undefined);   // undefined = reading, null = failed
+      useEffect(()=>{let live=true;pfFetchBurn(token).then(b=>{if(live)setBurn(b);});return()=>{live=false;};},[token]);
+      const now=new Date();const date=`${now.getMonth()+1}-${now.getDate()}-${String(now.getFullYear()).slice(-2)}`;
+      const start=PF_SUPPLY[token];
+      const burnKnown=!!(burn&&burn.supply>0);
+      const burned=burnKnown?burn.total:null;
+      const circSupply=burnKnown?Math.max(0,start-burned):null;
+      const circ=mode==='circ'&&burnKnown;
+      const basis=circ?circSupply:start;
+      const tiers=PF_BURN_C.map(c=>({name:c.n,emoji:c.e,threshold:basis*pfTierFraction(c)}));
+      const isPTGC=token==='PTGC';
+      const usdCell=v=>!v||isNaN(v)?'—':v>=1?'$'+Math.floor(v).toLocaleString('en-US'):'$'+v.toFixed(2);
+      return(
+        <PfModal className="z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80" onClose={close} label={`${token} leagues`}>
+          <div className={`lg-m max-w-[560px] w-full max-h-[92vh] overflow-y-auto overscroll-contain${isPTGC?'':' ufo'}`} onClick={e=>e.stopPropagation()}>
+            <div className="lg-hd">
+              <div className="sky" aria-hidden="true"></div><img className="whale" src={`logos/leagues/lg-whale.webp?v=${PF_LG_ART_V}`} alt="" aria-hidden="true"/><img className="shark" src={`logos/leagues/lg-shark.webp?v=${PF_LG_ART_V}`} alt="" aria-hidden="true"/>
+              <div className="tg"><PfSupplyToggle mode={mode} setMode={m=>setMode(m==='circ'&&!burnKnown?'start':m)} color={isPTGC?'#FFE27A':'#B4FF86'} color2={isPTGC?'#E3B52A':'#5BE632'}/></div>
+              <PfLgCoin token={token}/>
+              <div className="lg-pl"><div className="d">Price {date}</div><div className="p">{fmtPriceNode(price)}</div></div>
+            </div>
+            <div className="lg-tiles" role="group" aria-label="Supply basis">
+              <button type="button" onClick={()=>setMode('start')} aria-pressed={!circ} className={`lg-t${circ?' dim':' sel'}`}><img src={`logos/leagues/lg-ic-coins.webp?v=${PF_LG_ART_V}`} alt=""/><div className="l">Starting supply</div><div className="v tabular-nums">{pfFmtInt(start)}</div></button>
+              <div className="lg-t burn"><img src="logos/panels/vg-flame.webp" alt=""/><div className="l">Burned</div><div className="v tabular-nums">{burn===undefined?'…':burnKnown?pfFmtInt(burned):'—'}</div></div>
+              <button type="button" onClick={()=>burnKnown&&setMode('circ')} aria-pressed={circ} disabled={!burnKnown} className={`lg-t circ${circ?' sel':' dim'}`}><img src={`logos/leagues/lg-ic-circ.webp?v=${PF_LG_ART_V}`} alt=""/><div className="l">Circulating supply</div><div className="v tabular-nums">{burnKnown?pfFmtInt(circSupply):burn===undefined?'…':'—'}</div></button>
+            </div>
+            <div className="lg-tb">
+              <div className="lg-cap">Tiers based on {circ?'circulating':'starting'} supply</div>
+              <div className="lg-th" aria-hidden="true"><b></b><b>Tier</b><b>Tokens</b><b>Price USD</b></div>
+              <div role="table" aria-label={`${token} holder tiers`}>
+                {tiers.map((t,i)=>(
+                  <div key={i} role="row" className={`lg-r${i===0?' top':''}`}>
+                    <span role="cell"><img className="sea-ic" src={pfSea(t.emoji)} alt="" style={{width:46,height:46}}/></span>
+                    <span role="cell" className="nm">{t.name}</span>
+                    <span role="cell" className="tk">{pfAbbr(t.threshold)}</span>
+                    <span role="cell" className="pr">{usdCell(t.threshold*price)}</span>
+                  </div>))}
+              </div>
+            </div>
+            <button type="button" onClick={close} className="lg-cl">Close</button>
+            <div className="lg-ft" aria-hidden="true"></div>
+          </div>
+        </PfModal>
+      );
+    };
+
     /* ===== PORTFOLIO v2 (2026-10-13) — the page body of design/portfolio/mock-portfolio-v4.html, built by tools/pf-v2.py =====
        HIDDEN: PF_V2_LIVE=false → the classic body stays the default and a faint dot bottom-right (PfV2Dot) flips this device
        to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
@@ -1073,14 +1234,43 @@
         <div className="pf2-lgb">
           <div className="pf2-lgbh"><span className="lb">League</span>
             {L.cur?<span className="cur"><img src={pfSea(L.cur.emoji)} alt=""/>{L.cur.name}</span>:<span className="cur" style={{color:'rgba(255,255,255,.55)'}}>below {L.next.name}</span>}
-            <button className="lnk" onClick={onTiers}>View tiers {'›'}</button></div>
+            <button className="lnk" onClick={onTiers}>Leagues</button></div>
           {L.next?(
             <>
               <div className="pf2-bar">{L.cur?<img src={pfSea(L.cur.emoji)} alt=""/>:<span style={{width:28}}/>}<div className="pf2-trk" role="progressbar" aria-valuenow={Math.round(L.pct)} aria-valuemin="0" aria-valuemax="100" aria-label={`Progress to ${L.next.name}`}><div className="pf2-fl" style={{width:L.pct+'%'}}></div><i className="pf2-tip" style={{left:L.pct+'%'}}></i></div><img className="nx" src={pfSea(L.next.emoji)} alt=""/></div>
-              <div className="pf2-lgbf"><span><b>{L.pct.toFixed(1)}%</b> to <b className="c2">{L.next.name}</b></span><span>need <b>{fmtAbbr(L.need)}</b>{cost!=null&&<> {'≈'} {fmtDollar(cost,0)}</>}</span></div>
+              <div className="pf2-lgbf"><span><b>{L.pct.toFixed(1)}%</b> to <b className="c2">{L.next.name}</b></span><span>need <b>{pfAbbr(L.need)}</b>{cost!=null&&<> {'≈'} {fmtDollar(cost,0)}</>}</span></div>
             </>
           ):<div className="pf2-top c2">Top league reached {'—'} {L.cur.name}</div>}
         </div>
+      );
+    };
+    /* round 2: edit a saved wallet — its label and its group (the classic page's Edit Wallet only renamed) */
+    const PfEditWallet=({w,groups,save,remove,close})=>{
+      const[name,setName]=useState(w.name||'');
+      const[grp,setGrp]=useState(w.group||'Default');
+      const[newG,setNewG]=useState('');
+      const[copied,setCopied]=useState(false);
+      const g=grp==='__new'?newG.trim():grp;
+      const ok=!(grp==='__new'&&!g);
+      const go=()=>{if(ok)save({name:name.trim(),group:g||'Default'});};
+      return(
+        <PfModal className="z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80" onClose={close} label="Edit wallet">
+          <div className="pf2-ew" onClick={e=>e.stopPropagation()}>
+            <button className="x" onClick={close} aria-label="Close">{'\u00D7'}</button>
+            <h2>EDIT WALLET</h2>
+            <div className="lb">Address</div>
+            <div className="adr"><span className="mono">{w.address}</span><button onClick={()=>{try{navigator.clipboard.writeText(w.address);setCopied(true);setTimeout(()=>setCopied(false),1500);}catch(e){}}}>{copied?'Copied':'Copy'}</button></div>
+            <label className="lb" htmlFor="pf2-ew-n">Name</label>
+            <input id="pf2-ew-n" className="in" value={name} onChange={e=>setName(e.target.value)} placeholder="Give this wallet a name…" autoFocus onKeyDown={e=>e.key==='Enter'&&go()}/>
+            <label className="lb" htmlFor="pf2-ew-g">Group</label>
+            <select id="pf2-ew-g" className="in" value={grp} onChange={e=>setGrp(e.target.value)}>
+              {[...new Set(['Default',...groups,w.group||'Default'])].map(x=><option key={x} value={x}>{x}</option>)}
+              <option value="__new">+ New group</option>
+            </select>
+            {grp==='__new'&&<input className="in" value={newG} onChange={e=>setNewG(e.target.value)} placeholder="New group name…" aria-label="New group name" onKeyDown={e=>e.key==='Enter'&&go()}/>}
+            <div className="bt"><button className="rm" onClick={remove}>Remove wallet</button><span style={{flex:1}}></span><button className="q" onClick={close}>Cancel</button><button className="sv" onClick={go} disabled={!ok}>Save</button></div>
+          </div>
+        </PfModal>
       );
     };
     const PortfolioV2=(p)=>{
@@ -1092,6 +1282,8 @@
       const[det,setDet]=useState(false);
       const[bdOpen,setBdOpen]=useState(false);
       const[addMsg,setAddMsg]=useState('');
+      const[lgTok,setLgTok]=useState(null);
+      const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
       const simulated=moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='');
       const gNames=Object.keys(groups);
       useEffect(()=>{if(grp!=='All'&&!groups[grp])setGrp('All');},[gNames.join('|')]);
@@ -1130,7 +1322,7 @@
       const fmtLock=t=>{if(!t)return'—';const now=Date.now()/1000;if(t<=now)return'Unlockable';const d=Math.floor((t-now)/86400);if(d>365)return Math.floor(d/365)+'y '+Math.floor((d%365)/30)+'m';if(d>30)return Math.floor(d/30)+'m '+d%30+'d';return d+'d';};
       const reflBox=()=>uf.reflState==='pending'?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>scanning{'…'}</div><div className="s">{uf.reflPending} wallet{uf.reflPending>1?'s':''}</div></>
         :uf.reflState==='failed'?<><div className="v" style={{fontSize:16,color:'#FFD38A'}}>unavailable</div><div className="s"><button onClick={retryFailedReflScans}>Retry</button></div></>
-        :<><div className="v">{fmtAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>;
+        :<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>;
       return(
         <div className="pf2"><div className="pf2-in">
           {/* ---- title, add capsule, toolbar, the deck ---- */}
@@ -1169,7 +1361,7 @@
               const ps=v>0?(pv||0)/v:null;
               return(
                 <div key={a} className={`pf2-wc ${on?'on':'off'}${st==='bad'?' bad':''}`}>
-                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><span className={`pf2-dot ${st==='ok'?'':st}`} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
+                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
                   <div className="ad mono">{w.name?<>{truncAddr(w.address)} {'·'} {w.group||'Default'}</>:<>{(w.group||'Default').toUpperCase()}</>}</div>
                   {st==='bad'?<button className="retry" onClick={()=>fetchWalletData(w.address)}>Read failed {'·'} retry</button>
                   :v==null?<div className="v dim">{st==='run'?'loading…':'—'}</div>
@@ -1178,7 +1370,7 @@
                     <div className="pf2-split" aria-hidden="true">{ps!=null&&<><i className="p" style={{width:ps*100+'%'}}></i><i className="u" style={{width:(1-ps)*100+'%'}}></i></>}</div>
                     <div className="r3"><span className="p">PTGC {ps==null?'—':Math.round(ps*100)+'%'}</span><span className="u">UFO {ps==null?'—':Math.round((1-ps)*100)+'%'}</span></div>
                   </>}
-                  <div className="acts"><button onClick={()=>{p.setEditingWallet(a);p.setEditWalletName(w.name||'');}} aria-label={`Rename ${label}`}>{'✎'} rename</button><button onClick={()=>removeWallet(w.address)} aria-label={`Remove ${label}`}>{'✕'}</button></div>
+                  <div className="acts"><button onClick={()=>removeWallet(w.address)} aria-label={`Remove ${label}`} title="Remove this wallet">✕</button></div>
                 </div>
               );
             })}
@@ -1206,33 +1398,33 @@
                 <div className="nm"><div className="t">PTGC</div><div className="sb">The Grays Currency</div><PfCreatures tokens={pt.totalHolding} token="PTGC"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
               <div className="pf2-t4">
-                <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{fmtAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
-                <div className="pf2-bx blu"><div className="lb">Liquid</div><div className="v">{fmtAbbr(pt.walletFree)}</div><div className="s">{fmtDollar(usd(pt.walletFree,dp.ptgc))}</div></div>
-                <div className="pf2-bx pur"><div className="lb">Staked</div><div className="v">{fmtAbbr(pt.staked)}</div><div className="s">{fmtDollar(usd(pt.staked,dp.ptgc))}</div></div>
-                <div className="pf2-bx rf"><div className="lb">Reflections</div><div className="v">{fmtAbbr(pt.reflections)}</div><div className="s">{fmtDollar(usd(pt.reflections,dp.ptgc))}</div></div>
+                <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
+                <div className="pf2-bx blu"><div className="lb">Liquid</div><div className="v">{pfAbbr(pt.walletFree)}</div><div className="s">{fmtDollar(usd(pt.walletFree,dp.ptgc))}</div></div>
+                <div className="pf2-bx pur"><div className="lb">Staked</div><div className="v">{pfAbbr(pt.staked)}</div><div className="s">{fmtDollar(usd(pt.staked,dp.ptgc))}</div></div>
+                <div className="pf2-bx rf"><div className="lb">Reflections</div><div className="v">{pfAbbr(pt.reflections)}</div><div className="s">{fmtDollar(usd(pt.reflections,dp.ptgc))}</div></div>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899'],['Liquid',pt.walletFree,'#F2D35B']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
-                  <div className="pf2-lgd">{parts.map(x=><div key={x[0]}><i style={{background:x[2]}}></i>{x[0]}<b>{fmtAbbr(x[1])}</b><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
+                  <div className="pf2-lgd">{parts.map(x=><div key={x[0]}><i style={{background:x[2]}}></i>{x[0]}<b>{pfAbbr(x[1])}</b><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
-              <PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>p.setShowPtgcLeagues(true)}/>
+              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')}/></div>
               <div className="pf2-le"><span className="lb">Total lifetime earned</span><span className="n">{fmtComma(Math.floor(ptgcEarned),2)}</span><span className="k">PTGC</span><span className="d"></span><span className="usd">{fmtDollar(usd(ptgcEarned,dp.ptgc))}</span></div>
-              <div className="pf2-ext">
-                <button onClick={()=>setDet(!det)} aria-expanded={det}>Claimable rewards <b>{fmtAbbr(pt.totalPending)} PTGC</b></button>
+              <div className="pf2-extw"><div className="pf2-ext">
+                <button onClick={()=>setDet(!det)} aria-expanded={det}>Claimable rewards <b>{pfAbbr(pt.totalPending)} PTGC</b></button>
                 <button onClick={()=>setDet(!det)} aria-expanded={det}>Lock positions <b>{pt.locks.length}</b></button>
-                <span>Earned: staking <b>{fmtAbbr(pt.claimed)}</b> {'·'} locking <b>{fmtAbbr(pt.lockClaimed)}</b> {'·'} reflections <b>{fmtAbbr(pt.reflections)}</b></span>
+                <span>Earned: staking <b>{pfAbbr(pt.claimed)}</b> {'·'} locking <b>{pfAbbr(pt.lockClaimed)}</b> {'·'} reflections <b>{pfAbbr(pt.reflections)}</b></span>
               </div>
               {det&&(
                 <div className="pf2-det">
                   <div className="h">CLAIMABLE NOW</div>
-                  <div className="row"><span>Staking rewards</span><b>{fmtAbbr(pt.pendingStake)} <span className="na">{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span></b></div>
-                  <div className="row"><span>Lock rewards</span><b>{fmtAbbr(pt.pendingLocks)} <span className="na">{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></b></div>
+                  <div className="row"><span>Staking rewards</span><b>{pfAbbr(pt.pendingStake)} <span className="na">{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span></b></div>
+                  <div className="row"><span>Lock rewards</span><b>{pfAbbr(pt.pendingLocks)} <span className="na">{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></b></div>
                   {pt.locks.length>0&&<>
                     <div className="h" style={{marginTop:10}}>LOCK POSITIONS {'·'} <a href="https://goptgc.com" target="_blank" rel="noopener noreferrer">verify on goptgc.com before unlocking</a></div>
-                    {pt.locks.map((l,i)=><div className="row" key={i}><span><b>{fmtAbbr(l.amount)}</b> PTGC <span className="na">{fmtDollar(usd(l.amount,dp.ptgc))}</span></span><span className={l.endTime<=Date.now()/1000?'pos':''}>{fmtLock(l.endTime)}</span><span className="pos">+{fmtAbbr(l.pending)}</span></div>)}
+                    {pt.locks.map((l,i)=><div className="row" key={i}><span><b>{pfAbbr(l.amount)}</b> PTGC <span className="na">{fmtDollar(usd(l.amount,dp.ptgc))}</span></span><span className={l.endTime<=Date.now()/1000?'pos':''}>{fmtLock(l.endTime)}</span><span className="pos">+{pfAbbr(l.pending)}</span></div>)}
                   </>}
                 </div>
-              )}
+              )}</div>
             </section>
 
             <section className="pf2-tk u">
@@ -1240,18 +1432,18 @@
                 <div className="nm"><div className="t">UFO</div><div className="sb">UFO Token</div><PfCreatures tokens={uf.balance} token="UFO"/></div>
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
               <div className="pf2-t4">
-                <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{fmtAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
-                <div className="pf2-bx"><div className="lb">Principal</div><div className="v">{ufoPrin==null?'—':fmtAbbr(ufoPrin)}</div><div className="s">{ufoPrin==null?'after the scan':fmtDollar(usd(ufoPrin,dp.ufo))}</div></div>
+                <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
+                <div className="pf2-bx"><div className="lb">Principal</div><div className="v">{ufoPrin==null?'—':pfAbbr(ufoPrin)}</div><div className="s">{ufoPrin==null?'after the scan':fmtDollar(usd(ufoPrin,dp.ufo))}</div></div>
                 <div className="pf2-bx grn"><div className="lb">Reflections</div>{reflBox()}</div>
                 <div className="pf2-bx grn"><div className="lb">Reflection yield</div><div className="v">{ufoYield==null?'—':(ufoYield>0&&ufoYield<0.01?'<0.01':ufoYield.toFixed(ufoYield<1?3:2))+(ufoYield==null?'':'%')}</div><div className="s">of principal</div></div>
               </div>
               {uf.balance>0&&ufoRefl!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoRefl,'#22D3EE']]}/>
-                  <div className="pf2-lgd"><div><i style={{background:'#7CFC00'}}></i>Principal<b>{fmtAbbr(ufoPrin)}</b><em>{pfPct(ufoPrin,uf.balance)}</em></div><div><i style={{background:'#22D3EE'}}></i>Reflections<b>{fmtAbbr(ufoRefl)}</b><em>{pfPct(ufoRefl,uf.balance)}</em></div></div></div>
+                  <div className="pf2-lgd"><div><i style={{background:'#7CFC00'}}></i>Principal<b>{pfAbbr(ufoPrin)}</b><em>{pfPct(ufoPrin,uf.balance)}</em></div><div><i style={{background:'#22D3EE'}}></i>Reflections<b>{pfAbbr(ufoRefl)}</b><em>{pfPct(ufoRefl,uf.balance)}</em></div></div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
-              <PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>p.setShowUfoLeagues(true)}/>
+              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-le"><span className="lb">Total lifetime earned</span>{ufoRefl==null?<span className="msg">{uf.reflState==='failed'?'unavailable':'scanning…'}</span>:<><span className="n">{fmtComma(Math.floor(ufoRefl),2)}</span><span className="k">UFO</span><span className="d"></span><span className="usd">{fmtDollar(usd(ufoRefl,dp.ufo))}</span></>}</div>
-              <div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div>
+              <div className="pf2-extw"><div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div></div>
             </section>
           </div>
 
@@ -1272,7 +1464,7 @@
               {bdOpen&&<div className="pf2-foldb" style={{overflowX:'auto'}}>
                 <table className="pf2-tbl"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING</th><th>UFO</th><th>REFLECTIONS</th></tr></thead><tbody>
                   {counted.map(w=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;const r=d.ufo.reflections;return(
-                    <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{fmtAbbr(d.ptgc.totalHolding)}</td><td className="pos">{fmtAbbr(d.ptgc.totalPending)}</td><td className="u">{fmtAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:fmtAbbr(r)}</td></tr>);})}
+                    <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{pfAbbr(d.ptgc.totalHolding)}</td><td className="pos">{pfAbbr(d.ptgc.totalPending)}</td><td className="u">{pfAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:pfAbbr(r)}</td></tr>);})}
                 </tbody></table></div>}
             </section>
             <section className="pf2-pn pf2-fold">
@@ -1290,6 +1482,8 @@
           </>}
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
+        {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
+        {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
           <div className="pf2-modal" onClick={()=>setHow(false)} role="dialog" aria-modal="true" aria-label="How it works"><div onClick={e=>e.stopPropagation()}>
             <button className="x" onClick={()=>setHow(false)} aria-label="Close">{'×'}</button>
@@ -1337,6 +1531,7 @@
       const[showPtgcLeagues,setShowPtgcLeagues]=useState(false);
       const[showUfoLeagues,setShowUfoLeagues]=useState(false);
       const[pfV2,setPfV2]=useState(()=>PF_V2_LIVE||pfV2Saved());   // Portfolio v2 (2026-10-13): hidden preview, see PortfolioV2
+      const updateWalletV2=(addr,patch)=>setWallets(prev=>prev.map(w=>w.address.toLowerCase()===addr?{...w,...patch}:w));   // Portfolio v2 round 2: the Edit window
       const togglePfV2=()=>setPfV2(v=>{const n=!v;try{n?localStorage.setItem(LS_PF_V2,'1'):localStorage.removeItem(LS_PF_V2);}catch(e){}try{window.scrollTo(0,0);}catch(e){}return n;});
       
       const ATH_PRICES={ptgc:0.00133,ufo:0.000113,pls:0.00029};
@@ -1626,7 +1821,7 @@
           )}
           
           {/* Portfolio v2 (2026-10-13): the new body behind the faint dot; the classic body below is untouched */}
-          {pfV2?<PortfolioV2 wallets={wallets} portfolioData={portfolioData} loadingAddrs={loadingAddrs} scanningAddr={scanningAddr} agg={agg} dp={dp} prices={prices} changes={changes} groups={groups} isWalletChecked={isWalletChecked} toggleWallet={toggleWallet} selectAllWallets={selectAllWallets} deselectAllWallets={deselectAllWallets} removeWallet={removeWallet} fetchWalletData={fetchWalletData} retryFailedReflScans={retryFailedReflScans} truncAddr={truncAddr} initialLoad={initialLoad} inputAddr={inputAddr} setInputAddr={setInputAddr} inputName={inputName} setInputName={setInputName} inputGroup={inputGroup} setInputGroup={setInputGroup} newGroupName={newGroupName} setNewGroupName={setNewGroupName} addWallet={addWallet} setEditingWallet={setEditingWallet} setEditWalletName={setEditWalletName} setShowPtgcLeagues={setShowPtgcLeagues} setShowUfoLeagues={setShowUfoLeagues} moonMathActive={moonMathActive} setMoonMathActive={setMoonMathActive} customPrices={customPrices} setCustomPrices={setCustomPrices} ATH_PRICES={ATH_PRICES}/>:(<>
+          {pfV2?<PortfolioV2 updateWallet={updateWalletV2} wallets={wallets} portfolioData={portfolioData} loadingAddrs={loadingAddrs} scanningAddr={scanningAddr} agg={agg} dp={dp} prices={prices} changes={changes} groups={groups} isWalletChecked={isWalletChecked} toggleWallet={toggleWallet} selectAllWallets={selectAllWallets} deselectAllWallets={deselectAllWallets} removeWallet={removeWallet} fetchWalletData={fetchWalletData} retryFailedReflScans={retryFailedReflScans} truncAddr={truncAddr} initialLoad={initialLoad} inputAddr={inputAddr} setInputAddr={setInputAddr} inputName={inputName} setInputName={setInputName} inputGroup={inputGroup} setInputGroup={setInputGroup} newGroupName={newGroupName} setNewGroupName={setNewGroupName} addWallet={addWallet} setEditingWallet={setEditingWallet} setEditWalletName={setEditWalletName} setShowPtgcLeagues={setShowPtgcLeagues} setShowUfoLeagues={setShowUfoLeagues} moonMathActive={moonMathActive} setMoonMathActive={setMoonMathActive} customPrices={customPrices} setCustomPrices={setCustomPrices} ATH_PRICES={ATH_PRICES}/>:(<>
           {/* Address Input + Moon Math side by side */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
             <div className="flex flex-col lg:flex-row gap-4">

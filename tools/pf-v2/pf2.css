@@ -74,10 +74,29 @@
     .pf2-split i.p{background:linear-gradient(90deg,#B8901A,#F2D35B)}.pf2-split i.u{background:linear-gradient(90deg,#3FB81C,#7CFC00)}
     .pf2-wc .r3{display:flex;justify-content:space-between;margin-top:5px;font-size:12.5px;color:rgba(255,255,255,.55)}
     .pf2-wc .r3 .p{color:#E8D46A}.pf2-wc .r3 .u{color:#9BFF4A}
-    .pf2-wc .acts{position:absolute;right:8px;bottom:-1px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
-    .pf2-wc:hover .acts,.pf2-wc:focus-within .acts{opacity:1}
-    .pf2-wc .acts button{border:0;background:rgba(0,0,0,.75);color:rgba(255,255,255,.7);font-size:12px;padding:2px 6px;border-radius:5px}
-    .pf2-wc .acts button:hover{color:#fff}
+    /* round 2: the edit pencil sits beside the name, always visible (Shaka could not find the hover-only rename) */
+    .pf2-ed{flex:none;border:0;background:transparent;color:rgba(255,255,255,.45);font-size:14px;line-height:1;padding:3px 4px;border-radius:5px}
+    .pf2-ed:hover,.pf2-ed:focus-visible{color:#F6E98A;background:rgba(217,202,93,.12)}
+    .pf2-wc .acts{position:absolute;right:6px;bottom:4px;display:flex}
+    .pf2-wc .acts button{border:0;background:transparent;color:rgba(255,255,255,.3);font-size:11px;padding:2px 5px;border-radius:5px}
+    .pf2-wc .acts button:hover{color:#FF8D94;background:rgba(255,75,85,.12)}
+    .pf2-wc .r3{padding-right:16px}
+    /* the edit window */
+    .pf2-ew{position:relative;max-width:460px;width:100%;border-radius:16px;border:1px solid rgba(217,202,93,.55);background:linear-gradient(180deg,#14120a,#0a0a0c);padding:20px 20px 16px;color:#fff;font-family:'Rajdhani',sans-serif;box-shadow:0 0 30px rgba(217,202,93,.15)}
+    .pf2-ew h2{margin:0 0 14px;font-family:'Orbitron',sans-serif;font-weight:900;font-size:17px;letter-spacing:.06em;color:#F6E98A}
+    .pf2-ew .x{position:absolute;right:12px;top:10px;border:0;background:transparent;color:rgba(255,255,255,.7);font-size:24px;line-height:1}
+    .pf2-ew .lb{display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);margin:12px 0 5px}
+    .pf2-ew .adr{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.4)}
+    .pf2-ew .adr .mono{flex:1;min-width:0;word-break:break-all;color:rgba(255,255,255,.75);font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+    .pf2-ew .adr button{flex:none;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.8);font-size:12.5px;font-weight:700;border-radius:6px;padding:3px 9px}
+    .pf2-ew .in{display:block;width:100%;height:40px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:#070a10;color:#fff;padding:0 12px;font:inherit;font-size:16px;margin-top:0}
+    .pf2-ew .in+.in{margin-top:8px}
+    .pf2-ew select.in option{background:#111}
+    .pf2-ew .bt{display:flex;gap:8px;align-items:center;margin-top:18px}
+    .pf2-ew .bt button{height:38px;border-radius:9px;padding:0 16px;font-weight:700;font-size:15px;border:1px solid rgba(255,255,255,.18);background:transparent;color:rgba(255,255,255,.8)}
+    .pf2-ew .bt .sv{border:0;background:linear-gradient(180deg,#FFE27A,#F2C94C 50%,#D9A520);color:#1a1200}
+    .pf2-ew .bt .sv:disabled{opacity:.4}
+    .pf2-ew .bt .rm{border-color:rgba(255,75,85,.4);color:#FF9AA0;font-size:13.5px;padding:0 11px}
     .pf2-wc .retry{margin-top:8px;font-size:12.5px;font-weight:700;color:#FFB4B9;border:1px solid rgba(255,75,85,.45);background:rgba(255,75,85,.1);border-radius:6px;padding:3px 8px}
     .pf2-more{display:none}
     .pf2-empty{grid-column:1/-1;text-align:center;padding:34px 10px;color:rgba(255,255,255,.55);font-size:16px;border:1px dashed rgba(255,255,255,.14);border-radius:12px}
@@ -98,13 +117,22 @@
     .pf2-st .v{font-size:31px;font-weight:700;line-height:1.05;margin-top:4px;white-space:nowrap}
     .pf2-st .s{font-size:15.5px;font-weight:700;margin-top:2px}
     /* the two token cards */
-    .pf2-tok2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px;align-items:start}
+    .pf2-tok2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;margin-top:18px;align-items:start}
+    /* round 2 (Shaka: "the ptgc and ufo boxes do not align good enough"): the two cards share ONE set of row tracks (subgrid) —
+       header · tiles · donut · league · lifetime · extras — so every band lines up across them and both cards end level */
+    @supports (grid-template-rows:subgrid){
+      .pf2-tok2{grid-template-rows:repeat(6,auto);align-items:stretch}
+      .pf2-tk{grid-row:span 6;display:grid;grid-template-rows:subgrid;row-gap:0}
+      .pf2-tk>.pf2-dn,.pf2-tk>.pf2-wait{align-self:center}
+    }
     .pf2-tk{padding:18px;border-radius:14px;overflow:hidden;min-width:0}
     .pf2-tk.p{border:1.5px solid rgba(217,202,93,.8);background:radial-gradient(420px 220px at 72% 6%,rgba(120,60,200,.28),transparent 70%),linear-gradient(180deg,rgba(18,14,24,.96),rgba(8,8,12,.96));box-shadow:0 0 26px rgba(217,202,93,.12),0 10px 30px rgba(0,0,0,.5)}
     .pf2-tk.u{border:1.5px solid rgba(124,252,0,.7);background:radial-gradient(420px 220px at 72% 6%,rgba(40,140,60,.25),transparent 70%),linear-gradient(180deg,rgba(10,22,14,.96),rgba(6,10,8,.96));box-shadow:0 0 26px rgba(124,252,0,.12),0 10px 30px rgba(0,0,0,.5)}
-    .pf2-tkh{display:flex;align-items:flex-start;gap:14px}
-    .pf2-tkh img.lg{width:60px;height:60px;border-radius:50%;flex:none;margin-top:2px}
-    .pf2-tkh .nm{flex:1;min-width:0}
+    .pf2-tkh{display:grid;grid-template-columns:60px minmax(0,1fr) auto;column-gap:14px;align-items:start}
+    .pf2-tkh img.lg{grid-column:1;grid-row:1/3;width:60px;height:60px;border-radius:50%;margin-top:2px}
+    .pf2-tkh .nm{display:contents}
+    .pf2-tkh .t{grid-column:2;grid-row:1}.pf2-tkh .sb{grid-column:2;grid-row:2}.pf2-tkh .px{grid-column:3;grid-row:1/3}
+    .pf2-tkh .pf2-crw{grid-column:2/-1;grid-row:3}
     .pf2-tkh .t{font-family:'Orbitron',sans-serif;font-weight:900;font-size:30px;line-height:1;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
     .pf2-tk.p .t{background-image:linear-gradient(180deg,#FFF3B0,#F2D35B 45%,#C9921A 70%,#F2C94C)}
     .pf2-tk.u .t{background-image:linear-gradient(180deg,#E9FFC8,#9BFF3C 45%,#4CB800 72%,#8DFF3A)}
@@ -112,10 +140,9 @@
     .pf2-tkh .px{text-align:right;flex:none}
     .pf2-tkh .px .a{font-size:22px;font-weight:700}
     .pf2-tkh .px .c{font-size:16px;font-weight:700;margin-top:2px}
-    .pf2-crw{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-    .pf2-crw span{display:inline-flex;align-items:center;gap:3px;height:34px;padding:0 10px 0 4px;border-radius:9px;background:radial-gradient(ellipse at 30% 50%,rgba(255,255,255,.08),rgba(0,0,0,.55) 75%);border:1px solid rgba(255,255,255,.12);font-weight:700;font-size:16px}
-    .pf2-tk.p .pf2-crw span{border-color:rgba(217,202,93,.3)}.pf2-tk.u .pf2-crw span{border-color:rgba(124,252,0,.28)}
-    .pf2-crw img{width:30px;height:30px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+    .pf2-crw{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:10px}
+    .pf2-crw span{display:inline-flex;align-items:center;gap:3px;font-weight:700;font-size:17px;text-shadow:0 1px 3px #000}   /* round 2: no box round each creature (Shaka) */
+    .pf2-crw img{width:34px;height:34px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.75))}
     .pf2-t4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px}
     .pf2-bx{border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.42);padding:11px 8px 12px;text-align:center;min-width:0}
     .pf2-bx .lb{font-size:11.5px;font-weight:600;letter-spacing:.06em;color:rgba(255,255,255,.62)}
@@ -137,7 +164,8 @@
     .pf2-lgd em{font-style:normal;color:rgba(255,255,255,.5);font-size:14.5px;text-align:right}
     .pf2-wait{padding:26px 6px;text-align:center;color:rgba(255,255,255,.5);font-size:15.5px}
     /* leagues block */
-    .pf2-lgb{border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.45);padding:12px 14px;margin:0 0 12px}
+    .pf2-lgw{margin:0 0 12px}
+    .pf2-lgb{border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.45);padding:12px 14px}
     .pf2-tk.p .pf2-lgb{border-color:rgba(217,202,93,.35)}.pf2-tk.u .pf2-lgb{border-color:rgba(124,252,0,.3)}
     .pf2-lgbh{display:flex;align-items:center;gap:12px}
     .pf2-lgbh .lb{font-size:12.5px}
@@ -165,7 +193,8 @@
     .pf2-le .d{width:1px;height:18px;background:rgba(255,255,255,.25)}
     .pf2-le .usd{font-size:19px;font-weight:700;color:#8DFF3A}
     .pf2-le .msg{font-size:15px;color:rgba(255,255,255,.55)}
-    .pf2-ext{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+    .pf2-extw{margin-top:10px}
+    .pf2-ext{display:flex;gap:8px;flex-wrap:wrap}
     .pf2-ext>span,.pf2-ext>button{font-size:13px;color:rgba(255,255,255,.6);border:1px dashed rgba(255,255,255,.18);border-radius:7px;padding:5px 10px;background:transparent}
     .pf2-ext>button:hover{border-color:rgba(255,255,255,.4);color:#fff}
     .pf2-ext b{color:#fff;font-weight:700}
@@ -216,7 +245,7 @@
     .pf2-dotbtn{position:fixed;right:10px;bottom:10px;z-index:70;width:12px;height:12px;border-radius:50%;border:0;padding:0;background:rgba(255,255,255,.14);opacity:.5;cursor:pointer}
     .pf2-dotbtn:hover{opacity:1;background:rgba(242,211,91,.6)}
     @media (max-width:1100px){.pf2-deck{grid-template-columns:repeat(4,minmax(0,1fr))}.pf2-st .v{font-size:26px}}
-    @media (max-width:980px){.pf2-tok2{grid-template-columns:1fr}.pf2-row3{grid-template-columns:1fr}.pf2-deck{grid-template-columns:repeat(3,minmax(0,1fr))}.pf2-folds{grid-template-columns:1fr}}
+    @media (max-width:980px){.pf2-tok2{grid-template-columns:1fr;row-gap:12px}.pf2-tk{grid-row:auto!important;display:block!important}.pf2-row3{grid-template-columns:1fr}.pf2-deck{grid-template-columns:repeat(3,minmax(0,1fr))}.pf2-folds{grid-template-columns:1fr}}
     @media (max-width:860px){.pf2-add{flex-wrap:wrap;padding:10px;gap:8px;border-radius:12px}
       .pf2-add .f{height:42px;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:0 11px;background:rgba(0,0,0,.35)}
       .pf2-add .f.a1{flex-basis:100%;padding-left:9px}.pf2-add .f.l,.pf2-add .f.g{width:auto;flex:1}
@@ -228,7 +257,6 @@
       .pf2-tools .sp{display:none}.pf2-seg{order:5}.pf2-srch{order:6;flex:1;width:auto}.pf2-how{order:4;margin-left:auto}
       .pf2-deck{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       .pf2-wc{padding:10px}.pf2-wc .nm{font-size:15px}.pf2-wc .v{font-size:19px}.pf2-wc .r3{font-size:11.5px}
-      .pf2-wc .acts{opacity:1;position:static;justify-content:flex-end;margin-top:6px}
       .pf2-deck.cut .pf2-wc:nth-child(n+7){display:none}
       .pf2-more{display:flex;grid-column:1/-1;height:38px;align-items:center;justify-content:center;border:1px dashed rgba(217,202,93,.45);border-radius:9px;color:#F6E98A;font-weight:700;font-size:14.5px;background:transparent}
       .pf2-row3,.pf2-tok2{gap:12px}
@@ -236,14 +264,13 @@
       .pf2-st .ic,.pf2-st .ic img{width:48px;height:48px}.pf2-st .ic.w,.pf2-st .ic.w img{width:58px;height:58px}
       .pf2-st .v{font-size:26px}
       .pf2-tk{padding:14px}
-      .pf2-tkh{display:grid;grid-template-columns:48px minmax(0,1fr) auto;column-gap:12px;align-items:center}
-      .pf2-tkh .nm{display:contents}
-      .pf2-tkh img.lg{grid-column:1;grid-row:1/3;margin:0;width:48px;height:48px}
-      .pf2-tkh .t{grid-column:2;grid-row:1;align-self:end;font-size:24px}
-      .pf2-tkh .sb{grid-column:2;grid-row:2;align-self:start;margin-top:4px;font-size:14px}
-      .pf2-tkh .px{grid-column:3;grid-row:1/3}.pf2-tkh .px .a{font-size:18px}.pf2-tkh .px .c{font-size:14px}
-      .pf2-tkh .pf2-crw{grid-column:1/-1;grid-row:3;margin-top:12px}
-      .pf2-crw span{height:30px;font-size:14.5px;padding:0 8px 0 3px}.pf2-crw img{width:26px;height:26px}
+      .pf2-tkh{grid-template-columns:48px minmax(0,1fr) auto;column-gap:12px;align-items:center}
+      .pf2-tkh img.lg{margin:0;width:48px;height:48px}
+      .pf2-tkh .t{align-self:end;font-size:24px}
+      .pf2-tkh .sb{align-self:start;margin-top:4px;font-size:14px}
+      .pf2-tkh .px .a{font-size:18px}.pf2-tkh .px .c{font-size:14px}
+      .pf2-tkh .pf2-crw{grid-column:1/-1;margin-top:12px;gap:4px 12px}
+      .pf2-crw span{font-size:15px}.pf2-crw img{width:30px;height:30px}
       .pf2-t4{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
       .pf2-dn{grid-template-columns:104px minmax(0,1fr);gap:14px}.pf2-dn svg{width:100px;height:100px}
       .pf2-lgd div{font-size:15px;grid-template-columns:12px minmax(0,1fr) auto 50px;gap:7px}
