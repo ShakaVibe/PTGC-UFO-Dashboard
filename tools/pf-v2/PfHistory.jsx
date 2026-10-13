@@ -135,7 +135,7 @@
       return(<svg className="pf2-spk" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".42"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs><path d={d+`L${W} ${H}L0 ${H}Z`} fill={`url(#${id})`}/><path d={d} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 3px ${col})`}}/></svg>);
     };
     /* the chart: one series (the total), area + 2 px line, recessive grid, crosshair + tooltip on hover / touch */
-    const PfHistChart=({pts,period})=>{
+    const PfHistChart=({pts,period,txs})=>{
       const ref=React.useRef(null);const[hov,setHov]=useState(null);
       const vals=pts.filter(p=>p.v!=null);
       if(vals.length<2)return <div className="pf2-hwait">Not enough points yet.</div>;
@@ -148,11 +148,23 @@
       const nx=period==='7D'?7:period==='30D'?6:period==='90D'?6:6;const xl=Array.from({length:nx+1},(_,i)=>t0+(t1-t0)*i/nx);
       const move=e=>{const r=ref.current.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const t=t0+(cx/r.width)*(t1-t0);let best=null;vals.forEach(p=>{if(!best||Math.abs(p.t-t)<Math.abs(best.t-t))best=p;});setHov(best);};
       const last=vals[vals.length-1];
-      /* round 8: buy / sell markers — where the TOKEN COUNT moved between two points (from the same balances the chart reads,
-         no extra data). Net per step, so a buy and a sell inside one step cancel; moves under 1 % of the bag are reflections /
-         rounding and are ignored. Green = more tokens (bought, claimed or moved in), red = fewer (sold or moved out). */
-      const ev=[];for(let i=1;i<vals.length;i++){const a=vals[i-1],b=vals[i];const ch=[];[['PTGC','bp'],['UFO','bu']].forEach(([k,f])=>{if(a[f]==null||b[f]==null)return;const d=b[f]-a[f];if(Math.abs(d)>Math.max(a[f],b[f])*0.01&&Math.abs(d)>1)ch.push({k,d});});if(ch.length)ev.push({p:b,ch,up:ch.reduce((x,c)=>x+c.d*(c.k==='PTGC'?b.p/(b.bp||1):b.u/(b.bu||1)),0)>=0});}
+      /* buy / sell markers.
+         round 14 (Shaka: "a bunch of sells… yet no red dots"): the dots now come from the REAL trades in Recent Transactions —
+         every Sell / Send / Add LP is a red dot, every Buy / Receive / Remove LP a green one, however small (the old balance-
+         change dots hid anything under 1 % of the bag, i.e. every normal-sized sell). Each trade lands on the first chart point
+         at or after it (where the balance already shows it); a step with both buys and sells gets both dots. Claims and moves
+         between your own wallets are not trades and get no dot.
+         Older than the trade list reaches (PulseScan's latest 50 per wallet and token), the round-8 dots still fill in:
+         where the token COUNT moved by more than 1 % between two points. */
+      const ev=[];const TIN={Buy:1,Receive:1,'Remove LP':1},TOUT={Sell:1,Send:1,'Add LP':1};
+      const since=txs?txs.since:Infinity;
+      if(txs){const by=new Map();txs.rows.forEach(r=>{if(!(TIN[r.type]||TOUT[r.type]))return;if(r.t<=vals[0].t||r.t<since)return;
+          const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[]};e.tx.push(r);by.set(p.t,e);});
+        by.forEach(e=>{const i=e.tx.filter(r=>TIN[r.type]),o=e.tx.filter(r=>TOUT[r.type]);
+          if(i.length)ev.push({p:e.p,up:true,two:o.length>0,tx:e.tx});if(o.length)ev.push({p:e.p,up:false,two:i.length>0,tx:e.tx});});}
+      for(let i=1;i<vals.length;i++){const a=vals[i-1],b=vals[i];if(b.t>=since)break;const ch=[];[['PTGC','bp'],['UFO','bu']].forEach(([k,f])=>{if(a[f]==null||b[f]==null)return;const d=b[f]-a[f];if(Math.abs(d)>Math.max(a[f],b[f])*0.01&&Math.abs(d)>1)ch.push({k,d});});if(ch.length)ev.push({p:b,ch,up:ch.reduce((x,c)=>x+c.d*(c.k==='PTGC'?b.p/(b.bp||1):b.u/(b.bu||1)),0)>=0});}
       const evAt=t=>ev.find(e=>e.p.t===t);
+      const txLine=r=>{const o=!!TOUT[r.type];return <span key={r.id} className={o?'out':'in'}>{o?'\u25BC ':'\u25B2 '}{r.type} {pfAbbr(Math.abs(r.amt))} {r.tok}{r.usd!=null&&<em> {'\u00B7'} {pfhMoney(r.usd)}</em>}</span>;};
       return(
         <div className="pf2-hc">
           <div className="pf2-hy" aria-hidden="true">{ticks.slice().reverse().map((v,i)=><span key={i}>{pfhMoney(v)}</span>)}</div>
@@ -160,17 +172,17 @@
             {ticks.map((v,i)=><i key={i} className="g" style={{top:Y(v)+'%'}}></i>)}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pfhA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5CE13A" stopOpacity=".5"/><stop offset="1" stopColor="#1F6B12" stopOpacity=".06"/></linearGradient></defs>
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
-            {ev.map((e,i)=><b key={'e'+i} className={`ev ${e.up?'in':'out'}`} style={{left:X(e.p.t)+'%',top:Y(e.p.v)+'%'}}></b>)}
+            {ev.map((e,i)=><b key={'e'+i} className={`ev ${e.up?'in':'out'}${e.two?' two':''}`} style={{left:X(e.p.t)+'%',top:Y(e.p.v)+'%'}}></b>)}
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);return e?<div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>:null;})()}</div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;if(e.tx){const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length===1?'trade':'trades'} since the point before</small></div>;}return <div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>;})()}</div></>}
           </div>
-          {ev.length>0&&<div className="pf2-hlg"><span><b className="in"></b>more tokens (bought, claimed or moved in)</span><span><b className="out"></b>fewer tokens (sold or moved out)</span></div>}
+          {ev.length>0&&<div className="pf2-hlg"><span><b className="in"></b>bought or received</span><span><b className="out"></b>sold or sent</span>{txs&&since>vals[0].t&&<span className="o">older dots: token count moved over 1 %</span>}</div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
     };
-    const PfValueHistory=({addrs,live,period,setPeriod})=>{
+    const PfValueHistory=({addrs,live,period,setPeriod,txs})=>{
       const s=usePfSeries(addrs,period);
       const pts=s.pts.length&&live&&live.v!=null?[...s.pts,{t:Date.now(),v:live.v,p:live.p,u:live.u,bp:live.bp,bu:live.bu,now:true}]:s.pts;
       const vals=pts.filter(p=>p.v!=null);
@@ -184,7 +196,7 @@
             <div className="pf2-vhc">
               {s.state==='loading'&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
               {s.state==='failed'&&<div className="pf2-hwait"><div>Couldn{'’'}t read the history from the chain right now.</div><button className="pf2-lnk" onClick={s.retry}>Retry</button></div>}
-              {s.state==='ok'&&<PfHistChart pts={pts} period={period}/>}
+              {s.state==='ok'&&<PfHistChart pts={pts} period={period} txs={txs}/>}
               {s.state==='ok'&&s.gaps>0&&<div className="pf2-hnote">{s.gaps} point{s.gaps>1?'s':''} could not be read and {s.gaps>1?'are':'is'} left as a gap. <button onClick={s.retry}>Retry</button></div>}
             </div>
             <div className="pf2-vhs">

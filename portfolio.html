@@ -394,7 +394,11 @@
     .pf2-htip .ev{display:grid;gap:1px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.12);font-size:13.5px;font-weight:700}
     .pf2-htip .ev .in{color:#5CF07A}.pf2-htip .ev .out{color:#FF6B73}.pf2-htip .ev small{font-size:11.5px;font-weight:500;color:rgba(255,255,255,.5)}
     .pf2-hlg{grid-column:2;grid-row:3;display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:4px;font-size:13px;color:rgba(255,255,255,.6)}
-    .pf2-hlg span{display:inline-flex;align-items:center;gap:6px}.pf2-hlg b{width:9px;height:9px;border-radius:50%}.pf2-hlg b.in{background:#39E15A}.pf2-hlg b.out{background:#FF4B55}
+    .pf2-hlg span{display:inline-flex;align-items:center;gap:6px}
+    /* round 14: a step with a buy AND a sell shows both dots side by side; trade lines in the tooltip; Unstake / Claim sub-labels */
+    .pf2-hp b.ev.two.in{margin-left:-11px}.pf2-hp b.ev.two.out{margin-left:0}
+    .pf2-htip .ev em{font-style:normal;font-weight:500;color:rgba(255,255,255,.6)}.pf2-hlg span.o{color:rgba(255,255,255,.4)}
+    .pf2-ty small{margin-left:5px;font-size:11px;font-weight:600;opacity:.7;text-transform:none}.pf2-hlg b{width:9px;height:9px;border-radius:50%}.pf2-hlg b.in{background:#39E15A}.pf2-hlg b.out{background:#FF4B55}
     .pf2-hx span{position:absolute;top:6px;transform:translateX(-50%);font-size:12.5px;font-weight:600;color:rgba(255,255,255,.55);white-space:nowrap}
     .pf2-hx span:first-child{transform:none}.pf2-hx span:last-child{transform:translateX(-100%)}
     .pf2-hwait{height:254px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:rgba(255,255,255,.7);font-size:15.5px;border:1px dashed rgba(124,252,0,.25);border-radius:10px}
@@ -1509,7 +1513,7 @@
       return(<svg className="pf2-spk" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".42"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs><path d={d+`L${W} ${H}L0 ${H}Z`} fill={`url(#${id})`}/><path d={d} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 3px ${col})`}}/></svg>);
     };
     /* the chart: one series (the total), area + 2 px line, recessive grid, crosshair + tooltip on hover / touch */
-    const PfHistChart=({pts,period})=>{
+    const PfHistChart=({pts,period,txs})=>{
       const ref=React.useRef(null);const[hov,setHov]=useState(null);
       const vals=pts.filter(p=>p.v!=null);
       if(vals.length<2)return <div className="pf2-hwait">Not enough points yet.</div>;
@@ -1522,11 +1526,23 @@
       const nx=period==='7D'?7:period==='30D'?6:period==='90D'?6:6;const xl=Array.from({length:nx+1},(_,i)=>t0+(t1-t0)*i/nx);
       const move=e=>{const r=ref.current.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const t=t0+(cx/r.width)*(t1-t0);let best=null;vals.forEach(p=>{if(!best||Math.abs(p.t-t)<Math.abs(best.t-t))best=p;});setHov(best);};
       const last=vals[vals.length-1];
-      /* round 8: buy / sell markers — where the TOKEN COUNT moved between two points (from the same balances the chart reads,
-         no extra data). Net per step, so a buy and a sell inside one step cancel; moves under 1 % of the bag are reflections /
-         rounding and are ignored. Green = more tokens (bought, claimed or moved in), red = fewer (sold or moved out). */
-      const ev=[];for(let i=1;i<vals.length;i++){const a=vals[i-1],b=vals[i];const ch=[];[['PTGC','bp'],['UFO','bu']].forEach(([k,f])=>{if(a[f]==null||b[f]==null)return;const d=b[f]-a[f];if(Math.abs(d)>Math.max(a[f],b[f])*0.01&&Math.abs(d)>1)ch.push({k,d});});if(ch.length)ev.push({p:b,ch,up:ch.reduce((x,c)=>x+c.d*(c.k==='PTGC'?b.p/(b.bp||1):b.u/(b.bu||1)),0)>=0});}
+      /* buy / sell markers.
+         round 14 (Shaka: "a bunch of sells… yet no red dots"): the dots now come from the REAL trades in Recent Transactions —
+         every Sell / Send / Add LP is a red dot, every Buy / Receive / Remove LP a green one, however small (the old balance-
+         change dots hid anything under 1 % of the bag, i.e. every normal-sized sell). Each trade lands on the first chart point
+         at or after it (where the balance already shows it); a step with both buys and sells gets both dots. Claims and moves
+         between your own wallets are not trades and get no dot.
+         Older than the trade list reaches (PulseScan's latest 50 per wallet and token), the round-8 dots still fill in:
+         where the token COUNT moved by more than 1 % between two points. */
+      const ev=[];const TIN={Buy:1,Receive:1,'Remove LP':1},TOUT={Sell:1,Send:1,'Add LP':1};
+      const since=txs?txs.since:Infinity;
+      if(txs){const by=new Map();txs.rows.forEach(r=>{if(!(TIN[r.type]||TOUT[r.type]))return;if(r.t<=vals[0].t||r.t<since)return;
+          const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[]};e.tx.push(r);by.set(p.t,e);});
+        by.forEach(e=>{const i=e.tx.filter(r=>TIN[r.type]),o=e.tx.filter(r=>TOUT[r.type]);
+          if(i.length)ev.push({p:e.p,up:true,two:o.length>0,tx:e.tx});if(o.length)ev.push({p:e.p,up:false,two:i.length>0,tx:e.tx});});}
+      for(let i=1;i<vals.length;i++){const a=vals[i-1],b=vals[i];if(b.t>=since)break;const ch=[];[['PTGC','bp'],['UFO','bu']].forEach(([k,f])=>{if(a[f]==null||b[f]==null)return;const d=b[f]-a[f];if(Math.abs(d)>Math.max(a[f],b[f])*0.01&&Math.abs(d)>1)ch.push({k,d});});if(ch.length)ev.push({p:b,ch,up:ch.reduce((x,c)=>x+c.d*(c.k==='PTGC'?b.p/(b.bp||1):b.u/(b.bu||1)),0)>=0});}
       const evAt=t=>ev.find(e=>e.p.t===t);
+      const txLine=r=>{const o=!!TOUT[r.type];return <span key={r.id} className={o?'out':'in'}>{o?'\u25BC ':'\u25B2 '}{r.type} {pfAbbr(Math.abs(r.amt))} {r.tok}{r.usd!=null&&<em> {'\u00B7'} {pfhMoney(r.usd)}</em>}</span>;};
       return(
         <div className="pf2-hc">
           <div className="pf2-hy" aria-hidden="true">{ticks.slice().reverse().map((v,i)=><span key={i}>{pfhMoney(v)}</span>)}</div>
@@ -1534,17 +1550,17 @@
             {ticks.map((v,i)=><i key={i} className="g" style={{top:Y(v)+'%'}}></i>)}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pfhA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5CE13A" stopOpacity=".5"/><stop offset="1" stopColor="#1F6B12" stopOpacity=".06"/></linearGradient></defs>
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
-            {ev.map((e,i)=><b key={'e'+i} className={`ev ${e.up?'in':'out'}`} style={{left:X(e.p.t)+'%',top:Y(e.p.v)+'%'}}></b>)}
+            {ev.map((e,i)=><b key={'e'+i} className={`ev ${e.up?'in':'out'}${e.two?' two':''}`} style={{left:X(e.p.t)+'%',top:Y(e.p.v)+'%'}}></b>)}
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);return e?<div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>:null;})()}</div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;if(e.tx){const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length===1?'trade':'trades'} since the point before</small></div>;}return <div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>;})()}</div></>}
           </div>
-          {ev.length>0&&<div className="pf2-hlg"><span><b className="in"></b>more tokens (bought, claimed or moved in)</span><span><b className="out"></b>fewer tokens (sold or moved out)</span></div>}
+          {ev.length>0&&<div className="pf2-hlg"><span><b className="in"></b>bought or received</span><span><b className="out"></b>sold or sent</span>{txs&&since>vals[0].t&&<span className="o">older dots: token count moved over 1 %</span>}</div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
     };
-    const PfValueHistory=({addrs,live,period,setPeriod})=>{
+    const PfValueHistory=({addrs,live,period,setPeriod,txs})=>{
       const s=usePfSeries(addrs,period);
       const pts=s.pts.length&&live&&live.v!=null?[...s.pts,{t:Date.now(),v:live.v,p:live.p,u:live.u,bp:live.bp,bu:live.bu,now:true}]:s.pts;
       const vals=pts.filter(p=>p.v!=null);
@@ -1558,7 +1574,7 @@
             <div className="pf2-vhc">
               {s.state==='loading'&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
               {s.state==='failed'&&<div className="pf2-hwait"><div>Couldn{'’'}t read the history from the chain right now.</div><button className="pf2-lnk" onClick={s.retry}>Retry</button></div>}
-              {s.state==='ok'&&<PfHistChart pts={pts} period={period}/>}
+              {s.state==='ok'&&<PfHistChart pts={pts} period={period} txs={txs}/>}
               {s.state==='ok'&&s.gaps>0&&<div className="pf2-hnote">{s.gaps} point{s.gaps>1?'s':''} could not be read and {s.gaps>1?'are':'is'} left as a gap. <button onClick={s.retry}>Retry</button></div>}
             </div>
             <div className="pf2-vhs">
@@ -1602,14 +1618,32 @@
        finding who the wallet traded WITH (they still count in the amount — it is what left the wallet); the main counterparty is
        the biggest remaining leg. From the staking contract = Claim; one of your own wallets = Move; method add/removeLiquidity =
        Add LP / Remove LP; a CONTRACT (DEX pair, router, aggregator) = Buy (tokens in) / Sell (tokens out); a person = Receive / Send. */
+    /* round 14 — lessons from pulsechain_monitor.py (the trade monitor we built earlier, every rule verified on chain there):
+       · claims are named by the FUNCTION, not the contract (staking and locking share 0xc71f…): withdrawReward = staking
+         rewards, withdrawRewardLock = lock rewards, claimFund = DAO; the DAO lock 0x305a… is a second claim / lock contract.
+       · PTGC staking is balance-lock style: an UNSTAKE (withdraw(uint256) on the staking contract) moves no principal — only the
+         reward out and the unstake fee in — so it is labelled Unstake and its principal is read from the call (see pftDetail).
+       · a hidden 1 % reflection slice of every PTGC send leaves the wallet with NO Transfer event; it equals the 1 % staking
+         leg, so the real amount sent = emitted + the staking leg. UFO: the 1 % reflection = the 5 % contract fee leg ÷ 5 (same
+         rule the UFO reflections scan uses). Sell / Send amounts are grossed up by it.
+       · LP adds made through a helper / zapper look like a Sell — the tell is LP tokens minted to the wallet in the same tx
+         (pftDetail checks the tx's other transfers). */
+    const PFT_DAO='0x305acfab82103c2b82b19543919d1c93b44e55db';
     const PFT_FEE=new Set(['0x0000000000000000000000000000000000000000','0x0000000000000000000000000000000000000369','0x000000000000000000000000000000000000dead',PFT_STAKING]);
+    const PFT_CLAIM_SUB={withdrawreward:'staking',withdrawrewardlock:'lock',claimfund:'DAO'};
     const pftClassify=(legs,addr,own,tok)=>{
       let net=0;legs.forEach(l=>{if(l.to===addr)net+=l.v;if(l.f===addr)net-=l.v;});
       const tokAddr=PFH_TOK[tok].toLowerCase();
-      if(legs.some(l=>l.f===PFT_STAKING&&l.to===addr))return{type:'Claim',net};
+      const m=(legs[0]&&legs[0].m||'').toLowerCase();
+      const fromSt=legs.some(l=>(l.f===PFT_STAKING||l.f===PFT_DAO)&&l.to===addr);
+      if(m==='withdraw'&&legs.some(l=>l.f===PFT_STAKING||l.to===PFT_STAKING||l.f===PFT_DAO||l.to===PFT_DAO))return{type:'Unstake',net,sub:legs.some(l=>l.f===PFT_DAO||l.to===PFT_DAO)?'DAO':''};
+      if(fromSt)return{type:'Claim',net,sub:PFT_CLAIM_SUB[m]||(legs.some(l=>l.f===PFT_DAO)?'DAO':'')};
+      if(legs.some(l=>l.f===addr&&l.to===PFT_DAO)&&!legs.some(l=>l.f===addr&&l.tc&&l.to!==PFT_DAO&&l.to!==tokAddr&&!PFT_FEE.has(l.to)))return{type:'Lock',net,sub:'DAO'};
       const main=legs.filter(l=>(l.to===addr||l.f===addr)).map(l=>l.to===addr?{a:l.f,c:l.fc,v:l.v}:{a:l.to,c:l.tc,v:l.v})
         .filter(x=>x.a&&x.a!==addr&&x.a!==tokAddr&&!PFT_FEE.has(x.a)).sort((x,y)=>y.v-x.v)[0];
-      const m=(legs[0]&&legs[0].m||'').toLowerCase();
+      /* the hidden reflection slice of a send (see above) */
+      if(net<0){if(tok==='PTGC'){const stLeg=legs.filter(l=>l.f===addr&&l.to===PFT_STAKING).reduce((a,l)=>a+l.v,0);net-=stLeg;}
+        else{const fee=legs.filter(l=>l.f===addr&&l.to===tokAddr).reduce((a,l)=>a+l.v,0);net-=fee/5;}}
       let type;
       if(main&&own.has(main.a))type='Move';
       else if(/addliquidity/.test(m))type='Add LP';
@@ -1618,8 +1652,26 @@
       else type=net>=0?'Receive':'Send';
       return{type,net,cp:main&&main.a};
     };
-    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
-    const PfRecentTx=({wallets,prices})=>{
+    /* per-tx detail, fetched only for the rows on screen that need it, cached for good (past txs never change):
+       Sell / Buy → was it really an LP add / remove through a helper (LP tokens minted to / returned by the wallet)?
+       Unstake → the principal, decoded from withdraw(uint256)'s argument. */
+    const PFT_DLS='grays_pf_txd_v1';
+    const pftD=(()=>{let c=null;return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_DLS)||'{}')||{};}catch(e){c={};}return c;},save(){try{localStorage.setItem(PFT_DLS,JSON.stringify(c));}catch(e){}}};})();
+    const pftDetail=async(h,addr)=>{
+      const c=pftD.get(),k=h+'|'+addr;if(c[k])return c[k];
+      const g=async u=>{const r=await fetch(PFT_API.replace('addresses/','')+u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();};
+      const out={};
+      const tx=await g('transactions/'+h);
+      const raw=tx&&tx.raw_input||'';
+      if(raw.startsWith('0x2e1a7d4d')&&raw.length>=74){try{out.principal=Number(BigInt('0x'+raw.slice(10,74)))/1e18;}catch(e){}}
+      const tt=await g('transactions/'+h+'/token-transfers');
+      (tt.items||[]).forEach(x=>{const sym=(x.token&&x.token.symbol||''),nm=(x.token&&x.token.name||'');if(!(sym==='PLP'||/LP/.test(nm)))return;
+        const f=(x.from&&x.from.hash||'').toLowerCase(),t=(x.to&&x.to.hash||'').toLowerCase();
+        if(t===addr&&/^0x0{40}$/.test(f))out.lp='add';else if(f===addr)out.lp='remove';});
+      c[k]=out;pftD.save();return out;
+    };
+    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],Unstake:['#B9C4FF','\u21E7'],Lock:['#5AB8FF','\u{1F512}'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
+    const PfRecentTx=({wallets,prices,onRows})=>{
       const pxNow=React.useRef(prices);pxNow.current=prices;
       const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});
       const[more,setMore]=useState(false);
@@ -1639,12 +1691,12 @@
             const rows=[];
             got.forEach(({addr,tok,items})=>{
               const by={};items.forEach(it=>{(by[it.h]=by[it.h]||[]).push(it);});
-              Object.values(by).forEach(legs=>{const{type,net,cp:mcp}=pftClassify(legs,addr,own,tok);if(Math.abs(net)<1e-9&&type!=='Move')return;
+              Object.values(by).forEach(legs=>{const{type,net,cp:mcp,sub}=pftClassify(legs,addr,own,tok);if(Math.abs(net)<1e-9&&type!=='Move')return;
                 const t=legs[0].t;let p=px?pfhPriceAt(px,tok,t):null;
                 /* newer than the price files (they refresh hourly) → today's price */
                 if(p==null){const last=px&&px.hourly[tok]&&px.hourly[tok].length?px.hourly[tok][px.hourly[tok].length-1][0]:0;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(t>=last&&cur>0)p=cur;}
                 const cp=mcp;
-                rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,amt:net,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
+                rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
             });
             /* a Move shows once (the receiving side), not twice */
             const seen=new Set();const out=[];
@@ -1655,14 +1707,26 @@
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
           const rows=build();
+          /* round 14: hand the trades to the value chart (its buy / sell dots). A wallet+token that filled a whole page (50) is
+             only complete back to its oldest item — older than that, the chart keeps its balance-change dots. */
+          if(onRows){let since=0;got.forEach(g=>{if(g.items.length>=50){const o=Math.min(...g.items.map(i=>i.t));if(o>since)since=o;}});if(failed)since=Date.now();onRows({rows,since});}
           setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
         })();
         return()=>{live=false;};
       },[key,nonce]);
-      const show=st.rows.slice(0,more?40:10);
+      const[det,setDet]=useState({});
+      const show0=st.rows.slice(0,more?40:10);
+      useEffect(()=>{let live=true;const need=show0.filter(r=>(r.type==='Sell'||r.type==='Buy'||r.type==='Unstake')&&!det[r.h+'|'+r.addr]);if(!need.length)return;
+        (async()=>{let q=0;const w=async()=>{while(q<need.length){const r=need[q++];try{const d=await pftDetail(r.h,r.addr);if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:d}));}catch(e){if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:{}}));}}};await Promise.all([w(),w()]);})();
+        return()=>{live=false;};},[st.rows.map(r=>r.id).slice(0,more?40:10).join(),more]);
+      const show=show0.map(r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
+        if(d.lp&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:d.lp==='add'?'Add LP':'Remove LP'};
+        if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
+        return r;});
       const fmtT=t=>{const d=new Date(t);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
-      const ty=t=>{const[c,g]=PFT_TYPE[t]||['#fff','•'];return <span className="pf2-ty" style={{color:c}}><i>{g}</i>{t}</span>;};
-      const amt=r=><span className={r.type==='Move'?'':r.amt>=0?'pos':'neg'}>{r.type==='Move'?'':r.amt>=0?'+':'−'}{pfAbbr(Math.abs(r.amt))}</span>;
+      const ty=(t,sub)=>{const[c,g]=PFT_TYPE[t]||['#fff','•'];return <span className="pf2-ty" style={{color:c}}><i>{g}</i>{t}{sub&&<small>{sub}</small>}</span>;};
+      /* an Unstake shows the principal that came free (it never moves — the stake is a lock on the balance), not a +/− */
+      const amt=r=>r.unstake?<span title="Principal released from staking (it never left the wallet)">{pfAbbr(r.amt)}</span>:<span className={r.type==='Move'?'':r.amt>=0?'pos':'neg'}>{r.type==='Move'?'':r.amt>=0?'+':'−'}{pfAbbr(Math.abs(r.amt))}</span>;
       const tx=h=><a className="pf2-txl" href={`https://scan.pulsechain.com/tx/${h}`} target="_blank" rel="noopener noreferrer">{h.slice(0,6)}{'…'}{h.slice(-4)} {'↗'}</a>;
       return(
         <section className="pf2-pn pf2-sec pf2-rt">
@@ -1674,8 +1738,8 @@
           {st.state==='none'&&<div className="pf2-soon">No PTGC or UFO transfers in the counted wallets yet.</div>}
           {st.state==='ok'&&st.rows.length>0&&<>
             <table className="pf2-txt"><thead><tr><th>TIME</th><th>WALLET</th><th>TYPE</th><th>TOKEN</th><th className="r">AMOUNT</th><th className="r">VALUE</th><th>TX</th></tr></thead>
-              <tbody>{show.map(r=><tr key={r.id}><td>{fmtT(r.t)}</td><td className="w">{r.who}</td><td>{ty(r.type)}</td><td className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</td><td className="r">{amt(r)}</td><td className="r">{fmtDollar(r.usd)}</td><td>{tx(r.h)}</td></tr>)}</tbody></table>
-            <div className="pf2-txm">{show.map(r=><div key={r.id}><span>{ty(r.type)} <b className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</b></span><span className="a">{amt(r)}</span><span className="d">{fmtT(r.t)} {'·'} {r.who}</span><span className="d r">{fmtDollar(r.usd)} {tx(r.h)}</span></div>)}</div>
+              <tbody>{show.map(r=><tr key={r.id}><td>{fmtT(r.t)}</td><td className="w">{r.who}</td><td>{ty(r.type,r.sub)}</td><td className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</td><td className="r">{amt(r)}</td><td className="r">{fmtDollar(r.usd)}</td><td>{tx(r.h)}</td></tr>)}</tbody></table>
+            <div className="pf2-txm">{show.map(r=><div key={r.id}><span>{ty(r.type,r.sub)} <b className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</b></span><span className="a">{amt(r)}</span><span className="d">{fmtT(r.t)} {'·'} {r.who}</span><span className="d r">{fmtDollar(r.usd)} {tx(r.h)}</span></div>)}</div>
             <div className="pf2-txf">{st.rows.length>10&&<button className="pf2-lnk" onClick={()=>setMore(!more)}>{more?'Show fewer':`Show more (${Math.min(40,st.rows.length)})`}</button>}
               {st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
               <span className="src">From PulseScan {'·'} the latest 50 transfers per wallet and token</span></div>
@@ -1872,6 +1936,7 @@
       /* step 2 (value history, option C): the counted wallets' real balances from the chain */
       const hAddrs=counted.map(w=>w.address.toLowerCase());
       const[hPeriod,setHPeriod]=useState('30D');
+      const[txs,setTxs]=useState(null);   // round 14: Recent Transactions → the value chart's buy / sell dots
       const liveP=anyData?usd(agg.ptgc.totalHolding,prices.ptgc):null,liveU=anyData?usd(agg.ufo.balance,prices.ufo):null;
       const liveV=liveP==null&&liveU==null?null:(liveP||0)+(liveU||0);
       const live={v:liveV,p:liveP||0,u:liveU||0,bp:anyData?agg.ptgc.totalHolding:null,bu:anyData?agg.ufo.balance:null};
@@ -2069,8 +2134,8 @@
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
-          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod}/>
-          <PfRecentTx wallets={counted} prices={prices}/>
+          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs}/>
+          <PfRecentTx wallets={counted} prices={prices} onRows={setTxs}/>
 
           {/* ---- the two folds ---- */}
           <div className="pf2-folds one">

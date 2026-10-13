@@ -186,6 +186,7 @@
       /* step 2 (value history, option C): the counted wallets' real balances from the chain */
       const hAddrs=counted.map(w=>w.address.toLowerCase());
       const[hPeriod,setHPeriod]=useState('30D');
+      const[txs,setTxs]=useState(null);   // round 14: Recent Transactions → the value chart's buy / sell dots
       const liveP=anyData?usd(agg.ptgc.totalHolding,prices.ptgc):null,liveU=anyData?usd(agg.ufo.balance,prices.ufo):null;
       const liveV=liveP==null&&liveU==null?null:(liveP||0)+(liveU||0);
       const live={v:liveV,p:liveP||0,u:liveU||0,bp:anyData?agg.ptgc.totalHolding:null,bu:anyData?agg.ufo.balance:null};
@@ -383,8 +384,8 @@
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
-          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod}/>
-          <PfRecentTx wallets={counted} prices={prices}/>
+          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs}/>
+          <PfRecentTx wallets={counted} prices={prices} onRows={setTxs}/>
 
           {/* ---- the two folds ---- */}
           <div className="pf2-folds one">

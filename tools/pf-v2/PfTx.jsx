@@ -29,14 +29,32 @@
        finding who the wallet traded WITH (they still count in the amount — it is what left the wallet); the main counterparty is
        the biggest remaining leg. From the staking contract = Claim; one of your own wallets = Move; method add/removeLiquidity =
        Add LP / Remove LP; a CONTRACT (DEX pair, router, aggregator) = Buy (tokens in) / Sell (tokens out); a person = Receive / Send. */
+    /* round 14 — lessons from pulsechain_monitor.py (the trade monitor we built earlier, every rule verified on chain there):
+       · claims are named by the FUNCTION, not the contract (staking and locking share 0xc71f…): withdrawReward = staking
+         rewards, withdrawRewardLock = lock rewards, claimFund = DAO; the DAO lock 0x305a… is a second claim / lock contract.
+       · PTGC staking is balance-lock style: an UNSTAKE (withdraw(uint256) on the staking contract) moves no principal — only the
+         reward out and the unstake fee in — so it is labelled Unstake and its principal is read from the call (see pftDetail).
+       · a hidden 1 % reflection slice of every PTGC send leaves the wallet with NO Transfer event; it equals the 1 % staking
+         leg, so the real amount sent = emitted + the staking leg. UFO: the 1 % reflection = the 5 % contract fee leg ÷ 5 (same
+         rule the UFO reflections scan uses). Sell / Send amounts are grossed up by it.
+       · LP adds made through a helper / zapper look like a Sell — the tell is LP tokens minted to the wallet in the same tx
+         (pftDetail checks the tx's other transfers). */
+    const PFT_DAO='0x305acfab82103c2b82b19543919d1c93b44e55db';
     const PFT_FEE=new Set(['0x0000000000000000000000000000000000000000','0x0000000000000000000000000000000000000369','0x000000000000000000000000000000000000dead',PFT_STAKING]);
+    const PFT_CLAIM_SUB={withdrawreward:'staking',withdrawrewardlock:'lock',claimfund:'DAO'};
     const pftClassify=(legs,addr,own,tok)=>{
       let net=0;legs.forEach(l=>{if(l.to===addr)net+=l.v;if(l.f===addr)net-=l.v;});
       const tokAddr=PFH_TOK[tok].toLowerCase();
-      if(legs.some(l=>l.f===PFT_STAKING&&l.to===addr))return{type:'Claim',net};
+      const m=(legs[0]&&legs[0].m||'').toLowerCase();
+      const fromSt=legs.some(l=>(l.f===PFT_STAKING||l.f===PFT_DAO)&&l.to===addr);
+      if(m==='withdraw'&&legs.some(l=>l.f===PFT_STAKING||l.to===PFT_STAKING||l.f===PFT_DAO||l.to===PFT_DAO))return{type:'Unstake',net,sub:legs.some(l=>l.f===PFT_DAO||l.to===PFT_DAO)?'DAO':''};
+      if(fromSt)return{type:'Claim',net,sub:PFT_CLAIM_SUB[m]||(legs.some(l=>l.f===PFT_DAO)?'DAO':'')};
+      if(legs.some(l=>l.f===addr&&l.to===PFT_DAO)&&!legs.some(l=>l.f===addr&&l.tc&&l.to!==PFT_DAO&&l.to!==tokAddr&&!PFT_FEE.has(l.to)))return{type:'Lock',net,sub:'DAO'};
       const main=legs.filter(l=>(l.to===addr||l.f===addr)).map(l=>l.to===addr?{a:l.f,c:l.fc,v:l.v}:{a:l.to,c:l.tc,v:l.v})
         .filter(x=>x.a&&x.a!==addr&&x.a!==tokAddr&&!PFT_FEE.has(x.a)).sort((x,y)=>y.v-x.v)[0];
-      const m=(legs[0]&&legs[0].m||'').toLowerCase();
+      /* the hidden reflection slice of a send (see above) */
+      if(net<0){if(tok==='PTGC'){const stLeg=legs.filter(l=>l.f===addr&&l.to===PFT_STAKING).reduce((a,l)=>a+l.v,0);net-=stLeg;}
+        else{const fee=legs.filter(l=>l.f===addr&&l.to===tokAddr).reduce((a,l)=>a+l.v,0);net-=fee/5;}}
       let type;
       if(main&&own.has(main.a))type='Move';
       else if(/addliquidity/.test(m))type='Add LP';
@@ -45,8 +63,26 @@
       else type=net>=0?'Receive':'Send';
       return{type,net,cp:main&&main.a};
     };
-    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
-    const PfRecentTx=({wallets,prices})=>{
+    /* per-tx detail, fetched only for the rows on screen that need it, cached for good (past txs never change):
+       Sell / Buy → was it really an LP add / remove through a helper (LP tokens minted to / returned by the wallet)?
+       Unstake → the principal, decoded from withdraw(uint256)'s argument. */
+    const PFT_DLS='grays_pf_txd_v1';
+    const pftD=(()=>{let c=null;return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_DLS)||'{}')||{};}catch(e){c={};}return c;},save(){try{localStorage.setItem(PFT_DLS,JSON.stringify(c));}catch(e){}}};})();
+    const pftDetail=async(h,addr)=>{
+      const c=pftD.get(),k=h+'|'+addr;if(c[k])return c[k];
+      const g=async u=>{const r=await fetch(PFT_API.replace('addresses/','')+u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();};
+      const out={};
+      const tx=await g('transactions/'+h);
+      const raw=tx&&tx.raw_input||'';
+      if(raw.startsWith('0x2e1a7d4d')&&raw.length>=74){try{out.principal=Number(BigInt('0x'+raw.slice(10,74)))/1e18;}catch(e){}}
+      const tt=await g('transactions/'+h+'/token-transfers');
+      (tt.items||[]).forEach(x=>{const sym=(x.token&&x.token.symbol||''),nm=(x.token&&x.token.name||'');if(!(sym==='PLP'||/LP/.test(nm)))return;
+        const f=(x.from&&x.from.hash||'').toLowerCase(),t=(x.to&&x.to.hash||'').toLowerCase();
+        if(t===addr&&/^0x0{40}$/.test(f))out.lp='add';else if(f===addr)out.lp='remove';});
+      c[k]=out;pftD.save();return out;
+    };
+    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],Unstake:['#B9C4FF','\u21E7'],Lock:['#5AB8FF','\u{1F512}'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
+    const PfRecentTx=({wallets,prices,onRows})=>{
       const pxNow=React.useRef(prices);pxNow.current=prices;
       const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});
       const[more,setMore]=useState(false);
@@ -66,12 +102,12 @@
             const rows=[];
             got.forEach(({addr,tok,items})=>{
               const by={};items.forEach(it=>{(by[it.h]=by[it.h]||[]).push(it);});
-              Object.values(by).forEach(legs=>{const{type,net,cp:mcp}=pftClassify(legs,addr,own,tok);if(Math.abs(net)<1e-9&&type!=='Move')return;
+              Object.values(by).forEach(legs=>{const{type,net,cp:mcp,sub}=pftClassify(legs,addr,own,tok);if(Math.abs(net)<1e-9&&type!=='Move')return;
                 const t=legs[0].t;let p=px?pfhPriceAt(px,tok,t):null;
                 /* newer than the price files (they refresh hourly) → today's price */
                 if(p==null){const last=px&&px.hourly[tok]&&px.hourly[tok].length?px.hourly[tok][px.hourly[tok].length-1][0]:0;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(t>=last&&cur>0)p=cur;}
                 const cp=mcp;
-                rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,amt:net,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
+                rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
             });
             /* a Move shows once (the receiving side), not twice */
             const seen=new Set();const out=[];
@@ -82,14 +118,26 @@
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
           const rows=build();
+          /* round 14: hand the trades to the value chart (its buy / sell dots). A wallet+token that filled a whole page (50) is
+             only complete back to its oldest item — older than that, the chart keeps its balance-change dots. */
+          if(onRows){let since=0;got.forEach(g=>{if(g.items.length>=50){const o=Math.min(...g.items.map(i=>i.t));if(o>since)since=o;}});if(failed)since=Date.now();onRows({rows,since});}
           setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
         })();
         return()=>{live=false;};
       },[key,nonce]);
-      const show=st.rows.slice(0,more?40:10);
+      const[det,setDet]=useState({});
+      const show0=st.rows.slice(0,more?40:10);
+      useEffect(()=>{let live=true;const need=show0.filter(r=>(r.type==='Sell'||r.type==='Buy'||r.type==='Unstake')&&!det[r.h+'|'+r.addr]);if(!need.length)return;
+        (async()=>{let q=0;const w=async()=>{while(q<need.length){const r=need[q++];try{const d=await pftDetail(r.h,r.addr);if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:d}));}catch(e){if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:{}}));}}};await Promise.all([w(),w()]);})();
+        return()=>{live=false;};},[st.rows.map(r=>r.id).slice(0,more?40:10).join(),more]);
+      const show=show0.map(r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
+        if(d.lp&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:d.lp==='add'?'Add LP':'Remove LP'};
+        if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
+        return r;});
       const fmtT=t=>{const d=new Date(t);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
-      const ty=t=>{const[c,g]=PFT_TYPE[t]||['#fff','•'];return <span className="pf2-ty" style={{color:c}}><i>{g}</i>{t}</span>;};
-      const amt=r=><span className={r.type==='Move'?'':r.amt>=0?'pos':'neg'}>{r.type==='Move'?'':r.amt>=0?'+':'−'}{pfAbbr(Math.abs(r.amt))}</span>;
+      const ty=(t,sub)=>{const[c,g]=PFT_TYPE[t]||['#fff','•'];return <span className="pf2-ty" style={{color:c}}><i>{g}</i>{t}{sub&&<small>{sub}</small>}</span>;};
+      /* an Unstake shows the principal that came free (it never moves — the stake is a lock on the balance), not a +/− */
+      const amt=r=>r.unstake?<span title="Principal released from staking (it never left the wallet)">{pfAbbr(r.amt)}</span>:<span className={r.type==='Move'?'':r.amt>=0?'pos':'neg'}>{r.type==='Move'?'':r.amt>=0?'+':'−'}{pfAbbr(Math.abs(r.amt))}</span>;
       const tx=h=><a className="pf2-txl" href={`https://scan.pulsechain.com/tx/${h}`} target="_blank" rel="noopener noreferrer">{h.slice(0,6)}{'…'}{h.slice(-4)} {'↗'}</a>;
       return(
         <section className="pf2-pn pf2-sec pf2-rt">
@@ -101,8 +149,8 @@
           {st.state==='none'&&<div className="pf2-soon">No PTGC or UFO transfers in the counted wallets yet.</div>}
           {st.state==='ok'&&st.rows.length>0&&<>
             <table className="pf2-txt"><thead><tr><th>TIME</th><th>WALLET</th><th>TYPE</th><th>TOKEN</th><th className="r">AMOUNT</th><th className="r">VALUE</th><th>TX</th></tr></thead>
-              <tbody>{show.map(r=><tr key={r.id}><td>{fmtT(r.t)}</td><td className="w">{r.who}</td><td>{ty(r.type)}</td><td className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</td><td className="r">{amt(r)}</td><td className="r">{fmtDollar(r.usd)}</td><td>{tx(r.h)}</td></tr>)}</tbody></table>
-            <div className="pf2-txm">{show.map(r=><div key={r.id}><span>{ty(r.type)} <b className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</b></span><span className="a">{amt(r)}</span><span className="d">{fmtT(r.t)} {'·'} {r.who}</span><span className="d r">{fmtDollar(r.usd)} {tx(r.h)}</span></div>)}</div>
+              <tbody>{show.map(r=><tr key={r.id}><td>{fmtT(r.t)}</td><td className="w">{r.who}</td><td>{ty(r.type,r.sub)}</td><td className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</td><td className="r">{amt(r)}</td><td className="r">{fmtDollar(r.usd)}</td><td>{tx(r.h)}</td></tr>)}</tbody></table>
+            <div className="pf2-txm">{show.map(r=><div key={r.id}><span>{ty(r.type,r.sub)} <b className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</b></span><span className="a">{amt(r)}</span><span className="d">{fmtT(r.t)} {'·'} {r.who}</span><span className="d r">{fmtDollar(r.usd)} {tx(r.h)}</span></div>)}</div>
             <div className="pf2-txf">{st.rows.length>10&&<button className="pf2-lnk" onClick={()=>setMore(!more)}>{more?'Show fewer':`Show more (${Math.min(40,st.rows.length)})`}</button>}
               {st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
               <span className="src">From PulseScan {'·'} the latest 50 transfers per wallet and token</span></div>

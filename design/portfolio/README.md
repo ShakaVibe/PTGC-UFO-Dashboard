@@ -275,3 +275,20 @@ names the mode ("… uses your custom prices" / "… the all-time-high prices") 
    aggregator) → Buy / Sell; a person → Receive / Send. Verified on a real wallet's 8 PTGC txs (multicall sells split over two
    pairs → Sell, selector-only buys from up to 9 pairs → Buy). Cache key → `grays_pf_tx_v2` (rows now carry is_contract).
    Harness PF_TX stub gained a fee-split sell.
+
+## Round 14 (2026-10-13)
+1. **Chart dots come from the real trades** (Shaka: "a bunch of sells… yet no red dots"). The round-8 dots compared token
+   counts between chart points and hid anything under 1 % of the bag — every normal-sized sell (his ~$350 sells of 8.9M PTGC
+   on a multi-billion bag). Now Recent Transactions hands its rows to the chart (`onRows` → `txs`): every Sell / Send / Add LP
+   is a red dot and every Buy / Receive / Remove LP a green one, on the first chart point at or after the trade; a step with
+   both gets both dots side by side; the tooltip lists the trades (type, amount, token, $). Claims and moves between your own
+   wallets get no dot. Older than PulseScan's latest-50-per-wallet window (or if a read failed), the old balance-change dots
+   still fill in, and the legend says so.
+2. **Lessons from his `pulsechain_monitor.py`** (the trade monitor built earlier) folded into `pftClassify`:
+   claims labelled by function (withdrawReward → staking, withdrawRewardLock → lock, claimFund → DAO); the DAO lock
+   contract 0x305a… (→ Lock); **Unstake** (withdraw(uint256) on the staking contract — principal never moves, so the
+   principal is decoded from the call and shown); the hidden 1 % reflection slice of a send added back (PTGC = the staking
+   leg, UFO = contract fee ÷ 5) so Sell / Send amounts are the real gross; helper-made LP adds that look like sells are caught
+   by an LP-token mint to the wallet in the same tx (per-tx detail fetched only for the rows on screen, cached in
+   `grays_pf_txd_v1`). Harness: PF_TX stub gained a DAO lock, an unstake and a zapper LP add, plus `/transactions/{hash}`
+   stubs; PF_TX_SHIFT=h ages the stub; probe `pf2-txdots.js`.
