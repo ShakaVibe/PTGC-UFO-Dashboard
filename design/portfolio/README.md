@@ -237,3 +237,14 @@ own prices ▾"); clicking it opens the price inputs as a full-width strip right
 fold (full width). ≤ 1100 px: Moon Math drops to a slim full-width bar under the three; ≤ 980 px everything stacks. Also live-
 checked round 9's Recent Transactions on ptgc-ufo.com with a real staking wallet: Claim / Buy rows, values and tx links correct.
 Render `renders/r10-moonmath.jpg`.
+
+## Round 11 (2026-10-13)
+1. Lifetime earned icon → his rising-bars-in-a-gold-ring (`reference/shaka-lifetime-icon-v2.png` → `logos/portfolio/pf-lifetime3.webp`).
+2. Moon Math: **Live / 🚀 All-time highs** is a lit toggle (the active one glows); a third "Your prices" chip appears when he types.
+3. **PLS maths fixed.** On the old page (and v2 until now) a Moon Math PLS price changed nothing — no figure used it. Now PLS = X
+   means PTGC and UFO keep their price IN PLS, so each $ price moves by X ÷ today's PLS (PLS ×2 → PTGC and UFO ×2; probe
+   `pf2-moon.js` ratio 2.0000). A PTGC / UFO price typed in still wins for that token; a line under the strip says what PLS did
+   ("PLS at … is 4.00× today's price → PTGC …, UFO …"). The classic page is left as it was.
+4. "Earned by source" heading without the icon. 5. UFO legend's "split of today's bag, pro rata" line removed.
+6. Moon Math strip redesigned: ONE row — token logo + PRICE + a short 150 px box for PTGC, UFO, PLS (PLS logo = DexScreener's
+   WPLS image), then the toggle at the right; phones stack. Render `renders/r11-moonmath.jpg`.

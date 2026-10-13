@@ -93,7 +93,7 @@
     };
     /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
     const PF_IC_HOLD='logos/leagues/lg-ic-coins.webp?v=1';   // round 9: his gold coin stack (the Leagues "Starting supply" icon)
-    const PF_IC_EARN='logos/portfolio/pf-lifetime2.webp';     // round 9: his lifetime-earned icon (infinity + coins)
+    const PF_IC_EARN='logos/portfolio/pf-lifetime3.webp';     // round 11: his lifetime-earned icon (rising bars in a gold ring)
     const PfYield=({cls,tok,y,earned,putIn,what})=>{
       const[open,setOpen]=useState(false);
       const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
@@ -109,7 +109,14 @@
         </div>);
     };
     const PortfolioV2=(p)=>{
-      const{wallets,portfolioData,loadingAddrs,agg,dp,prices,changes,groups,isWalletChecked,toggleWallet,selectAllWallets,deselectAllWallets,removeWallet,fetchWalletData,retryFailedReflScans,truncAddr,initialLoad,moonMathActive,setMoonMathActive,customPrices,setCustomPrices,ATH_PRICES}=p;
+      const{wallets,portfolioData,loadingAddrs,agg,dp:dp0,prices,changes,groups,isWalletChecked,toggleWallet,selectAllWallets,deselectAllWallets,removeWallet,fetchWalletData,retryFailedReflScans,truncAddr,initialLoad,moonMathActive,setMoonMathActive,customPrices,setCustomPrices,ATH_PRICES}=p;
+      /* round 11 (Shaka: "double check the PLS price math"): on the old page a Moon Math PLS price changed NOTHING — no figure
+         uses PLS. PTGC and UFO trade against PLS, so "PLS goes to X" now means: same price in PLS, so each token's $ price moves
+         by X ÷ today's PLS price. A PTGC or UFO price typed in yourself still wins for that token. */
+      const plsC=moonMathActive&&customPrices.pls!==''?parseFloat(customPrices.pls):null;
+      const plsX=plsC>0&&prices.pls>0?plsC/prices.pls:null;
+      const dp={ptgc:moonMathActive&&customPrices.ptgc!==''?dp0.ptgc:(plsX&&prices.ptgc!=null?prices.ptgc*plsX:dp0.ptgc),
+                ufo:moonMathActive&&customPrices.ufo!==''?dp0.ufo:(plsX&&prices.ufo!=null?prices.ufo*plsX:dp0.ufo),pls:dp0.pls};
       const[q,setQ]=useState('');
       const[grp,setGrp]=useState('All');
       const[showAll,setShowAll]=useState(false);
@@ -258,14 +265,27 @@
               <span className="mo" aria-hidden="true">{'\u{1F319}'}</span><b className="oh mmt">MOON MATH</b><span className={`off${moonMathActive?' on':''}`}>{moonMathActive?'ON':'OFF'}</span><span className="tr">try your own prices {'\u25BE'}</span>
             </button>
           </div>
-          {moonMathActive&&<div className="pf2-pn pf2-mmp">
-                <div className="pf2-mmg">
-                  <div><label style={{color:'#F2D35B'}}>PTGC PRICE</label><input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(c=>({...c,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(8):'0.00'}/></div>
-                  <div><label style={{color:'#8DFF3A'}}>UFO PRICE</label><input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(c=>({...c,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(9):'0.00'}/></div>
-                  <div><label style={{color:'#8FB8FF'}}>PLS PRICE</label><input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(c=>({...c,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(8):'0.00'}/></div>
+          {moonMathActive&&(()=>{
+            const ath={ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)};
+            const mode=customPrices.ptgc===''&&customPrices.ufo===''&&customPrices.pls===''?'live':(customPrices.ptgc===ath.ptgc&&customPrices.ufo===ath.ufo&&customPrices.pls===ath.pls?'ath':'custom');
+            const fld=(k,logo,cls,live,dec)=>(
+              <label className={`pf2-mmf ${cls}`}><img src={logo} alt="" onError={e=>{e.currentTarget.style.visibility='hidden';}}/><span className="lb">Price</span>
+                <input type="number" step="any" inputMode="decimal" value={customPrices[k]} onChange={e=>setCustomPrices(c=>({...c,[k]:e.target.value}))} placeholder={live?live.toFixed(dec):'0.00'} aria-label={`${k.toUpperCase()} price`}/></label>);
+            return(
+            <div className="pf2-pn pf2-mmp">
+              <div className="row">
+                {fld('ptgc',TOKENS.PTGC.logo,'p',prices.ptgc,8)}
+                {fld('ufo',TOKENS.UFO.logo,'u',prices.ufo,9)}
+                {fld('pls',`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${WPLS_ADDR.toLowerCase()}.png`,'l',prices.pls,8)}
+                <div className="pf2-mmt" role="group" aria-label="Prices">
+                  <button className={mode==='live'?'on':''} aria-pressed={mode==='live'} onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})}>Live</button>
+                  <button className={mode==='ath'?'on':''} aria-pressed={mode==='ath'} onClick={()=>setCustomPrices(ath)}>{'\u{1F680}'} All-time highs</button>
+                  {mode==='custom'&&<span className="cu">Your prices</span>}
                 </div>
-                <div className="pf2-mmb"><button onClick={()=>setCustomPrices({ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)})}>{'\u{1F680}'} All-time highs</button><button className="q" onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})}>Reset to live</button></div>
-              </div>}
+              </div>
+              {plsX&&<div className="hint">PLS at {fmtPriceNode(plsC)} is {plsX>=1?plsX.toFixed(plsX<10?2:0)+'\u00D7':(plsX*100).toFixed(1)+'% of'} today{'\u2019'}s price {'\u2192'} at the same price in PLS{customPrices.ptgc===''&&<>, PTGC <b>{fmtPriceNode(dp.ptgc)}</b></>}{customPrices.ufo===''&&<>, UFO <b>{fmtPriceNode(dp.ufo)}</b></>}{customPrices.ptgc!==''&&customPrices.ufo!==''?' (your PTGC and UFO prices are used as typed)':''}.</div>}
+            </div>);
+          })()}
 
           {/* ---- the two token cards ---- */}
           <div className="pf2-tok2">
@@ -275,7 +295,7 @@
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
               <div className="pf2-t4 t2">
                 <div className="pf2-bx gold big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div></div>
-                <div className="pf2-bx rf big"><img className="bic wide" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div></div>
+                <div className="pf2-bx rf big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div></div>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Liquid',pt.walletFree,'#F2D35B'],['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
@@ -283,7 +303,7 @@
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
               <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')}/></div>
               <div className="pf2-ebs">
-                <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
+                <div className="h">Earned by source</div>
                 <div className="pf2-src3">
                   {[['Staking','st',pt.claimed],['Locking','lk',pt.lockClaimed],['Reflections','rf',pt.reflections]].map(([n,c,v])=>(
                     <div key={n} className={`pf2-src ${c}`}><div className="l">{n}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(usd(v,dp.ptgc))}</div><div className="p">{pfPct(v,ptEarned)} of earned</div></div>))}
@@ -329,19 +349,18 @@
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
               <div className="pf2-t4 t2">
                 <div className="pf2-bx grn big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div></div>
-                <div className="pf2-bx grn big"><img className="bic wide" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div>{reflBox()}</div></div>
+                <div className="pf2-bx grn big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div>{reflBox()}</div></div>
               </div>
               {uf.balance>0&&ufoShare!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoReflNow,'#22D3EE']]}/>
                   <div className="pf2-lg2">
                     <div className="r"><i style={{background:'#7CFC00'}}></i><span>Principal</span><b>{pfAbbr(ufoPrin)}</b><span className="usd">{fmtDollar(usd(ufoPrin,dp.ufo))}</span><em>{pfPct(ufoPrin,uf.balance)}</em></div>
                     <div className="r"><i style={{background:'#22D3EE'}}></i><span>From reflections</span><b>{pfAbbr(ufoReflNow)}</b><span className="usd">{fmtDollar(usd(ufoReflNow,dp.ufo))}</span><em>{pfPct(ufoReflNow,uf.balance)}</em></div>
-                    <div className="r sub"><span></span><span>split of today{'\u2019'}s bag, pro rata</span><b></b><span className="usd"></span><em></em></div>
                   </div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-ebs">
-                <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
+                <div className="h">Earned by source</div>
                 <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
               </div>
             </section>

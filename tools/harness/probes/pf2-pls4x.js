@@ -1,0 +1,1 @@
+(async()=>{document.querySelector('.pf2-st.mm').click();await new Promise(r=>setTimeout(r,300));const i=document.querySelectorAll('.pf2-mmf input')[2];Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'0.000568');i.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>setTimeout(r,300));return 'ok'})()
