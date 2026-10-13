@@ -148,6 +148,11 @@
       const nx=period==='7D'?7:period==='30D'?6:period==='90D'?6:6;const xl=Array.from({length:nx+1},(_,i)=>t0+(t1-t0)*i/nx);
       const move=e=>{const r=ref.current.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const t=t0+(cx/r.width)*(t1-t0);let best=null;vals.forEach(p=>{if(!best||Math.abs(p.t-t)<Math.abs(best.t-t))best=p;});setHov(best);};
       const last=vals[vals.length-1];
+      /* round 8: buy / sell markers — where the TOKEN COUNT moved between two points (from the same balances the chart reads,
+         no extra data). Net per step, so a buy and a sell inside one step cancel; moves under 1 % of the bag are reflections /
+         rounding and are ignored. Green = more tokens (bought, claimed or moved in), red = fewer (sold or moved out). */
+      const ev=[];for(let i=1;i<vals.length;i++){const a=vals[i-1],b=vals[i];const ch=[];[['PTGC','bp'],['UFO','bu']].forEach(([k,f])=>{if(a[f]==null||b[f]==null)return;const d=b[f]-a[f];if(Math.abs(d)>Math.max(a[f],b[f])*0.01&&Math.abs(d)>1)ch.push({k,d});});if(ch.length)ev.push({p:b,ch,up:ch.reduce((x,c)=>x+c.d*(c.k==='PTGC'?b.p/(b.bp||1):b.u/(b.bu||1)),0)>=0});}
+      const evAt=t=>ev.find(e=>e.p.t===t);
       return(
         <div className="pf2-hc">
           <div className="pf2-hy" aria-hidden="true">{ticks.slice().reverse().map((v,i)=><span key={i}>{pfhMoney(v)}</span>)}</div>
@@ -155,17 +160,19 @@
             {ticks.map((v,i)=><i key={i} className="g" style={{top:Y(v)+'%'}}></i>)}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pfhA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5CE13A" stopOpacity=".5"/><stop offset="1" stopColor="#1F6B12" stopOpacity=".06"/></linearGradient></defs>
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
+            {ev.map((e,i)=><b key={'e'+i} className={`ev ${e.up?'in':'out'}`} style={{left:X(e.p.t)+'%',top:Y(e.p.v)+'%'}}></b>)}
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div></div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);return e?<div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>:null;})()}</div></>}
           </div>
+          {ev.length>0&&<div className="pf2-hlg"><span><b className="in"></b>more tokens (bought, claimed or moved in)</span><span><b className="out"></b>fewer tokens (sold or moved out)</span></div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
     };
     const PfValueHistory=({addrs,live,period,setPeriod})=>{
       const s=usePfSeries(addrs,period);
-      const pts=s.pts.length&&live&&live.v!=null?[...s.pts,{t:Date.now(),v:live.v,p:live.p,u:live.u,now:true}]:s.pts;
+      const pts=s.pts.length&&live&&live.v!=null?[...s.pts,{t:Date.now(),v:live.v,p:live.p,u:live.u,bp:live.bp,bu:live.bu,now:true}]:s.pts;
       const vals=pts.filter(p=>p.v!=null);
       const first=vals[0],hi=vals.reduce((a,p)=>!a||p.v>a.v?p:a,null),lo=vals.reduce((a,p)=>!a||p.v<a.v?p:a,null);
       const cur=live&&live.v!=null?live.v:null;const chg=first&&cur!=null&&first.v>0?(cur-first.v)/first.v*100:null;

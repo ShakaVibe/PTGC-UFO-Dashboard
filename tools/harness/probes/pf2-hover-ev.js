@@ -1,0 +1,1 @@
+(async()=>{const e=document.querySelector('.pf2-hp b.ev');if(!e)return'no ev';const r=e.getBoundingClientRect();e.closest('.pf2-hp').dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:r.left+5,clientY:r.top+5}));await new Promise(r=>setTimeout(r,300));const t=document.querySelector('.pf2-htip');return t?t.innerText.replace(/\n/g,' | '):'no tip';})()

@@ -91,6 +91,21 @@
         </PfModal>
       );
     };
+    /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
+    const PfYield=({cls,tok,y,earned,putIn,what})=>{
+      const[open,setOpen]=useState(false);
+      const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
+      return(
+        <div className={`pf2-bx ${cls} pf2-yld`}>
+          <div className="lb">Reward yield <button className="pf2-i" aria-expanded={open} aria-label="What is reward yield?" onClick={()=>setOpen(!open)}>{'\u24D8'}</button></div>
+          <div className="v">{fy}</div><div className="s">on what you put in</div>
+          {open&&<div className="pf2-ypop" role="note" onClick={()=>setOpen(false)}>
+            <b>How much you{'\u2019'}ve earned for every {tok} you put in.</b>
+            {y!=null&&earned!=null&&putIn>0?<span>You put in <b>{pfAbbr(putIn)}</b> {tok} (bought or moved into these wallets) and have earned <b>{pfAbbr(earned)}</b> {tok} from {what} {'\u2192'} <b>{fy}</b>.</span>:<span>Lifetime earned {'\u00F7'} the {tok} you bought or moved into these wallets.</span>}
+            <span>Selling doesn{'\u2019'}t change it.</span>
+          </div>}
+        </div>);
+    };
     const PortfolioV2=(p)=>{
       const{wallets,portfolioData,loadingAddrs,agg,dp,prices,changes,groups,isWalletChecked,toggleWallet,selectAllWallets,deselectAllWallets,removeWallet,fetchWalletData,retryFailedReflScans,truncAddr,initialLoad,moonMathActive,setMoonMathActive,customPrices,setCustomPrices,ATH_PRICES}=p;
       const[q,setQ]=useState('');
@@ -126,7 +141,7 @@
       const[hPeriod,setHPeriod]=useState('30D');
       const liveP=anyData?usd(agg.ptgc.totalHolding,prices.ptgc):null,liveU=anyData?usd(agg.ufo.balance,prices.ufo):null;
       const liveV=liveP==null&&liveU==null?null:(liveP||0)+(liveU||0);
-      const live={v:liveV,p:liveP||0,u:liveU||0};
+      const live={v:liveV,p:liveP||0,u:liveU||0,bp:anyData?agg.ptgc.totalHolding:null,bu:anyData?agg.ufo.balance:null};
       const s30=usePfSeries(hAddrs,'30D',anyData);
       const h24=usePf24h(anyData?hAddrs:[]);
       const spk=k=>s30.state==='ok'?[...s30.pts.map(x=>x.v==null?null:x[k]),live[k]]:null;
@@ -247,7 +262,7 @@
               <div className="pf2-t4 t3">
                 <div className="pf2-bx gold"><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div>
                 <div className="pf2-bx rf"><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div>
-                <div className="pf2-bx rf" title="Everything earned (staking + locking + reflections) ÷ the PTGC these wallets brought in"><div className="lb">Reward yield</div><div className="v">{fmtY(ptYield)}</div><div className="s">on PTGC brought in</div></div>
+                <PfYield cls="rf" tok="PTGC" y={ptYield} earned={ptEarned} putIn={ptIn} what="staking, locking and reflections"/>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Liquid',pt.walletFree,'#F2D35B'],['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
@@ -261,7 +276,7 @@
                     <div key={n} className={`pf2-src ${c}`}><div className="l">{n}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(usd(v,dp.ptgc))}</div><div className="p">{pfPct(v,ptEarned)} of earned</div></div>))}
                 </div>
                 {(pt.totalPending>0||pt.staked>0)&&(
-                  <div className="pf2-rtc"><img src="logos/portfolio/pf-claim.webp" alt=""/>
+                  <div className="pf2-rtc"><img src="logos/portfolio/pf-claim2.webp" alt=""/>
                     <div className="b"><div className="t">Ready to claim <b>{pfAbbr(pt.totalPending)} PTGC</b><span>{fmtDollar(usd(pt.totalPending,dp.ptgc))}</span></div>
                       <div className="sub"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(pt.pendingStake)}</b> {fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pt.pendingLocks)}</b> {fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></div></div>
                   </div>)}
@@ -302,7 +317,7 @@
               <div className="pf2-t4 t3">
                 <div className="pf2-bx grn"><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div>
                 <div className="pf2-bx grn"><div className="lb">Lifetime earned</div>{reflBox()}</div>
-                <div className="pf2-bx grn" title="Reflections (UFO\u2019s only reward) ÷ the UFO these wallets brought in"><div className="lb">Reward yield</div><div className="v">{fmtY(ufoYield)}</div><div className="s">on UFO brought in</div></div>
+                <PfYield cls="grn" tok="UFO" y={ufoYield} earned={ufoRefl} putIn={ufRecv} what="reflections"/>
               </div>
               {uf.balance>0&&ufoShare!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoReflNow,'#22D3EE']]}/>
@@ -315,9 +330,8 @@
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-ebs">
                 <div className="h"><img src="logos/portfolio/pf-earned.webp" alt=""/>Earned by source</div>
-                <div className="pf2-src3 one"><div className="pf2-src ur"><div className="l">Reflections {'\u2014'} the only UFO reward</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>}</div></div>
+                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoRefl==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoRefl)}</div><div className="s">{fmtDollar(usd(ufoRefl,dp.ufo))}</div></>}</div></div>
               </div>
-              <div className="pf2-extw"><div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div></div>
             </section>
           </div>
 
@@ -362,7 +376,7 @@
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
             <p><b>PTGC</b> holdings are the wallet's full balance; the PTGC staking contract tells us how much of it is staked or locked, and what rewards are waiting to be claimed. <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
-            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). <b>Reward yield</b> is that {'\u00F7'} the tokens the wallets brought in (everything received, minus the reward claims that arrived from the staking contract), so selling never inflates it. A move between two of your own wallets counts as brought in at both ends, which pulls the yield down slightly. UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
+            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). <b>Reward yield</b> is how much you have earned for every token you put in: lifetime earned {'\u00F7'} the tokens you bought or moved into these wallets (reward payouts don{'\u2019'}t count as putting in). Put in 1,000,000 and earned 250,000 {'\u2192'} 25 %. Selling never changes it. Moving tokens between two of your own wallets counts as putting in twice, which makes it read a little low, never high. UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned.</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></div>

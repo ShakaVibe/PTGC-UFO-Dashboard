@@ -200,3 +200,14 @@ box. Lock positions drop-down unchanged.
 **Checked on chain** (block 27789531, wallet 0x559b…bf7c, a lock claim): the claim is a Transfer from the staking contract;
 PTGC totalReceived rose by 539.104 and lockClaimed by 539.104 — claims sit in "received", not in reflections. So reward yield =
 (claimed + lockClaimed + reflections) ÷ (received − claimed − lockClaimed). Render `renders/r7-rewards-A.jpg`.
+
+## Round 8 (2026-10-13)
+Shaka's eight: (1) Ready to claim = his new chest (`reference/shaka-claim-icon-v2.png`, checkerboard removed → `logos/portfolio/
+pf-claim2.webp`, new name so no cache); (2) "— the only UFO reward" removed; (3) "on brought in" → "on what you put in" + an ⓘ
+that opens a plain-English note with his own numbers ("You put in X and have earned Y from … → Z %. Selling doesn't change it");
+How it works reworded; (4) UFO "Share of supply" badge removed; (5) PTGC Total holdings gets the gold frame; (6) **buy / sell
+markers** on the Value History — from the balances the chart already reads (no extra data): where a token count moved > 1 % between
+two points, green (more tokens) / red (fewer); the tooltip names the move ("▼ −34.59B PTGC since the point before"); legend under
+the chart. Net per step (a buy and a sell inside one step cancel); exact per-transaction dots need the transfer list (comes with
+Recent Transactions). (7) Answered: the chart already prices REAL past balances at the price of that day — not today's tokens at
+today's price. (8) UFO reflections source box in PTGC's gold. Render `renders/r8-history-markers.jpg`.
