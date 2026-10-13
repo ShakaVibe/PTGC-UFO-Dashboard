@@ -1,11 +1,11 @@
-/* Portfolio v2 round 11: Moon Math — PLS ×2 must double PTGC + UFO values (same price in PLS); ATH / Live toggle state */
+/* Portfolio v2 round 12: Moon Math tile — Live / Custom / ATH; Custom opens the price window; typing PTGC ×2 doubles PTGC value */
 (async()=>{const S=ms=>new Promise(r=>setTimeout(r,ms));const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const t=(el,v)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));};
-const num=s=>parseFloat(s.replace(/[^0-9.]/g,''));const o={};
-o.before=$('.pf2-st.p .v').textContent;$('.pf2-st.mm').click();await S(300);
-o.liveOn=$$('.pf2-mmt button').map(b=>b.className).join('|');
-const pls=$$('.pf2-mmf input')[2];const livePls=num(pls.placeholder);t(pls,String(livePls*2));await S(300);
-o.after=$('.pf2-st.p .v').textContent;o.ratio=(num(o.after)/num(o.before)).toFixed(4);o.hint=($('.pf2-mmp .hint')||{}).textContent;o.mode=$$('.pf2-mmt button').map(b=>b.className).join('|')+' '+(($('.pf2-mmt .cu')||{}).textContent||'');
-$$('.pf2-mmt button')[1].click();await S(300);o.athOn=$$('.pf2-mmt button').map(b=>b.className).join('|');
-$$('.pf2-mmt button')[0].click();await S(300);o.backLive=$('.pf2-st.p .v').textContent===o.before;
+const num=s=>parseFloat(s.replace(/[^0-9.]/g,''));const st=()=>$$('.pf2-mmt3 button').map(b=>b.className==='on'?'['+b.textContent+']':b.textContent).join(' ');const o={};
+o.start=st();o.before=$('.pf2-st.p .v').textContent;
+$$('.pf2-mmt3 button')[1].click();await S(300);o.custom=st();o.pop=!!$('.pf2-mmpop');o.inputs=$$('.pf2-mmpop input').length;
+const i=$$('.pf2-mmpop input')[0];t(i,String(num(i.placeholder)*2));await S(300);o.ratio=(num($('.pf2-st.p .v').textContent)/num(o.before)).toFixed(3);o.banner=($('.pf2-mm')||{}).textContent;
+$('.pf2-mmpop .ok').click();await S(200);o.popClosed=!$('.pf2-mmpop');o.edit=($('.pf2-mmedit')||{}).textContent;
+$$('.pf2-mmt3 button')[2].click();await S(300);o.ath=st();o.banner2=($('.pf2-mm')||{}).textContent;
+$$('.pf2-mmt3 button')[0].click();await S(300);o.live=st();o.back=$('.pf2-st.p .v').textContent===o.before;
 return JSON.stringify(o);})()

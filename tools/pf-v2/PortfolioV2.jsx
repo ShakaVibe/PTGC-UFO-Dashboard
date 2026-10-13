@@ -108,6 +108,44 @@
           </div>}
         </div>);
     };
+    /* round 12 (Shaka: "remove the PLS … add Live, Custom, All-time highs … can you get it all into the moon math tile? maybe if you
+       select custom it opens a little window for you to put the prices"). The strip under the row is gone: the tile holds a
+       three-way toggle; Custom opens a small window anchored to the tile for the PTGC and UFO prices. */
+    const PfMoonTile=({on,setOn,customPrices,setCustomPrices,prices,ATH_PRICES})=>{
+      const ath={ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:''};
+      const mode=!on||(customPrices.ptgc===''&&customPrices.ufo==='')?(on?'custom':'live'):(customPrices.ptgc===ath.ptgc&&customPrices.ufo===ath.ufo?'ath':'custom');
+      const[pop,setPop]=useState(false);
+      const ref=React.useRef(null);
+      useEffect(()=>{if(!pop)return;const away=e=>{if(ref.current&&!ref.current.contains(e.target))setPop(false);};const key=e=>{if(e.key==='Escape')setPop(false);};
+        document.addEventListener('mousedown',away);document.addEventListener('touchstart',away);document.addEventListener('keydown',key);
+        return()=>{document.removeEventListener('mousedown',away);document.removeEventListener('touchstart',away);document.removeEventListener('keydown',key);};},[pop]);
+      const pick=m=>{
+        if(m==='live'){setCustomPrices({ptgc:'',ufo:'',pls:''});setOn(false);setPop(false);}
+        else if(m==='ath'){setCustomPrices(ath);setOn(true);setPop(false);}
+        else{if(mode==='ath')setCustomPrices({ptgc:'',ufo:'',pls:''});setOn(true);setPop(true);}
+      };
+      const fld=(k,logo,cls,live,dec)=>(
+        <label className={`pf2-mmf ${cls}`}><img src={logo} alt=""/><span className="nm">{k.toUpperCase()}</span>
+          <input type="number" step="any" inputMode="decimal" value={customPrices[k]} onChange={e=>setCustomPrices(c=>({...c,[k]:e.target.value,pls:''}))} placeholder={live?live.toFixed(dec):'0.00'} aria-label={`${k.toUpperCase()} price in dollars`}/>
+          <span className="now">now {fmtPriceNode(live)}</span></label>);
+      return(
+        <div className={`pf2-pn pf2-st mm${on?' on':''}`} ref={ref}>
+          <div className="mt"><span className="mo" aria-hidden="true">{'\u{1F319}'}</span><b className="oh mmt">MOON MATH</b></div>
+          <div className="pf2-mmt3" role="radiogroup" aria-label="Prices to use">
+            {[['live','Live'],['custom','Custom \u270E'],['ath','\u{1F680} All-time highs']].map(([k,l])=>
+              <button key={k} role="radio" aria-checked={mode===k} className={mode===k?'on':''} onClick={()=>pick(k)}>{l}</button>)}
+          </div>
+          {pop&&(
+            <div className="pf2-mmpop" role="dialog" aria-label="Your own prices">
+              <div className="h">Your own prices</div>
+              <p>Type the price you want to imagine for PTGC and / or UFO. Every dollar figure on the page {'\u2014'} totals, cards, wallets {'\u2014'} switches to it. Leave one empty to keep its live price.</p>
+              {fld('ptgc',TOKENS.PTGC.logo,'p',prices.ptgc,8)}
+              {fld('ufo',TOKENS.UFO.logo,'u',prices.ufo,9)}
+              <div className="bt"><button className="q" onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})}>Clear</button><button className="ok" onClick={()=>setPop(false)}>Done</button></div>
+            </div>)}
+          {mode==='custom'&&!pop&&<button className="pf2-mmedit" onClick={()=>setPop(true)}>{customPrices.ptgc||customPrices.ufo?'edit your prices':'enter your prices'}</button>}
+        </div>);
+    };
     const PortfolioV2=(p)=>{
       const{wallets,portfolioData,loadingAddrs,agg,dp:dp0,prices,changes,groups,isWalletChecked,toggleWallet,selectAllWallets,deselectAllWallets,removeWallet,fetchWalletData,retryFailedReflScans,truncAddr,initialLoad,moonMathActive,setMoonMathActive,customPrices,setCustomPrices,ATH_PRICES}=p;
       /* round 11 (Shaka: "double check the PLS price math"): on the old page a Moon Math PLS price changed NOTHING — no figure
@@ -247,7 +285,7 @@
             })}
             {!showAll&&shown.length>6&&<button className="pf2-more" onClick={()=>setShowAll(true)}>Show all {shown.length} wallets {'▾'}</button>}
           </div>
-          {simulated&&<div className="pf2-mm">{'\u{1F319}'} Moon Math is on {'—'} every dollar figure below uses your prices.</div>}
+          {simulated&&<div className="pf2-mm">{'\u{1F319}'} Moon Math is on {'\u2014'} every dollar figure below uses {customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo)?'the all-time-high prices':'your custom prices'}. <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to live</button></div>}
 
           {wallets.length>0&&!anyData&&(()=>{const run=wallets.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=wallets.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
             <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}
@@ -261,31 +299,8 @@
             <section className="pf2-pn pf2-st u"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div>
               <div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div><div className="s" style={{color:'#8DFF3A'}}>{pfPct(ufoUSD,total)}</div></div><PfSpark vals={spk('u')} col="#7CFC00"/></section>
             {/* round 10 (Shaka: "shrink the three boxes a hair so we can move the moon math box to the end there") */}
-            <button className={`pf2-pn pf2-st mm${moonMathActive?' on':''}`} aria-expanded={moonMathActive} onClick={()=>setMoonMathActive(!moonMathActive)}>
-              <span className="mo" aria-hidden="true">{'\u{1F319}'}</span><b className="oh mmt">MOON MATH</b><span className={`off${moonMathActive?' on':''}`}>{moonMathActive?'ON':'OFF'}</span><span className="tr">try your own prices {'\u25BE'}</span>
-            </button>
+            <PfMoonTile on={moonMathActive} setOn={setMoonMathActive} customPrices={customPrices} setCustomPrices={setCustomPrices} prices={prices} ATH_PRICES={ATH_PRICES}/>
           </div>
-          {moonMathActive&&(()=>{
-            const ath={ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)};
-            const mode=customPrices.ptgc===''&&customPrices.ufo===''&&customPrices.pls===''?'live':(customPrices.ptgc===ath.ptgc&&customPrices.ufo===ath.ufo&&customPrices.pls===ath.pls?'ath':'custom');
-            const fld=(k,logo,cls,live,dec)=>(
-              <label className={`pf2-mmf ${cls}`}><img src={logo} alt="" onError={e=>{e.currentTarget.style.visibility='hidden';}}/><span className="lb">Price</span>
-                <input type="number" step="any" inputMode="decimal" value={customPrices[k]} onChange={e=>setCustomPrices(c=>({...c,[k]:e.target.value}))} placeholder={live?live.toFixed(dec):'0.00'} aria-label={`${k.toUpperCase()} price`}/></label>);
-            return(
-            <div className="pf2-pn pf2-mmp">
-              <div className="row">
-                {fld('ptgc',TOKENS.PTGC.logo,'p',prices.ptgc,8)}
-                {fld('ufo',TOKENS.UFO.logo,'u',prices.ufo,9)}
-                {fld('pls',`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${WPLS_ADDR.toLowerCase()}.png`,'l',prices.pls,8)}
-                <div className="pf2-mmt" role="group" aria-label="Prices">
-                  <button className={mode==='live'?'on':''} aria-pressed={mode==='live'} onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})}>Live</button>
-                  <button className={mode==='ath'?'on':''} aria-pressed={mode==='ath'} onClick={()=>setCustomPrices(ath)}>{'\u{1F680}'} All-time highs</button>
-                  {mode==='custom'&&<span className="cu">Your prices</span>}
-                </div>
-              </div>
-              {plsX&&<div className="hint">PLS at {fmtPriceNode(plsC)} is {plsX>=1?plsX.toFixed(plsX<10?2:0)+'\u00D7':(plsX*100).toFixed(1)+'% of'} today{'\u2019'}s price {'\u2192'} at the same price in PLS{customPrices.ptgc===''&&<>, PTGC <b>{fmtPriceNode(dp.ptgc)}</b></>}{customPrices.ufo===''&&<>, UFO <b>{fmtPriceNode(dp.ufo)}</b></>}{customPrices.ptgc!==''&&customPrices.ufo!==''?' (your PTGC and UFO prices are used as typed)':''}.</div>}
-            </div>);
-          })()}
 
           {/* ---- the two token cards ---- */}
           <div className="pf2-tok2">

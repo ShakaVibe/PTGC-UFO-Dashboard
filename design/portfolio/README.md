@@ -248,3 +248,14 @@ Render `renders/r10-moonmath.jpg`.
 4. "Earned by source" heading without the icon. 5. UFO legend's "split of today's bag, pro rata" line removed.
 6. Moon Math strip redesigned: ONE row — token logo + PRICE + a short 150 px box for PTGC, UFO, PLS (PLS logo = DexScreener's
    WPLS image), then the toggle at the right; phones stack. Render `renders/r11-moonmath.jpg`.
+
+## Round 12 (2026-10-13): Moon Math all inside its tile
+"Remove the PLS … add Live, Custom, All-time highs … make the border of the long box the same purple as the Moon Math tile …
+even better, eliminate that extra bar and get it all into the moon math tile — maybe Custom opens a little window."
+The strip under the row is gone (and PLS with it). The tile (`PfMoonTile`, 168 px, bright purple border always) holds the title and
+a three-way toggle **Live · Custom ✎ · 🚀 All-time highs** (the active one lit). Custom opens a small window anchored under the tile,
+same purple border: "Your own prices — type the price you want to imagine for PTGC and / or UFO. Every dollar figure on the page —
+totals, cards, wallets — switches to it. Leave one empty to keep its live price.", PTGC and UFO boxes (logo, name, live price under
+each), Clear / Done; closes on Done, Esc or a click outside; "edit your prices" link stays in the tile. The banner above the tiles
+names the mode ("… uses your custom prices" / "… the all-time-high prices") with a Back to live button. Probe `pf2-moon.js`
+(PTGC ×2 → value ×2.000, every toggle state). Render `renders/r12-moontile.jpg`.
