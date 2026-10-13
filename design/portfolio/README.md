@@ -119,3 +119,17 @@ missing the locked and staked … and then the details for locks". They were beh
   unlockable ones green; six shown then "Show all n locks"; goptgc.com verify link in the header.
 - Lock times under a day read in hours ("13h"), not "0d". Harness: `PF_STAKE=1` stubs a staked + locked position with three
   locks. Render `renders/r3-rewards-locks.jpg`.
+
+## Round 4 (2026-10-13): rewards + locks inside the PTGC card
+Shaka: "I don't like how the ptgc stuff is under the UFO side too … just under the PTGC side. The claimable should be above,
+and then the lock positions should be in a drop down. Let's add this icon to the claimable part … and we don't need to
+repeat this [the Staking split]" + "increase the font size of the dollar figures a bit".
+- The full-width panel is gone. In the PTGC card, under the "Earned" line: **Claimable rewards** with his gold chest
+  (`reference/shaka-claim-icon.png` had a baked-in checkerboard → removed by flood fill from the edges + alpha unmixing
+  against the local checker grey, specks dropped, squared 320 px → `logos/portfolio/pf-claim.webp`), staking / lock / total;
+  then **Lock positions** as a drop-down (closed by default; "24 · 8 unlockable"), the same lock rows inside + goptgc link.
+- The Staking split block is dropped (the tiles + donut already show it).
+- Dollar figures bigger: tile $ 13.5 → 15.5 px (five-tile row 12.5 → 14.5), claimable $ 14 → 15.5, lock $ 13 → 14.
+- Fix on the way: the token-name gradient rule (`.pf2-tk.p .t`) leaked onto the lock rows' `.t` cells → scoped to `.pf2-tkh`.
+- The UFO card keeps the shared row grid, so it carries empty space at the foot level with PTGC's claimable box.
+Render `renders/r4-ptgc-claim.jpg`.

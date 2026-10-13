@@ -93,6 +93,7 @@
       const[showAll,setShowAll]=useState(false);
       const[how,setHow]=useState(false);
       const[allLocks,setAllLocks]=useState(false);
+      const[lkOpen,setLkOpen]=useState(false);
       const[bdOpen,setBdOpen]=useState(false);
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
@@ -225,7 +226,46 @@
               <div className="pf2-le"><span className="lb">Total lifetime earned</span><span className="n">{fmtComma(Math.floor(ptgcEarned),2)}</span><span className="k">PTGC</span><span className="d"></span><span className="usd">{fmtDollar(usd(ptgcEarned,dp.ptgc))}</span></div>
               <div className="pf2-extw"><div className="pf2-ext">
                 <span>Earned: staking <b>{pfAbbr(pt.claimed)}</b> {'\u00B7'} locking <b>{pfAbbr(pt.lockClaimed)}</b> {'\u00B7'} reflections <b>{pfAbbr(pt.reflections)}</b></span>
-              </div></div>
+              </div>
+              {/* round 4 (Shaka: "I want them just under the PTGC side … the claimable should be above … the lock positions in a
+                  drop down … add this icon to the claimable part … we don't need to repeat [the staking split]") */}
+              {(pt.totalPending>0||pt.staked>0)&&(
+                <div className="pf2-clm">
+                  <img src="logos/portfolio/pf-claim.webp" alt=""/>
+                  <div className="rows">
+                    <div className="h">Claimable rewards</div>
+                    <div className="row"><span><i style={{background:'#B26BFF'}}></i>Staking rewards</span><b style={{color:'#C38BFF'}}>{pfAbbr(pt.pendingStake)}</b><em>{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</em></div>
+                    <div className="row"><span><i style={{background:'#EC4899'}}></i>Lock rewards</span><b style={{color:'#F472B6'}}>{pfAbbr(pt.pendingLocks)}</b><em>{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</em></div>
+                    <div className="row tot"><span>Total claimable</span><b className="pos">{pfAbbr(pt.totalPending)}</b><em className="pos">{fmtDollar(usd(pt.totalPending,dp.ptgc))}</em></div>
+                  </div>
+                </div>
+              )}
+              {pt.locks.length>0&&(()=>{
+                const now=Date.now()/1000;
+                const locks=[];counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(d&&!d.error)d.ptgc.locks.forEach(l=>locks.push({...l,who:w.name||truncAddr(w.address)}));});
+                locks.sort((a,b)=>a.endTime-b.endTime);
+                const shownL=allLocks?locks:locks.slice(0,6);
+                const fmtD=t=>{try{return new Date(t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return'';}};
+                const ready=locks.filter(l=>l.endTime<=now).length;
+                return(
+                <div className={`pf2-lkd${lkOpen?' open':''}`}>
+                  <button className="pf2-lkh" aria-expanded={lkOpen} onClick={()=>setLkOpen(!lkOpen)}><span className="t">{'\u{1F512}'} Lock positions</span><span className="n">{locks.length}{ready?<> {'\u00B7'} <b>{ready} unlockable</b></>:null}</span><span className="chev">{'\u25BE'}</span></button>
+                  {lkOpen&&<div className="pf2-lkb">
+                    <a className="pf2-rlv" href="https://goptgc.com" target="_blank" rel="noopener noreferrer">Verify on goptgc.com before unlocking {'\u2197'}</a>
+                    {shownL.map((l,i)=>{
+                      const done=l.endTime<=now;const span=l.endTime-l.startTime;const pc=done?100:span>0?Math.max(0,Math.min(100,(now-l.startTime)/span*100)):0;
+                      return(
+                        <div key={i} className={`pf2-lk${done?' done':''}`}>
+                          <div className="a"><b>{pfAbbr(l.amount)} PTGC</b><span>{fmtDollar(usd(l.amount,dp.ptgc))}</span>{counted.length>1&&<small>{l.who}</small>}</div>
+                          <div className="t"><b>{done?'Unlockable':fmtLock(l.endTime)}</b><span>{done?'since ':'unlocks '}{fmtD(l.endTime)}</span><div className="pg" aria-hidden="true"><i style={{width:pc+'%'}}></i></div></div>
+                          <div className="r"><b>+{pfAbbr(l.pending)}</b><span>pending</span></div>
+                        </div>);
+                    })}
+                    {locks.length>6&&<button className="pf2-lnk q" style={{marginTop:10}} onClick={()=>setAllLocks(!allLocks)}>{allLocks?'Show fewer':`Show all ${locks.length} locks`}</button>}
+                  </div>}
+                </div>);
+              })()}
+              </div>
             </section>
 
             <section className="pf2-tk u">
@@ -247,46 +287,6 @@
               <div className="pf2-extw"><div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div></div>
             </section>
           </div>
-
-          {/* ---- round 3 (Shaka: "we lost the Claimable Rewards Breakdown … missing the locked and staked … and the details for
-               locks"): PTGC rewards + every lock, open on the page, under the two cards ---- */}
-          {(pt.staked>0||pt.totalPending>0||pt.locks.length>0)&&(()=>{
-            const now=Date.now()/1000;
-            const locks=[];counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(d&&!d.error)d.ptgc.locks.forEach(l=>locks.push({...l,who:w.name||truncAddr(w.address)}));});
-            locks.sort((a,b)=>a.endTime-b.endTime);
-            const shownL=allLocks?locks:locks.slice(0,6);
-            const fmtD=t=>{try{return new Date(t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return'';}};
-            const ready=locks.filter(l=>l.endTime<=now).length;
-            return(
-            <section className="pf2-pn pf2-rl">
-              <div className="pf2-sech"><h2 className="oh"><img src={TOKENS.PTGC.logo} alt=""/>PTGC REWARDS &amp; LOCKS</h2><a href="https://goptgc.com" target="_blank" rel="noopener noreferrer" className="pf2-rlv">Verify on goptgc.com before unlocking {'\u2197'}</a></div>
-              <div className="pf2-rlg">
-                <div className="pf2-rlc">
-                  <div className="lb">Claimable rewards</div>
-                  <div className="row"><span><i style={{background:'#B26BFF'}}></i>Staking rewards</span><b style={{color:'#C38BFF'}}>{pfAbbr(pt.pendingStake)}</b><em>{fmtDollar(usd(pt.pendingStake,dp.ptgc))}</em></div>
-                  <div className="row"><span><i style={{background:'#EC4899'}}></i>Lock rewards</span><b style={{color:'#F472B6'}}>{pfAbbr(pt.pendingLocks)}</b><em>{fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</em></div>
-                  <div className="row tot"><span>Total claimable</span><b className="pos">{pfAbbr(pt.totalPending)}</b><em className="pos">{fmtDollar(usd(pt.totalPending,dp.ptgc))}</em></div>
-                  <div className="lb" style={{marginTop:16}}>Staking</div>
-                  <div className="row"><span><i style={{background:'#B26BFF'}}></i>Staked (not locked)</span><b>{pfAbbr(pt.stakedOnly)}</b><em>{fmtDollar(usd(pt.stakedOnly,dp.ptgc))}</em></div>
-                  <div className="row"><span><i style={{background:'#EC4899'}}></i>Locked &amp; staked</span><b>{pfAbbr(pt.locked)}</b><em>{fmtDollar(usd(pt.locked,dp.ptgc))}</em></div>
-                  <div className="row tot"><span>Total staked</span><b>{pfAbbr(pt.staked)}</b><em>{fmtDollar(usd(pt.staked,dp.ptgc))}</em></div>
-                </div>
-                <div className="pf2-rll">
-                  <div className="lb">Lock positions <span>({locks.length}{ready?` \u00B7 ${ready} unlockable`:''})</span></div>
-                  {locks.length===0?<div className="pf2-wait" style={{padding:'18px 4px'}}>No locks in the counted wallets</div>:shownL.map((l,i)=>{
-                    const done=l.endTime<=now;const span=l.endTime-l.startTime;const pc=done?100:span>0?Math.max(0,Math.min(100,(now-l.startTime)/span*100)):0;
-                    return(
-                      <div key={i} className={`pf2-lk${done?' done':''}`}>
-                        <div className="a"><b>{pfAbbr(l.amount)} PTGC</b><span>{fmtDollar(usd(l.amount,dp.ptgc))}</span>{counted.length>1&&<small>{l.who}</small>}</div>
-                        <div className="t"><b>{done?'Unlockable':fmtLock(l.endTime)}</b><span>{done?'since ':'unlocks '}{fmtD(l.endTime)}</span><div className="pg" aria-hidden="true"><i style={{width:pc+'%'}}></i></div></div>
-                        <div className="r"><b>+{pfAbbr(l.pending)}</b><span>pending</span></div>
-                      </div>);
-                  })}
-                  {locks.length>6&&<button className="pf2-lnk q" style={{marginTop:10}} onClick={()=>setAllLocks(!allLocks)}>{allLocks?'Show fewer':`Show all ${locks.length} locks`}</button>}
-                </div>
-              </div>
-            </section>);
-          })()}
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
           <section className="pf2-pn pf2-sec">
