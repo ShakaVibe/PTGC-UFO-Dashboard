@@ -93,7 +93,7 @@
     };
     /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
     const PF_IC_HOLD='logos/leagues/lg-ic-coins.webp?v=1';   // round 9: his gold coin stack (the Leagues "Starting supply" icon)
-    const PF_IC_EARN='logos/portfolio/pf-lifetime3.webp';     // round 11: his lifetime-earned icon (rising bars in a gold ring)
+    const PF_IC_EARN='logos/portfolio/pf-lifetime4.webp';     // round 13: his lifetime-earned icon (clock + coins)
     const PfYield=({cls,tok,y,earned,putIn,what})=>{
       const[open,setOpen]=useState(false);
       const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
@@ -130,9 +130,9 @@
           <span className="now">now {fmtPriceNode(live)}</span></label>);
       return(
         <div className={`pf2-pn pf2-st mm${on?' on':''}`} ref={ref}>
-          <div className="mt"><span className="mo" aria-hidden="true">{'\u{1F319}'}</span><b className="oh mmt">MOON MATH</b></div>
+          <div className="mt"><img className="mo" src="logos/portfolio/pf-moon.webp" alt=""/><b className="oh mmt">MOON MATH</b></div>
           <div className="pf2-mmt3" role="radiogroup" aria-label="Prices to use">
-            {[['live','Live'],['custom','Custom \u270E'],['ath','\u{1F680} All-time highs']].map(([k,l])=>
+            {[['live','Live Prices'],['custom','Custom \u270E'],['ath','\u{1F680} All-Time Highs']].map(([k,l])=>
               <button key={k} role="radio" aria-checked={mode===k} className={mode===k?'on':''} onClick={()=>pick(k)}>{l}</button>)}
           </div>
           {pop&&(
@@ -285,7 +285,8 @@
             })}
             {!showAll&&shown.length>6&&<button className="pf2-more" onClick={()=>setShowAll(true)}>Show all {shown.length} wallets {'▾'}</button>}
           </div>
-          {simulated&&<div className="pf2-mm">{'\u{1F319}'} Moon Math is on {'\u2014'} every dollar figure below uses {customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo)?'the all-time-high prices':'your custom prices'}. <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to live</button></div>}
+          {moonMathActive&&(()=>{const isAth=customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo);const none=customPrices.ptgc===''&&customPrices.ufo==='';return(
+            <div className="pf2-mm"><img src="logos/portfolio/pf-moon.webp" alt=""/>Moon Math is on {'\u2014'} {isAth?'every dollar figure below uses the All-Time High prices.':none?'Custom is selected: type a PTGC and / or UFO price in the Moon Math window (live prices until you do).':'every dollar figure below uses your custom prices.'} <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to Live Prices</button></div>);})()}
 
           {wallets.length>0&&!anyData&&(()=>{const run=wallets.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=wallets.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
             <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}

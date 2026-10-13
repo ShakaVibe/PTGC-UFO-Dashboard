@@ -259,3 +259,19 @@ totals, cards, wallets — switches to it. Leave one empty to keep its live pric
 each), Clear / Done; closes on Done, Esc or a click outside; "edit your prices" link stays in the tile. The banner above the tiles
 names the mode ("… uses your custom prices" / "… the all-time-high prices") with a Back to live button. Probe `pf2-moon.js`
 (PTGC ×2 → value ×2.000, every toggle state). Render `renders/r12-moontile.jpg`.
+
+## Round 13 (2026-10-13)
+1. The purple Moon Math banner shows for Custom too (any mode but Live Prices); with Custom and nothing typed yet it says so
+   ("type a PTGC and / or UFO price … live prices until you do"); its button reads "Back to Live Prices".
+2–3. Toggle labels: **Live Prices · Custom ✎ · 🚀 All-Time Highs**.
+4. Lifetime earned icon → his clock + coins (`logos/portfolio/pf-lifetime4.webp`; real alpha, trimmed).
+5. Moon Math tile + banner use his gold crescent (`logos/portfolio/pf-moon.webp`).
+6. **Transaction types fixed.** Checked live on PulseScan: every PTGC transfer (sell, buy, plain send) splits off fee legs to the
+   token contract, the STAKING contract and the burn address — so the old "a leg went to staking = Stake" rule turned every
+   PTGC sell into "Stake" (his 0xAC0E…0bd0 rows). Routers also often show a bare selector (0xe25d4a18), so the method name can't
+   decide a swap. New rule (PfTx.jsx `pftClassify`): fee legs (token contract, staking contract, 0x0 / 0x…369 / 0x…dEaD) are
+   ignored when finding the counterparty but still count in the amount; the biggest remaining leg is the counterparty. From the
+   staking contract → Claim; one of your wallets → Move; add/removeLiquidity → Add LP / Remove LP; a contract (pair, router,
+   aggregator) → Buy / Sell; a person → Receive / Send. Verified on a real wallet's 8 PTGC txs (multicall sells split over two
+   pairs → Sell, selector-only buys from up to 9 pairs → Buy). Cache key → `grays_pf_tx_v2` (rows now carry is_contract).
+   Harness PF_TX stub gained a fee-split sell.

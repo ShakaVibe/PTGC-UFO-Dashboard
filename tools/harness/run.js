@@ -162,9 +162,9 @@ const dsAnswer=(url)=>{
     if(/api\.scan\.pulsechain\.com\/api\/v2\/addresses\/0x[0-9a-fA-F]{40}\/token-transfers/.test(u)&&process.env.PF_TX){
       const w=u.match(/addresses\/(0x[0-9a-fA-F]{40})/)[1].toLowerCase(),isU=/token=0x49eD/i.test(u),tok=isU?'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6':'0x94534EeEe131840b1c0F61847c572228bdfDDE93';
       const P='0x'+'ab'.repeat(20),S='0xC71f597a2AC39E47F07102E849d18489C96f39EF',O='0x2222222222222222222222222222222222222222';
-      const ago=h=>new Date(Date.now()-h*3600e3).toISOString(),it=(h,f,t,m,v,hx)=>({tx_hash:'0x'+hx.repeat(64).slice(0,64),timestamp:ago(h),from:{hash:f},to:{hash:t},method:m,total:{decimals:'18',value:(BigInt(Math.round(v))*10n**18n).toString()}});
+      const ago=h=>new Date(Date.now()-h*3600e3).toISOString(),isC=a=>[P,S,tok].includes(a),it=(h,f,t,m,v,hx)=>({tx_hash:'0x'+hx.repeat(64).slice(0,64),timestamp:ago(h),from:{hash:f,is_contract:isC(f)},to:{hash:t,is_contract:isC(t)},method:m,total:{decimals:'18',value:(BigInt(Math.round(v))*10n**18n).toString()}});
       const items=w!=='0x1111111111111111111111111111111111111111'?[]:isU?[it(3,w,P,'swapExactTokensForETH',9_500_000,'a1'),it(3,w,tok,'swapExactTokensForETH',500_000,'a1'),it(30,P,w,'swapExactETHForTokens',40_000_000,'a2')]
-        :[it(1,S,w,'withdrawRewardLock',539_104,'b1'),it(5,P,w,'swapExactETHForTokens',12_456_789,'b2'),it(20,w,O,'transfer',100_000_000,'b3'),it(50,'0x9999999999999999999999999999999999999999',w,'transfer',2_345_678,'b4')];
+        :[it(1,S,w,'withdrawRewardLock',539_104,'b1'),it(5,P,w,'swapExactETHForTokens',12_456_789,'b2'),it(20,w,O,'transfer',100_000_000,'b3'),it(50,'0x9999999999999999999999999999999999999999',w,'transfer',2_345_678,'b4'),it(60,w,P,'0xe25d4a18',8_500_000,'b5'),it(60,w,tok,'0xe25d4a18',250_000,'b5'),it(60,w,S,'0xe25d4a18',100_000,'b5'),it(60,w,'0x0000000000000000000000000000000000000000','0xe25d4a18',50_000,'b5')];
       return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items})});
     }
     if(/api\.dexscreener\.com/.test(u)&&process.env.DS_DOWN)return r.fulfill({status:503,body:'down'});
