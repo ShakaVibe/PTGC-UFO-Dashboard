@@ -227,3 +227,13 @@ as PTGC's; add in the recent transactions".
   staked PTGC never leaves the wallet), Stake, Buy / Sell (the tx called a swap / multicall / execute / zap), Move (between two of
   his wallets, shown once as "A → B"), Receive / Send. Value = amount × that hour's / day's price, today's price when newer than the
   price files. 10 rows, Show more (40), Refresh, a "x of y reads failed — retry" line. Phone: two-line rows. Harness `PF_TX=1`.
+
+## Round 9b: his Lifetime earned icon (infinity + coins) arrived → checkerboard removed → `logos/portfolio/pf-lifetime2.webp` (new name, no cache), shown 78 px wide (crops the square padding). The placeholder pf-lifetime.webp stays unused. Render `renders/r10-tiles.jpg`.
+
+## Round 10 (2026-10-13): Moon Math moves into the tile row
+"Shrink the three of these boxes a hair so we can move the moon math box to the end there instead of at the bottom." Row =
+three value tiles (icons 52 px, figure 25 px, sparkline 66 px) + a 150 px Moon Math tile (moon, gradient title, ON/OFF, "try your
+own prices ▾"); clicking it opens the price inputs as a full-width strip right under the row. Per-Wallet Breakdown is now the only
+fold (full width). ≤ 1100 px: Moon Math drops to a slim full-width bar under the three; ≤ 980 px everything stacks. Also live-
+checked round 9's Recent Transactions on ptgc-ufo.com with a real staking wallet: Claim / Buy rows, values and tx links correct.
+Render `renders/r10-moonmath.jpg`.

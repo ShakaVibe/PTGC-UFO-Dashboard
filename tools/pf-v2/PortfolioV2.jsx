@@ -93,7 +93,7 @@
     };
     /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
     const PF_IC_HOLD='logos/leagues/lg-ic-coins.webp?v=1';   // round 9: his gold coin stack (the Leagues "Starting supply" icon)
-    const PF_IC_EARN='logos/portfolio/pf-lifetime.webp';      // round 9: his lifetime-earned icon (placeholder = the rising coins until his file lands)
+    const PF_IC_EARN='logos/portfolio/pf-lifetime2.webp';     // round 9: his lifetime-earned icon (infinity + coins)
     const PfYield=({cls,tok,y,earned,putIn,what})=>{
       const[open,setOpen]=useState(false);
       const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
@@ -246,14 +246,26 @@
             <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}
           {wallets.length>0&&anyData&&<>
           {/* ---- three summary tiles ---- */}
-          <div className="pf2-row3">
+          <div className="pf2-row3 r4">
             <section className="pf2-pn pf2-st t"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div>
               <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div></div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></section>
             <section className="pf2-pn pf2-st p"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div>
               <div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div><div className="s" style={{color:'#F2D35B'}}>{pfPct(ptgcUSD,total)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></section>
             <section className="pf2-pn pf2-st u"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div>
               <div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div><div className="s" style={{color:'#8DFF3A'}}>{pfPct(ufoUSD,total)}</div></div><PfSpark vals={spk('u')} col="#7CFC00"/></section>
+            {/* round 10 (Shaka: "shrink the three boxes a hair so we can move the moon math box to the end there") */}
+            <button className={`pf2-pn pf2-st mm${moonMathActive?' on':''}`} aria-expanded={moonMathActive} onClick={()=>setMoonMathActive(!moonMathActive)}>
+              <span className="mo" aria-hidden="true">{'\u{1F319}'}</span><b className="oh mmt">MOON MATH</b><span className={`off${moonMathActive?' on':''}`}>{moonMathActive?'ON':'OFF'}</span><span className="tr">try your own prices {'\u25BE'}</span>
+            </button>
           </div>
+          {moonMathActive&&<div className="pf2-pn pf2-mmp">
+                <div className="pf2-mmg">
+                  <div><label style={{color:'#F2D35B'}}>PTGC PRICE</label><input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(c=>({...c,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(8):'0.00'}/></div>
+                  <div><label style={{color:'#8DFF3A'}}>UFO PRICE</label><input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(c=>({...c,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(9):'0.00'}/></div>
+                  <div><label style={{color:'#8FB8FF'}}>PLS PRICE</label><input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(c=>({...c,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(8):'0.00'}/></div>
+                </div>
+                <div className="pf2-mmb"><button onClick={()=>setCustomPrices({ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)})}>{'\u{1F680}'} All-time highs</button><button className="q" onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})}>Reset to live</button></div>
+              </div>}
 
           {/* ---- the two token cards ---- */}
           <div className="pf2-tok2">
@@ -263,7 +275,7 @@
                 <div className="px"><div className="a">{fmtPriceNode(prices.ptgc)}</div><div className="c">{pfChg(changes.ptgc)}</div></div></div>
               <div className="pf2-t4 t2">
                 <div className="pf2-bx gold big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(pt.totalHolding)}</div><div className="s">{fmtDollar(usd(pt.totalHolding,dp.ptgc))}</div></div></div>
-                <div className="pf2-bx rf big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div></div>
+                <div className="pf2-bx rf big"><img className="bic wide" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div><div className="v">{pfAbbr(ptEarned)}</div><div className="s">{fmtDollar(usd(ptEarned,dp.ptgc))}</div></div></div>
               </div>
               {pt.totalHolding>0?(()=>{const parts=[['Liquid',pt.walletFree,'#F2D35B'],['Staked (not locked)',pt.stakedOnly,'#B26BFF'],['Locked & staked',pt.locked,'#EC4899']].filter(x=>x[1]>0);return(
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
@@ -317,7 +329,7 @@
                 <div className="px"><div className="a">{fmtPriceNode(prices.ufo)}</div><div className="c">{pfChg(changes.ufo)}</div></div></div>
               <div className="pf2-t4 t2">
                 <div className="pf2-bx grn big"><img className="bic" src={PF_IC_HOLD} alt=""/><div><div className="lb">Total holdings</div><div className="v">{pfAbbr(uf.balance)}</div><div className="s">{fmtDollar(usd(uf.balance,dp.ufo))}</div></div></div>
-                <div className="pf2-bx grn big"><img className="bic" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div>{reflBox()}</div></div>
+                <div className="pf2-bx grn big"><img className="bic wide" src={PF_IC_EARN} alt=""/><div><div className="lb">Lifetime earned</div>{reflBox()}</div></div>
               </div>
               {uf.balance>0&&ufoShare!=null?(
                 <div className="pf2-dn"><PfRing parts={[[ufoPrin,'#7CFC00'],[ufoReflNow,'#22D3EE']]}/>
@@ -340,7 +352,7 @@
           <PfRecentTx wallets={counted} prices={prices}/>
 
           {/* ---- the two folds ---- */}
-          <div className="pf2-folds">
+          <div className="pf2-folds one">
             <section className="pf2-pn pf2-fold">
               <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}><b className="oh">PER-WALLET BREAKDOWN</b><span>{counted.length} wallet{counted.length===1?'':'s'}</span><span className="chev">{'▾'}</span></button>
               {bdOpen&&<div className="pf2-foldb" style={{overflowX:'auto'}}>
@@ -348,17 +360,6 @@
                   {counted.map(w=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;const r=d.ufo.reflections;return(
                     <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{pfAbbr(d.ptgc.totalHolding)}</td><td className="pos">{pfAbbr(d.ptgc.totalPending)}</td><td className="u">{pfAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:pfAbbr(r)}</td></tr>);})}
                 </tbody></table></div>}
-            </section>
-            <section className="pf2-pn pf2-fold">
-              <button className="pf2-foldh" aria-expanded={moonMathActive} onClick={()=>setMoonMathActive(!moonMathActive)}><b className="oh mmt">MOON MATH</b><span className={`off${moonMathActive?' on':''}`}>{moonMathActive?'ON':'OFF'}</span><span>try your own prices</span><span className="chev">{'▾'}</span></button>
-              {moonMathActive&&<div className="pf2-foldb">
-                <div className="pf2-mmg">
-                  <div><label style={{color:'#F2D35B'}}>PTGC PRICE</label><input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(c=>({...c,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(8):'0.00'}/></div>
-                  <div><label style={{color:'#8DFF3A'}}>UFO PRICE</label><input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(c=>({...c,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(9):'0.00'}/></div>
-                  <div><label style={{color:'#8FB8FF'}}>PLS PRICE</label><input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(c=>({...c,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(8):'0.00'}/></div>
-                </div>
-                <div className="pf2-mmb"><button onClick={()=>setCustomPrices({ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)})}>{'\u{1F680}'} All-time highs</button><button className="q" onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})}>Reset to live</button></div>
-              </div>}
             </section>
           </div>
           </>}
