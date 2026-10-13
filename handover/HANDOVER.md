@@ -11,6 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
+- **Portfolio v2 (2026-10-13, HIDDEN):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/`), mock-ups + every decision `design/portfolio/README.md`. Step 2 owed: value history from real chain balances (his option C) + Recent Transactions.
 - **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
@@ -35,7 +36,18 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (2026-10-08)
+## Current state (2026-10-13)
+
+**2026-10-13 (Tuesday): THE PORTFOLIO PAGE REDESIGNED — step 1 BUILT and HIDDEN, written to the Mac, NOT pushed.** His mock-up →
+mock v1–v4 + a three-option sheet for the wallets area (he picked A, wallet cards) → "Lets BUILD BUT … hide it behind a small faint
+dot". `tools/pf-v2.py` (idempotent, sha256 `b1442380…`): the new body (`PortfolioV2`) renders from the classic body's own state;
+the faint dot flips a device to v2 and back (remembered); classic byte-identical with no flag (`probes/pf2-classic-hash.js`).
+Value History + Recent Transactions are "Coming next" panels. **NEXT: his push + his look (click the dot at the bottom-right of
+the Portfolio page, Mac then phone); then step 2 — the value history from real balances read from the chain (option C — he
+chose it after learning option A would hide sells), the 24 h change + tile sparklines from it, Recent Transactions; PLS
+balances still unanswered. Go-live = `PF_V2_LIVE=true` when he says.** `sessions/2026-10-13.md`.
+
+## Before that (2026-10-08)
 
 **2026-10-08 (Thursday): the Socials → Combined → "Combined KPI Report" row showed the new `KpiCardV2` pair and then flipped to the
 2025 `TwitterCard` share image once UFO's data landed (`startInTwitterMode`, the 2026-10-05 "share image only from the Socials row"
