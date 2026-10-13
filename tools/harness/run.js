@@ -82,6 +82,13 @@ const rpcAnswer=(body)=>{
       else if(d==='0x18160ddd')result=pad(333_333_333_333n*10n**18n);
       else if(d==='0x0902f1ac')result=pad(1_000_000n*10n**18n).slice(0,66)+pad(2_000_000n*10n**18n).slice(2)+pad(1_700_000_000).slice(2);
       else if(d==='0x313ce567')result=pad(18);
+      /* PF_STAKE=1 (2026-10-13, Portfolio v2 round 3): the PTGC staking contract answers with a staked + locked position and
+         three locks (one unlockable, one ~13 h away, one years away), so the rewards + locks panel has something to draw */
+      else if(process.env.PF_STAKE&&d==='0x15612933'){const now=Math.floor(Date.now()/1000);result='0x'+[10_000_000_000n*10n**18n,0n,BigInt(now-86400*400),1_000_000_000n*10n**18n,200_000_000n*10n**18n,6_000_000_000n*10n**18n,0n].map(v=>v.toString(16).padStart(64,'0')).join('');}
+      else if(process.env.PF_STAKE&&d==='0xdf034586')result=pad(3);
+      else if(process.env.PF_STAKE&&d==='0x1ce33368'){const i=Number(BigInt('0x'+q.params[0].data.slice(-64)));const now=Math.floor(Date.now()/1000);const L=[[1_000_000_000n,now-86400*200,now-3600],[2_000_000_000n,now-86400*30,now+13*3600],[3_000_000_000n,now-86400*100,now+86400*365*8]][i-1]||[0n,0,0];result='0x'+[L[0]*10n**18n,BigInt(L[1]),BigInt(L[2])].map(v=>v.toString(16).padStart(64,'0')).join('');}
+      else if(process.env.PF_STAKE&&d==='0xf40f0f52')result=pad(500_000_000n*10n**18n);
+      else if(process.env.PF_STAKE&&d==='0xddeecc24')result=pad(50_000_000n*10n**18n);
       else result=pad(0);
     }else result=null;
     return {jsonrpc:'2.0',id:q.id,result};

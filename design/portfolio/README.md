@@ -108,3 +108,14 @@ History + Recent Transactions are "Coming next" panels (step 2). Renders: `rende
 4. Edit: a pencil beside every wallet's name (always visible) → the Edit window — address + Copy, Name, Group (+ new
    group), Save / Cancel / Remove wallet; Esc closes (`probes/pf2-edit.js`). The card's corner × stays.
 Renders: `renders/r2-cards.jpg`, `r2-leagues.jpg`, `r2-edit.jpg`.
+
+## Round 3 (2026-10-13): rewards + locks open on the page
+Shaka (with a screenshot of the classic page): "we lost the Claimable Rewards Breakdown … that needs to be there … also
+missing the locked and staked … and then the details for locks". They were behind the two dashed chips — he never found them.
+- PTGC tiles are five: Total · Liquid · Staked · **Locked & staked** (pink) · Reflections (phones: Total full width, then 2×2).
+- A full-width **PTGC REWARDS & LOCKS** panel under the two cards (only when the counted wallets stake / lock / have rewards):
+  Claimable rewards (staking, lock, total — tokens + $), Staking (not locked, locked & staked, total), and **every lock**:
+  amount + $ + which wallet, time left + unlock date + a progress bar from lock start to unlock, pending reward; soonest first,
+  unlockable ones green; six shown then "Show all n locks"; goptgc.com verify link in the header.
+- Lock times under a day read in hours ("13h"), not "0d". Harness: `PF_STAKE=1` stubs a staked + locked position with three
+  locks. Render `renders/r3-rewards-locks.jpg`.
