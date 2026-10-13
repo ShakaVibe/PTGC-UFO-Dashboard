@@ -133,3 +133,22 @@ repeat this [the Staking split]" + "increase the font size of the dollar figures
 - Fix on the way: the token-name gradient rule (`.pf2-tk.p .t`) leaked onto the lock rows' `.t` cells → scoped to `.pf2-tkh`.
 - The UFO card keeps the shared row grid, so it carries empty space at the foot level with PTGC's claimable box.
 Render `renders/r4-ptgc-claim.jpg`.
+
+## Round 5 (2026-10-13): Value History built (option C), lifetime icon + gold box, donut seam
+Shaka: "Here is a logo for the total lifetime rewards. Make it small as I do not want to increase the height of that box. Also
+let's try give that box a light gold shading. And go ahead and add in the portfolio value history now." + "fix the pie chart …
+where the yellow meets the purple".
+- **Value History** (`tools/pf-v2/PfHistory.jsx`): every counted wallet's PTGC + UFO `balanceOf` at past blocks (archive eth_call,
+  batched 80 per request, two at a time; rpc.pulsechain.com + g4mm4 only — publicnode has no archive state, tested), × the
+  price then (data/charts-data.json daily, charts-intraday.json hourly, raw GitHub). Points: 7D every 6 h, 30D / 90D daily,
+  1Y every 4 days, + the live "now"; aligned to UTC so they repeat and are cached per wallet + token + time in localStorage
+  (`grays_pf_hist_v1`); a point with any wallet unread or no price = a gap. Block for a time = interpolation between anchor
+  blocks (head, 7 / 30 / 90 / 180 / 365 / 420 d). Side card: current value, change over the period, period high / low. Hover /
+  touch crosshair + tooltip (date, total, PTGC $ / UFO $). **ALL dropped** — prices exist for 365 days only (1Y is the longest
+  honest range). Default 30D.
+- Tiles: sparklines from the 30D series; the total's **24 h change is real** now (every counted wallet's balances exactly 24 h
+  ago × the price then vs now), falling back to the price move until it lands.
+- Lifetime earned: his rising-coins icon (checkerboard removed) at 34 px inside the box, box height unchanged (59 px), light
+  gold gradient + gold hairline; the token count prints whole numbers so it stays on one line.
+- Donut: a 2-unit dark gap between arcs and one glow on the group — the last arc no longer paints over the first.
+Harness: `PF_HIST=1` makes past balances grow toward today with a sell ~10 days back. Render `renders/r5-history.jpg`.

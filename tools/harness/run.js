@@ -78,7 +78,10 @@ const rpcAnswer=(body)=>{
     else if(m==='eth_call'){
       const d=(q.params[0].data||'').slice(0,10);
       // balanceOf → 5% of a big supply-ish number; totalSupply; getReserves; token0/1; generic
-      if(d==='0x70a08231')result=pad(16_666_666_666n*10n**18n);
+      /* PF_HIST=1 (2026-10-13, Portfolio v2 value history): balances at PAST blocks grow toward today with a sell ~10 days
+         back, so the history chart has a shape (latest stays the canned 16.67B) */
+      if(d==='0x70a08231'&&process.env.PF_HIST&&q.params[1]&&q.params[1]!=='latest'){const n=parseInt(q.params[1],16);const days=(HEAD-n)*10/86400;const f=days<10?1:Math.max(0.15,1.35-days/120);result=pad(BigInt(Math.round(16_666_666_666*f))*10n**18n);}
+      else if(d==='0x70a08231')result=pad(16_666_666_666n*10n**18n);
       else if(d==='0x18160ddd')result=pad(333_333_333_333n*10n**18n);
       else if(d==='0x0902f1ac')result=pad(1_000_000n*10n**18n).slice(0,66)+pad(2_000_000n*10n**18n).slice(2)+pad(1_700_000_000).slice(2);
       else if(d==='0x313ce567')result=pad(18);

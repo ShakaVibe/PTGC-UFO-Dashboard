@@ -23,12 +23,17 @@
       const floor=cur?cur.min:0,ceil=next.min;
       return{cur,next,pct:Math.max(0,Math.min(100,(balance-floor)/(ceil-floor)*100)),need:Math.max(0,ceil-balance)};
     };
+    /* round 5 (Shaka: "fix the pie chart … where the yellow meets the purple"): each segment's own drop-shadow painted over
+       its neighbour and the last arc overlapped the first at 12 o'clock. Now a 2-unit dark gap between arcs (the dataviz
+       spacer rule) and ONE glow on the group. */
     const PfRing=({parts,size=132})=>{
-      const r=46,c=2*Math.PI*r,tot=parts.reduce((s,p)=>s+(p[0]>0?p[0]:0),0);let off=0;
+      const r=46,c=2*Math.PI*r,list=parts.filter(p=>p[0]>0),tot=list.reduce((s,p)=>s+p[0],0),gap=list.length>1?2:0;let off=0;
       return(
         <svg viewBox="0 0 120 120" style={{width:size,height:size}} aria-hidden="true">
           <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="22"/>
-          {tot>0&&parts.filter(p=>p[0]>0).map(([v,col],i)=>{const L=v/tot*c;const el=<circle key={i} cx="60" cy="60" r={r} fill="none" stroke={col} strokeWidth="22" strokeDasharray={`${L} ${c-L}`} strokeDashoffset={-off} transform="rotate(-90 60 60)" style={{filter:`drop-shadow(0 0 6px ${col}66)`}}/>;off+=L;return el;})}
+          <g style={{filter:'drop-shadow(0 0 5px rgba(255,255,255,.18))'}}>
+          {tot>0&&list.map(([v,col],i)=>{const L=v/tot*c;const vis=Math.max(.6,L-gap);const el=<circle key={i} cx="60" cy="60" r={r} fill="none" stroke={col} strokeWidth="22" strokeDasharray={`${vis} ${c-vis}`} strokeDashoffset={-(off+gap/2)} transform="rotate(-90 60 60)"/>;off+=L;return el;})}
+          </g>
         </svg>
       );
     };
@@ -116,9 +121,18 @@
       const ufoUSD=anyData?usd(agg.ufo.balance,dp.ufo):null;
       const total=ptgcUSD==null&&ufoUSD==null?null:(ptgcUSD||0)+(ufoUSD||0);
       /* 24h: today's holdings at yesterday's prices (the price move, not trades) — step 2 swaps in real balances */
+      /* step 2 (value history, option C): the counted wallets' real balances from the chain */
+      const hAddrs=counted.map(w=>w.address.toLowerCase());
+      const[hPeriod,setHPeriod]=useState('30D');
+      const liveP=anyData?usd(agg.ptgc.totalHolding,prices.ptgc):null,liveU=anyData?usd(agg.ufo.balance,prices.ufo):null;
+      const liveV=liveP==null&&liveU==null?null:(liveP||0)+(liveU||0);
+      const live={v:liveV,p:liveP||0,u:liveU||0};
+      const s30=usePfSeries(hAddrs,'30D',anyData);
+      const h24=usePf24h(anyData?hAddrs:[]);
+      const spk=k=>s30.state==='ok'?[...s30.pts.map(x=>x.v==null?null:x[k]),live[k]]:null;
       const prev=(v,c)=>v==null?null:c==null||isNaN(c)?null:v/(1+c/100);
       const pPrev=prev(ptgcUSD,changes.ptgc),uPrev=prev(ufoUSD,changes.ufo);
-      const tChg=simulated||total==null||(ptgcUSD>0&&pPrev==null)||(ufoUSD>0&&uPrev==null)?null:(()=>{const pr=(pPrev||0)+(uPrev||0);return pr>0?(total-pr)/pr*100:null;})();
+      const tChg=h24&&liveV!=null&&h24.v>0?(liveV-h24.v)/h24.v*100:simulated||total==null||(ptgcUSD>0&&pPrev==null)||(ufoUSD>0&&uPrev==null)?null:(()=>{const pr=(pPrev||0)+(uPrev||0);return pr>0?(total-pr)/pr*100:null;})();
       const shown=wallets.filter(w=>(grp==='All'||(w.group||'Default')===grp)&&(!q.trim()||(w.name||'').toLowerCase().includes(q.trim().toLowerCase())||w.address.toLowerCase().includes(q.trim().toLowerCase())));
       const allOn=wallets.length>0&&wallets.every(w=>isWalletChecked(w.address));
       const noneOn=wallets.every(w=>!isWalletChecked(w.address));
@@ -198,11 +212,11 @@
           {/* ---- three summary tiles ---- */}
           <div className="pf2-row3">
             <section className="pf2-pn pf2-st t"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div>
-              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div></div></section>
+              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div></div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></section>
             <section className="pf2-pn pf2-st p"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div>
-              <div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div><div className="s" style={{color:'#F2D35B'}}>{pfPct(ptgcUSD,total)}</div></div></section>
+              <div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div><div className="s" style={{color:'#F2D35B'}}>{pfPct(ptgcUSD,total)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></section>
             <section className="pf2-pn pf2-st u"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div>
-              <div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div><div className="s" style={{color:'#8DFF3A'}}>{pfPct(ufoUSD,total)}</div></div></section>
+              <div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div><div className="s" style={{color:'#8DFF3A'}}>{pfPct(ufoUSD,total)}</div></div><PfSpark vals={spk('u')} col="#7CFC00"/></section>
           </div>
 
           {/* ---- the two token cards ---- */}
@@ -223,7 +237,7 @@
                   <div className="pf2-lgd">{parts.map(x=><div key={x[0]}><i style={{background:x[2]}}></i>{x[0]}<b>{pfAbbr(x[1])}</b><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
               <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')}/></div>
-              <div className="pf2-le"><span className="lb">Total lifetime earned</span><span className="n">{fmtComma(Math.floor(ptgcEarned),2)}</span><span className="k">PTGC</span><span className="d"></span><span className="usd">{fmtDollar(usd(ptgcEarned,dp.ptgc))}</span></div>
+              <div className="pf2-le"><img className="ic" src="logos/portfolio/pf-earned.webp" alt=""/><span className="lb">Total lifetime earned</span><span className="n">{fmtComma(Math.floor(ptgcEarned),0)}</span><span className="k">PTGC</span><span className="d"></span><span className="usd">{fmtDollar(usd(ptgcEarned,dp.ptgc))}</span></div>
               <div className="pf2-extw"><div className="pf2-ext">
                 <span>Earned: staking <b>{pfAbbr(pt.claimed)}</b> {'\u00B7'} locking <b>{pfAbbr(pt.lockClaimed)}</b> {'\u00B7'} reflections <b>{pfAbbr(pt.reflections)}</b></span>
               </div>
@@ -283,16 +297,13 @@
                   <div className="pf2-lgd"><div><i style={{background:'#7CFC00'}}></i>Principal<b>{pfAbbr(ufoPrin)}</b><em>{pfPct(ufoPrin,uf.balance)}</em></div><div><i style={{background:'#22D3EE'}}></i>Reflections<b>{pfAbbr(ufoRefl)}</b><em>{pfPct(ufoRefl,uf.balance)}</em></div></div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
-              <div className="pf2-le"><span className="lb">Total lifetime earned</span>{ufoRefl==null?<span className="msg">{uf.reflState==='failed'?'unavailable':'scanning…'}</span>:<><span className="n">{fmtComma(Math.floor(ufoRefl),2)}</span><span className="k">UFO</span><span className="d"></span><span className="usd">{fmtDollar(usd(ufoRefl,dp.ufo))}</span></>}</div>
+              <div className="pf2-le"><img className="ic" src="logos/portfolio/pf-earned.webp" alt=""/><span className="lb">Total lifetime earned</span>{ufoRefl==null?<span className="msg">{uf.reflState==='failed'?'unavailable':'scanning…'}</span>:<><span className="n">{fmtComma(Math.floor(ufoRefl),0)}</span><span className="k">UFO</span><span className="d"></span><span className="usd">{fmtDollar(usd(ufoRefl,dp.ufo))}</span></>}</div>
               <div className="pf2-extw"><div className="pf2-ext"><span>Share of supply <b>{uf.balance>0?((s=>s>0&&s<0.01?'<0.01':s.toFixed(s<1?3:2))(uf.balance/UFO_TOTAL_SUPPLY*100))+'%':'—'}</b></span></div></div>
             </section>
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
-          <section className="pf2-pn pf2-sec">
-            <div className="pf2-sech"><h2 className="oh">PORTFOLIO VALUE HISTORY</h2></div>
-            <div className="pf2-soon"><b>Coming next.</b> Your real balances, read from the chain day by day {'—'} sells show as drops, buys as rises.</div>
-          </section>
+          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod}/>
           <section className="pf2-pn pf2-sec">
             <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2></div>
             <div className="pf2-soon"><b>Coming next.</b> Receives, sends, swaps, stakes and claims across your wallets.</div>
