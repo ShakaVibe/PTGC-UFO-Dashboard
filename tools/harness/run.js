@@ -165,8 +165,8 @@ const dsAnswer=(url)=>{
       const ago=h=>new Date(Date.now()-(h+(+process.env.PF_TX_SHIFT||0))*3600e3).toISOString(),isC=a=>[P,S,tok].includes(a),it=(h,f,t,m,v,hx)=>({tx_hash:'0x'+hx.repeat(64).slice(0,64),timestamp:ago(h),from:{hash:f,is_contract:isC(f)},to:{hash:t,is_contract:isC(t)},method:m,total:{decimals:'18',value:(BigInt(Math.round(v))*10n**18n).toString()}});
       const items=w!=='0x1111111111111111111111111111111111111111'?[]:isU?[it(3,w,P,'swapExactTokensForETH',9_500_000,'a1'),it(3,w,tok,'swapExactTokensForETH',500_000,'a1'),it(30,P,w,'swapExactETHForTokens',40_000_000,'a2')]
         :[it(1,S,w,'withdrawRewardLock',539_104,'b1'),it(5,P,w,'swapExactETHForTokens',12_456_789,'b2'),it(20,w,O,'transfer',100_000_000,'b3'),it(50,'0x9999999999999999999999999999999999999999',w,'transfer',2_345_678,'b4'),it(60,w,P,'0xe25d4a18',8_500_000,'b5'),it(60,w,tok,'0xe25d4a18',250_000,'b5'),it(60,w,S,'0xe25d4a18',100_000,'b5'),it(60,w,'0x0000000000000000000000000000000000000000','0xe25d4a18',50_000,'b5'),
-          /* round 14: a DAO lock, an unstake (reward in + fee out, principal only in the call data), a helper-made LP add (looks like a sell) */
-          it(70,w,'0x305AcfAB82103C2b82b19543919D1C93B44E55db','lock',1_000_000,'b6'),it(80,S,w,'withdraw',20_000,'b7'),it(80,w,S,'withdraw',2_000,'b7'),it(90,w,P,'0xe25d4a18',3_000_000,'b8')];
+          /* round 14: an unstake (reward in + fee out, principal only in the call data), a helper-made LP add (looks like a sell) */
+          it(80,S,w,'withdraw',20_000,'b7'),it(80,w,S,'withdraw',2_000,'b7'),it(90,w,P,'0xe25d4a18',3_000_000,'b8')];
       return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items})});
     }
     /* round 14: PulseScan's per-tx detail (raw_input for the unstake principal, the tx's other transfers for the LP-mint tell) */

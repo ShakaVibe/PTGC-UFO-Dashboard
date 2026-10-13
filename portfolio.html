@@ -1620,25 +1620,27 @@
        Add LP / Remove LP; a CONTRACT (DEX pair, router, aggregator) = Buy (tokens in) / Sell (tokens out); a person = Receive / Send. */
     /* round 14 — lessons from pulsechain_monitor.py (the trade monitor we built earlier, every rule verified on chain there):
        · claims are named by the FUNCTION, not the contract (staking and locking share 0xc71f…): withdrawReward = staking
-         rewards, withdrawRewardLock = lock rewards, claimFund = DAO; the DAO lock 0x305a… is a second claim / lock contract.
+         rewards, withdrawRewardLock = lock rewards. (round 14b, Shaka: the DAO has nothing to do with a personal wallet —
+         the monitor's DAO claim / DAO lock rules are left out.)
        · PTGC staking is balance-lock style: an UNSTAKE (withdraw(uint256) on the staking contract) moves no principal — only the
          reward out and the unstake fee in — so it is labelled Unstake and its principal is read from the call (see pftDetail).
-       · a hidden 1 % reflection slice of every PTGC send leaves the wallet with NO Transfer event; it equals the 1 % staking
-         leg, so the real amount sent = emitted + the staking leg. UFO: the 1 % reflection = the 5 % contract fee leg ÷ 5 (same
-         rule the UFO reflections scan uses). Sell / Send amounts are grossed up by it.
+       · the 1 % HOLDERS share of the fee (reflections) leaves the sender with NO Transfer event — it is paid by shrinking
+         everyone's balance-rate, not by a transfer. PTGC fee 5 %: emitted = 2.5 % to the token contract (2 % DAO + 0.5 %
+         liquidity), 1 % to the staking contract, 0.5 % to 0x…369 (burn); hidden = 1 % holders = the same size as the staking
+         leg. UFO fee 6 %: emitted = 5 % to the UFO contract (burns + liquidity); hidden = 1 % holders = that leg ÷ 5.
+         Checked on chain 2026-10-13: a PTGC sell (tx 0x91968a23…, block 27,789,557) logged 14,850 out, the wallet's balanceOf
+         fell 15,000; three UFO sells fell by emitted + exactly the fee leg ÷ 5. Sell / Send amounts are grossed up by it.
        · LP adds made through a helper / zapper look like a Sell — the tell is LP tokens minted to the wallet in the same tx
          (pftDetail checks the tx's other transfers). */
-    const PFT_DAO='0x305acfab82103c2b82b19543919d1c93b44e55db';
     const PFT_FEE=new Set(['0x0000000000000000000000000000000000000000','0x0000000000000000000000000000000000000369','0x000000000000000000000000000000000000dead',PFT_STAKING]);
-    const PFT_CLAIM_SUB={withdrawreward:'staking',withdrawrewardlock:'lock',claimfund:'DAO'};
+    const PFT_CLAIM_SUB={withdrawreward:'staking',withdrawrewardlock:'lock'};
     const pftClassify=(legs,addr,own,tok)=>{
       let net=0;legs.forEach(l=>{if(l.to===addr)net+=l.v;if(l.f===addr)net-=l.v;});
       const tokAddr=PFH_TOK[tok].toLowerCase();
       const m=(legs[0]&&legs[0].m||'').toLowerCase();
-      const fromSt=legs.some(l=>(l.f===PFT_STAKING||l.f===PFT_DAO)&&l.to===addr);
-      if(m==='withdraw'&&legs.some(l=>l.f===PFT_STAKING||l.to===PFT_STAKING||l.f===PFT_DAO||l.to===PFT_DAO))return{type:'Unstake',net,sub:legs.some(l=>l.f===PFT_DAO||l.to===PFT_DAO)?'DAO':''};
-      if(fromSt)return{type:'Claim',net,sub:PFT_CLAIM_SUB[m]||(legs.some(l=>l.f===PFT_DAO)?'DAO':'')};
-      if(legs.some(l=>l.f===addr&&l.to===PFT_DAO)&&!legs.some(l=>l.f===addr&&l.tc&&l.to!==PFT_DAO&&l.to!==tokAddr&&!PFT_FEE.has(l.to)))return{type:'Lock',net,sub:'DAO'};
+      const fromSt=legs.some(l=>l.f===PFT_STAKING&&l.to===addr);
+      if(m==='withdraw'&&legs.some(l=>l.f===PFT_STAKING||l.to===PFT_STAKING))return{type:'Unstake',net};
+      if(fromSt)return{type:'Claim',net,sub:PFT_CLAIM_SUB[m]||''};
       const main=legs.filter(l=>(l.to===addr||l.f===addr)).map(l=>l.to===addr?{a:l.f,c:l.fc,v:l.v}:{a:l.to,c:l.tc,v:l.v})
         .filter(x=>x.a&&x.a!==addr&&x.a!==tokAddr&&!PFT_FEE.has(x.a)).sort((x,y)=>y.v-x.v)[0];
       /* the hidden reflection slice of a send (see above) */
@@ -1670,7 +1672,7 @@
         if(t===addr&&/^0x0{40}$/.test(f))out.lp='add';else if(f===addr)out.lp='remove';});
       c[k]=out;pftD.save();return out;
     };
-    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],Unstake:['#B9C4FF','\u21E7'],Lock:['#5AB8FF','\u{1F512}'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
+    const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],Unstake:['#B9C4FF','\u21E7'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
     const PfRecentTx=({wallets,prices,onRows})=>{
       const pxNow=React.useRef(prices);pxNow.current=prices;
       const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});

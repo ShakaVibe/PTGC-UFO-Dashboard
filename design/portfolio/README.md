@@ -285,10 +285,16 @@ names the mode ("… uses your custom prices" / "… the all-time-high prices") 
    wallets get no dot. Older than PulseScan's latest-50-per-wallet window (or if a read failed), the old balance-change dots
    still fill in, and the legend says so.
 2. **Lessons from his `pulsechain_monitor.py`** (the trade monitor built earlier) folded into `pftClassify`:
-   claims labelled by function (withdrawReward → staking, withdrawRewardLock → lock, claimFund → DAO); the DAO lock
-   contract 0x305a… (→ Lock); **Unstake** (withdraw(uint256) on the staking contract — principal never moves, so the
+   claims labelled by function (withdrawReward → staking, withdrawRewardLock → lock); **Unstake** (withdraw(uint256) on the staking contract — principal never moves, so the
    principal is decoded from the call and shown); the hidden 1 % reflection slice of a send added back (PTGC = the staking
    leg, UFO = contract fee ÷ 5) so Sell / Send amounts are the real gross; helper-made LP adds that look like sells are caught
    by an LP-token mint to the wallet in the same tx (per-tx detail fetched only for the rows on screen, cached in
-   `grays_pf_txd_v1`). Harness: PF_TX stub gained a DAO lock, an unstake and a zapper LP add, plus `/transactions/{hash}`
+   `grays_pf_txd_v1`). Harness: PF_TX stub gained an unstake and a zapper LP add, plus `/transactions/{hash}`
    stubs; PF_TX_SHIFT=h ages the stub; probe `pf2-txdots.js`.
+
+### Round 14b
+- DAO rules dropped (Shaka: the DAO has nothing to do with a personal wallet) — no DAO claim / DAO lock types.
+- The hidden 1 % was questioned, so it was re-checked on chain: PTGC sell tx 0x91968a23… (block 27,789,557) logged
+  14,850 PTGC out (95 % + 2.5 % + 1 % + 0.5 % of 15,000) while the wallet's balanceOf fell 15,000.0 — the missing 1 % is the
+  holders' share of his 5 % fee, which reflection tokens pay without a Transfer event. Three UFO sells: balance fell by the
+  emitted legs + exactly (5 % fee leg ÷ 5) = the holders' 1 % of his 6 % fee. The gross-up stays.
