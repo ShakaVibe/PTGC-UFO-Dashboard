@@ -12,9 +12,12 @@
     const PFH_TOK={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
     const PFH_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
     const PFH_H=3600e3,PFH_D=86400e3;
-    const PFH_PERIODS={'7D':{step:6*PFH_H,n:28,unit:6*PFH_H},'30D':{step:PFH_D,n:30,unit:PFH_D},'90D':{step:PFH_D,n:90,unit:PFH_D},'1Y':{step:4*PFH_D,n:92,unit:PFH_D}};
+    const PFH_PERIODS={'7D':{step:6*PFH_H,n:28,unit:6*PFH_H},'30D':{step:PFH_D,n:30,unit:PFH_D},'90D':{step:PFH_D,n:90,unit:PFH_D},'1Y':{step:4*PFH_D,n:92,unit:4*PFH_D}};   // round 24 (audit B5): 1Y points on 4-day boundaries so they repeat day to day
     let pfhCache=null;   // {v:{'addr|TOK':{ts:bal}}}
-    const pfhLoad=()=>{if(pfhCache)return pfhCache;try{const s=localStorage.getItem(PFH_LS);pfhCache=s?JSON.parse(s):{v:{}};if(!pfhCache.v)pfhCache={v:{}};}catch(e){pfhCache={v:{}};}return pfhCache;};
+    const pfhLoad=()=>{if(pfhCache)return pfhCache;try{const s=localStorage.getItem(PFH_LS);pfhCache=s?JSON.parse(s):{v:{}};if(!pfhCache.v)pfhCache={v:{}};}catch(e){pfhCache={v:{}};}
+      /* round 24 (audit B5): the cache grew forever — drop points older than 400 days, and 6-hour (7D) points older than 15 days */
+      try{const now=Date.now();let n=0;Object.values(pfhCache.v).forEach(m=>Object.keys(m).forEach(k=>{const t=+k;if(now-t>400*PFH_D||(t%PFH_D!==0&&now-t>15*PFH_D)){delete m[k];n++;}}));if(n)pfhSave();}catch(e){}
+      return pfhCache;};
     let pfhSaveT=null;
     const pfhSave=()=>{clearTimeout(pfhSaveT);pfhSaveT=setTimeout(()=>{try{localStorage.setItem(PFH_LS,JSON.stringify(pfhCache));}catch(e){/* full: drop the oldest wallet entries */try{const ks=Object.keys(pfhCache.v);ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>delete pfhCache.v[k]);localStorage.setItem(PFH_LS,JSON.stringify(pfhCache));}catch(e2){}}},800);};
     let pfhEp=0;
@@ -30,9 +33,14 @@
       }
     };
     /* timestamp → block: anchors at the head and ~7 / 30 / 90 / 180 / 365 / 420 days back, linear between them */
-    let pfhAnchors=null,pfhAnchorsAt=0;
-    const pfhGetAnchors=async()=>{
-      if(pfhAnchors&&Date.now()-pfhAnchorsAt<10*60e3)return pfhAnchors;
+    let pfhAnchors=null,pfhAnchorsAt=0,pfhAnchorsP=null;
+    /* round 24 (audit B2): one request at a time — the chart, the 24 h tiles and the Details window all ask at mount */
+    const pfhGetAnchors=()=>{
+      if(pfhAnchors&&Date.now()-pfhAnchorsAt<10*60e3)return Promise.resolve(pfhAnchors);
+      if(pfhAnchorsP)return pfhAnchorsP;
+      pfhAnchorsP=pfhGetAnchors0().finally(()=>{pfhAnchorsP=null;});return pfhAnchorsP;
+    };
+    const pfhGetAnchors0=async()=>{
       const head=await pfhRpc({jsonrpc:'2.0',id:1,method:'eth_getBlockByNumber',params:['latest',false]});
       const hn=parseInt(head.result.number,16),ht=parseInt(head.result.timestamp,16)*1000;
       const nums=[7,30,90,180,365,420].map(d=>Math.max(1,hn-Math.round(d*PFH_D/10300)));
@@ -66,9 +74,13 @@
       return{state:st.state,of:a=>st.m[a.toLowerCase().slice(2)]||0,retry:()=>{setSt(s=>({...s,state:'loading'}));setNonce(n=>n+1);}};
     };
     /* prices: the Charts page's prebuilt files (refetched every 30 min) */
-    let pfhPx=null,pfhPxAt=0;
-    const pfhPrices=async()=>{
-      if(pfhPx&&Date.now()-pfhPxAt<30*60e3)return pfhPx;
+    let pfhPx=null,pfhPxAt=0,pfhPxP=null;
+    const pfhPrices=()=>{
+      if(pfhPx&&Date.now()-pfhPxAt<30*60e3)return Promise.resolve(pfhPx);
+      if(pfhPxP)return pfhPxP;   // round 24 (audit B2): was fetched up to 5× at first paint
+      pfhPxP=pfhPrices0().finally(()=>{pfhPxP=null;});return pfhPxP;
+    };
+    const pfhPrices0=async()=>{
       const g=async f=>{try{const r=await fetch(PFH_RAW+f,{cache:'no-cache'});return r.ok?await r.json():null;}catch(e){return null;}};
       const[d,h]=await Promise.all([g('charts-data.json'),g('charts-intraday.json')]);
       if(!d&&!h){pfhPx=null;throw new Error('price files unavailable');}   // round 23 (audit A3): a failed load is not cached for 30 min
@@ -133,14 +145,17 @@
       return{...st,retry:()=>setNonce(n=>n+1)};
     };
     /* the real 24 h change: every counted wallet's balances exactly 24 h ago × the price then, vs now */
+    const pf24Mem={};   // round 24 (audit B2): per-wallet balances 24 h ago, keyed by the 10-minute slot — a toggle no longer re-reads every wallet
     const usePf24h=addrs=>{
       const[v,setV]=useState(null);const key=addrs.slice().sort().join(',');
       useEffect(()=>{if(!addrs.length){setV(null);return;}let live=true;(async()=>{try{
         const[a,px]=await Promise.all([pfhGetAnchors(),pfhPrices()]);
-        const ts=Math.floor((Date.now()-PFH_D)/60e3)*60e3;const block=pfhBlockAt(a,ts);
-        const res=await pfhRpc(addrs.flatMap((addr,i)=>['PTGC','UFO'].map((tok,k)=>({jsonrpc:'2.0',id:i*2+k,method:'eth_call',params:[{to:PFH_TOK[tok],data:'0x70a08231'+addr.slice(2).padStart(64,'0')},'0x'+block.toString(16)]}))));
-        const by={};(res||[]).forEach(r=>{if(r)by[r.id]=r;});let p=0,u=0;
-        for(let i=0;i<addrs.length;i++)for(let k=0;k<2;k++){const r=by[i*2+k];if(!r||r.error||r.result==null)throw new Error('read');const x=r.result==='0x'?0:Number(BigInt(r.result))/1e18;if(k===0)p+=x;else u+=x;}
+        const ts=Math.floor((Date.now()-PFH_D)/600e3)*600e3;const block=pfhBlockAt(a,ts);
+        const need=addrs.filter(addr=>!pf24Mem[addr+'|'+ts]);
+        if(need.length){const res=await pfhRpc(need.flatMap((addr,i)=>['PTGC','UFO'].map((tok,k)=>({jsonrpc:'2.0',id:i*2+k,method:'eth_call',params:[{to:PFH_TOK[tok],data:'0x70a08231'+addr.slice(2).padStart(64,'0')},'0x'+block.toString(16)]}))));
+          const by={};(res||[]).forEach(r=>{if(r)by[r.id]=r;});
+          need.forEach((addr,i)=>{const v2=[0,0];for(let k=0;k<2;k++){const r=by[i*2+k];if(!r||r.error||r.result==null)return;v2[k]=r.result==='0x'?0:Number(BigInt(r.result))/1e18;}if(by[i*2]&&by[i*2+1])pf24Mem[addr+'|'+ts]=v2;});}
+        let p=0,u=0;for(const addr of addrs){const m=pf24Mem[addr+'|'+ts];if(!m)throw new Error('read');p+=m[0];u+=m[1];}
         const pp=p>0?pfhPriceAt(px,'PTGC',ts):0,pu=u>0?pfhPriceAt(px,'UFO',ts):0;if(pp==null||pu==null)throw new Error('price');
         if(live)setV({p:p*pp,u:u*pu,v:p*pp+u*pu});
       }catch(e){if(live)setV(null);}})();return()=>{live=false;};},[key]);
@@ -155,7 +170,7 @@
       return(<svg className="pf2-spk" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".42"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs><path d={d+`L${W} ${H}L0 ${H}Z`} fill={`url(#${id})`}/><path d={d} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 3px ${col})`}}/></svg>);
     };
     /* the chart: one series (the total), area + 2 px line, recessive grid, crosshair + tooltip on hover / touch */
-    const PfHistChart=({pts,period,txs})=>{
+    const PfHistChart=React.memo(({pts,period,txs})=>{   // round 24 (audit B1): memoised — redraws only when its points / period / transactions change
       const ref=React.useRef(null);const[hov,setHov]=useState(null);
       const vals=pts.filter(p=>p.v!=null);
       if(vals.length<2)return <div className="pf2-hwait">Not enough points yet.</div>;
@@ -184,6 +199,7 @@
          how many of each kind, taller with more, a count on the busy ones. Dust under $1 is left out. Hovering the chart lights
          the matching bar and the tooltip lists the transactions. Each wallet + token only counts back to its own coverage. */
       const cov=txs&&txs.cov||{};
+      const stepName=period==='7D'?'6 hours':period==='1Y'?'4 days':'day';
       const kindOf=r=>TOUT[r.type]?'out':TCL[r.type]?'cl':TLP[r.type]?'lp':TIN[r.type]?'in':null;
       if(txs){const by=new Map();txs.rows.forEach(r=>{const k=kindOf(r);if(!k)return;if(r.usd!=null&&r.usd<1)return;if(r.t<=vals[0].t||r.t<(cov[r.addr+'|'+r.tok]||0))return;
           const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[],n:{in:0,out:0,cl:0,lp:0}};e.tx.push(r);e.n[k]++;by.set(p.t,e);});
@@ -202,19 +218,20 @@
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length} {l.length===1?'transaction':'transactions'} {period==='7D'?'in these 6 hours':'this day'}</small></div>;})()}</div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length} {l.length===1?'transaction':'transactions'} {stepName==='day'?'this day':'in these '+stepName}</small></div>;})()}</div></>}
           </div>
-          {txs&&<div className="pf2-strip" aria-hidden="true"><span className="lab">{period==='7D'?'TRADES / 6H':'TRADES'}</span>
+          {txs&&<div className="pf2-strip" aria-hidden="true"><span className="lab">{period==='7D'?'TRADES / 6H':period==='1Y'?'TRADES / 4D':'TRADES'}</span>
             {ev.map((e,i)=>{const n=e.tx.length,h=Math.min(26,4+n*4);const on=hov&&hov.t===e.p.t;return(<span key={i} className={`day${on?' on':''}${n>=4?' hot':''}`} data-n={n} style={{left:X(e.p.t)+'%',height:h+'px'}}>
               {KINDS.map(([k])=>e.n[k]>0&&<i key={k} className={k} style={{flex:e.n[k]}}></i>)}</span>);})}</div>}
-          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {period==='7D'?'6 hours':'day'} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span>{covFrom>vals[0].t&&<span className="o">complete from {pfhDate(covFrom)}</span>}</div>}
+          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {stepName} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span>{covFrom>vals[0].t&&<span className="o">complete from {pfhDate(covFrom)}</span>}</div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
-    };
+    });
     const PfValueHistory=({addrs,live,period,setPeriod,txs})=>{
       const s=usePfSeries(addrs,period);
-      const pts=s.pts.length&&live&&live.v!=null?[...s.pts,{t:Date.now(),v:live.v,p:live.p,u:live.u,bp:live.bp,bu:live.bu,now:true}]:s.pts;
+      const lv=live&&live.v!=null?live:null;
+      const pts=React.useMemo(()=>s.pts.length&&lv?[...s.pts,{t:Date.now(),v:lv.v,p:lv.p,u:lv.u,bp:lv.bp,bu:lv.bu,now:true}]:s.pts,[s.pts,lv&&lv.v,lv&&lv.p,lv&&lv.u,lv&&lv.bp,lv&&lv.bu]);   // round 24 (audit B1): stable between renders
       const vals=pts.filter(p=>p.v!=null);
       const first=vals[0],hi=vals.reduce((a,p)=>!a||p.v>a.v?p:a,null),lo=vals.reduce((a,p)=>!a||p.v<a.v?p:a,null);
       const cur=live&&live.v!=null?live.v:null;const chg=first&&cur!=null&&first.v>0?(cur-first.v)/first.v*100:null;
@@ -364,12 +381,15 @@
       /* days from the running totals — PTGC and UFO each complete (or not) on their own */
       const priceOf=(t,mid)=>{let p=px?pfhPriceAt(px,t,mid):null;if(p==null&&prices){const s0=px&&px.hourly[t];const lastT=s0&&s0.length?s0[s0.length-1][0]:null;const cur=prices[t==='UFO'?'ufo':'ptgc'];if(lastT!=null&&mid>=lastT&&cur>0)p=cur;}return p;};
       const days=React.useMemo(()=>{if(!e.pts)return null;const out=[];
+        /* round 24 (audit B4): UFO flows bucketed per wallet and sorted once; each day then takes its slice with a moving pointer
+           (was: a scan of every flow for every wallet × every day on every tick) */
+        const fl={},ptr={};if(txs&&txs.flows){txs.flows.forEach(f=>{if(f.tok==='UFO')(fl[f.addr]=fl[f.addr]||[]).push(f);});Object.values(fl).forEach(a=>a.sort((x,y)=>x.t-y.t));}
         for(let i=0;i<e.pts.length-1;i++){const a=e.pts[i],b=e.pts[i+1];const d={t0:a.ts,t1:b.ts,okP:true,okU:true,st:0,lk:0,rf:0,uf:0};
           for(const ad of addrs){const va=a.w[ad],vb=b.w[ad];if(!va||!vb){d.okP=d.okU=false;d.whyP=d.whyU='Couldn’t be read from the chain';break;}
             d.st+=Math.max(0,vb[0]-va[0]);d.lk+=Math.max(0,vb[1]-va[1]);d.rf+=Math.max(0,vb[2]-va[2]);
             if(d.okU){const cv=txs&&txs.cov?txs.cov[ad+'|UFO']:undefined;
               if(!txs||!txs.flows||cv===undefined||cv>a.bt){d.okU=false;d.whyU=!txs||!txs.flows?'Waiting for your transactions…':'Older than the transactions in reach';}
-              else{const net=txs.flows.reduce((t,f)=>f.addr===ad&&f.tok==='UFO'&&f.t>a.bt&&f.t<=b.bt?t+f.net:t,0);d.uf+=Math.max(0,(vb[3]-va[3])-net);}}}
+              else{const arr=fl[ad]||[];let j=ptr[ad]||0;while(j<arr.length&&arr[j].t<=a.bt)j++;let net=0;while(j<arr.length&&arr[j].t<=b.bt){net+=arr[j].net;j++;}ptr[ad]=j;d.uf+=Math.max(0,(vb[3]-va[3])-net);}}}
           const mid=Math.min(Date.now(),(a.ts+b.ts)/2);d.pP=priceOf('PTGC',mid);d.pU=priceOf('UFO',mid);
           out.push(d);}
         return out;},[e.pts,txs,px,addrs.join(),prices&&prices.ptgc,prices&&prices.ufo]);

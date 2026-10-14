@@ -1,0 +1,3 @@
+(async()=>{const q=s=>[...document.querySelectorAll(s)];const keys=Object.keys(localStorage).filter(k=>k.startsWith('grays_pf_tx_v4:'));
+const t0=performance.now();let n=0;const ro=new MutationObserver(ms=>{n+=ms.length});ro.observe(document.querySelector('.pf2'),{childList:true,subtree:true,characterData:true});await new Promise(r=>setTimeout(r,4000));ro.disconnect();
+return{txKeys:keys.length,txKB:Math.round(keys.reduce((t,k)=>t+(localStorage.getItem(k)||'').length,0)/1024),histKB:Math.round((localStorage.getItem('grays_pf_hist_v1')||'').length/1024),domMutations4s:n,bars:q('.pf2-strip .day').length,rows:q('.pf2-fr').length,chips:q('.pf2-chips button').map(b=>b.innerText.replace(/\n/g,' '))};})()

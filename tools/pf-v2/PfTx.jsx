@@ -10,21 +10,27 @@
        page by page back a year (PFT_BACK) or PFT_PAGES pages, whichever comes first: page 1 for everyone first (the list paints
        fast), then the deeper pages in the background. A cached entry keeps {items, next (PulseScan's next_page_params), done};
        a refresh reads only the newest page(s) and merges them in until it meets what is already cached. */
-    const PFT_LS='grays_pf_tx_v3';   // v3 (round 18): entries carry next / done (paging)
+    const PFT_LS='grays_pf_tx_v4:';   // v4 (round 24): one key per wallet+token (v3 was one blob)
     const PFT_API='https://api.scan.pulsechain.com/api/v2/addresses/';
     const PFT_STAKING='0xc71f597a2ac39e47f07102e849d18489c96f39ef';
     const PFT_TTL=5*60e3,PFT_BACK=365*864e5,PFT_PAGES=20;
-    try{localStorage.removeItem('grays_pf_tx_v1');localStorage.removeItem('grays_pf_tx_v2');}catch(e){}
+    try{['grays_pf_tx_v1','grays_pf_tx_v2','grays_pf_tx_v3'].forEach(k=>localStorage.removeItem(k));}catch(e){}
     /* round 23 (audit A5): the cache used to be WIPED on a quota error (a 20-wallet portfolio is ~4 MB), so big portfolios never
        kept one and re-read everything every visit. Now: saves are debounced, and on quota the least recently read wallet+token
        entries are dropped one at a time until it fits. */
-    const pftCache=(()=>{let c=null,t=null;const write=()=>{for(let i=0;i<60;i++){try{localStorage.setItem(PFT_LS,JSON.stringify(c));return;}catch(e){const ks=Object.keys(c);if(!ks.length)return;const old=ks.sort((a,b)=>(c[a].at||0)-(c[b].at||0))[0];delete c[old];}}};
-      return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_LS)||'{}')||{};}catch(e){c={};}return c;},save(){clearTimeout(t);t=setTimeout(write,400);},flush(){clearTimeout(t);write();}};})();
+    /* round 24 (audit B3): one localStorage key per wallet+token (PFT_LS + key) — a landed page writes only its own entry
+       instead of re-serialising the whole multi-MB cache; on quota the least recently read OTHER entries go first. */
+    const pftCache=(()=>{const m={};let loaded=false,t=null;const dirty=new Set();
+      const load=()=>{if(loaded)return;loaded=true;try{for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith(PFT_LS)){try{m[k.slice(PFT_LS.length)]=JSON.parse(localStorage.getItem(k));}catch(e){}}}}catch(e){}};
+      const write=()=>{for(const k of [...dirty]){dirty.delete(k);const e=m[k];if(!e)continue;for(let i=0;i<40;i++){try{localStorage.setItem(PFT_LS+k,JSON.stringify(e));break;}
+        catch(err){const ks=Object.keys(m).filter(x=>x!==k);if(!ks.length)break;const old=ks.sort((a,b)=>(m[a].at||0)-(m[b].at||0))[0];delete m[old];try{localStorage.removeItem(PFT_LS+old);}catch(e2){}}}}};
+      return{get(){load();return m;},save(k){dirty.add(k);clearTimeout(t);t=setTimeout(write,400);},flush(){clearTimeout(t);write();}};})();
     const pftPage=async(addr,tok,next)=>{
       const ac=new AbortController();const to=setTimeout(()=>ac.abort(),25000);
       try{
         const q=next?'&'+Object.entries(next).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&'):'';
-        const r=await fetch(`${PFT_API}${addr}/token-transfers?type=ERC-20&token=${PFH_TOK[tok]}${q}`,{signal:ac.signal});
+        let r=await fetch(`${PFT_API}${addr}/token-transfers?type=ERC-20&token=${PFH_TOK[tok]}${q}`,{signal:ac.signal});
+        if(r.status===429){await new Promise(res=>setTimeout(res,2500));r=await fetch(`${PFT_API}${addr}/token-transfers?type=ERC-20&token=${PFH_TOK[tok]}${q}`,{signal:ac.signal});}   // round 24 (audit B6): one polite retry when PulseScan rate-limits
         if(!r.ok)throw new Error('HTTP '+r.status);
         const j=await r.json();
         const items=(j.items||[]).map(x=>({h:x.tx_hash,t:Date.parse(x.timestamp),f:(x.from&&x.from.hash||'').toLowerCase(),to:(x.to&&x.to.hash||'').toLowerCase(),fc:!!(x.from&&x.from.is_contract),tc:!!(x.to&&x.to.is_contract),m:x.method||'',v:(()=>{try{return Number(BigInt(x.total.value))/Math.pow(10,+x.total.decimals||18);}catch(e){return 0;}})(),li:x.log_index}));
@@ -46,7 +52,7 @@
           e=fresh.length===pg.items.length*n&&pg.next?{at:Date.now(),items:fresh,next:pg.next,pages:n}   // still a gap → start over from here
             :{...hit,at:Date.now(),items:fresh.concat(hit.items)};
         }else e={at:Date.now(),items:pg.items,next:pg.next,pages:1};
-        e.done=pftDone(e);c[k]=e;pftCache.save();return e;
+        e.done=pftDone(e);c[k]=e;pftCache.save(k);return e;
       }catch(err){if(hit)return hit;throw err;}
     };
     /* one more (older) page */
@@ -55,7 +61,7 @@
       const pg=await pftPage(addr,tok,e.next);
       const have=new Set(e.items.map(pftKey));
       const n={...e,items:e.items.concat(pg.items.filter(i=>!have.has(pftKey(i)))),next:pg.next,pages:(e.pages||1)+1};
-      n.done=pftDone(n);c[k]=n;pftCache.save();return n;
+      n.done=pftDone(n);c[k]=n;pftCache.save(k);return n;
     };
     /* round 13 (Shaka: "double check your types … those ones from 0bd0 show as Stake, but they were sells"). Checked live on
        PulseScan: EVERY PTGC transfer — sells, buys, plain sends — splits off fee legs to the token contract, the staking contract
@@ -133,10 +139,12 @@
       const[flt,setFlt]=useState('All');    // round 17: filter chip
       const[cp,setCp]=useState(null);       // round 17: the row whose wallet address was just copied
       const[nonce,setNonce]=useState(0);
+      const force=React.useRef(false);   // round 24 (audit B2): Refresh re-reads page 1 ONCE (nonce>0 used to force it on every later toggle)
+      const secRef=React.useRef(null);
       const key=wallets.map(w=>w.address.toLowerCase()).sort().join(',');
       useEffect(()=>{
         if(!wallets.length){setSt({state:'empty',rows:[],failed:0,done:0,total:0});return;}
-        let live=true;
+        let live=true;const forceNow=force.current;force.current=false;
         (async()=>{
           const own=new Set(wallets.map(w=>w.address.toLowerCase()));
           const names={};wallets.forEach(w=>{names[w.address.toLowerCase()]=w.name||(w.address.slice(0,6)+'…'+w.address.slice(-4));});
@@ -166,24 +174,34 @@
              one-year mark is complete back to its OLDEST item, not to the beginning of time */
           const cov=()=>{const o={};got.forEach(g=>{o[g.addr+'|'+g.tok]=g.full?0:(g.items.length?g.items[g.items.length-1].t:Date.now());});return o;};
           let busy=true,pages=0;   // round 22: the Details window waits on these (busy = older pages still coming; pages = how many read)
-          const tell=()=>{if(onRows&&live){const rows=build();onRows({rows,cov:cov(),failed,flows,busy,pages});}};
-          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
+          /* round 24 (audit B1): build() ran twice per landed page and every one re-rendered the whole page (~1,500 times for 20
+             wallets). Now one build per page, and the parent is told at most ~2× a second (always at the end). */
+          let lastRows=null,lastTell=0,tellT=null;
+          const tell=(final)=>{if(!onRows||!live)return;const now=Date.now();if(!final&&now-lastTell<500){clearTimeout(tellT);tellT=setTimeout(()=>tell(true),520-(now-lastTell));return;}
+            clearTimeout(tellT);lastTell=now;onRows({rows:lastRows||(lastRows=build()),cov:cov(),failed,flows,busy,pages});};
+          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,forceNow);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live){lastRows=build();setSt({state:'ok',rows:lastRows,failed,done,total:jobs.length});}}};
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
-          tell();
+          tell(true);
+          /* round 24 (audit B7): the deep (older) pages only start once the section has been scrolled into view — or after
+             5 s anyway, so the chart's history and the Details window still fill in on a page left open */
+          await new Promise(res=>{let done2=false;const go=()=>{if(!done2){done2=true;res();}};const el=secRef.current;
+            if(!el||!('IntersectionObserver' in window)){setTimeout(go,1500);return;}
+            const io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting)){io.disconnect();go();}},{rootMargin:'600px'});io.observe(el);setTimeout(()=>{io.disconnect();go();},5000);});
+          if(!live)return;
           /* phase 2: the older pages, two at a time, the list and the chart updating as they land */
           let q2=0;const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
           const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;g.full=!e.next;pages++;}catch(err){break;}
-            if(live){setSt(s=>({...s,rows:build()}));tell();}}}};
+            if(live){lastRows=build();setSt(s=>({...s,rows:lastRows}));tell(false);}}}};
           await Promise.all([w2(),w2()]);
           if(!live)return;
-          const rows=build();
-          busy=false;tell();
+          const rows=lastRows=build();
+          busy=false;tell(true);
           setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
         })();
         /* round 23 (audit A6): if this run is cut short (wallet set changed, section unmounted) the Details window must not
            keep waiting on busy:true */
-        return()=>{live=false;pftCache.flush();if(onRows)onRows(t=>t?{...t,busy:false}:t);};
+        return()=>{live=false;clearTimeout(tellT);pftCache.flush();if(onRows)onRows(t=>t?{...t,busy:false}:t);};
       },[key,nonce]);
       /* round 17 (Shaka picked option B of mock-tx-v1): an activity feed — one plain-words line per transaction ("Sold 8.91M PTGC"),
          a round type icon with the token's logo on its corner, the wallet (with a copy button) and time underneath, the dollar value
@@ -225,11 +243,11 @@
           <a className="lk" href={`https://scan.pulsechain.com/tx/${r.h}`} target="_blank" rel="noopener noreferrer" title="Open on PulseScan" aria-label="Open this transaction on PulseScan">{'↗'}</a>
         </div>);};
       return(
-        <section className="pf2-pn pf2-sec pf2-rt">
+        <section className="pf2-pn pf2-sec pf2-rt" ref={secRef}>
           <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
             {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}</div>}
-            <button className="pf2-lnk q" onClick={()=>setNonce(n=>n+1)}>{'↻'} Refresh</button></div>
+            <button className="pf2-lnk q" onClick={()=>{force.current=true;setNonce(n=>n+1);}}>{'↻'} Refresh</button></div>
           {st.state==='loading'&&<div className="pf2-soon">Reading your wallets{'’'} PTGC and UFO transfers from PulseScan{'…'}</div>}
           {st.state==='failed'&&<div className="pf2-soon">Couldn{'’'}t reach PulseScan right now. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></div>}
           {st.state==='none'&&<div className="pf2-soon">{st.failed>0?<>{st.failed} of {st.total} PulseScan reads failed, so some history may be missing. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></>:'No PTGC or UFO transfers in the counted wallets yet.'}</div>}

@@ -396,3 +396,13 @@ A12 **Unstake**: PulseScan doesn't decode the staking contract's withdraw — re
 A13 Buy / Sell only when ANOTHER token moved in the same tx (checked lazily with the per-tx detail we already fetch); a plain
    transfer to a contract (Safe, bridge, vesting) is Send / Receive. Detail cache → `grays_pf_txd_v2`.
 Also: a stray backspace character in the LP-name regex (`/\bLP\b/` had been written through a non-raw string) fixed.
+
+## Round 24 (2026-10-14) — Phase B (performance), B8 held (it would go live)
+B1 One `build()` per landed history page; the parent is told at most ~2× a second (always at the end); `PfHistChart` memoised,
+   its points stable between renders. B2 In-flight dedupe for the price files and the block anchors (were fetched up to 5× / 3×
+   at first paint); 24 h balances remembered per wallet per 10-min slot (a toggle no longer re-reads every wallet); Refresh forces
+   a page-1 re-read ONCE (nonce>0 used to force it on every later toggle). B3 Transactions cache is one localStorage key per
+   wallet+token (`grays_pf_tx_v4:<addr|TOK>`) — a page writes only its own entry; v3 blob removed. B4 Details: UFO flows bucketed
+   per wallet and sorted once, two-pointer per day. B5 1Y points on 4-day boundaries (repeat day to day); history cache pruned
+   on load (> 400 days; 6-h points > 15 days). B6 PulseScan 429 → one 2.5 s retry. B7 Deep paging waits for the Recent
+   Transactions section to come within 600 px of the screen (or 5 s). Strip legend / tooltip say per 6 hours / day / 4 days.
