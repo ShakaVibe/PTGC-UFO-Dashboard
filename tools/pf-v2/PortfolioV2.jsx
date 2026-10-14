@@ -162,6 +162,7 @@
       const[allLocks,setAllLocks]=useState(false);
       const[lkOpen,setLkOpen]=useState(false);
       const[bdOpen,setBdOpen]=useState(false);
+      const[bdCp,setBdCp]=useState(null);   // round 19: the breakdown address just copied
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
       const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
@@ -391,6 +392,13 @@
                 <div className="h">Earned by source</div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
                 <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
+                {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
+                    holder reward = the counted UFO ÷ the supply (≈: burned / excluded balances shift it a little). */}
+                {uf.balance>0&&(()=>{const sh=uf.balance/999999999051*100;return(
+                  <div className="pf2-rtc u"><img src={TOKENS.UFO.logo} alt=""/>
+                    <div className="b"><div className="t">Paid to your wallet automatically <span>{'\u00B7'} nothing to claim</span></div>
+                      <div className="sub"><span>You get <b>{'\u2248'} {sh<0.01?'<0.01':sh.toFixed(sh<1?3:2)}%</b> of every holder reward</span><span>1% of every UFO buy, sell &amp; transfer</span></div></div>
+                  </div>);})()}
               </div>
             </section>
           </div>
@@ -403,11 +411,28 @@
           <div className="pf2-folds one">
             <section className="pf2-pn pf2-fold">
               <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}><b className="oh">PER-WALLET BREAKDOWN</b><span>{counted.length} wallet{counted.length===1?'':'s'}</span><span className="chev">{'▾'}</span></button>
-              {bdOpen&&<div className="pf2-foldb" style={{overflowX:'auto'}}>
-                <table className="pf2-tbl"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING</th><th>UFO</th><th>REFLECTIONS</th></tr></thead><tbody>
-                  {counted.map(w=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;const r=d.ufo.reflections==null?d.ufo.reflections:d.ufo.reflections+(v1.state==='ok'?v1.of(a):0);return(
-                    <tr key={a}><td>{w.name||truncAddr(w.address)}</td><td className="p">{pfAbbr(d.ptgc.totalHolding)}</td><td className="pos">{pfAbbr(d.ptgc.totalPending)}</td><td className="u">{pfAbbr(d.ufo.balance)}</td><td className="u">{r===undefined?(p.scanningAddr===a?'scanning…':'queued'):r===null?<span style={{color:'#FFD38A'}}>unavailable</span>:pfAbbr(r)}</td></tr>);})}
-                </tbody></table></div>}
+              {/* round 19 (option A of mock-r18-v1, cards on a phone): tokens with $ under each, Pending to claim in PTGC yellow, UFO as one
+                  total, a Total column with each wallet's share (bar split PTGC yellow / UFO green), copy buttons, an All-wallets row. */}
+              {bdOpen&&(()=>{const COL=['#B26BFF','#F2D35B','#22D3EE','#FF8A3D','#EC4899','#7CFC00','#6FA8FF','#FF6B73'];
+                const rows=counted.map((w,i)=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;
+                  const pT=d.ptgc.totalHolding||0,pc=d.ptgc.totalPending||0,uT=d.ufo.balance||0,p$=usd(pT,dp.ptgc)||0,u$=usd(uT,dp.ufo)||0;
+                  return{w,a,c:COL[i%COL.length],pT,pc,uT,p$,c$:usd(pc,dp.ptgc)||0,u$,t$:p$+u$};}).filter(Boolean);
+                const S=k=>rows.reduce((t,r)=>t+r[k],0),all=S('t$');
+                const cpy=a=>{try{navigator.clipboard.writeText(a);}catch(e){}setBdCp(a);setTimeout(()=>setBdCp(x=>x===a?null:x),1400);};
+                const who=r=><><div className="n"><i style={{background:r.c}}></i>{r.w.name||truncAddr(r.w.address)}</div>
+                  <div className="ad">{truncAddr(r.w.address)}<button className={`cp${bdCp===r.a?' ok':''}`} onClick={()=>cpy(r.w.address)} title={`Copy ${r.w.address}`} aria-label={`Copy wallet address ${r.w.address}`}>{bdCp===r.a?'\u2713':'\u29C9'}</button></div></>;
+                const cell=(v,$v,k)=><><span className={`tk ${k}`}>{pfAbbr(v)}</span><span className="us">{fmtDollar($v)}</span></>;
+                const bar=r=><div className="bar"><span><b style={{width:(r.t$>0?r.p$/r.t$*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(r.t$>0?r.u$/r.t$*100:0)+'%',background:'#7CFC00'}}></b></span><small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}%</small></div>;
+                return(<div className="pf2-foldb pf2-bd">
+                  <table className="pf2-bdt"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING TO CLAIM</th><th>UFO</th><th>TOTAL</th></tr></thead><tbody>
+                    {rows.map(r=><tr key={r.a}><td>{who(r)}</td><td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
+                    {rows.length>1&&<tr className="sum"><td><div className="n">ALL WALLETS</div></td><td>{cell(S('pT'),S('p$'),'p')}</td><td>{cell(S('pc'),S('c$'),'p')}</td><td>{cell(S('uT'),S('u$'),'u')}</td><td><span className="tot">{fmtDollar(all)}</span></td></tr>}
+                  </tbody></table>
+                  <div className="pf2-bdc">{rows.map(r=><div key={r.a} className="wc"><div className="top"><div className="who">{who(r)}</div><div className="tv">{fmtDollar(r.t$)}<small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}% of portfolio</small></div></div>
+                      <div className="sb"><b style={{width:(r.t$>0?r.p$/r.t$*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(r.t$>0?r.u$/r.t$*100:0)+'%',background:'#7CFC00'}}></b></div>
+                      <div className="cols"><div className="cl"><div className="l">PTGC</div>{cell(r.pT,r.p$,'p')}</div><div className="cl"><div className="l">Pending to claim</div>{cell(r.pc,r.c$,'p')}</div><div className="cl"><div className="l">UFO</div>{cell(r.uT,r.u$,'u')}</div></div></div>)}
+                    {rows.length>1&&<div className="wsum"><span className="l">ALL WALLETS</span><b>{fmtDollar(all)}</b></div>}</div>
+                </div>);})()}
             </section>
           </div>
           </>}

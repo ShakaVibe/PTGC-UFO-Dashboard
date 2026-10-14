@@ -330,3 +330,12 @@ day (Today / Yesterday / weekday / date). Filter chips with counts — All · Bu
 3. Mock-up `mock-r18-v1.html` (render `renders/r18-v1-1340.jpg`) for his two layout questions: the empty space under UFO's
    Earned by source (A one tall box · B a "paid automatically · nothing to claim" strip mirroring PTGC's Ready to claim — my
    pick) and the Per-Wallet Breakdown (A rich table · B wallet cards).
+
+## Round 19 (2026-10-14) — his "go with your suggestions" on mock-r18-v1
+1. UFO gap → **B**: under UFO's Reflections box, a strip mirroring PTGC's Ready to claim — UFO logo, "Paid to your wallet
+   automatically · nothing to claim", "You get ≈ X% of every holder reward" (counted UFO ÷ 999,999,999,051 supply) and
+   "1% of every UFO buy, sell & transfer".
+2. Per-Wallet Breakdown → **A** (rich table) on desktop / tablet, **B's cards** on a phone (≤ 700 px): copy button on every
+   address, PTGC + Pending to claim (PTGC yellow) + UFO (one total, no reflections column), $ under every amount, Total with each
+   wallet's share and a PTGC/UFO split bar, an All-wallets row. Total = PTGC + UFO held (pending not included, same as the
+   page's Total portfolio value).
