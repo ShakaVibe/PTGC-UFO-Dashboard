@@ -430,3 +430,16 @@ dot has an aria-label. D6 Search field gets a visible focus ring; one gold focus
 D7 Moon Math, Details tabs and the supply toggle are aria-pressed buttons (no fake tab / radio semantics). D8 No meaningful text
 under 12 px (harness sweep: 0 small texts, 0 small targets at 390 px). D9 iOS: windows lock the page behind (position:fixed);
 clipboard ✓ only on a successful copy, with an execCommand fallback.
+
+## Round 27 (2026-10-14) — Phase E (code health), hidden as before
+E1 Dead code out: PfYield (+ its CSS), the yield maths (ptYield / ufoYield / fmtY / ptgcEarned / ptRecv / ptIn), the PLS
+multiplier maths, the retired rounds' CSS (table feed, old Moon Math strip, `.pf2-src3.two`, `.pf2-tbl`, `.pf2-le`, …) — an
+audit script found every class never referenced from the JSX (comments excluded); pf2.css −10 % (the "a third" estimate in the
+roadmap was high). E2 One PF_ADDR / PF_SUPPLY block in PfLeagues.jsx; PFH_TOK, PFT_STAKING, PFE_ST, PF_TOKEN_ADDR, PF_BURN_ADDR
+and the UFO supply literal all read from it. E3 One quota strategy: `pfLsSet(key,obj,shrink)` — the history cache drops its
+oldest 10 % of points, the Details cache its oldest days, the tx cache its least-recently-read wallets (never a wipe).
+E4 A header in each file listing what it expects from the others and the concatenation order. E6 `pftCovered(txs,addr,tok,t)`
+is the one reading of the coverage map (strip, Details days, Details loader). E7 Comments fixed (swapped / duplicated / stale
+ones, the PfTx header). E8 Named: PFH_BLOCK_MS, PFH_RPC_TIMEOUT, PFH_BATCH. Left for later: E5 (window.pfUfoRecv → needs a
+classic-code change), E8's remaining literals, E9 (precompiling the JSX is a site-wide decision), the pool() helper.
+Also: Moon Math tile buttons 24 px tall (last sub-24 px target on desktop).

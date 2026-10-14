@@ -1,3 +1,5 @@
+    /* Expects (all defined before this file runs): PfLeagues.jsx, PfHistory.jsx, PfTx.jsx, plus the classic page's globals
+       (TOKENS, fmtDollar, usd, agg / dp / prices / portfolioData passed in as props, PF_V2_LIVE…). */
     /* ===== PORTFOLIO v2 (2026-10-13) — the page body of design/portfolio/mock-portfolio-v4.html, built by tools/pf-v2.py =====
        HIDDEN: PF_V2_LIVE=false → the classic body stays the default and a faint dot bottom-right (PfV2Dot) flips this device
        to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
@@ -9,7 +11,6 @@
     const PF_SEA_V=4;   // = index.html SEA_ART_V (the sea art files are shared: logos/panels/sea-*.webp)
     const PF_SEA={'\u{1F531}':'trident','\u{1F40B}':'whale','\u{1F988}':'shark','\u{1F42C}':'dolphin','\u{1F991}':'squid','\u{1F422}':'turtle','\u{1F990}':'shrimp','\u{1F41A}':'shell'};
     const pfSea=e=>`logos/panels/sea-${PF_SEA[e]||'shell'}.webp?v=${PF_SEA_V}`;
-    const PF_SUPPLY={PTGC:333333333333,UFO:UFO_TOTAL_SUPPLY};
     const PfV2Dot=({on,toggle})=>(
       <button className="pf2-dotbtn" onClick={toggle} aria-label={on?'Back to the current portfolio page':'Preview the new portfolio page'} title={on?'Back to the current page':'Preview'}></button>
     );
@@ -99,20 +100,6 @@
     /* round 8: Reward yield tile with a plain-English explainer (Shaka: "'on brought in' sounds weird … we need to explain it better") */
     const PF_IC_HOLD='logos/leagues/lg-ic-coins.webp?v=1';   // round 9: his gold coin stack (the Leagues "Starting supply" icon)
     const PF_IC_EARN='logos/portfolio/pf-lifetime4.webp';     // round 13: his lifetime-earned icon (clock + coins)
-    const PfYield=({cls,tok,y,earned,putIn,what})=>{
-      const[open,setOpen]=useState(false);
-      const fy=y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
-      return(
-        <div className={`pf2-bx ${cls} pf2-yld`}>
-          <div className="lb">Reward yield <button className="pf2-i" aria-expanded={open} aria-label="What is reward yield?" onClick={()=>setOpen(!open)}>{'\u24D8'}</button></div>
-          <div className="v">{fy}</div><div className="s">on what you put in</div>
-          {open&&<div className="pf2-ypop" role="note" onClick={()=>setOpen(false)}>
-            <b>How much you{'\u2019'}ve earned for every {tok} you put in.</b>
-            {y!=null&&earned!=null&&putIn>0?<span>You put in <b>{pfAbbr(putIn)}</b> {tok} (bought or moved into these wallets) and have earned <b>{pfAbbr(earned)}</b> {tok} from {what} {'\u2192'} <b>{fy}</b>.</span>:<span>Lifetime earned {'\u00F7'} the {tok} you bought or moved into these wallets.</span>}
-            <span>Selling doesn{'\u2019'}t change it.</span>
-          </div>}
-        </div>);
-    };
     /* round 12 (Shaka: "remove the PLS … add Live, Custom, All-time highs … can you get it all into the moon math tile? maybe if you
        select custom it opens a little window for you to put the prices"). The strip under the row is gone: the tile holds a
        three-way toggle; Custom opens a small window anchored to the tile for the PTGC and UFO prices. */
@@ -156,13 +143,11 @@
       /* round 11 (Shaka: "double check the PLS price math"): on the old page a Moon Math PLS price changed NOTHING — no figure
          uses PLS. PTGC and UFO trade against PLS, so "PLS goes to X" now means: same price in PLS, so each token's $ price moves
          by X ÷ today's PLS price. A PTGC or UFO price typed in yourself still wins for that token. */
-      const plsC=moonMathActive&&customPrices.pls!==''?parseFloat(customPrices.pls):null;
-      const plsX=plsC>0&&prices.pls>0?plsC/prices.pls:null;
       /* round 25 (audit C14): while a custom price is being typed ("0.", "", "0") every $ figure went to $0.00 — a custom
          price counts only once it is a number above zero; until then the live price stands */
       const cust=k=>{const v=parseFloat(String(customPrices[k]).replace(',','.'));return moonMathActive&&v>0?v:null;};
-      const dp={ptgc:cust('ptgc')!=null?cust('ptgc'):(plsX&&prices.ptgc!=null?prices.ptgc*plsX:(moonMathActive&&customPrices.ptgc!==''?(prices.ptgc!=null?prices.ptgc:dp0.ptgc):dp0.ptgc)),
-                ufo:cust('ufo')!=null?cust('ufo'):(plsX&&prices.ufo!=null?prices.ufo*plsX:(moonMathActive&&customPrices.ufo!==''?(prices.ufo!=null?prices.ufo:dp0.ufo):dp0.ufo)),pls:dp0.pls};
+      const dp={ptgc:cust('ptgc')!=null?cust('ptgc'):(moonMathActive&&customPrices.ptgc!==''?(prices.ptgc!=null?prices.ptgc:dp0.ptgc):dp0.ptgc),
+                ufo:cust('ufo')!=null?cust('ufo'):(moonMathActive&&customPrices.ufo!==''?(prices.ufo!=null?prices.ufo:dp0.ufo):dp0.ufo),pls:dp0.pls};   // round 27 (audit E1): the PLS multiplier maths is gone (v2 has no PLS input since round 12)
       const[q,setQ]=useState('');
       const[grp,setGrp]=useState('All');
       const[showAll,setShowAll]=useState(false);
@@ -172,13 +157,13 @@
       const[bdOpen,setBdOpen]=useState(false);
       const[bdCp,setBdCp]=useState(null);
       const[bdSort,setBdSort]=useState('value');   // round 25 (audit C17): value | name | added
-      const[edTok,setEdTok]=useState(null);   // round 20: the 30-day Earned details window (PTGC / UFO)   // round 19: the breakdown address just copied
+      const[edTok,setEdTok]=useState(null);   // round 20: the Earned details window (which token it opened on)
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
-      const[edit,setEdit]=useState(null);
+      const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited
       const[rmAsk,setRmAsk]=useState(null);   // round 23 (audit A8): the card whose ✕ was just tapped — asks before removing
-      useEffect(()=>{if(!rmAsk)return;const t=setTimeout(()=>setRmAsk(null),5000);return()=>clearTimeout(t);},[rmAsk]);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
-      const simulated=moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='');
+      useEffect(()=>{if(!rmAsk)return;const t=setTimeout(()=>setRmAsk(null),5000);return()=>clearTimeout(t);},[rmAsk]);
+      const simulated=moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!=='');
       const gNames=Object.keys(groups);
       useEffect(()=>{if(grp!=='All'&&!groups[grp])setGrp('All');},[gNames.join('|')]);
       /* per wallet: value at the displayed prices, the PTGC share, its state */
@@ -230,13 +215,12 @@
          R ÷ (received + R), applied to the current holdings (sells are assumed to take principal and reflections alike), so
          it can never show more reflections than were earned or a negative principal. */
       const okW=counted.map(w=>portfolioData[w.address.toLowerCase()]).filter(d=>d&&!d.error);
-      const ptRecv=okW.length&&okW.every(d=>typeof d.ptgc.received==='number')?okW.reduce((a,d)=>a+d.ptgc.received,0):null;
       const ufRecv=(()=>{if(!okW.length)return null;let t=0;for(const w of counted){const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)continue;if(!(d.ufo.balance>0))continue;const r=(window.pfUfoRecv||{})[a];if(typeof r!=='number')return null;t+=r;}return t;})();
       /* round 15: + the OLD UFO contract's reflections (to the 2026-07-06 migration). They are lifetime, so every counted wallet adds
          its share, sold-out ones too (ufoOld). For the split of today's bag only wallets still holding UFO count (ufoOldHeld): the
          migration airdrop sits inside ufRecv, and the old reflections are the part of it that was earned — so
          share = (new + old reflections) ÷ (received + new reflections), never above 1. If the file can't be read the page shows the
-         new contract alone and says so. */
+         new contract alone with an "old contract not included · retry" note (round 23). */
       const v1Sum=held=>v1.state!=='ok'?null:counted.reduce((t,w)=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return t;if(held&&!(d.ufo.balance>0))return t;return t+v1.of(a);},0);
       const ufoOld=v1Sum(false),ufoOldHeld=v1Sum(true);
       const ufoNew=ufoRefl;
@@ -246,13 +230,8 @@
          Transfer from the staking contract, PTGC's totalReceived rises by exactly the claim and lockClaimed by the same amount —
          so claims sit inside "received" (and outside reflections). Brought in = received − staking claims − lock claims. */
       const ptEarned=pt.claimed+pt.lockClaimed+pt.reflections;
-      const ptIn=ptRecv==null?null:ptRecv-pt.claimed-pt.lockClaimed;
-      const ptYield=ptIn>0?ptEarned/ptIn*100:null;
-      const ufoYield=ufoRefl==null||!(ufRecv>0)?null:ufoRefl/ufRecv*100;
       const ufoShare=ufoEarned==null||ufRecv==null||!((ufRecv+ufoNew)>0)?null:Math.min(1,(ufoNew+(ufoOldHeld||0))/(ufRecv+ufoNew));
       const ufoReflNow=ufoShare==null?null:uf.balance*ufoShare,ufoPrin=ufoShare==null?null:uf.balance-ufoReflNow;
-      const fmtY=y=>y==null?'\u2014':(y>0&&y<0.01?'<0.01':y.toFixed(y<1?3:2))+'%';
-      const ptgcEarned=pt.claimed+pt.lockClaimed+pt.reflections;
       const fmtLock=t=>{if(!t)return'—';const now=Date.now()/1000;if(t<=now)return'Unlockable';const d=Math.floor((t-now)/86400);if(d>365)return Math.floor(d/365)+'y '+Math.floor((d%365)/30)+'m';if(d>30)return Math.floor(d/30)+'m '+d%30+'d';if(d>0)return d+'d';const h=Math.floor((t-now)/3600);return h>0?h+'h':Math.max(1,Math.floor((t-now)/60))+'m';};
       const reflBox=()=>uf.reflState==='pending'?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>scanning{'…'}</div><div className="s">{uf.reflPending} wallet{uf.reflPending>1?'s':''}</div></>
         :uf.reflState==='failed'?<><div className="v" style={{fontSize:16,color:'#FFD38A'}}>unavailable</div><div className="s"><button onClick={retryFailedReflScans}>Retry</button></div></>
@@ -409,7 +388,7 @@
                 <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">{v1.state==='failed'?<span className="warn">old contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></span>:'100% of earned'}</div></>}</div></div>
                 {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
                     holder reward = the counted UFO ÷ the supply (≈: burned / excluded balances shift it a little). */}
-                {uf.balance>0&&(()=>{const sh=uf.balance/999999999051*100;return(
+                {uf.balance>0&&(()=>{const sh=uf.balance/PF_SUPPLY.UFO*100;return(
                   <div className="pf2-rtc u"><img src={TOKENS.UFO.logo} alt=""/>
                     <div className="b"><div className="t">Paid to your wallet automatically <span>{'\u00B7'} nothing to claim</span></div>
                       <div className="sub"><span>You get <b>{'\u2248'} {sh<0.01?'<0.01':sh.toFixed(sh<1?3:2)}%</b> of every holder reward</span><span>1% of every UFO buy, sell &amp; transfer</span></div></div>

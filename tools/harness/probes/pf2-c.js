@@ -10,4 +10,4 @@ q('.pf2-edb')[0].click();for(let i=0;i<60&&!document.querySelector('.pf2-erw .su
 out.edsel=q('.pf2-edsel button').map(b=>b.innerText+(b.className.includes('on')?'*':''));out.edsub=(document.querySelector('.pf2-erw .sub')||{}).innerText;
 const b7=q('.pf2-edsel .pp button').find(b=>b.innerText==='7D');b7.click();for(let i=0;i<40&&!(document.querySelector('.pf2-erw .sum')&&q('.pf2-erw .dt tbody tr').length<=8);i++)await S(500);out.rows7=q('.pf2-erw .dt tbody tr').length;out.first7=q('.pf2-erw .dt tbody tr').slice(0,2).map(t=>t.innerText.replace(/\n|\t/g,' | ').slice(0,70));
 const w2=q('.pf2-edsel .ws button')[2];if(w2){w2.click();for(let i=0;i<40&&!document.querySelector('.pf2-erw .sum');i++)await S(500);out.walletSub=(document.querySelector('.pf2-erw .sub')||{}).innerText;}
-out.fn=(document.querySelector('.pf2-erw .fn')||{}).innerText.slice(-80);return out;})()
+out.fn=(document.querySelector('.pf2-erw .fn')||{}).innerText.slice(-80);document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await S(200);return out;})()

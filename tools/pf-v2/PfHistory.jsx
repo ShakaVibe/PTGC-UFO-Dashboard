@@ -1,3 +1,6 @@
+    /* Expects from PfLeagues.jsx (loaded first): PF_ADDR, PF_TOKEN_ADDR, PF_SUPPLY, pfAbbr, pfAddr, pfLsSet, PfModal. Used by PfTx.jsx
+       and PortfolioV2.jsx: PFH_TOK, pfhPrices, pfhPriceAt, pfhRpc, usePfSeries, usePf24h, PfValueHistory, PfEarnedModal, usePfUfoV1.
+       pf-v2.py concatenates PfLeagues → PfHistory → PfTx → PortfolioV2; only use another file's names inside functions. */
     /* ===== Portfolio v2 — VALUE HISTORY (2026-10-13, Shaka's option C: "real balances read from the chain") =====
        For every counted wallet, the PTGC and UFO balanceOf AT PAST BLOCKS (archive eth_call, batched), times that moment's
        price (data/charts-data.json daily ≤ 365 d, data/charts-intraday.json hourly ≤ 14 d — the Charts page's prebuilt files),
@@ -9,9 +12,9 @@
        publicnode answers "missing trie node" for old blocks (tested 2026-10-13). */
     const PFH_RPC=['https://rpc.pulsechain.com','https://rpc-pulsechain.g4mm4.io'];
     const PFH_LS='grays_pf_hist_v1';
-    const PFH_TOK={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
+    const PFH_TOK=PF_TOKEN_ADDR;   // round 27 (audit E2): one source (PfLeagues.jsx)
     const PFH_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
-    const PFH_H=3600e3,PFH_D=86400e3;
+    const PFH_H=3600e3,PFH_D=86400e3,PFH_BLOCK_MS=10300,PFH_RPC_TIMEOUT=20000,PFH_BATCH=80;   // PulseChain ~10.3 s blocks; batched eth_call size
     const PFH_PERIODS={'7D':{step:6*PFH_H,n:28,unit:6*PFH_H},'30D':{step:PFH_D,n:30,unit:PFH_D},'90D':{step:PFH_D,n:90,unit:PFH_D},'1Y':{step:4*PFH_D,n:92,unit:4*PFH_D}};   // round 24 (audit B5): 1Y points on 4-day boundaries so they repeat day to day
     let pfhCache=null;   // {v:{'addr|TOK':{ts:bal}}}
     const pfhLoad=()=>{if(pfhCache)return pfhCache;try{const s=localStorage.getItem(PFH_LS);pfhCache=s?JSON.parse(s):{v:{}};if(!pfhCache.v)pfhCache={v:{}};}catch(e){pfhCache={v:{}};}
@@ -19,12 +22,13 @@
       try{const now=Date.now();let n=0;Object.values(pfhCache.v).forEach(m=>Object.keys(m).forEach(k=>{const t=+k;if(now-t>400*PFH_D||(t%PFH_D!==0&&now-t>15*PFH_D)){delete m[k];n++;}}));if(n)pfhSave();}catch(e){}
       return pfhCache;};
     let pfhSaveT=null;
-    const pfhSave=()=>{clearTimeout(pfhSaveT);pfhSaveT=setTimeout(()=>{try{localStorage.setItem(PFH_LS,JSON.stringify(pfhCache));}catch(e){/* full: drop the oldest wallet entries */try{const ks=Object.keys(pfhCache.v);ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>delete pfhCache.v[k]);localStorage.setItem(PFH_LS,JSON.stringify(pfhCache));}catch(e2){}}},800);};
+    /* round 27 (audit E3): on quota, drop the OLDEST points (not a third of the wallets) until it fits — same idea as the tx cache */
+    const pfhSave=()=>{clearTimeout(pfhSaveT);pfhSaveT=setTimeout(()=>pfLsSet(PFH_LS,pfhCache,c=>{const all=[];Object.entries(c.v).forEach(([k,m])=>Object.keys(m).forEach(t=>all.push([+t,k])));if(!all.length)return false;all.sort((a,b)=>a[0]-b[0]);all.slice(0,Math.max(1,Math.ceil(all.length/10))).forEach(([t,k])=>{delete c.v[k][t];});return true;}),800);};
     let pfhEp=0;
     const pfhRpc=async(body,tries=3)=>{
       for(let t=0;t<tries;t++){
         const ep=PFH_RPC[(pfhEp+t)%PFH_RPC.length];
-        try{const ac=new AbortController();const to=setTimeout(()=>ac.abort(),20000);
+        try{const ac=new AbortController();const to=setTimeout(()=>ac.abort(),PFH_RPC_TIMEOUT);
           const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ac.signal});clearTimeout(to);
           if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();
           if(Array.isArray(body)&&!Array.isArray(j))throw new Error('no batch');
@@ -43,7 +47,7 @@
     const pfhGetAnchors0=async()=>{
       const head=await pfhRpc({jsonrpc:'2.0',id:1,method:'eth_getBlockByNumber',params:['latest',false]});
       const hn=parseInt(head.result.number,16),ht=parseInt(head.result.timestamp,16)*1000;
-      const nums=[7,30,90,180,365,420].map(d=>Math.max(1,hn-Math.round(d*PFH_D/10300)));
+      const nums=[7,30,90,180,365,420].map(d=>Math.max(1,hn-Math.round(d*PFH_D/PFH_BLOCK_MS)));
       const res=await pfhRpc(nums.map((n,i)=>({jsonrpc:'2.0',id:i,method:'eth_getBlockByNumber',params:['0x'+n.toString(16),false]})));
       const a=[[hn,ht]];res.forEach(r=>{if(r&&r.result)a.push([parseInt(r.result.number,16),parseInt(r.result.timestamp,16)*1000]);});
       a.sort((x,y)=>x[1]-y[1]);pfhAnchors=a;pfhAnchorsAt=Date.now();return a;
@@ -97,7 +101,7 @@
       const c=pfhLoad();const need=[];const waits=[];
       jobs.forEach(j=>{const k=j.addr+'|'+j.tok;const hit=c.v[k]&&c.v[k][j.ts]!=null;if(hit)return;const ik=k+'|'+j.ts;if(pfhInflight.has(ik)){waits.push(pfhInflight.get(ik));return;}need.push(j);});
       let done=0;const total=need.length;onProgress&&onProgress(total?0:1);
-      const B=80,batches=[];for(let i=0;i<need.length;i+=B)batches.push(need.slice(i,i+B));
+      const B=PFH_BATCH,batches=[];for(let i=0;i<need.length;i+=B)batches.push(need.slice(i,i+B));
       const run=async batch=>{
         let res=null;try{res=await pfhRpc(batch.map((j,i)=>({jsonrpc:'2.0',id:i,method:'eth_call',params:[{to:PFH_TOK[j.tok],data:'0x70a08231'+j.addr.slice(2).padStart(64,'0')},'0x'+j.block.toString(16)]})));}catch(e){res=null;}
         const byId={};(res||[]).forEach(r=>{if(r)byId[r.id]=r;});
@@ -208,7 +212,7 @@
       const cov=txs&&txs.cov||{};
       const stepName=period==='7D'?'6 hours':period==='1Y'?'4 days':'day';
       const kindOf=r=>TOUT[r.type]?'out':TCL[r.type]?'cl':TLP[r.type]?'lp':TIN[r.type]?'in':null;
-      if(txs){const by=new Map();txs.rows.forEach(r=>{const k=kindOf(r);if(!k)return;if(r.usd!=null&&r.usd<1)return;if(r.t<=vals[0].t||r.t<(cov[r.addr+'|'+r.tok]||0))return;
+      if(txs){const by=new Map();txs.rows.forEach(r=>{const k=kindOf(r);if(!k)return;if(r.usd!=null&&r.usd<1)return;if(r.t<=vals[0].t||!pftCovered(txs,r.addr,r.tok,r.t))return;
           const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[],n:{in:0,out:0,cl:0,lp:0}};e.tx.push(r);e.n[k]++;by.set(p.t,e);});
         by.forEach(e=>ev.push(e));}
       const evMax=ev.reduce((m,e)=>Math.max(m,e.tx.length),0);
@@ -279,14 +283,14 @@
        A day whose reads failed — or, for UFO, whose transfers aren't all in reach — is a gap, never a guess. Past midnights are
        cached for good (PFE_LS); the head is read fresh. */
     const PFE_LS='grays_pf_ed_v1';
-    const PFE_ST='0xC71f597a2AC39E47F07102E849d18489C96f39EF';
+    const PFE_ST=PF_ADDR.STAKING;
     let pfeC=null;
     const pfeLoad=()=>{if(pfeC)return pfeC;try{pfeC=JSON.parse(localStorage.getItem(PFE_LS)||'{}')||{};}catch(e){pfeC={};}if(!pfeC.v)pfeC={v:{},bt:{}};if(!pfeC.bt)pfeC.bt={};return pfeC;};
-    const pfeSave=()=>{try{localStorage.setItem(PFE_LS,JSON.stringify(pfeC));}catch(e){try{pfeC={v:{},bt:{}};localStorage.removeItem(PFE_LS);}catch(e2){}}};
+    const pfeSave=()=>pfLsSet(PFE_LS,pfeC,c=>{const ks=[...new Set(Object.values(c.v).flatMap(m=>Object.keys(m)))].sort((a,b)=>+a-+b);if(!ks.length)return false;ks.slice(0,Math.max(1,Math.ceil(ks.length/10))).forEach(k=>{Object.values(c.v).forEach(m=>{delete m[k];});delete c.bt[k];});return true;});   // round 27 (audit E3): drop the oldest days, never wipe
     const pfePad=a=>a.toLowerCase().replace(/^0x/,'').padStart(64,'0');
     const pfeWord=(h,i)=>{try{const x=h.slice(2+64*i,2+64*(i+1));return x.length===64?Number(BigInt('0x'+x))/1e18:null;}catch(e){return null;}};
     const pfeNum=h=>h&&h!=='0x'&&h.length>=66?pfeWord(h,0):null;
-    const pfeBatch=async calls=>{const out=new Array(calls.length).fill(null);const B=80;const bs=[];for(let i=0;i<calls.length;i+=B)bs.push(i);
+    const pfeBatch=async calls=>{const out=new Array(calls.length).fill(null);const B=PFH_BATCH;const bs=[];for(let i=0;i<calls.length;i+=B)bs.push(i);
       let q=0;const w=async()=>{while(q<bs.length){const s0=bs[q++];const ch=calls.slice(s0,s0+B);let res=null;try{res=await pfhRpc(ch.map((c,i)=>({jsonrpc:'2.0',id:i,...c})));}catch(e){res=null;}
         (res||[]).forEach(r=>{if(r&&!r.error&&r.result!=null)out[s0+r.id]=r.result;});}};
       await Promise.all([w(),w()]);return out;};
@@ -346,7 +350,6 @@
     const pfeNice=m=>{if(!(m>0))return 1;const e=Math.pow(10,Math.floor(Math.log10(m)));const f=m/e;return(f<=1.5?1.5:f<=2?2:f<=2.5?2.5:f<=3?3:f<=4?4:f<=5?5:f<=6?6:f<=8?8:10)*e;};
     const pfeDay=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric'});   // round 25 (audit C2): local days now
     const pfeWd=t=>new Date(t).toLocaleDateString('en-US',{weekday:'short'});
-    /* the stacked daily columns: ≤ 20 px, 2 px surface gaps between segments, 4 px rounded top, hover / tap a day */
     /* round 21: views — PTGC (tokens), UFO (tokens), BOTH (dollars: the two tokens can't share a token scale; the default).
        Each view says which sources it stacks, how to read a source's value off a day, and how a day counts as complete. */
     const PFE_NB={st:'PTGC staking',lk:'PTGC locking',rf:'PTGC reflections',uf:'UFO reflections'};
@@ -409,15 +412,14 @@
         for(let i=0;i<e.pts.length-1;i++){const a=e.pts[i],b=e.pts[i+1];const d={t0:a.ts,t1:b.ts,okP:true,okU:true,st:0,lk:0,rf:0,uf:0};
           for(const ad of addrs){const va=a.w[ad],vb=b.w[ad];if(!va||!vb){d.okP=d.okU=false;d.whyP=d.whyU='Couldn’t be read from the chain';break;}
             d.st+=Math.max(0,vb[0]-va[0]);d.lk+=Math.max(0,vb[1]-va[1]);d.rf+=Math.max(0,vb[2]-va[2]);
-            if(d.okU){const cv=txs&&txs.cov?txs.cov[ad+'|UFO']:undefined;
-              if(!txs||!txs.flows||cv===undefined||cv>a.bt){d.okU=false;d.whyU=!txs||!txs.flows?'Waiting for your transactions…':'Older than the transactions in reach';}
+            if(d.okU){if(!txs||!txs.flows||!pftCovered(txs,ad,'UFO',a.bt)){d.okU=false;d.whyU=!txs||!txs.flows?'Waiting for your transactions…':'Older than the transactions in reach';}
               else{const arr=fl[ad]||[];let j=ptr[ad]||0;while(j<arr.length&&arr[j].t<=a.bt)j++;let net=0;while(j<arr.length&&arr[j].t<=b.bt){net+=arr[j].net;j++;}ptr[ad]=j;d.uf+=Math.max(0,(vb[3]-va[3])-net);}}}
           const mid=Math.min(Date.now(),(a.ts+b.ts)/2);d.pP=priceOf('PTGC',mid);d.pU=priceOf('UFO',mid);
           out.push(d);}
         return out;},[e.pts,txs,px,addrs.join(),prices&&prices.ptgc,prices&&prices.ufo]);
       const chainDone=!!e.pts,needU=tok!=='PTGC';
       const startBt=e.pts&&e.pts[0]?e.pts[0].bt:0;
-      const uReady=!!(txs&&txs.flows&&(!txs.busy||addrs.every(ad=>{const c=txs.cov&&txs.cov[ad+'|UFO'];return c!==undefined&&c<=startBt;})));
+      const uReady=!!(txs&&txs.flows&&(!txs.busy||addrs.every(ad=>pftCovered(txs,ad,'UFO',startBt))));
       const waiting=e.state!=='failed'&&(!chainDone||(needU&&!uReady));
       const tot=d=>d&&V.ok(d)?keys.reduce((t,k)=>t+V.val(d,k),0):0;
       const okDays=days?days.filter(V.ok):[];

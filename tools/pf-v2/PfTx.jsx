@@ -1,18 +1,23 @@
-    /* ===== Portfolio v2 — RECENT TRANSACTIONS (2026-10-13, round 9) =====
+    /* ===== Portfolio v2 — RECENT TRANSACTIONS (round 9, rewritten through round 27) =====
        PulseScan's token-transfer list per counted wallet and token (PTGC, UFO) — /api/v2/addresses/{w}/token-transfers, CORS
-       open, the latest 50 per call (tested live: ~1–10 s a call). Up to 3 calls in flight; answers cached 5 min in
-       localStorage (PFT_LS) so a reload paints at once. Transfers of one tx + token are netted for the wallet (a UFO sell is
-       the pair leg + the fee leg to the token contract → one "Sell"). Types: Claim (from the PTGC staking contract — staking
-       or lock reward), Stake (to it), Buy / Sell (the tx called a swap), Move (between two of YOUR wallets),
-       Receive / Send (anything else). Value = amount × that hour's / day's price (the history's price files). */
+       open, 50 per page, paged back up to a year (round 18), cached per wallet+token in localStorage (round 24). Transfers of
+       one tx + token are netted for the wallet (a UFO sell is the pair leg + the fee leg → one "Sell"). Types (pftClassify):
+       Claim (from the staking contract, named by function), Unstake, Buy / Sell (a contract counterparty AND another token
+       moved in the tx), Add / Remove LP, Move (between two of YOUR wallets), Receive / Send. Value = amount × that hour's /
+       day's price (the history's price files). Shown as an activity feed (round 17) and handed to the value chart's strip
+       and the Details window (rows, flows, coverage). Expects from the other files: PF_ADDR, pfAddr, pfCopy (PfLeagues),
+       PFH_TOK, pfhPrices, pfhPriceAt (PfHistory). */
     /* round 18 (Shaka: "a lot of dots are still missing on the chart"): ONE page (the latest 50 transfers) was all we read, and a
        busy wallet's 50 reach back only hours — so the chart had no trades for most of the week. Now each wallet + token is read
        page by page back a year (PFT_BACK) or PFT_PAGES pages, whichever comes first: page 1 for everyone first (the list paints
        fast), then the deeper pages in the background. A cached entry keeps {items, next (PulseScan's next_page_params), done};
        a refresh reads only the newest page(s) and merges them in until it meets what is already cached. */
+    /* round 27 (audit E6): the one place that says whether a wallet+token's transaction list reaches back to time t.
+       cov[addr|TOK]: undefined = not read yet · 0 = PulseScan ran out of pages (whole history) · a timestamp = complete back to it */
+    const pftCovered=(txs,addr,tok,t)=>{const c=txs&&txs.cov?txs.cov[addr+'|'+tok]:undefined;return c!==undefined&&t>=c;};
     const PFT_LS='grays_pf_tx_v4:';   // v4 (round 24): one key per wallet+token (v3 was one blob)
     const PFT_API='https://api.scan.pulsechain.com/api/v2/addresses/';
-    const PFT_STAKING='0xc71f597a2ac39e47f07102e849d18489c96f39ef';
+    const PFT_STAKING=PF_ADDR.STAKING.toLowerCase();
     const PFT_TTL=5*60e3,PFT_BACK=365*864e5,PFT_PAGES=20;
     try{['grays_pf_tx_v1','grays_pf_tx_v2','grays_pf_tx_v3'].forEach(k=>localStorage.removeItem(k));}catch(e){}
     /* round 23 (audit A5): the cache used to be WIPED on a quota error (a 20-wallet portfolio is ~4 MB), so big portfolios never

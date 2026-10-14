@@ -1,3 +1,6 @@
+    /* ===== Portfolio v2 — shared bits (loaded FIRST by pf-v2.py) =====
+       Everything here is used by the other three files: PF_ADDR / PF_SUPPLY (addresses, supplies), pfAbbr, pfAddr, pfCopy,
+       pfLsSet, PfModal (focus-trapping window), the leagues modal. Only module-scope constants and functions live here. */
     /* Portfolio v2, round 2 (2026-10-13): the Leagues window = the dashboard's TierInfoModal look (index.html, 2026-10-04
        redesign: his sea + whale + shark header, the lit coin, Starting / Burned / Circulating tiles, eight sea-art rows, Close).
        Ported here because portfolio.html does not load index.html's code; its lg-* CSS is copied in by tools/pf-v2.py
@@ -5,11 +8,17 @@
        read as index.html's fetchBurn; a failed read prints "—" and keeps the starting basis (gotcha 20). */
     const PF_BURN_C=[{n:'Poseidon',e:'\u{1F531}',p:10},{n:'Whale',e:'\u{1F40B}',p:1},{n:'Shark',e:'\u{1F988}',p:0.1},{n:'Dolphin',e:'\u{1F42C}',p:0.01},{n:'Squid',e:'\u{1F991}',p:0.001},{n:'Turtle',e:'\u{1F422}',p:0.0001},{n:'Shrimp',e:'\u{1F990}',p:0.00001},{n:'Shell',e:'\u{1F41A}',p:0}];
     const pfTierFraction=c=>c.p>0?Number((c.p/100).toPrecision(15)):0.00000001;   // = index.html tierFraction (SHELL_CARD_PCT)
-    const PF_BURN_ADDR='0x0000000000000000000000000000000000000369';
-    const PF_TOKEN_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
+    /* round 27 (audit E2): ONE place for the addresses and supplies every v2 file uses (there were four copies) */
+    const PF_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',STAKING:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',BURN:'0x0000000000000000000000000000000000000369'};
+    const PF_SUPPLY={PTGC:333333333333,UFO:999999999051};
+    const PF_BURN_ADDR=PF_ADDR.BURN;
+    const PF_TOKEN_ADDR={PTGC:PF_ADDR.PTGC,UFO:PF_ADDR.UFO};
     const pfFetchBurn=async token=>{try{const to=PF_TOKEN_ADDR[token];const[b,s]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x70a08231000000000000000000000000'+PF_BURN_ADDR.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x18160ddd'},'latest'],id:2})]);if(!b||!s||b.result==null||s.result==null)return null;const burned=Number(BigInt(b.result))/1e18,supply=Number(BigInt(s.result))/1e18;return supply>0?{total:burned,supply}:null;}catch(e){return null;}};
     /* = index.html fmtAbbr (a67: the unit is picked AFTER rounding — never "1000.00M"); the classic page keeps its own */
     /* round 26 (audit D9): clipboard writes REJECT (not throw) when they fail on iOS — the ✓ only shows on success */
+    /* round 27 (audit E3): one localStorage write with one quota strategy — keep calling `shrink(obj)` (which must drop
+       something and return true) until the write fits; give up quietly when nothing is left to drop */
+    const pfLsSet=(key,obj,shrink)=>{for(let i=0;i<40;i++){try{localStorage.setItem(key,JSON.stringify(obj));return true;}catch(e){if(!shrink||!shrink(obj))break;}}return false;};
     const pfCopy=text=>{try{if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(text).then(()=>true,()=>false);}catch(e){}
       try{const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');document.body.removeChild(ta);return Promise.resolve(!!ok);}catch(e){return Promise.resolve(false);}};
     const pfAddr=a=>a?a.slice(0,6)+'\u2026'+a.slice(-4):'';   // round 25 (audit C13): one address style everywhere (the classic page's truncAddr uses three dots)

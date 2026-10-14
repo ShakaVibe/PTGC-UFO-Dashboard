@@ -46,6 +46,7 @@ css += ('\n    /* ---- the Leagues window (lg-*), copied from index.html by tool
 CSS_A, CSS_B = '    /* ===== Portfolio v2 (2026-10-13, design', '\n  </style>\n</head>'
 JSX_A, JSX_B = '    /* Portfolio v2, round 2 (2026-10-13): the Leagues window', '\n\n    const PortfolioPage=({onBack})=>{'
 JSX_A0 = '    /* ===== PORTFOLIO v2 (2026-10-13)'   # step-1 builds started the block here
+JSX_A1 = '    /* ===== Portfolio v2 — shared bits (loaded FIRST by pf-v2.py) ====='   # round 27: PfLeagues.jsx got a header, so the block starts here now
 
 def sync(start_markers, end, block, what):
     """Insert the block before `end`, or replace what an earlier run inserted (so edits to tools/pf-v2/* flow in)."""
@@ -63,7 +64,7 @@ def sync(start_markers, end, block, what):
 
 # 1. CSS  2. the components (Leagues window + PortfolioV2)
 sync([CSS_A], CSS_B, css, 'css')
-sync([JSX_A, JSX_A0], JSX_B, jsx, 'jsx')
+sync([JSX_A1, JSX_A, JSX_A0], JSX_B, jsx, 'jsx')
 
 # 3. state + toggle
 once('const[pfV2,setPfV2]', rep(
