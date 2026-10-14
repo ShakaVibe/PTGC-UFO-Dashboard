@@ -1,0 +1,2 @@
+(async()=>{const q=s=>[...document.querySelectorAll(s)];const t=q('.pf2-ed .tw .tabs button,.pf2-ed .tm .tabs button').find(b=>b.offsetParent&&b.innerText.includes('UFO'));if(!t)return'no tab';t.click();await new Promise(r=>setTimeout(r,800));
+return{tiles:q('.pf2-ed .tl').map(t=>t.innerText.replace(/\n/g,' | ')),rows:q('.pf2-ed .dt tbody tr, .pf2-ed .dl>div').filter(x=>x.offsetParent).slice(0,4).map(t=>t.innerText.replace(/\n|\t/g,' | '))};})()

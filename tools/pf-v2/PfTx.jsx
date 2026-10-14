@@ -133,11 +133,12 @@
           setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
           const got=[];let failed=0,done=0,q=0;
           const px=await pfhPrices().catch(()=>null);
+          let flows=[];   // round 20: every tx's net per wallet + token (moves on BOTH sides) — the Earned details' UFO maths
           const build=()=>{
-            const rows=[];
+            const rows=[];flows=[];
             got.forEach(({addr,tok,items})=>{
               const by={};items.forEach(it=>{(by[it.h]=by[it.h]||[]).push(it);});
-              Object.values(by).forEach(legs=>{const{type,net,cp:mcp,sub}=pftClassify(legs,addr,own,tok);if(Math.abs(net)<1e-9&&type!=='Move')return;
+              Object.values(by).forEach(legs=>{const{type,net,cp:mcp,sub}=pftClassify(legs,addr,own,tok);flows.push({addr,tok,t:legs[0].t,net});if(Math.abs(net)<1e-9&&type!=='Move')return;
                 const t=legs[0].t;let p=px?pfhPriceAt(px,tok,t):null;
                 /* newer than the price files (they refresh hourly) → today's price */
                 if(p==null){const last=px&&px.hourly[tok]&&px.hourly[tok].length?px.hourly[tok][px.hourly[tok].length-1][0]:0;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(t>=last&&cur>0)p=cur;}
@@ -151,7 +152,7 @@
           };
           /* round 18: chart coverage — a wallet + token is complete back to its oldest transfer unless it hit the page cap / a year */
           const cov=()=>{const o={};got.forEach(g=>{o[g.addr+'|'+g.tok]=g.done?0:(g.items.length?g.items[g.items.length-1].t:Date.now());});return o;};
-          const tell=()=>{if(onRows&&live)onRows({rows:build(),cov:cov(),failed});};
+          const tell=()=>{if(onRows&&live){const rows=build();onRows({rows,cov:cov(),failed,flows});}};
           const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items:e.items,done:e.done});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;

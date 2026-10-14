@@ -162,7 +162,8 @@
       const[allLocks,setAllLocks]=useState(false);
       const[lkOpen,setLkOpen]=useState(false);
       const[bdOpen,setBdOpen]=useState(false);
-      const[bdCp,setBdCp]=useState(null);   // round 19: the breakdown address just copied
+      const[bdCp,setBdCp]=useState(null);
+      const[edTok,setEdTok]=useState(null);   // round 20: the 30-day Earned details window (PTGC / UFO)   // round 19: the breakdown address just copied
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
       const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
@@ -332,7 +333,7 @@
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
               <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')}/></div>
               <div className="pf2-ebs">
-                <div className="h">Earned by source</div>
+                <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('PTGC')} aria-label="PTGC rewards per day, last 30 days"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>Details {'\u00B7'} 30D</button></div>
                 <div className="pf2-src3">
                   {[['Staking','st',pt.claimed],['Locking','lk',pt.lockClaimed],['Reflections','rf',pt.reflections]].map(([n,c,v])=>(
                     <div key={n} className={`pf2-src ${c}`}><div className="l">{n}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(usd(v,dp.ptgc))}</div><div className="p">{pfPct(v,ptEarned)} of earned</div></div>))}
@@ -389,7 +390,7 @@
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
               <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')}/></div>
               <div className="pf2-ebs">
-                <div className="h">Earned by source</div>
+                <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards per day, last 30 days"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>Details {'\u00B7'} 30D</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
                 <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
                 {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
@@ -439,6 +440,7 @@
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
         {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
+        {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} close={()=>setEdTok(null)}/>}
         {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
           <div className="pf2-modal" onClick={()=>setHow(false)} role="dialog" aria-modal="true" aria-label="How it works"><div onClick={e=>e.stopPropagation()}>

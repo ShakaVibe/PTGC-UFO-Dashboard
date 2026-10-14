@@ -339,3 +339,14 @@ day (Today / Yesterday / weekday / date). Filter chips with counts — All · Bu
    address, PTGC + Pending to claim (PTGC yellow) + UFO (one total, no reflections column), $ under every amount, Total with each
    wallet's share and a PTGC/UFO split bar, an All-wallets row. Total = PTGC + UFO held (pending not included, same as the
    page's Total portfolio value).
+
+## Round 20 (2026-10-14) — Earned by source · 30-day Details (mock-earned-details-v1, approved "awesome, let's build it")
+"Details · 30D" pill in both Earned by source headers → a window (PfEarnedModal, PfHistory.jsx) with PTGC / UFO tabs:
+30-day total + per-source tiles (UFO: total / daily average / best day), stacked daily columns (staking / locking /
+reflections; UFO green) with hover + legend toggles + an average line, a by-day table newest first with the best day marked
+(cards on a phone). Maths — running totals per wallet at each UTC midnight (archive eth_call, batched 80, cached for good in
+`grays_pf_ed_v1`; the head read fresh): staking = claimed + pendingToClaimed + pendingReward; locking = lockClaimed +
+Σ pendingRewardLock; PTGC reflections = balance + totalSend − totalReceived; UFO = Δbalance − that day's net transfers
+(Recent Transactions now also hands up per-tx `flows`, both sides of a move), split at the boundary blocks' real timestamps.
+Verified on chain on a real staker (all three only rise; a 4.2M-PTGC staking day showed up as one). Gaps, never guesses.
+Prices: that day's from the price files, today's live. Harness PF_ED=1 + probes pf2-ed.js / pf2-ed-ufo.js.

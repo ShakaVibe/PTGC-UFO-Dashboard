@@ -80,7 +80,18 @@ const rpcAnswer=(body)=>{
       // balanceOf → 5% of a big supply-ish number; totalSupply; getReserves; token0/1; generic
       /* PF_HIST=1 (2026-10-13, Portfolio v2 value history): balances at PAST blocks grow toward today with a sell ~10 days
          back, so the history chart has a shape (latest stays the canned 16.67B) */
-      if(d==='0x70a08231'&&process.env.PF_HIST&&q.params[1]&&q.params[1]!=='latest'){const n=parseInt(q.params[1],16);const days=(HEAD-n)*10/86400;const f=days<10?1:Math.max(0.15,1.35-days/120);result=pad(BigInt(Math.round(16_666_666_666*f))*10n**18n);}
+      /* PF_ED=1 (round 20, Earned details): running totals that rise day by day at past blocks — staking claimed +15M/day,
+         lock claimed +1.2M/day, PTGC reflections +12–28M/day (via totalReceived), UFO balance +300–500M/day (reflections; no
+         transfers in the stub's last 30 days except the PF_TX ones) */
+      const edDays=q.params[1]&&q.params[1]!=='latest'?Math.max(0,(HEAD-parseInt(q.params[1],16))*10/86400):0;
+      const edW=x=>BigInt(Math.round(x))*10n**18n;
+      const edR=dd=>8e9-dd*20e6-Math.sin(dd)*4e6,edU=dd=>16_666_666_666-dd*400e6-Math.cos(dd*1.3)*60e6;
+      if(process.env.PF_ED&&d==='0x70a08231'&&/49ed/i.test(q.params[0].to)){result=pad(edW(edU(edDays)));}
+      else if(process.env.PF_ED&&d==='0x70a08231')result=pad(16_666_666_666n*10n**18n);
+      else if(process.env.PF_ED&&d==='0xc64a041b')result=pad(2_000_000_000n*10n**18n);
+      else if(process.env.PF_ED&&d==='0x4df9cfb3')result=pad(edW(16_666_666_666+2e9-edR(edDays)));
+      else if(process.env.PF_ED&&d==='0x15612933'){const now=Math.floor(Date.now()/1000);result='0x'+[10_000_000_000n*10n**18n,0n,BigInt(now-86400*400),edW(1e9-edDays*15e6),edW(2e8-edDays*1.2e6),6_000_000_000n*10n**18n,0n].map(v=>v.toString(16).padStart(64,'0')).join('');}
+      else if(d==='0x70a08231'&&process.env.PF_HIST&&q.params[1]&&q.params[1]!=='latest'){const n=parseInt(q.params[1],16);const days=(HEAD-n)*10/86400;const f=days<10?1:Math.max(0.15,1.35-days/120);result=pad(BigInt(Math.round(16_666_666_666*f))*10n**18n);}
       else if(d==='0x70a08231')result=pad(16_666_666_666n*10n**18n);
       else if(d==='0x18160ddd')result=pad(333_333_333_333n*10n**18n);
       else if(d==='0x0902f1ac')result=pad(1_000_000n*10n**18n).slice(0,66)+pad(2_000_000n*10n**18n).slice(2)+pad(1_700_000_000).slice(2);

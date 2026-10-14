@@ -231,3 +231,176 @@
         </section>
       );
     };
+    /* ===== round 20 — EARNED BY SOURCE · 30-DAY DETAILS (design/portfolio/mock-earned-details-v1.html, approved) =====
+       Each day = the change in a running total between two UTC midnights (the last bar = today so far, to the live head block).
+       Running totals per wallet, read at past blocks (archive eth_call, batched like the value history):
+         staking S = mapUserInfo.claimed + mapUserInfo.pendingToClaimed + pendingReward      (staking contract)
+         locking L = mapUserInfo.lockClaimed + Σ pendingRewardLock(i), i = 1..lockCount       (staking contract)
+         PTGC reflections R = balanceOf + totalSend − totalReceived                           (PTGC's own counters, exact)
+         UFO balance U = balanceOf; UFO reflections of a day = ΔU − that day's net transfers (Recent Transactions' flows, the
+         hidden 1 % added back), split at the boundary blocks' REAL timestamps so a transfer near midnight lands on the right day.
+       So staking / locking show rewards as they build up, not only on claim days (checked on chain 2026-10-14: S, L, R only rise).
+       A day whose reads failed — or, for UFO, whose transfers aren't all in reach — is a gap, never a guess. Past midnights are
+       cached for good (PFE_LS); the head is read fresh. */
+    const PFE_LS='grays_pf_ed_v1';
+    const PFE_ST='0xC71f597a2AC39E47F07102E849d18489C96f39EF';
+    let pfeC=null;
+    const pfeLoad=()=>{if(pfeC)return pfeC;try{pfeC=JSON.parse(localStorage.getItem(PFE_LS)||'{}')||{};}catch(e){pfeC={};}if(!pfeC.v)pfeC={v:{},bt:{}};if(!pfeC.bt)pfeC.bt={};return pfeC;};
+    const pfeSave=()=>{try{localStorage.setItem(PFE_LS,JSON.stringify(pfeC));}catch(e){try{pfeC={v:{},bt:{}};localStorage.removeItem(PFE_LS);}catch(e2){}}};
+    const pfePad=a=>a.toLowerCase().replace(/^0x/,'').padStart(64,'0');
+    const pfeWord=(h,i)=>{try{const x=h.slice(2+64*i,2+64*(i+1));return x.length===64?Number(BigInt('0x'+x))/1e18:null;}catch(e){return null;}};
+    const pfeNum=h=>h&&h!=='0x'&&h.length>=66?pfeWord(h,0):null;
+    const pfeBatch=async calls=>{const out=new Array(calls.length).fill(null);const B=80;const bs=[];for(let i=0;i<calls.length;i+=B)bs.push(i);
+      let q=0;const w=async()=>{while(q<bs.length){const s0=bs[q++];const ch=calls.slice(s0,s0+B);let res=null;try{res=await pfhRpc(ch.map((c,i)=>({jsonrpc:'2.0',id:i,...c})));}catch(e){res=null;}
+        (res||[]).forEach(r=>{if(r&&!r.error&&r.result!=null)out[s0+r.id]=r.result;});}};
+      await Promise.all([w(),w()]);return out;};
+    const usePfEarned=(addrs,open)=>{
+      const[st,setSt]=useState({state:'idle',progress:0,pts:null});
+      const[nonce,setNonce]=useState(0);
+      const key=addrs.slice().sort().join(',');
+      useEffect(()=>{
+        if(!open||!addrs.length)return;let live=true;
+        (async()=>{
+          setSt(s=>({...s,state:s.pts?'ok':'loading',progress:0}));
+          try{
+            const a=await pfhGetAnchors();const head=a[a.length-1];
+            const last=Math.floor(Date.now()/PFH_D)*PFH_D;const tss=[];for(let k=29;k>=0;k--)tss.push(last-k*PFH_D);
+            const pts=tss.map(ts=>({ts,block:pfhBlockAt(a,ts)})).concat([{ts:'now',block:head[0],bt:head[1]}]);
+            const c=pfeLoad();
+            /* the boundary blocks' real timestamps (cached with the midnight) */
+            const nbt=pts.filter(p=>p.ts!=='now'&&c.bt[p.ts]==null);
+            if(nbt.length){const r=await pfeBatch(nbt.map(p=>({method:'eth_getBlockByNumber',params:['0x'+p.block.toString(16),false]})));
+              r.forEach((x,i)=>{if(x&&x.timestamp)c.bt[nbt[i].ts]=parseInt(x.timestamp,16)*1000;});}
+            pts.forEach(p=>{if(p.ts!=='now')p.bt=c.bt[p.ts]!=null?c.bt[p.ts]:p.ts;});
+            /* phase A — 7 reads per wallet + boundary not cached yet (the head always) */
+            const need=[];pts.forEach(p=>addrs.forEach(ad=>{const hit=p.ts!=='now'&&c.v[ad]&&c.v[ad][p.ts];if(!hit)need.push({p,ad});}));
+            const blk=p=>'0x'+p.block.toString(16),P=PFH_TOK.PTGC,U=PFH_TOK.UFO;
+            const callsA=[];need.forEach(({p,ad})=>{const x=pfePad(ad),b=blk(p);[[P,'0x70a08231'],[P,'0xc64a041b'],[P,'0x4df9cfb3'],[PFE_ST,'0x15612933'],[PFE_ST,'0xf40f0f52'],[PFE_ST,'0xdf034586'],[U,'0x70a08231']].forEach(([to,sel])=>callsA.push({method:'eth_call',params:[{to,data:sel+x},b]}));});
+            if(live)setSt(s=>({...s,progress:.05}));
+            const rA=callsA.length?await pfeBatch(callsA):[];
+            if(live)setSt(s=>({...s,progress:.6}));
+            const partial=need.map((n,i)=>{const g=k=>rA[i*7+k];const ui=g(3);
+              const bal=pfeNum(g(0)),snd=pfeNum(g(1)),rcv=pfeNum(g(2)),pr=pfeNum(g(4)),u=pfeNum(g(6));let lc=null;try{lc=g(5)&&g(5).length>=66?Number(BigInt(g(5).slice(0,66))):null;}catch(e){}
+              const ok=ui&&ui.length>=2+64*7&&[bal,snd,rcv,pr,u,lc].every(v=>v!=null);
+              return ok?{...n,r:bal+snd-rcv,s:pfeWord(ui,3)+pfeWord(ui,6)+pr,lcl:pfeWord(ui,4),lc,u}:{...n,bad:true};});
+            /* phase B — each lock's pending reward */
+            const callsB=[],idx=[];partial.forEach((x,j)=>{if(x.bad)return;for(let i=1;i<=x.lc;i++){callsB.push({method:'eth_call',params:[{to:PFE_ST,data:'0xddeecc24'+pfePad(x.ad)+i.toString(16).padStart(64,'0')},blk(x.p)]});idx.push(j);}});
+            const rB=callsB.length?await pfeBatch(callsB):[];
+            const pl=partial.map(()=>0),plBad=partial.map(()=>false);rB.forEach((h,k)=>{const v=pfeNum(h);if(v==null)plBad[idx[k]]=true;else pl[idx[k]]+=v;});
+            const nowV={};
+            partial.forEach((x,j)=>{if(x.bad||plBad[j])return;const v=[x.s,x.lcl+pl[j],x.r,x.u];if(x.p.ts==='now')nowV[x.ad]=v;else(c.v[x.ad]=c.v[x.ad]||{})[x.p.ts]=v;});
+            /* keep the cache to the last ~45 days */
+            Object.values(c.v).forEach(m=>Object.keys(m).forEach(k=>{if(+k<last-45*PFH_D)delete m[k];}));Object.keys(c.bt).forEach(k=>{if(+k<last-45*PFH_D)delete c.bt[k];});
+            pfeSave();
+            const val=(ad,p)=>p.ts==='now'?nowV[ad]:(c.v[ad]||{})[p.ts];
+            const out=pts.map(p=>({ts:p.ts==='now'?Date.now():p.ts,bt:p.bt,w:Object.fromEntries(addrs.map(ad=>[ad,val(ad,p)||null]))}));
+            if(!live)return;
+            setSt({state:'ok',progress:1,pts:out});
+          }catch(e){if(live)setSt(s=>({...s,state:s.pts?'ok':'failed'}));}
+        })();
+        return()=>{live=false;};
+      },[key,open,nonce]);
+      return{...st,retry:()=>setNonce(n=>n+1)};
+    };
+    const PFE_C={st:'#A970FF',lk:'#EC4899',rf:'#E8BE3F',uf:'#7CFC00'};
+    const PFE_N={st:'Staking',lk:'Locking',rf:'Reflections',uf:'Reflections'};
+    const pfeUseW=()=>{const ref=React.useRef(null);const[w,setW]=useState(0);useEffect(()=>{if(!ref.current)return;const ro=new ResizeObserver(e=>setW(Math.round(e[0].contentRect.width)));ro.observe(ref.current);return()=>ro.disconnect();},[]);return[ref,w];};
+    const pfeNice=m=>{if(!(m>0))return 1;const e=Math.pow(10,Math.floor(Math.log10(m)));const f=m/e;return(f<=1.5?1.5:f<=2?2:f<=2.5?2.5:f<=3?3:f<=4?4:f<=5?5:f<=6?6:f<=8?8:10)*e;};
+    const pfeDay=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+    const pfeWd=t=>new Date(t).toLocaleDateString('en-US',{weekday:'short',timeZone:'UTC'});
+    /* the stacked daily columns: ≤ 20 px, 2 px surface gaps between segments, 4 px rounded top, hover / tap a day */
+    const PfEdChart=({days,keys,tok,px})=>{
+      const[ref,W]=pfeUseW();const[hov,setHov]=useState(null);
+      const phone=W>0&&W<520,H=phone?190:260,L=phone?44:56,R=10,T=12,B=26;
+      const n=days.length,iw=Math.max(1,W-L-R),ih=H-T-B,band=iw/n,bw=Math.min(phone?8:20,band*.62);
+      const tot=d=>d.ok?keys.reduce((t,k)=>t+(d[k]||0),0):0;
+      const mx=pfeNice(Math.max(1,...days.map(tot))*1.05),y=v=>T+ih-v/mx*ih;
+      const ok=days.filter(d=>d.ok),avg=ok.length?ok.reduce((t,d)=>t+tot(d),0)/ok.length:0;
+      const move=e=>{const r=ref.current.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const i=Math.floor((cx-L)/band);setHov(i>=0&&i<n?i:null);};
+      const h=hov!=null?days[hov]:null;
+      return(
+        <div className="pf2-edplot" ref={ref} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move}>
+          {W>0&&<svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${tok} earned per day, last 30 days`}>
+            {[0,1,2,3,4].map(i=>{const v=mx*i/4,yy=y(v);return(<g key={i}><line x1={L} x2={W-R} y1={yy} y2={yy} stroke={`rgba(255,255,255,${i?0.07:0.18})`} strokeWidth="1"/><text x={L-8} y={yy+4} textAnchor="end" className="ax">{pfAbbr(v)}</text></g>);})}
+            {days.map((d,i)=>{const cx=L+band*i+band/2,x=cx-bw/2;let acc=0;const vis=keys.filter(k=>(d[k]||0)>0);const dim=hov!=null&&i!==hov;
+              return(<g key={i} opacity={dim?.78:1}>
+                {i===hov&&<rect x={L+band*i+1} y={T} width={Math.max(1,band-2)} height={ih} rx="6" fill="rgba(255,255,255,.05)"/>}
+                {!d.ok&&<rect x={x} y={T+ih-3} width={bw} height="3" rx="1.5" fill="rgba(255,255,255,.25)"/>}
+                {d.ok&&vis.map((k,j)=>{const v=d[k],top=j===vis.length-1,yy=y(acc+v),hh=Math.max(0,v/mx*ih-(j>0?2:0));acc+=v;
+                  if(!top||hh<1)return <rect key={k} x={x} y={yy} width={bw} height={Math.max(hh,.5)} fill={PFE_C[k]}/>;
+                  const r=Math.min(4,bw/2,hh);return <path key={k} d={`M${x},${yy+hh} L${x},${yy+r} Q${x},${yy} ${x+r},${yy} L${x+bw-r},${yy} Q${x+bw},${yy} ${x+bw},${yy+r} L${x+bw},${yy+hh} Z`} fill={PFE_C[k]}/>;})}
+                {(i===n-1||(phone?i%10===0:i%5===0))&&<text x={cx} y={H-6} textAnchor="middle" className="ax">{i===n-1?'Today':pfeDay(d.t0)}</text>}
+              </g>);})}
+            {avg>0&&<><line x1={L} x2={W-R} y1={y(avg)} y2={y(avg)} stroke="rgba(255,255,255,.5)" strokeWidth="1.2"/><text x={W-R} y={y(avg)-6} textAnchor="end" className="ax av">avg {pfAbbr(avg)}/day</text></>}
+          </svg>}
+          {h&&<div className="pf2-edtip" style={phone?{left:'50%',transform:'translateX(-50%)'}:{left:(L+band*hov+band/2)+'px',transform:hov>n/2?'translateX(calc(-100% - 16px))':'translateX(16px)'}}>
+            <div className="d">{hov===n-1?'TODAY SO FAR':(pfeWd(h.t0)+' · '+pfeDay(h.t0)).toUpperCase()}</div>
+            {!h.ok?<div className="r">{h.why||'Couldn’t be read'}</div>:<>
+              {keys.map(k=><div key={k} className="r"><i style={{background:PFE_C[k]}}></i>{PFE_N[k]}<b>{pfAbbr(h[k]||0)}</b><em>{fmtDollar(h.p!=null?(h[k]||0)*h.p:null)}</em></div>)}
+              {keys.length>1&&<div className="r t">Total<b>{pfAbbr(tot(h))} {tok}</b><em>{fmtDollar(h.p!=null?tot(h)*h.p:null)}</em></div>}</>}
+          </div>}
+        </div>);
+    };
+    const PfEarnedModal=({tok:tok0,addrs,txs,close,prices})=>{
+      const[tok,setTok]=useState(tok0);const[hid,setHid]=useState({});const[all,setAll]=useState(false);
+      const e=usePfEarned(addrs,true);
+      const[px,setPx]=useState(null);useEffect(()=>{pfhPrices().then(setPx).catch(()=>{});},[]);
+      const isU=tok==='UFO',keys0=isU?['uf']:['st','lk','rf'],keys=keys0.filter(k=>!hid[k]);
+      /* days from the running totals */
+      const days=React.useMemo(()=>{if(!e.pts)return null;const out=[];
+        for(let i=0;i<e.pts.length-1;i++){const a=e.pts[i],b=e.pts[i+1];const d={t0:a.ts,t1:b.ts,ok:true,st:0,lk:0,rf:0,uf:0};
+          for(const ad of addrs){const va=a.w[ad],vb=b.w[ad];if(!va||!vb){d.ok=false;d.why='Couldn’t be read from the chain';break;}
+            d.st+=Math.max(0,vb[0]-va[0]);d.lk+=Math.max(0,vb[1]-va[1]);d.rf+=Math.max(0,vb[2]-va[2]);
+            if(isU){const cv=txs&&txs.cov?txs.cov[ad+'|UFO']:undefined;
+              if(!txs||!txs.flows||cv===undefined||cv>a.bt){d.ok=false;d.why=!txs||!txs.flows?'Waiting for your transactions…':'Older than the transactions in reach';break;}
+              const net=txs.flows.reduce((t,f)=>f.addr===ad&&f.tok==='UFO'&&f.t>a.bt&&f.t<=b.bt?t+f.net:t,0);
+              d.uf+=Math.max(0,(vb[3]-va[3])-net);}}
+          const mid=Math.min(Date.now(),(a.ts+b.ts)/2);d.p=px?pfhPriceAt(px,tok,mid):null;
+          /* newer than the price files (they refresh hourly) → today's live price */
+          if(d.p==null&&prices){const s0=px&&px.hourly[tok];const lastT=s0&&s0.length?s0[s0.length-1][0]:0;const cur=prices[isU?'ufo':'ptgc'];if(mid>=lastT&&cur>0)d.p=cur;}
+          out.push(d);}
+        return out;},[e.pts,txs,tok,px,addrs.join(),prices&&prices.ptgc,prices&&prices.ufo]);
+      const tot=d=>d&&d.ok?keys.reduce((t,k)=>t+(d[k]||0),0):0;
+      const okDays=days?days.filter(d=>d.ok):[];
+      const sum=k=>okDays.reduce((t,d)=>t+(d[k]||0),0),sumUsd=k=>okDays.reduce((t,d)=>t+(d.p!=null?(d[k]||0)*d.p:0),0);
+      const T=keys.reduce((t,k)=>t+sum(k),0),T$=keys.reduce((t,k)=>t+sumUsd(k),0),nd=Math.max(1,okDays.length);
+      let best=null;okDays.forEach(d=>{if(!best||tot(d)>tot(best))best=d;});
+      const list=days?days.slice().reverse():[];const shown=all?list:list.slice(0,8);
+      if(best&&!all&&!shown.includes(best))shown.push(best);
+      const logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
+      const tabs=<div className="tabs" role="tablist">{['PTGC','UFO'].map(t=><button key={t} role="tab" aria-selected={tok===t} className={tok===t?'on':''} onClick={()=>{setTok(t);setHid({});}}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div>;
+      return(
+        <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${tok} rewards, last 30 days`}>
+          <div className={`pf2-ed${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
+            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2>{tok} REWARDS</h2><div className="sub">Earned by source {'·'} last 30 days {'·'} all counted wallets</div></div>
+              <div className="tw">{tabs}</div><button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
+            <div className="tm">{tabs}</div>
+            {(e.state==='loading'||e.state==='idle')&&!e.pts&&<div className="pf2-hwait" style={{height:240}}><div>Reading the last 30 days from the chain{'…'} <b>{Math.round(e.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,e.progress*100)+'%'}}></i></div><small>First look reads every day once; after that only today.</small></div>}
+            {e.state==='failed'&&!e.pts&&<div className="pf2-hwait" style={{height:200}}><div>Couldn{'’'}t read the last 30 days right now.</div><button className="pf2-lnk" onClick={e.retry}>Retry</button></div>}
+            {days&&<>
+              <div className={`sum${isU?' one':''}`}>
+                <div className="tl tot"><div className="l">Earned {'·'} 30 days</div><div className="v">{pfAbbr(T)} {tok}</div><div className="s">{fmtDollar(T$)}</div><div className="a">{'≈'} {pfAbbr(T/nd)} a day {'·'} {fmtDollar(T$/nd)}</div></div>
+                {isU?<>
+                  <div className="tl uf"><div className="l"><i style={{background:PFE_C.uf}}></i>Daily average</div><div className="v">{pfAbbr(T/nd)}</div><div className="s">{fmtDollar(T$/nd)}</div><div className="a">per day{okDays.length<30?` · ${okDays.length} days in reach`:', last 30 days'}</div></div>
+                  <div className="tl uf"><div className="l">Best day</div><div className="v">{best?pfAbbr(tot(best)):'—'}</div><div className="s">{best&&best.p!=null?fmtDollar(tot(best)*best.p):'—'}</div><div className="a">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div></div>
+                </>:keys0.map(k=>{const v=sum(k);return(<div key={k} className={`tl ${k}`}><div className="l"><i style={{background:PFE_C[k]}}></i>{PFE_N[k]}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(sumUsd(k))}</div><div className="a">{'≈'} {pfAbbr(v/nd)} a day</div><b className="bar" style={{width:(T>0&&!hid[k]?v/T*100:0)+'%',background:PFE_C[k]}}></b></div>);})}
+              </div>
+              <div className="ch"><div className="chh"><b>DAILY</b>{e.state==='loading'&&<span className="upd">updating{'…'}</span>}
+                {!isU&&<div className="lg">{keys0.map(k=><button key={k} className={hid[k]?'off':''} aria-pressed={!hid[k]} onClick={()=>setHid(h=>{const n={...h,[k]:!h[k]};return keys0.every(x=>n[x])?h:n;})}><i style={{background:PFE_C[k]}}></i>{PFE_N[k]}</button>)}</div>}</div>
+                <PfEdChart days={days} keys={keys} tok={tok} px={px}/></div>
+              <div className="tbh"><b>BY DAY</b><span>newest first{!all&&list.length>8?` · showing 8 of ${list.length}`:''}{list.length>8&&<> {'·'} <button onClick={()=>setAll(!all)}>{all?'show fewer':'show all'}</button></>}</span></div>
+              <table className="dt"><thead><tr><th>DAY</th>{keys.map(k=><th key={k}><i style={{background:PFE_C[k]}}></i>{PFE_N[k].toUpperCase()}</th>)}{keys.length>1&&<th>TOTAL</th>}<th>VALUE</th></tr></thead>
+                <tbody>{shown.map(d=><tr key={d.t0} className={d===best?'best':''}><td className="dd">{d===list[0]?'Today so far':pfeWd(d.t0)+' '+pfeDay(d.t0)}{d===best&&<span className="bd">BEST DAY</span>}</td>
+                  {d.ok?<>{keys.map(k=><td key={k}>{pfAbbr(d[k]||0)}</td>)}{keys.length>1&&<td className="tt">{pfAbbr(tot(d))}</td>}<td className="tt">{fmtDollar(d.p!=null?tot(d)*d.p:null)}</td></>
+                    :<td colSpan={keys.length+(keys.length>1?2:1)} className="na">{d.why}</td>}</tr>)}</tbody></table>
+              <div className="dl">{shown.map(d=>{const t=tot(d);return(<div key={d.t0} className={d===best?'best':''}><span className="d">{d===list[0]?'Today so far':pfeWd(d.t0)+' '+pfeDay(d.t0)}</span>
+                {d.ok?<><span className="t">{pfAbbr(t)} <small>{fmtDollar(d.p!=null?t*d.p:null)}</small></span>
+                  {keys.length>1&&<><div className="mini">{keys.map(k=><b key={k} style={{width:(t>0?(d[k]||0)/t*100:0)+'%',background:PFE_C[k]}}></b>)}</div>
+                  <div className="k">{keys.map(k=><span key={k}><i style={{background:PFE_C[k]}}></i>{pfAbbr(d[k]||0)}</span>)}</div></>}</>
+                  :<span className="t na">{d.why}</span>}</div>);})}</div>
+              <div className="fn">{isU?<><b>Reflections</b> each day = the day{'’'}s change in your UFO balance, minus everything bought, sold or moved that day (the hidden 1% added back). They land in your wallet automatically.</>
+                :<><b>Staking</b> and <b>locking</b> count rewards as they build up each day (claimed + waiting to be claimed), not only on the day you claim. <b>Reflections</b> come from PTGC{'’'}s own totals of what each wallet sent and received.</>} Days run midnight to midnight UTC; dollar values use that day{'’'}s price.</div>
+            </>}
+          </div>
+        </PfModal>);
+    };
