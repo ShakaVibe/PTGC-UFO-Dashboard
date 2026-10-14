@@ -11,7 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
-- **Portfolio v2 (2026-10-13, HIDDEN):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/`), mock-ups + every decision `design/portfolio/README.md`. Step 2 owed: value history from real chain balances (his option C) + Recent Transactions.
+- **Portfolio v2 (2026-10-13/14, HIDDEN, 28 rounds, all pushed):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
 - **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
@@ -36,7 +36,26 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (2026-10-13)
+## Current state (2026-10-14)
+
+**2026-10-14 (Wednesday): PORTFOLIO v2 rounds 17–28 — all built, pushed by him (last `0f39d5c5c`), STILL HIDDEN behind the dot.**
+Morning: Recent Transactions as an activity feed (his pick B of `mock-tx-v1`), bigger fonts, the chart's trade dots → an activity
+strip, UFO old+new contract as one Reflections box, the per-wallet breakdown rebuilt, a 30-day "Details" window for Earned by
+source (mock approved: "awesome. lets build it"; scroll bar, BOTH tab default, avg/day beside DAILY, big loader, dressed tiles).
+Then a **full audit + roadmap** (`handover/PORTFOLIO-ROADMAP.md`) and its phases in order: A fixes (round 23), B performance
+(24), C polish (25), D accessibility (26), E cleanup (27 — shared constants in PfLeagues.jsx, dead code out, the build script's
+`JSX_A1` marker so it is idempotent again). Evening, round 28: the strip bars are hover / click targets — tooltip + a DAY
+WINDOW (`PfDayModal`, rows shared with the feed via `PfTxRow`), bar labels fixed to the trades' own day; the wallet deck shrunk
+to 7-across mini tiles with a Value / Name / Added sort (his pick A of `mock-wallets-v2`). Classic body hash unchanged all day
+(`probes/pf2-classic-hash.js` → 215506704 with no PF_STAKE, no preview flag). Live checks on ptgc-ufo.com with the two test
+wallets (`sessions/2026-10-14.md` has the numbers). He asked "anything left besides making it live?" — answer: nothing required;
+**NEXT, only when he says: (1) the go-live checklist in PORTFOLIO-ROADMAP.md (hard-refresh test Chrome / Safari / iPhone,
+10-wallet cold load, `PF_V2_LIVE=true`, remove the dot, keep the classic body one round, update this file); (2) B8 faster UFO
+load — best in the same push as go-live since both touch classic; (3) Phase F ideas (F1 cost basis & P&L, F2 CSV/PDF export,
+F3 since-last-visit, F4 `?code=` share link, F5 goals, F6 lock calendar, F7 local alerts) one at a time, MOCK-UP FIRST — he
+approves every visual before it is built.** `sessions/2026-10-14.md`, `design/portfolio/README.md` rounds 14–28.
+
+## Before that (2026-10-13)
 
 **2026-10-13 (Tuesday): THE PORTFOLIO PAGE REDESIGNED — step 1 BUILT and HIDDEN, written to the Mac, NOT pushed.** His mock-up →
 mock v1–v4 + a three-option sheet for the wallets area (he picked A, wallet cards) → "Lets BUILD BUT … hide it behind a small faint
@@ -1358,6 +1377,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
+- `sessions/2026-10-14.md` — Portfolio v2 rounds 17–28: the activity feed, strip, Details window, the audit + roadmap and its
+  five phases, round 28's day window + mini tiles. Still hidden; go-live / B8 / Phase F wait for his word.
+- `sessions/2026-10-13.md` — Portfolio v2 step 1 (mock v1–v4, the wallet cards, hidden behind the dot) and step 2 (value history
+  from chain balances, Recent Transactions, rounds up to 16).
 - `sessions/2026-10-07.md` — the Volume window (mock v1 → built, `tools/volume-window.py`, pushed `43fb8af46`) and the RH Cores window
   (mock v1 → built, `tools/rh-cores.py`, pushed `1119ec37f`), the hub's RH rows (`tools/rh-socials.py`, pushed `2c3d15d4c`); Audit III (→ `2026-10-07-audit.md`, pushed `822e2a78e`, roadmap AUDIT III phase); the P1 batch c1–c8 + c11 + c25 (`tools/audit3-p1.py`, pushed `d60b83082`); batch 2 c23 + c24 + c26 + c27 (`tools/audit3-p2.py`, pushed `d8b1c6a2f`); batch 3 c9 + c31 + c28 + c29 (`tools/audit3-p3.py`, pushed `742b07829`, live-verified in the browser); batch 4 the pipeline c17 + c18 + c20 + c19 + c22 (`tools/audit3-p4.py`, pushed `468c308a5`); batch 5a c13 + c12 + c14 (`tools/audit3-p5.py`, tw.css, pushed `685bad0b4`, live-verified); batch 5b c15 (21 WebP files, `tools/audit3-p5b.py`, pushed `1201aa916`); the DexScreener outage + the first run on the new runner; batch 6 c30 + the liquidity note (`tools/audit3-p6.py`, commit line); the TXNS 24H item closed; HvB live look ok.
 - `sessions/2026-10-07-audit.md` — Audit III: the merged c1–c65 list and the seven raw sweeps (L, M, P, D, C, S, E) with evidence.
