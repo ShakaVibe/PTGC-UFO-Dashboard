@@ -371,7 +371,7 @@
       const tabs=<div className="tabs" role="tablist">{['PTGC','UFO'].map(t=><button key={t} role="tab" aria-selected={tok===t} className={tok===t?'on':''} onClick={()=>{setTok(t);setHid({});}}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div>;
       return(
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${tok} rewards, last 30 days`}>
-          <div className={`pf2-ed${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
+          <div className={`pf2-erw${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
             <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2>{tok} REWARDS</h2><div className="sub">Earned by source {'·'} last 30 days {'·'} all counted wallets</div></div>
               <div className="tw">{tabs}</div><button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
             <div className="tm">{tabs}</div>

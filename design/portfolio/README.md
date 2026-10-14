@@ -350,3 +350,6 @@ reflections; UFO green) with hover + legend toggles + an average line, a by-day 
 (Recent Transactions now also hands up per-tx `flows`, both sides of a move), split at the boundary blocks' real timestamps.
 Verified on chain on a real staker (all three only rise; a 4.2M-PTGC staking day showed up as one). Gaps, never guesses.
 Prices: that day's from the price files, today's live. Harness PF_ED=1 + probes pf2-ed.js / pf2-ed-ufo.js.
+- Round 20b hotfix: the window's class `.pf2-ed` clashed with the wallet card's ✎ edit button (also `.pf2-ed`, round 2) — the
+  pencil picked up the window's box styling and, while the mouse was over the window, the pencil's `:hover` background made
+  the window see-through. Window renamed `.pf2-erw`. Found live-checking round 20 on ptgc-ufo.com.
