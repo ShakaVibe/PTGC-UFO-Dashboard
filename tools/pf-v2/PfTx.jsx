@@ -87,7 +87,9 @@
     const PfRecentTx=({wallets,prices,onRows})=>{
       const pxNow=React.useRef(prices);pxNow.current=prices;
       const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});
-      const[more,setMore]=useState(false);
+      const[lim,setLim]=useState(10);      // round 17: rows shown (10, +30 per Show more)
+      const[flt,setFlt]=useState('All');    // round 17: filter chip
+      const[cp,setCp]=useState(null);       // round 17: the row whose wallet address was just copied
       const[nonce,setNonce]=useState(0);
       const key=wallets.map(w=>w.address.toLowerCase()).sort().join(',');
       useEffect(()=>{
@@ -127,34 +129,58 @@
         })();
         return()=>{live=false;};
       },[key,nonce]);
+      /* round 17 (Shaka picked option B of mock-tx-v1): an activity feed — one plain-words line per transaction ("Sold 8.91M PTGC"),
+         a round type icon with the token's logo on its corner, the wallet (with a copy button) and time underneath, the dollar value
+         on the right; grouped by day; filter chips with counts; "Show 30 more". The same layout on a phone. */
+      const PFT_F={All:null,Buys:['Buy'],Sells:['Sell'],Claims:['Claim','Unstake'],LP:['Add LP','Remove LP'],Transfers:['Move','Receive','Send']};
       const[det,setDet]=useState({});
-      const show0=st.rows.slice(0,more?40:10);
-      useEffect(()=>{let live=true;const need=show0.filter(r=>(r.type==='Sell'||r.type==='Buy'||r.type==='Unstake')&&!det[r.h+'|'+r.addr]);if(!need.length)return;
-        (async()=>{let q=0;const w=async()=>{while(q<need.length){const r=need[q++];try{const d=await pftDetail(r.h,r.addr);if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:d}));}catch(e){if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:{}}));}}};await Promise.all([w(),w()]);})();
-        return()=>{live=false;};},[st.rows.map(r=>r.id).slice(0,more?40:10).join(),more]);
-      const show=show0.map(r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
+      /* LP / unstake detail first (it can turn a "Sell" into "Add LP"), so the chips count the corrected types */
+      const fix=r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
         if(d.lp&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:d.lp==='add'?'Add LP':'Remove LP'};
         if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
-        return r;});
-      const fmtT=t=>{const d=new Date(t);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});};
-      const ty=(t,sub)=>{const[c,g]=PFT_TYPE[t]||['#fff','•'];return <span className="pf2-ty" style={{color:c}}><i>{g}</i>{t}{sub&&<small>{sub}</small>}</span>;};
-      /* an Unstake shows the principal that came free (it never moves — the stake is a lock on the balance), not a +/− */
-      const amt=r=>r.unstake?<span title="Principal released from staking (it never left the wallet)">{pfAbbr(r.amt)}</span>:<span className={r.type==='Move'?'':r.amt>=0?'pos':'neg'}>{r.type==='Move'?'':r.amt>=0?'+':'−'}{pfAbbr(Math.abs(r.amt))}</span>;
-      const tx=h=><a className="pf2-txl" href={`https://scan.pulsechain.com/tx/${h}`} target="_blank" rel="noopener noreferrer">{h.slice(0,6)}{'…'}{h.slice(-4)} {'↗'}</a>;
+        return r;};
+      const all=st.rows.map(fix);
+      const cnt=k=>PFT_F[k]?all.filter(r=>PFT_F[k].includes(r.type)).length:all.length;
+      const list=PFT_F[flt]?all.filter(r=>PFT_F[flt].includes(r.type)):all;
+      const show=list.slice(0,lim);
+      useEffect(()=>{let live=true;const need=show.filter(r=>(r.type==='Sell'||r.type==='Buy'||r.type==='Unstake')&&!det[r.h+'|'+r.addr]);if(!need.length)return;
+        (async()=>{let q=0;const w=async()=>{while(q<need.length){const r=need[q++];try{const d=await pftDetail(r.h,r.addr);if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:d}));}catch(e){if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:{}}));}}};await Promise.all([w(),w()]);})();
+        return()=>{live=false;};},[show.map(r=>r.id).join()]);
+      const dayKey=t=>{const d=new Date(t);return d.getFullYear()*10000+d.getMonth()*100+d.getDate();};
+      const dayName=t=>{const d=new Date(t),n=new Date(),k=dayKey(t),y=new Date(n);y.setDate(n.getDate()-1);
+        const md=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        if(k===dayKey(n.getTime()))return['TODAY',md];if(k===dayKey(y.getTime()))return['YESTERDAY',md];
+        if(n-d<6*864e5)return[d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase(),md];
+        return[md.toUpperCase(),d.getFullYear()!==n.getFullYear()?String(d.getFullYear()):''];};
+      const groups=[];show.forEach(r=>{const k=dayKey(r.t);const g=groups[groups.length-1];if(g&&g.k===k)g.rows.push(r);else groups.push({k,rows:[r]});});
+      const fmtTm=t=>new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+      const VERB={Buy:'Bought',Sell:'Sold',Claim:'Claimed','Add LP':'Added to LP','Remove LP':'Removed from LP',Move:'Moved',Receive:'Received',Send:'Sent',Unstake:'Unstaked'};
+      const AMT={Sell:'neg',Send:'neg','Add LP':'neg',Buy:'pos',Receive:'pos',Claim:'pos','Remove LP':'pos'};
+      const VAL={Sell:'received',Buy:'paid',Claim:'earned'};
+      const copy=(r)=>{try{navigator.clipboard.writeText(r.addr);}catch(e){}setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);};
+      const row=r=>{const[c,g]=PFT_TYPE[r.type]||['#fff','•'];
+        const extra=r.type==='Claim'&&r.sub?' · from '+r.sub:r.unstake?' · released from staking':'';
+        return(<div key={r.id} className="pf2-fr">
+          <div className="ic" style={{color:c,borderColor:c+'88',background:c+'1f'}}>{g}<img src={r.tok==='PTGC'?TOKENS.PTGC.logo:TOKENS.UFO.logo} alt={r.tok}/></div>
+          <div className="m"><div className="t1">{VERB[r.type]||r.type} <em className={AMT[r.type]||''}>{pfAbbr(Math.abs(r.amt))}</em> {r.tok}</div>
+            <div className="t2"><span className="w">{r.who}</span><button className={`cp${cp===r.id?' ok':''}`} onClick={()=>copy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp===r.id?'✓':'⧉'}</button><span className="tm">{'·'} {fmtTm(r.t)}{extra}</span></div></div>
+          <div className="v">{fmtDollar(r.usd)}<small>{VAL[r.type]||'value'}</small></div>
+          <a className="lk" href={`https://scan.pulsechain.com/tx/${r.h}`} target="_blank" rel="noopener noreferrer" title="Open on PulseScan" aria-label="Open this transaction on PulseScan">{'↗'}</a>
+        </div>);};
       return(
         <section className="pf2-pn pf2-sec pf2-rt">
           <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
+            {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}</div>}
             <button className="pf2-lnk q" onClick={()=>setNonce(n=>n+1)}>{'↻'} Refresh</button></div>
           {st.state==='loading'&&<div className="pf2-soon">Reading your wallets{'’'} PTGC and UFO transfers from PulseScan{'…'}</div>}
           {st.state==='failed'&&<div className="pf2-soon">Couldn{'’'}t reach PulseScan right now. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></div>}
           {st.state==='none'&&<div className="pf2-soon">No PTGC or UFO transfers in the counted wallets yet.</div>}
           {st.state==='ok'&&st.rows.length>0&&<>
-            <table className="pf2-txt"><thead><tr><th>TIME</th><th>WALLET</th><th>TYPE</th><th>TOKEN</th><th className="r">AMOUNT</th><th className="r">VALUE</th><th>TX</th></tr></thead>
-              <tbody>{show.map(r=><tr key={r.id}><td>{fmtT(r.t)}</td><td className="w">{r.who}</td><td>{ty(r.type,r.sub)}</td><td className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</td><td className="r">{amt(r)}</td><td className="r">{fmtDollar(r.usd)}</td><td>{tx(r.h)}</td></tr>)}</tbody></table>
-            <div className="pf2-txm">{show.map(r=><div key={r.id}><span>{ty(r.type,r.sub)} <b className={r.tok==='PTGC'?'tp':'tu'}>{r.tok}</b></span><span className="a">{amt(r)}</span><span className="d">{fmtT(r.t)} {'·'} {r.who}</span><span className="d r">{fmtDollar(r.usd)} {tx(r.h)}</span></div>)}</div>
-            <div className="pf2-txf">{st.rows.length>10&&<button className="pf2-lnk" onClick={()=>setMore(!more)}>{more?'Show fewer':`Show more (${Math.min(40,st.rows.length)})`}</button>}
-              {st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
+            <div className="pf2-feed">{groups.map(g=>{const[d,md]=dayName(g.rows[0].t);return(<React.Fragment key={g.k}>
+              <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span></div>{g.rows.map(row)}</React.Fragment>);})}</div>
+            {list.length>lim&&<button className="pf2-more" onClick={()=>setLim(l=>l+30)}>Show {Math.min(30,list.length-lim)} more</button>}
+            <div className="pf2-txf">{st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
               <span className="src">From PulseScan {'·'} the latest 50 transfers per wallet and token</span></div>
           </>}
         </section>

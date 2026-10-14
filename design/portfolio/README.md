@@ -309,3 +309,11 @@ names the mode ("… uses your custom prices" / "… the all-time-high prices") 
    contract**; Lifetime earned, the principal / reflections ring and the per-wallet table include it. If the file can't be
    read, the old box says "unavailable" and the totals are the new contract alone. Harness: PF_V1=1 / PF_V1=down; probe
    `pf2-v1.js`.
+
+## Round 17 (2026-10-14) — Recent Transactions as an activity feed
+Mock-up `mock-tx-v1.html` (render `renders/tx-v1-1340.jpg`): A refined table · B activity feed · C day boxes. Shaka picked **B**,
+plus a copy button next to the wallet. Built in PfTx.jsx: one plain-words line per transaction ("Sold 8.91M PTGC"), a round
+type icon with the token logo on its corner, wallet + copy button + time underneath (Claim says "from staking / lock", Unstake
+"released from staking"), dollar value on the right with received / paid / earned / value, PulseScan link button. Grouped by
+day (Today / Yesterday / weekday / date). Filter chips with counts — All · Buys · Sells · Claims (+ Unstake) · LP · Transfers
+(Move, Receive, Send); empty ones hide. "Show 30 more" instead of the 10 / 40 toggle. Same layout on a phone. Probe `pf2-feed.js`.
