@@ -144,7 +144,7 @@
       const key=wallets.map(w=>w.address.toLowerCase()).sort().join(',');
       useEffect(()=>{
         if(!wallets.length){setSt({state:'empty',rows:[],failed:0,done:0,total:0});return;}
-        let live=true;const forceNow=force.current;force.current=false;
+        let live=true,tellT=null;const forceNow=force.current;force.current=false;
         (async()=>{
           const own=new Set(wallets.map(w=>w.address.toLowerCase()));
           const names={};wallets.forEach(w=>{names[w.address.toLowerCase()]=w.name||(w.address.slice(0,6)+'…'+w.address.slice(-4));});
@@ -162,7 +162,7 @@
                 /* newer than the price files (they refresh hourly) → today's price */
                 if(p==null){const ser=px&&px.hourly[tok];const last=ser&&ser.length?ser[ser.length-1][0]:null;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(last!=null&&t>=last&&cur>0)p=cur;}   // round 23 (audit A3): never "today's price" for old rows when the price files failed
                 const cp=mcp;
-                rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
+                rows.push({id:addr+legs[0].h+tok,t,addr,cp:type==='Move'?cp:null,dir:net>=0?1:-1,tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});   // round 25 (audit C3): the name is looked up at render, so a rename shows at once
             });
             /* a Move shows once (the receiving side), not twice */
             const seen=new Set();const out=[];
@@ -176,7 +176,7 @@
           let busy=true,pages=0;   // round 22: the Details window waits on these (busy = older pages still coming; pages = how many read)
           /* round 24 (audit B1): build() ran twice per landed page and every one re-rendered the whole page (~1,500 times for 20
              wallets). Now one build per page, and the parent is told at most ~2× a second (always at the end). */
-          let lastRows=null,lastTell=0,tellT=null;
+          let lastRows=null,lastTell=0;
           const tell=(final)=>{if(!onRows||!live)return;const now=Date.now();if(!final&&now-lastTell<500){clearTimeout(tellT);tellT=setTimeout(()=>tell(true),520-(now-lastTell));return;}
             clearTimeout(tellT);lastTell=now;onRows({rows:lastRows||(lastRows=build()),cov:cov(),failed,flows,busy,pages});};
           const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,forceNow);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live){lastRows=build();setSt({state:'ok',rows:lastRows,failed,done,total:jobs.length});}}};
@@ -206,7 +206,12 @@
       /* round 17 (Shaka picked option B of mock-tx-v1): an activity feed — one plain-words line per transaction ("Sold 8.91M PTGC"),
          a round type icon with the token's logo on its corner, the wallet (with a copy button) and time underneath, the dollar value
          on the right; grouped by day; filter chips with counts; "Show 30 more". The same layout on a phone. */
-      const PFT_F={All:null,Buys:['Buy'],Sells:['Sell'],Claims:['Claim','Unstake'],LP:['Add LP','Remove LP'],Transfers:['Move','Receive','Send']};
+      const PFT_F={All:null,Buys:['Buy'],Sells:['Sell'],Claims:['Claim'],Unstakes:['Unstake'],LP:['Add LP','Remove LP'],Transfers:['Move','Receive','Send']};   // round 25 (audit C9): Unstakes have their own chip
+      const nameOf=React.useMemo(()=>{const m={};wallets.forEach(w=>{m[w.address.toLowerCase()]=w.name||pfAddr(w.address);});return a=>m[a]||(a?a.slice(0,6)+'\u2026'+a.slice(-4):'');},[wallets]);
+      const whoOf=r=>r.type==='Move'&&r.cp?(r.dir>=0?nameOf(r.cp)+' \u2192 '+nameOf(r.addr):nameOf(r.addr)+' \u2192 '+nameOf(r.cp)):nameOf(r.addr);
+      /* round 25 (audit C1): dust — rows under $1 are hidden until "Show dust" is on (a bot wallet is full of $0.18 buys) */
+      const[dust,setDust]=useState(false);
+      const isDust=r=>r.usd!=null&&r.usd<1&&r.type!=='Move'&&r.type!=='Claim'&&r.type!=='Unstake';
       const[det,setDet]=useState({});
       /* LP / unstake detail first (it can turn a "Sell" into "Add LP"), so the chips count the corrected types */
       const fix=r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
@@ -214,7 +219,9 @@
         if(d.swap===false&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:r.type==='Sell'?'Send':'Receive'};
         if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
         return r;};
-      const all=st.rows.map(fix);
+      const all0=st.rows.map(fix);
+      const nDust=all0.filter(isDust).length;
+      const all=dust?all0:all0.filter(r=>!isDust(r));
       const cnt=k=>PFT_F[k]?all.filter(r=>PFT_F[k].includes(r.type)).length:all.length;
       const list=PFT_F[flt]?all.filter(r=>PFT_F[flt].includes(r.type)):all;
       const show=list.slice(0,lim);
@@ -238,7 +245,7 @@
         return(<div key={r.id} className="pf2-fr">
           <div className="ic" style={{color:c,borderColor:c+'88',background:c+'1f'}}>{g}<img src={r.tok==='PTGC'?TOKENS.PTGC.logo:TOKENS.UFO.logo} alt={r.tok}/></div>
           <div className="m"><div className="t1">{VERB[r.type]||r.type} <em className={AMT[r.type]||''}>{pfAbbr(Math.abs(r.amt))}</em> {r.tok}</div>
-            <div className="t2"><span className="w">{r.who}</span><button className={`cp${cp===r.id?' ok':''}`} onClick={()=>copy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp===r.id?'✓':'⧉'}</button><span className="tm">{'·'} {fmtTm(r.t)}{extra}</span></div></div>
+            <div className="t2"><span className="w">{whoOf(r)}</span><button className={`cp${cp===r.id?' ok':''}`} onClick={()=>copy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp===r.id?'✓':'⧉'}</button><span className="tm">{'·'} {fmtTm(r.t)}{extra}</span></div></div>
           <div className="v">{fmtDollar(r.usd)}<small>{VAL[r.type]||'value'}</small></div>
           <a className="lk" href={`https://scan.pulsechain.com/tx/${r.h}`} target="_blank" rel="noopener noreferrer" title="Open on PulseScan" aria-label="Open this transaction on PulseScan">{'↗'}</a>
         </div>);};
@@ -246,7 +253,8 @@
         <section className="pf2-pn pf2-sec pf2-rt" ref={secRef}>
           <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
-            {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}</div>}
+            {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}
+              {nDust>0&&<button className={`dust${dust?' on':''}`} aria-pressed={dust} onClick={()=>setDust(!dust)} title="Transactions worth under $1">{dust?'Hide':'Show'} dust<b>{nDust}</b></button>}</div>}
             <button className="pf2-lnk q" onClick={()=>{force.current=true;setNonce(n=>n+1);}}>{'↻'} Refresh</button></div>
           {st.state==='loading'&&<div className="pf2-soon">Reading your wallets{'’'} PTGC and UFO transfers from PulseScan{'…'}</div>}
           {st.state==='failed'&&<div className="pf2-soon">Couldn{'’'}t reach PulseScan right now. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></div>}

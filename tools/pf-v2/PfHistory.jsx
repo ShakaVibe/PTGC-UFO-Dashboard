@@ -110,7 +110,14 @@
       p.finally(()=>need.forEach(j=>pfhInflight.delete(j.addr+'|'+j.tok+'|'+j.ts)));
       await Promise.all([p,...waits]);
     };
-    const pfhTimes=period=>{const P=PFH_PERIODS[period];const now=Date.now();const last=Math.floor(now/P.unit)*P.unit;const out=[];for(let k=P.n-1;k>=0;k--)out.push(last-k*P.step);return out.filter(t=>t<now-60e3);};
+    /* round 25 (audit C2): chart points sit on LOCAL midnights (and local 6-hour slots on 7D) so a point labelled "Oct 13" is the
+       end of Oct 13 where the viewer is — the feed already groups by local day. 1Y keeps 4-day boundaries. */
+    const pfhLocalMidnight=t=>{const d=new Date(t);d.setHours(0,0,0,0);return d.getTime();};
+    const pfhTimes=period=>{const P=PFH_PERIODS[period];const now=Date.now();const out=[];
+      if(period==='1Y'){const last=Math.floor(now/P.unit)*P.unit;for(let k=P.n-1;k>=0;k--)out.push(last-k*P.step);}
+      else if(period==='7D'){const d=new Date(now);d.setMinutes(0,0,0);d.setHours(Math.floor(d.getHours()/6)*6);for(let k=P.n-1;k>=0;k--)out.push(d.getTime()-k*P.step);}
+      else{const d0=new Date(pfhLocalMidnight(now));for(let k=P.n-1;k>=0;k--){const d=new Date(d0);d.setDate(d0.getDate()-k);out.push(d.getTime());}}
+      return out.filter(t=>t<now-60e3);};
     /* the series for a set of wallets + period: [{t,p,u,v}] (null v = a gap), plus the live "now" point added by the caller */
     const usePfSeries=(addrs,period,enabled=true)=>{
       const[st,setSt]=useState({state:'idle',pts:[],progress:0});
@@ -241,15 +248,15 @@
             <div className="pf2-pp" role="group" aria-label="Period">{Object.keys(PFH_PERIODS).map(k=><button key={k} className={period===k?'on':''} aria-pressed={period===k} onClick={()=>setPeriod(k)}>{k}</button>)}</div></div>
           <div className="pf2-vhb">
             <div className="pf2-vhc">
-              {s.state==='loading'&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
+              {s.state==='loading'&&!s.pts.length&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
               {s.state==='failed'&&<div className="pf2-hwait"><div>Couldn{'’'}t read the history from the chain right now.</div><button className="pf2-lnk" onClick={s.retry}>Retry</button></div>}
-              {s.state==='ok'&&<PfHistChart pts={pts} period={period} txs={txs}/>}
+              {(s.state==='ok'||(s.state==='loading'&&s.pts.length>0))&&<div className={s.state==='loading'?'pf2-hstale':''}>{s.state==='loading'&&<span className="pf2-upd">updating{'\u2026'} {Math.round(s.progress*100)}%</span>}<PfHistChart pts={pts} period={period} txs={txs}/></div>}   {/* round 25 (audit C4): the old chart stays while a toggle / period change reloads */}
               {s.state==='ok'&&s.gaps>0&&<div className="pf2-hnote">{s.gaps} point{s.gaps>1?'s':''} could not be read and {s.gaps>1?'are':'is'} left as a gap. <button onClick={s.retry}>Retry</button></div>}
             </div>
             <div className="pf2-vhs">
               <div className="lb">Current value</div><div className="cv">{fmtDollar(cur)}</div>
               <div className={`chg ${chg==null?'':chg>=0?'up':'dn'}`}>{chg==null?<span>{'—'}</span>:<>{chg>=0?'▲':'▼'} {chg>=0?'+':'−'}{Math.abs(chg).toFixed(2)}% <small>{chg>=0?'+':'−'}{fmtDollar(Math.abs(cur-first.v))} ({period})</small></>}</div>
-              <div className="hl"><div><div className="lb">Period high</div><b>{hi?pfhMoney(hi.v):'—'}</b><small>{hi?(hi.now?'now':pfhDate(hi.t)):''}</small></div><div><div className="lb">Period low</div><b>{lo?pfhMoney(lo.v):'—'}</b><small>{lo?(lo.now?'now':pfhDate(lo.t)):''}</small></div></div>
+              <div className="hl"><div><div className="lb">Period high</div><b>{hi?fmtDollar(hi.v):'—'}</b><small>{hi?(hi.now?'now':pfhDate(hi.t)):''}</small></div><div><div className="lb">Period low</div><b>{lo?fmtDollar(lo.v):'—'}</b><small>{lo?(lo.now?'now':pfhDate(lo.t)):''}</small></div></div>
             </div>
           </div>
         </section>
@@ -278,17 +285,18 @@
       let q=0;const w=async()=>{while(q<bs.length){const s0=bs[q++];const ch=calls.slice(s0,s0+B);let res=null;try{res=await pfhRpc(ch.map((c,i)=>({jsonrpc:'2.0',id:i,...c})));}catch(e){res=null;}
         (res||[]).forEach(r=>{if(r&&!r.error&&r.result!=null)out[s0+r.id]=r.result;});}};
       await Promise.all([w(),w()]);return out;};
-    const usePfEarned=(addrs,open)=>{
+    const usePfEarned=(addrs,open,nDays=30)=>{
       const[st,setSt]=useState({state:'idle',progress:0,pts:null});
       const[nonce,setNonce]=useState(0);
-      const key=addrs.slice().sort().join(',');
+      const key=addrs.slice().sort().join(',')+'|'+nDays;
       useEffect(()=>{
         if(!open||!addrs.length)return;let live=true;
         (async()=>{
           setSt(s=>({...s,state:s.pts?'ok':'loading',progress:0}));
           try{
             const a=await pfhGetAnchors();const head=a[a.length-1];
-            const last=Math.floor(Date.now()/PFH_D)*PFH_D;const tss=[];for(let k=29;k>=0;k--)tss.push(last-k*PFH_D);
+            /* round 25 (audit C2 / C16): LOCAL midnights (the feed groups by local day), 7 / 30 / 90 of them */
+            const d0=new Date(pfhLocalMidnight(Date.now()));const last=d0.getTime();const tss=[];for(let k=nDays-1;k>=0;k--){const d=new Date(d0);d.setDate(d0.getDate()-k);tss.push(d.getTime());}
             const pts=tss.map(ts=>({ts,block:pfhBlockAt(a,ts)})).concat([{ts:'now',block:head[0],bt:head[1]}]);
             const c=pfeLoad();
             /* the boundary blocks' real timestamps (cached with the midnight) */
@@ -313,8 +321,8 @@
             const pl=partial.map(()=>0),plBad=partial.map(()=>false);rB.forEach((h,k)=>{const v=pfeNum(h);if(v==null)plBad[idx[k]]=true;else pl[idx[k]]+=v;});
             const nowV={};
             partial.forEach((x,j)=>{if(x.bad||plBad[j])return;const v=[x.s,x.lcl+pl[j],x.r,x.u];if(x.p.ts==='now')nowV[x.ad]=v;else(c.v[x.ad]=c.v[x.ad]||{})[x.p.ts]=v;});
-            /* keep the cache to the last ~45 days */
-            Object.values(c.v).forEach(m=>Object.keys(m).forEach(k=>{if(+k<last-45*PFH_D)delete m[k];}));Object.keys(c.bt).forEach(k=>{if(+k<last-45*PFH_D)delete c.bt[k];});
+            /* keep the cache to the last ~100 days */
+            Object.values(c.v).forEach(m=>Object.keys(m).forEach(k=>{if(+k<last-100*PFH_D)delete m[k];}));Object.keys(c.bt).forEach(k=>{if(+k<last-100*PFH_D)delete c.bt[k];});
             pfeSave();
             const val=(ad,p)=>p.ts==='now'?nowV[ad]:(c.v[ad]||{})[p.ts];
             const out=pts.map(p=>({ts:p.ts==='now'?Date.now():p.ts,bt:p.bt,w:Object.fromEntries(addrs.map(ad=>[ad,val(ad,p)||null]))}));
@@ -326,12 +334,13 @@
       },[key,open,nonce]);
       return{...st,retry:()=>setNonce(n=>n+1)};
     };
+    const PFE_LS_DAYS='grays_pf_ed_days';
     const PFE_C={st:'#A970FF',lk:'#EC4899',rf:'#E8BE3F',uf:'#7CFC00'};
     const PFE_N={st:'Staking',lk:'Locking',rf:'Reflections',uf:'Reflections'};
     const pfeUseW=()=>{const ref=React.useRef(null);const[w,setW]=useState(0);useEffect(()=>{if(!ref.current)return;const ro=new ResizeObserver(e=>setW(Math.round(e[0].contentRect.width)));ro.observe(ref.current);return()=>ro.disconnect();},[]);return[ref,w];};
     const pfeNice=m=>{if(!(m>0))return 1;const e=Math.pow(10,Math.floor(Math.log10(m)));const f=m/e;return(f<=1.5?1.5:f<=2?2:f<=2.5?2.5:f<=3?3:f<=4?4:f<=5?5:f<=6?6:f<=8?8:10)*e;};
-    const pfeDay=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
-    const pfeWd=t=>new Date(t).toLocaleDateString('en-US',{weekday:'short',timeZone:'UTC'});
+    const pfeDay=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric'});   // round 25 (audit C2): local days now
+    const pfeWd=t=>new Date(t).toLocaleDateString('en-US',{weekday:'short'});
     /* the stacked daily columns: ≤ 20 px, 2 px surface gaps between segments, 4 px rounded top, hover / tap a day */
     /* round 21: views — PTGC (tokens), UFO (tokens), BOTH (dollars: the two tokens can't share a token scale; the default).
        Each view says which sources it stacks, how to read a source's value off a day, and how a day counts as complete. */
@@ -351,7 +360,7 @@
       const h=hov!=null?days[hov]:null;
       return(
         <div className="pf2-edplot" ref={ref} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move}>
-          {W>0&&<svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rewards earned per day, last 30 days`}>
+          {W>0&&<svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rewards earned per day`}>
             {[0,1,2,3,4].map(i=>{const v=mx*i/4,yy=y(v);return(<g key={i}><line x1={L} x2={W-R} y1={yy} y2={yy} stroke={`rgba(255,255,255,${i?0.07:0.18})`} strokeWidth="1"/><text x={L-8} y={yy+4} textAnchor="end" className="ax">{V.fmt(v)}</text></g>);})}
             {days.map((d,i)=>{const cx=L+band*i+band/2,x=cx-bw/2;let acc=0;const good=V.ok(d);const vis=good?keys.filter(k=>V.val(d,k)>0):[];const dim=hov!=null&&i!==hov;
               return(<g key={i} opacity={dim?.78:1}>
@@ -360,7 +369,7 @@
                 {vis.map((k,j)=>{const v=V.val(d,k),top=j===vis.length-1,yy=y(acc+v),hh=Math.max(0,v/mx*ih-(j>0?2:0));acc+=v;
                   if(!top||hh<1)return <rect key={k} x={x} y={yy} width={bw} height={Math.max(hh,.5)} fill={PFE_C[k]}/>;
                   const r=Math.min(4,bw/2,hh);return <path key={k} d={`M${x},${yy+hh} L${x},${yy+r} Q${x},${yy} ${x+r},${yy} L${x+bw-r},${yy} Q${x+bw},${yy} ${x+bw},${yy+r} L${x+bw},${yy+hh} Z`} fill={PFE_C[k]}/>;})}
-                {(i===n-1||(phone?i%10===0:i%5===0))&&<text x={cx} y={H-6} textAnchor="middle" className="ax">{i===n-1?'Today':pfeDay(d.t0)}</text>}
+                {(i===n-1||(i%Math.max(1,Math.round(n/(phone?3:6)))===0&&i<n-1))&&<text x={cx} y={H-6} textAnchor="middle" className="ax">{i===n-1?'Today':pfeDay(d.t0)}</text>}
               </g>);})}
             {/* round 21b (Shaka): the average's number moved up beside DAILY (pf2-avg) where it reads clearly; the line stays, dashed to match its key */}
             {avg>0&&<line x1={L} x2={W-R} y1={y(avg)} y2={y(avg)} stroke="rgba(255,255,255,.6)" strokeWidth="1.2" strokeDasharray="5 4"/>}
@@ -373,9 +382,14 @@
           </div>}
         </div>);
     };
-    const PfEarnedModal=({tok:tok0,addrs,txs,close,prices})=>{
-      const[tok,setTok]=useState('BOTH');const[hid,setHid]=useState({});
-      const e=usePfEarned(addrs,true);
+    const PfEarnedModal=({tok:tok0,addrs:addrs0,txs,close,prices,wallets,hasUfo=true})=>{
+      /* round 25 (audit C10 / C15 / C16): no UFO in the counted wallets → PTGC only (Both / UFO greyed); a wallet picker
+         (All wallets · each wallet) — the per-wallet reads are the same cache, so switching is free; 7D / 30D / 90D. */
+      const[tok,setTok]=useState(hasUfo?'BOTH':'PTGC');const[hid,setHid]=useState({});
+      const[sel,setSel]=useState('all');
+      const[nd,setNd]=useState(()=>{try{const v=+localStorage.getItem(PFE_LS_DAYS);return [7,30,90].includes(v)?v:30;}catch(e){return 30;}});
+      const addrs=sel==='all'?addrs0:addrs0.filter(a=>a===sel);
+      const e=usePfEarned(addrs,true,nd);
       const[px,setPx]=useState(null);useEffect(()=>{pfhPrices().then(setPx).catch(()=>{});},[]);
       const V=pfeView(tok),isU=tok==='UFO',isB=tok==='BOTH',keys0=V.keys,keys=keys0.filter(k=>!hid[k]);
       /* days from the running totals — PTGC and UFO each complete (or not) on their own */
@@ -400,28 +414,30 @@
       const tot=d=>d&&V.ok(d)?keys.reduce((t,k)=>t+V.val(d,k),0):0;
       const okDays=days?days.filter(V.ok):[];
       const sum=k=>okDays.reduce((t,d)=>t+V.val(d,k),0),sumUsd=k=>okDays.reduce((t,d)=>t+(V.usd(d,k)||0),0),sumTok=k=>okDays.reduce((t,d)=>t+(d[k]||0),0);
-      const T=keys.reduce((t,k)=>t+sum(k),0),T$=keys.reduce((t,k)=>t+sumUsd(k),0),nd=Math.max(1,okDays.length);
+      const T=keys.reduce((t,k)=>t+sum(k),0),T$=keys.reduce((t,k)=>t+sumUsd(k),0),nOk=Math.max(1,okDays.length);
       let best=null;okDays.forEach(d=>{if(!best||tot(d)>tot(best))best=d;});
       const list=days?days.slice().reverse():[];
       const logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
-      const tabs=<div className="tabs" role="tablist">{['BOTH','PTGC','UFO'].map(t=><button key={t} role="tab" aria-selected={tok===t} className={tok===t?'on':''} onClick={()=>{setTok(t);setHid({});}}>{t==='BOTH'?<span className="two"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>}{t==='BOTH'?'Both':t}</button>)}</div>;
+      const tabs=<div className="tabs" role="tablist">{['BOTH','PTGC','UFO'].map(t=><button key={t} role="tab" aria-selected={tok===t} disabled={!hasUfo&&t!=='PTGC'} title={!hasUfo&&t!=='PTGC'?'No UFO in the counted wallets':undefined} className={tok===t?'on':''} onClick={()=>{setTok(t);setHid({});}}>{t==='BOTH'?<span className="two"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>}{t==='BOTH'?'Both':t}</button>)}</div>;
       const dayName=d=>d===list[0]?'Today so far':pfeWd(d.t0)+' '+pfeDay(d.t0);
       const tk=(v,k)=>pfAbbr(v)+(k==='uf'?' UFO':' PTGC');
       /* BOTH: per-token totals for the tiles and the table */
       const pT=d=>['st','lk','rf'].filter(k=>!hid[k]).reduce((t,k)=>t+(d[k]||0),0),uT=d=>hid.uf?0:(d.uf||0);
       const P30=okDays.reduce((t,d)=>t+pT(d),0),P30$=okDays.reduce((t,d)=>t+pT(d)*d.pP,0),U30=okDays.reduce((t,d)=>t+uT(d),0),U30$=okDays.reduce((t,d)=>t+uT(d)*d.pU,0);
       return(
-        <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${isB?'PTGC and UFO':tok} rewards, last 30 days`}>
+        <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${isB?'PTGC and UFO':tok} rewards, last ${nd} days`}>
           <div className={`pf2-erw${isU?' u':''}${isB?' b':''}`} onClick={ev=>ev.stopPropagation()}>
             <div className="ehd">{isB?<span className="two big"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={logo} alt=""/>}
-              <div className="tt"><h2>{isB?'ALL REWARDS':tok+' REWARDS'}</h2><div className="sub">{isB?'PTGC + UFO in dollars':'Earned by source'} {'·'} last 30 days {'·'} all counted wallets</div></div>
+              <div className="tt"><h2>{isB?'ALL REWARDS':tok+' REWARDS'}</h2><div className="sub">{isB?'PTGC + UFO in dollars':'Earned by source'} {'·'} last {nd} days {'·'} {sel==='all'?'all counted wallets':((wallets&&(wallets.find(w=>w.address.toLowerCase()===sel)||{}).name)||pfAddr(sel))}</div></div>
               <div className="tw">{tabs}</div><button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
             <div className="tm">{tabs}</div>
+            <div className="pf2-edsel"><div className="pp" role="group" aria-label="Period">{[7,30,90].map(n=><button key={n} className={nd===n?'on':''} aria-pressed={nd===n} onClick={()=>{setNd(n);try{localStorage.setItem(PFE_LS_DAYS,String(n));}catch(e){}}}>{n}D</button>)}</div>
+              {wallets&&wallets.length>1&&<div className="ws"><button className={sel==='all'?'on':''} aria-pressed={sel==='all'} onClick={()=>setSel('all')}>All wallets</button>{wallets.map(w=>{const a=w.address.toLowerCase();if(!addrs0.includes(a))return null;return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{w.name||pfAddr(w.address)}</button>;})}</div>}</div>
             {/* round 22 (Shaka: "we need like a big loading thing so people realize it and wait"): one big loader until
                 everything this tab needs is in — the 30 days of chain reads, and (Both / UFO) the UFO transfers back to 30 days */}
             {waiting&&<div className="pf2-edload" role="status" aria-live="polite">
               <div className="orb"><span className="ring"></span><span className="ring r2"></span>{isB?<span className="two big"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={logo} alt=""/>}</div>
-              <div className="h">Crunching your last 30 days{'…'}</div>
+              <div className="h">Crunching your last {nd} days{'…'}</div>
               <div className="p">This takes a little while the first time {'—'} after that it opens almost instantly.</div>
               <div className="steps">
                 <div className={`st${chainDone?' ok':' on'}`}><i>{chainDone?'✓':'1'}</i><span>Daily reward totals from the chain</span><b>{chainDone?'done':Math.round(e.progress*100)+'%'}</b></div>
@@ -429,22 +445,22 @@
               </div>
               <div className="bar"><i style={{width:Math.max(6,Math.min(100,((chainDone?1:e.progress)*(needU?.6:1)+(needU?(uReady?.4:Math.min(.36,((txs&&txs.pages)||0)*.04)):0))*100))+'%'}}></i></div>
             </div>}
-            {e.state==='failed'&&!e.pts&&<div className="pf2-hwait" style={{height:200}}><div>Couldn{'’'}t read the last 30 days right now.</div><button className="pf2-lnk" onClick={e.retry}>Retry</button></div>}
+            {e.state==='failed'&&!e.pts&&<div className="pf2-hwait" style={{height:200}}><div>Couldn{'’'}t read the last {nd} days right now.</div><button className="pf2-lnk" onClick={e.retry}>Retry</button></div>}
             {days&&!waiting&&<>
               {isB?<div className="sum">
-                  <div className="tl tot"><div className="l">Earned {'·'} 30 days</div><div className="v">{fmtDollar(T)}</div><div className="s">PTGC + UFO</div><div className="a">{'≈'} {fmtDollar(T/nd)} a day</div></div>
+                  <div className="tl tot"><div className="l">Earned {'·'} {nd} days</div><div className="v">{fmtDollar(T)}</div><div className="s">PTGC + UFO</div><div className="a">{'≈'} {fmtDollar(T/nOk)} a day</div></div>
                   <div className="tl rf"><div className="l"><img src={TOKENS.PTGC.logo} alt=""/>PTGC</div><div className="v">{fmtDollar(P30$)}</div><div className="s">{pfAbbr(P30)} PTGC</div><div className="a">staking + locking + reflections</div><b className="bar" style={{width:(T>0?P30$/T*100:0)+'%',background:'#E8BE3F'}}></b></div>
                   <div className="tl uf"><div className="l"><img src={TOKENS.UFO.logo} alt=""/>UFO</div><div className="v">{fmtDollar(U30$)}</div><div className="s">{pfAbbr(U30)} UFO</div><div className="a">reflections</div><b className="bar" style={{width:(T>0?U30$/T*100:0)+'%',background:'#7CFC00'}}></b></div>
-                  <div className="tl best"><span className="ico" aria-hidden="true">{'\u{1F3C6}'}</span><div className="l">Best day</div><div className="v">{best?fmtDollar(tot(best)):'—'}</div><div className="s">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div><div className="a">{okDays.length<30?`${okDays.length} of 30 days in reach`:'last 30 days'}</div></div></div>
+                  <div className="tl best"><span className="ico" aria-hidden="true">{'\u{1F3C6}'}</span><div className="l">Best day</div><div className="v">{best?fmtDollar(tot(best)):'—'}</div><div className="s">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div><div className="a">{okDays.length<nd?`${okDays.length} of ${nd} days in reach`:`last ${nd} days`}</div></div></div>
               :<div className={`sum${isU?' one':''}`}>
-                <div className="tl tot"><div className="l">Earned {'·'} 30 days</div><div className="v">{pfAbbr(T)} {tok}</div><div className="s">{fmtDollar(T$)}</div><div className="a">{'≈'} {pfAbbr(T/nd)} a day {'·'} {fmtDollar(T$/nd)}</div></div>
+                <div className="tl tot"><div className="l">Earned {'·'} {nd} days</div><div className="v">{pfAbbr(T)} {tok}</div><div className="s">{fmtDollar(T$)}</div><div className="a">{'≈'} {pfAbbr(T/nOk)} a day {'·'} {fmtDollar(T$/nOk)}</div></div>
                 {isU?<>
-                  <div className="tl uf"><div className="l"><i style={{background:PFE_C.uf}}></i>Daily average</div><div className="v">{pfAbbr(T/nd)}</div><div className="s">{fmtDollar(T$/nd)}</div><div className="a">per day{okDays.length<30?` · ${okDays.length} days in reach`:', last 30 days'}</div></div>
+                  <div className="tl uf"><div className="l"><i style={{background:PFE_C.uf}}></i>Daily average</div><div className="v">{pfAbbr(T/nOk)}</div><div className="s">{fmtDollar(T$/nOk)}</div><div className="a">per day{okDays.length<nd?` · ${okDays.length} days in reach`:`, last ${nd} days`}</div></div>
                   <div className="tl uf best"><span className="ico" aria-hidden="true">{'\u{1F3C6}'}</span><div className="l">Best day</div><div className="v">{best?pfAbbr(tot(best)):'—'}</div><div className="s">{best&&best.pU!=null?fmtDollar(tot(best)*best.pU):'—'}</div><div className="a">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div></div>
-                </>:keys0.map(k=>{const v=sum(k);return(<div key={k} className={`tl ${k}`}><div className="l"><i style={{background:PFE_C[k]}}></i>{PFE_N[k]}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(sumUsd(k))}</div><div className="a">{'≈'} {pfAbbr(v/nd)} a day</div><b className="bar" style={{width:(T>0&&!hid[k]?v/T*100:0)+'%',background:PFE_C[k]}}></b></div>);})}
+                </>:keys0.map(k=>{const v=sum(k);return(<div key={k} className={`tl ${k}`}><div className="l"><i style={{background:PFE_C[k]}}></i>{PFE_N[k]}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(sumUsd(k))}</div><div className="a">{'≈'} {pfAbbr(v/nOk)} a day</div><b className="bar" style={{width:(T>0&&!hid[k]?v/T*100:0)+'%',background:PFE_C[k]}}></b></div>);})}
               </div>}
               <div className="ch"><div className="chh"><b>DAILY{isB?' · IN DOLLARS':''}</b>
-                {okDays.length>0&&<span className="pf2-avg" title="Average per day over the days shown (the dashed line)"><i></i>Avg <b>{isB?fmtDollar(T/nd):pfAbbr(T/nd)+' '+tok}</b> / day</span>}{e.state==='loading'&&<span className="upd">updating{'…'}</span>}
+                {okDays.length>0&&<span className="pf2-avg" title="Average per day over the days shown (the dashed line)"><i></i>Avg <b>{isB?fmtDollar(T/nOk):pfAbbr(T/nOk)+' '+tok}</b> / day</span>}{e.state==='loading'&&<span className="upd">updating{'…'}</span>}
                 {keys0.length>1&&<div className="lg">{keys0.map(k=><button key={k} className={hid[k]?'off':''} aria-pressed={!hid[k]} onClick={()=>setHid(h=>{const n={...h,[k]:!h[k]};return keys0.every(x=>n[x])?h:n;})}><i style={{background:PFE_C[k]}}></i>{V.name(k)}</button>)}</div>}</div>
                 <PfEdChart days={days} keys={keys} V={V}/></div>
               {/* round 21 (Shaka): every day in one list that scrolls on its own (a styled scroll bar on the right), no "show all" */}
@@ -463,7 +479,7 @@
                   :<span className="t na">{V.why(d)}</span>}</div>);})}</div>
               <div className="fn">{isB?<>Everything in <b>dollars</b>, since PTGC and UFO can{'’'}t share a token scale. <b>PTGC</b> = staking + locking (counted as they build up each day, claimed or not) + reflections; <b>UFO</b> = reflections. Pick PTGC or UFO above for token amounts.</>
                 :isU?<><b>Reflections</b> each day = the day{'’'}s change in your UFO balance, minus everything bought, sold or moved that day (the hidden 1% added back). They land in your wallet automatically.</>
-                :<><b>Staking</b> and <b>locking</b> count rewards as they build up each day (claimed + waiting to be claimed), not only on the day you claim. <b>Reflections</b> come from PTGC{'’'}s own totals of what each wallet sent and received.</>} Days run midnight to midnight UTC; dollar values use that day{'’'}s price.</div>
+                :<><b>Staking</b> and <b>locking</b> count rewards as they build up each day (claimed + waiting to be claimed), not only on the day you claim. <b>Reflections</b> come from PTGC{'’'}s own totals of what each wallet sent and received.</>} Days run midnight to midnight in your local time; dollar values use that day{'’'}s price.</div>
             </>}
           </div>
         </PfModal>);

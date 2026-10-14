@@ -9,6 +9,7 @@
     const PF_TOKEN_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
     const pfFetchBurn=async token=>{try{const to=PF_TOKEN_ADDR[token];const[b,s]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x70a08231000000000000000000000000'+PF_BURN_ADDR.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x18160ddd'},'latest'],id:2})]);if(!b||!s||b.result==null||s.result==null)return null;const burned=Number(BigInt(b.result))/1e18,supply=Number(BigInt(s.result))/1e18;return supply>0?{total:burned,supply}:null;}catch(e){return null;}};
     /* = index.html fmtAbbr (a67: the unit is picked AFTER rounding — never "1000.00M"); the classic page keeps its own */
+    const pfAddr=a=>a?a.slice(0,6)+'\u2026'+a.slice(-4):'';   // round 25 (audit C13): one address style everywhere (the classic page's truncAddr uses three dots)
     const pfAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=999.995e9)return(num/1e12).toFixed(2)+'T';if(num>=999.995e6)return(num/1e9).toFixed(2)+'B';if(num>=999.995e3)return(num/1e6).toFixed(2)+'M';if(num>=999.995)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const pfFmtInt=n=>n==null||isNaN(n)?'—':Math.floor(Number(n)).toLocaleString('en-US');
     const PfModal=({onClose,label,className='',children})=>{

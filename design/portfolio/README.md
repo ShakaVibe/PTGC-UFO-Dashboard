@@ -406,3 +406,17 @@ B1 One `build()` per landed history page; the parent is told at most ~2× a seco
    per wallet and sorted once, two-pointer per day. B5 1Y points on 4-day boundaries (repeat day to day); history cache pruned
    on load (> 400 days; 6-h points > 15 days). B6 PulseScan 429 → one 2.5 s retry. B7 Deep paging waits for the Recent
    Transactions section to come within 600 px of the screen (or 5 s). Strip legend / tooltip say per 6 hours / day / 4 days.
+
+## Round 25 (2026-10-14) — Phase C (polish), "do it all"
+C1 Dust: feed rows under $1 hidden behind a "Show dust (N)" chip (moves / claims / unstakes never count as dust). C2 Local
+time everywhere: chart points on local midnights (local 6-h slots on 7D; 1Y keeps 4-day boundaries), Details days are local
+midnights, footnote says so. C3 Feed names resolved at render (a rename shows at once). C4 The old chart (and the sparklines)
+stay while a toggle / period change reloads, with an "updating… N%" tag. C5 Chart tooltip centred on phones, never clipped.
+C6 Side panel high / low in full dollars (stacked). C7 Moon Math banner: "your holdings, rewards and totals are valued at…
+(The value history and the transactions stay at real prices.)". C8 "· N unreadable" after the counted total. C9 Unstakes have
+their own chip. C10 No UFO → Details opens on PTGC, Both / UFO greyed. C11 Creature row uses the League's 8 tiers (Shrimp,
+Shell). C12 Contrast lifted (footer, source line, chip counts, strip note). C13 One address style (0x1234…abcd); an unnamed
+wallet in the breakdown shows its group instead of the address twice. C14 Moon Math: a custom price counts only once it's a
+number above 0 (typing "0." no longer zeroes the page); decimal text inputs. C15 Details: wallet picker (All wallets · each).
+C16 Details: 7D / 30D / 90D (remembered). C17 Breakdown: sort by Value / Name / Added; group subtotal rows where a group has
+2+ wallets. Fixed on the way: a cleanup-scope bug from round 24 (tellT) that threw on every wallet toggle.

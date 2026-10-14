@@ -39,8 +39,12 @@
     };
     const pfPct=(v,t)=>{if(!(t>0)||v==null)return'—';const p=v/t*100;return(p>0&&p<0.1?p.toFixed(2):p.toFixed(1))+'%';};
     const pfChg=c=>c==null||isNaN(c)?<span className="na">{'—'} (24h)</span>:<span className={c>=0?'pos':'neg'}>{c>=0?'+':'−'}{Math.abs(c).toFixed(2)}% (24h)</span>;
+    /* round 25 (audit C11): the creature row used the classic 6-tier list (stops at Turtle) while the League goes to Shrimp /
+       Shell — a Shrimp-sized bag showed "League: Shrimp" over an empty row. Same 8 tiers as the League now. */
+    const pfCreatures=(tokens,supply)=>{const out=[];let rem=tokens;for(const c of PF_BURN_C){if(c.p<=0)continue;const th=supply*c.p/100;const n=Math.floor(rem/th);if(n>0){out.push({emoji:c.e,count:n,name:c.n});rem=rem%th;}}
+      if(!out.length&&tokens>0)out.push({emoji:'\u{1F41A}',count:1,name:'Shell'});return out;};
     const PfCreatures=({tokens,token})=>{
-      const list=tokens>0?getHoldingCreatures(tokens,token):[];
+      const list=tokens>0?pfCreatures(tokens,PF_SUPPLY[token]):[];
       if(!list.length)return null;
       return <div className="pf2-crw">{list.map((c,i)=><span key={i} title={`${c.count} × ${c.name}`}><img src={pfSea(c.emoji)} alt={c.name}/>{'×'}{c.count}</span>)}</div>;
     };
@@ -127,7 +131,7 @@
       };
       const fld=(k,logo,cls,live,dec)=>(
         <label className={`pf2-mmf ${cls}`}><img src={logo} alt=""/><span className="nm">{k.toUpperCase()}</span>
-          <input type="number" step="any" inputMode="decimal" value={customPrices[k]} onChange={e=>setCustomPrices(c=>({...c,[k]:e.target.value,pls:''}))} placeholder={live?live.toFixed(dec):'0.00'} aria-label={`${k.toUpperCase()} price in dollars`}/>
+          <input type="text" inputMode="decimal" autoComplete="off" value={customPrices[k]} onChange={e=>setCustomPrices(c=>({...c,[k]:e.target.value,pls:''}))} placeholder={live?live.toFixed(dec):'0.00'} aria-label={`${k.toUpperCase()} price in dollars`}/>
           <span className="now">now {fmtPriceNode(live)}</span></label>);
       return(
         <div className={`pf2-pn pf2-st mm${on?' on':''}`} ref={ref}>
@@ -154,8 +158,11 @@
          by X ÷ today's PLS price. A PTGC or UFO price typed in yourself still wins for that token. */
       const plsC=moonMathActive&&customPrices.pls!==''?parseFloat(customPrices.pls):null;
       const plsX=plsC>0&&prices.pls>0?plsC/prices.pls:null;
-      const dp={ptgc:moonMathActive&&customPrices.ptgc!==''?dp0.ptgc:(plsX&&prices.ptgc!=null?prices.ptgc*plsX:dp0.ptgc),
-                ufo:moonMathActive&&customPrices.ufo!==''?dp0.ufo:(plsX&&prices.ufo!=null?prices.ufo*plsX:dp0.ufo),pls:dp0.pls};
+      /* round 25 (audit C14): while a custom price is being typed ("0.", "", "0") every $ figure went to $0.00 — a custom
+         price counts only once it is a number above zero; until then the live price stands */
+      const cust=k=>{const v=parseFloat(String(customPrices[k]).replace(',','.'));return moonMathActive&&v>0?v:null;};
+      const dp={ptgc:cust('ptgc')!=null?cust('ptgc'):(plsX&&prices.ptgc!=null?prices.ptgc*plsX:(moonMathActive&&customPrices.ptgc!==''?(prices.ptgc!=null?prices.ptgc:dp0.ptgc):dp0.ptgc)),
+                ufo:cust('ufo')!=null?cust('ufo'):(plsX&&prices.ufo!=null?prices.ufo*plsX:(moonMathActive&&customPrices.ufo!==''?(prices.ufo!=null?prices.ufo:dp0.ufo):dp0.ufo)),pls:dp0.pls};
       const[q,setQ]=useState('');
       const[grp,setGrp]=useState('All');
       const[showAll,setShowAll]=useState(false);
@@ -164,6 +171,7 @@
       const[lkOpen,setLkOpen]=useState(false);
       const[bdOpen,setBdOpen]=useState(false);
       const[bdCp,setBdCp]=useState(null);
+      const[bdSort,setBdSort]=useState('value');   // round 25 (audit C17): value | name | added
       const[edTok,setEdTok]=useState(null);   // round 20: the 30-day Earned details window (PTGC / UFO)   // round 19: the breakdown address just copied
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
@@ -198,7 +206,7 @@
       const live={v:liveV,p:liveP||0,u:liveU||0,bp:anyData?agg.ptgc.totalHolding:null,bu:anyData?agg.ufo.balance:null};
       const s30=usePfSeries(hAddrs,'30D',anyData);
       const h24=usePf24h(anyData?hAddrs:[]);
-      const spk=k=>s30.state==='ok'?[...s30.pts.map(x=>x.v==null?null:x[k]),live[k]]:null;
+      const spk=k=>s30.pts.length?[...s30.pts.map(x=>x.v==null?null:x[k]),live[k]]:null;   // round 25 (audit C4): sparklines keep showing while a toggle reloads
       const prev=(v,c)=>v==null?null:c==null||isNaN(c)?null:v/(1+c/100);
       const pPrev=prev(ptgcUSD,changes.ptgc),uPrev=prev(ufoUSD,changes.ufo);
       const tChg=h24&&liveV!=null&&h24.v>0?(liveV-h24.v)/h24.v*100:simulated||total==null||(ptgcUSD>0&&pPrev==null)||(ufoUSD>0&&uPrev==null)?null:(()=>{const pr=(pPrev||0)+(uPrev||0);return pr>0?(total-pr)/pr*100:null;})();
@@ -271,7 +279,7 @@
           {addMsg&&<div className="pf2-addmsg" role="alert">{addMsg}</div>}
           <div className="pf2-tools">
             <b>MY WALLETS <span>({wallets.length})</span></b>
-            {wallets.length>0&&<span className="sum">{'·'} <strong>{counted.length}</strong> counted {'·'} <strong>{fmtDollar(total)}</strong></span>}
+            {wallets.length>0&&(()=>{const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;}).length;return <span className="sum">{'·'} <strong>{counted.length}</strong> counted {'·'} <strong>{fmtDollar(total)}</strong>{bad>0&&<span className="warn"> {'·'} {bad} unreadable</span>}</span>;})()}
             {wallets.length>0&&<><button className="pf2-lnk" onClick={selectAllWallets} disabled={allOn}>Select all</button><button className="pf2-lnk q" onClick={deselectAllWallets} disabled={noneOn}>Clear</button></>}
             <span className="sp"></span>
             {gNames.length>1&&<div className="pf2-seg" role="group" aria-label="Show group">{['All',...gNames].map(g=><button key={g} className={grp===g?'on':''} aria-pressed={grp===g} onClick={()=>setGrp(g)}>{g}</button>)}</div>}
@@ -284,12 +292,12 @@
             ):shown.length===0?(
               <div className="pf2-empty">No wallet matches {q.trim()?<>{'“'}{q.trim()}{'”'}</>:'this group'}.</div>
             ):shown.map(w=>{
-              const{a,st,v,pv}=wv(w);const on=isWalletChecked(w.address);const label=w.name||truncAddr(w.address);
+              const{a,st,v,pv}=wv(w);const on=isWalletChecked(w.address);const label=w.name||pfAddr(w.address);
               const ps=v>0?(pv||0)/v:null;
               return(
                 <div key={a} className={`pf2-wc ${on?'on':'off'}${st==='bad'?' bad':''}`}>
                   <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
-                  <div className="ad mono">{w.name?<>{truncAddr(w.address)} {'·'} {w.group||'Default'}</>:<>{(w.group||'Default').toUpperCase()}</>}</div>
+                  <div className="ad mono">{w.name?<>{pfAddr(w.address)} {'·'} {w.group||'Default'}</>:<>{(w.group||'Default').toUpperCase()}</>}</div>
                   {st==='bad'?<button className="retry" onClick={()=>fetchWalletData(w.address)}>Read failed {'·'} retry</button>
                   :v==null?<div className="v dim">{st==='run'?'loading…':'—'}</div>
                   :<>
@@ -305,7 +313,7 @@
             {!showAll&&shown.length>6&&<button className="pf2-more" onClick={()=>setShowAll(true)}>Show all {shown.length} wallets {'▾'}</button>}
           </div>
           {moonMathActive&&(()=>{const isAth=customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo);const none=customPrices.ptgc===''&&customPrices.ufo==='';return(
-            <div className="pf2-mm"><img src="logos/portfolio/pf-moon.webp" alt=""/>Moon Math is on {'\u2014'} {isAth?'every dollar figure below uses the All-Time High prices.':none?'Custom is selected: type a PTGC and / or UFO price in the Moon Math window (live prices until you do).':'every dollar figure below uses your custom prices.'} <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to Live Prices</button></div>);})()}
+            <div className="pf2-mm"><img src="logos/portfolio/pf-moon.webp" alt=""/>Moon Math is on {'\u2014'} {isAth?'your holdings, rewards and totals are valued at the All-Time High prices.':none?'Custom is selected: type a PTGC and / or UFO price in the Moon Math window (live prices until you do).':'your holdings, rewards and totals are valued at your custom prices.'} <span className="mmn">(The value history and the transactions stay at real prices.)</span> <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to Live Prices</button></div>);})()}
 
           {/* round 23 (audit A2): with every wallet switched off this used to say "Reading your wallets…" forever */}
           {wallets.length>0&&!anyData&&(()=>{const run=counted.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
@@ -353,7 +361,7 @@
               <div className="pf2-extw">
               {pt.locks.length>0&&(()=>{
                 const now=Date.now()/1000;
-                const locks=[];counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(d&&!d.error)d.ptgc.locks.forEach(l=>locks.push({...l,who:w.name||truncAddr(w.address)}));});
+                const locks=[];counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(d&&!d.error)d.ptgc.locks.forEach(l=>locks.push({...l,who:w.name||pfAddr(w.address)}));});
                 locks.sort((a,b)=>a.endTime-b.endTime);
                 const shownL=allLocks?locks:locks.slice(0,6);
                 const fmtD=t=>{try{return new Date(t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return'';}};
@@ -423,19 +431,25 @@
               {bdOpen&&(()=>{const COL=['#B26BFF','#F2D35B','#22D3EE','#FF8A3D','#EC4899','#7CFC00','#6FA8FF','#FF6B73'];
                 const rows=counted.map((w,i)=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;
                   const pT=d.ptgc.totalHolding||0,pc=d.ptgc.totalPending||0,uT=d.ufo.balance||0,p$=usd(pT,dp.ptgc)||0,u$=usd(uT,dp.ufo)||0;
-                  return{w,a,c:COL[i%COL.length],pT,pc,uT,p$,c$:usd(pc,dp.ptgc)||0,u$,t$:p$+u$};}).filter(Boolean);
-                const S=k=>rows.reduce((t,r)=>t+r[k],0),all=S('t$');
+                  return{w,a,i,c:COL[i%COL.length],pT,pc,uT,p$,c$:usd(pc,dp.ptgc)||0,u$,t$:p$+u$,g:w.group||'Default'};}).filter(Boolean);
+                if(bdSort==='value')rows.sort((x,y)=>y.t$-x.t$);else if(bdSort==='name')rows.sort((x,y)=>(x.w.name||x.a).localeCompare(y.w.name||y.a));
+                const S=(k,rs=rows)=>rs.reduce((t,r)=>t+r[k],0),all=S('t$');
+                /* group subtotals when more than one group is counted */
+                const gs=[...new Set(rows.map(r=>r.g))];const grouped=gs.length>1;
+                const order=grouped?gs.flatMap(g=>{const rs=rows.filter(r=>r.g===g);return rs.length>1?[...rs,{sub:g,rs}]:rs;}):rows;   // a subtotal only where a group has 2+ wallets
                 const cpy=a=>{try{navigator.clipboard.writeText(a);}catch(e){}setBdCp(a);setTimeout(()=>setBdCp(x=>x===a?null:x),1400);};
-                const who=r=><><div className="n"><i style={{background:r.c}}></i>{r.w.name||truncAddr(r.w.address)}</div>
-                  <div className="ad">{truncAddr(r.w.address)}<button className={`cp${bdCp===r.a?' ok':''}`} onClick={()=>cpy(r.w.address)} title={`Copy ${r.w.address}`} aria-label={`Copy wallet address ${r.w.address}`}>{bdCp===r.a?'\u2713':'\u29C9'}</button></div></>;
+                const who=r=><><div className="n"><i style={{background:r.c}}></i>{r.w.name||pfAddr(r.w.address)}</div>
+                  <div className="ad">{r.w.name?pfAddr(r.w.address):<span className="g">{r.g}</span>}<button className={`cp${bdCp===r.a?' ok':''}`} onClick={()=>cpy(r.w.address)} title={`Copy ${r.w.address}`} aria-label={`Copy wallet address ${r.w.address}`}>{bdCp===r.a?'\u2713':'\u29C9'}</button></div></>;
                 const cell=(v,$v,k)=><><span className={`tk ${k}`}>{pfAbbr(v)}</span><span className="us">{fmtDollar($v)}</span></>;
                 const bar=r=><div className="bar"><span><b style={{width:(r.t$>0?r.p$/r.t$*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(r.t$>0?r.u$/r.t$*100:0)+'%',background:'#7CFC00'}}></b></span><small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}%</small></div>;
+                const subRow=g=><tr key={'g'+g.sub} className="sub"><td><div className="n">{g.sub}</div></td><td>{cell(S('pT',g.rs),S('p$',g.rs),'p')}</td><td>{cell(S('pc',g.rs),S('c$',g.rs),'p')}</td><td>{cell(S('uT',g.rs),S('u$',g.rs),'u')}</td><td><span className="tot">{fmtDollar(S('t$',g.rs))}</span><div className="bar"><small>{all>0?(S('t$',g.rs)/all*100).toFixed(1):'0.0'}%</small></div></td></tr>;
                 return(<div className="pf2-foldb pf2-bd">
+                  <div className="pf2-bds"><span>Sort</span>{[['value','Value'],['name','Name'],['added','Added']].map(([k,l])=><button key={k} className={bdSort===k?'on':''} aria-pressed={bdSort===k} onClick={()=>setBdSort(k)}>{l}</button>)}</div>
                   <table className="pf2-bdt"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING TO CLAIM</th><th>UFO</th><th>TOTAL</th></tr></thead><tbody>
-                    {rows.map(r=><tr key={r.a}><td>{who(r)}</td><td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
+                    {order.map(r=>r.sub?subRow(r):<tr key={r.a}><td>{who(r)}</td><td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
                     {rows.length>1&&<tr className="sum"><td><div className="n">ALL WALLETS</div></td><td>{cell(S('pT'),S('p$'),'p')}</td><td>{cell(S('pc'),S('c$'),'p')}</td><td>{cell(S('uT'),S('u$'),'u')}</td><td><span className="tot">{fmtDollar(all)}</span></td></tr>}
                   </tbody></table>
-                  <div className="pf2-bdc">{rows.map(r=><div key={r.a} className="wc"><div className="top"><div className="who">{who(r)}</div><div className="tv">{fmtDollar(r.t$)}<small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}% of portfolio</small></div></div>
+                  <div className="pf2-bdc">{order.map(r=>r.sub?<div key={'g'+r.sub} className="wsum g"><span className="l">{r.sub}</span><b>{fmtDollar(S('t$',r.rs))}</b></div>:<div key={r.a} className="wc"><div className="top"><div className="who">{who(r)}</div><div className="tv">{fmtDollar(r.t$)}<small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}% of portfolio</small></div></div>
                       <div className="sb"><b style={{width:(r.t$>0?r.p$/r.t$*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(r.t$>0?r.u$/r.t$*100:0)+'%',background:'#7CFC00'}}></b></div>
                       <div className="cols"><div className="cl"><div className="l">PTGC</div>{cell(r.pT,r.p$,'p')}</div><div className="cl"><div className="l">Pending to claim</div>{cell(r.pc,r.c$,'p')}</div><div className="cl"><div className="l">UFO</div>{cell(r.uT,r.u$,'u')}</div></div></div>)}
                     {rows.length>1&&<div className="wsum"><span className="l">ALL WALLETS</span><b>{fmtDollar(all)}</b></div>}</div>
@@ -446,7 +460,7 @@
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
         {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
-        {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} close={()=>setEdTok(null)}/>}
+        {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} wallets={counted} hasUfo={uf.balance>0||(ufoEarned||0)>0} close={()=>setEdTok(null)}/>}
         {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
           <div className="pf2-modal" onClick={()=>setHow(false)} role="dialog" aria-modal="true" aria-label="How it works"><div onClick={e=>e.stopPropagation()}>
