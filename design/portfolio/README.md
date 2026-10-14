@@ -317,3 +317,16 @@ type icon with the token logo on its corner, wallet + copy button + time underne
 "released from staking"), dollar value on the right with received / paid / earned / value, PulseScan link button. Grouped by
 day (Today / Yesterday / weekday / date). Filter chips with counts — All · Buys · Sells · Claims (+ Unstake) · LP · Transfers
 (Move, Receive, Send); empty ones hide. "Show 30 more" instead of the 10 / 40 toggle. Same layout on a phone. Probe `pf2-feed.js`.
+
+## Round 18 (2026-10-14)
+1. Bigger type: Earned by source (labels / amounts / $), Ready to claim, the whole Value History (axes, legend, tooltip, the
+   side panel) and the transaction feed.
+2. **Chart dots fixed for real.** Only the newest 50 transfers per wallet + token were read, which on a busy wallet reach back
+   hours — and the coverage cut-off was the most active wallet's, applied to every wallet. Now each wallet + token pages back up
+   to a year (or 20 pages): page 1 for everyone first, the older pages in the background, refreshes only read the newest pages
+   and merge (cache `grays_pf_tx_v3`). Coverage is per wallet + token. The round-8 "token count moved > 1 %" fallback dots are
+   gone — dots come only from real transactions; if a wallet's history is cut short inside the period, the legend says "dots
+   complete from <date>". Harness PF_TX_PAGES=1 serves a second page.
+3. Mock-up `mock-r18-v1.html` (render `renders/r18-v1-1340.jpg`) for his two layout questions: the empty space under UFO's
+   Earned by source (A one tall box · B a "paid automatically · nothing to claim" strip mirroring PTGC's Ready to claim — my
+   pick) and the Per-Wallet Breakdown (A rich table · B wallet cards).

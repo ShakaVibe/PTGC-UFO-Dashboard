@@ -5,22 +5,53 @@
        the pair leg + the fee leg to the token contract → one "Sell"). Types: Claim (from the PTGC staking contract — staking
        or lock reward), Stake (to it), Buy / Sell (the tx called a swap), Move (between two of YOUR wallets),
        Receive / Send (anything else). Value = amount × that hour's / day's price (the history's price files). */
-    const PFT_LS='grays_pf_tx_v2';   // v2 (round 13): rows also carry whether each side is a contract
+    /* round 18 (Shaka: "a lot of dots are still missing on the chart"): ONE page (the latest 50 transfers) was all we read, and a
+       busy wallet's 50 reach back only hours — so the chart had no trades for most of the week. Now each wallet + token is read
+       page by page back a year (PFT_BACK) or PFT_PAGES pages, whichever comes first: page 1 for everyone first (the list paints
+       fast), then the deeper pages in the background. A cached entry keeps {items, next (PulseScan's next_page_params), done};
+       a refresh reads only the newest page(s) and merges them in until it meets what is already cached. */
+    const PFT_LS='grays_pf_tx_v3';   // v3 (round 18): entries carry next / done (paging)
     const PFT_API='https://api.scan.pulsechain.com/api/v2/addresses/';
     const PFT_STAKING='0xc71f597a2ac39e47f07102e849d18489c96f39ef';
-    const PFT_TTL=5*60e3;
+    const PFT_TTL=5*60e3,PFT_BACK=365*864e5,PFT_PAGES=20;
+    try{localStorage.removeItem('grays_pf_tx_v2');}catch(e){}
     const pftCache=(()=>{let c=null;return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_LS)||'{}')||{};}catch(e){c={};}return c;},save(){try{localStorage.setItem(PFT_LS,JSON.stringify(c));}catch(e){try{c={};localStorage.removeItem(PFT_LS);}catch(e2){}}}};})();
-    const pftFetch=async(addr,tok,force)=>{
-      const k=addr+'|'+tok,c=pftCache.get(),hit=c[k];
-      if(!force&&hit&&Date.now()-hit.at<PFT_TTL)return hit.items;
+    const pftPage=async(addr,tok,next)=>{
       const ac=new AbortController();const to=setTimeout(()=>ac.abort(),25000);
       try{
-        const r=await fetch(`${PFT_API}${addr}/token-transfers?type=ERC-20&token=${PFH_TOK[tok]}`,{signal:ac.signal});
+        const q=next?'&'+Object.entries(next).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&'):'';
+        const r=await fetch(`${PFT_API}${addr}/token-transfers?type=ERC-20&token=${PFH_TOK[tok]}${q}`,{signal:ac.signal});
         if(!r.ok)throw new Error('HTTP '+r.status);
         const j=await r.json();
-        const items=(j.items||[]).map(x=>({h:x.tx_hash,t:Date.parse(x.timestamp),f:(x.from&&x.from.hash||'').toLowerCase(),to:(x.to&&x.to.hash||'').toLowerCase(),fc:!!(x.from&&x.from.is_contract),tc:!!(x.to&&x.to.is_contract),m:x.method||'',v:(()=>{try{return Number(BigInt(x.total.value))/Math.pow(10,+x.total.decimals||18);}catch(e){return 0;}})()}));
-        c[k]={at:Date.now(),items};pftCache.save();return items;
-      }catch(e){if(hit)return hit.items;throw e;}finally{clearTimeout(to);}
+        const items=(j.items||[]).map(x=>({h:x.tx_hash,t:Date.parse(x.timestamp),f:(x.from&&x.from.hash||'').toLowerCase(),to:(x.to&&x.to.hash||'').toLowerCase(),fc:!!(x.from&&x.from.is_contract),tc:!!(x.to&&x.to.is_contract),m:x.method||'',v:(()=>{try{return Number(BigInt(x.total.value))/Math.pow(10,+x.total.decimals||18);}catch(e){return 0;}})(),li:x.log_index}));
+        return{items,next:j.next_page_params||null};
+      }finally{clearTimeout(to);}
+    };
+    const pftKey=i=>i.h+'|'+(i.li!=null?i.li:i.f+i.to+i.v);
+    const pftDone=(e)=>!e.next||e.pages>=PFT_PAGES||(e.items.length&&Date.now()-e.items[e.items.length-1].t>PFT_BACK);
+    /* page 1 (fresh or merged into the cache) */
+    const pftFetch=async(addr,tok,force)=>{
+      const k=addr+'|'+tok,c=pftCache.get(),hit=c[k];
+      if(!force&&hit&&Date.now()-hit.at<PFT_TTL)return hit;
+      try{
+        let pg=await pftPage(addr,tok,null),e;
+        if(hit&&hit.items.length){
+          const have=new Set(hit.items.map(pftKey));let fresh=pg.items.filter(i=>!have.has(pftKey(i))),n=1;
+          /* the newest page didn't reach the cache yet → keep reading (a few pages at most) */
+          while(fresh.length===pg.items.length&&pg.next&&n<5){pg=await pftPage(addr,tok,pg.next);n++;fresh=fresh.concat(pg.items.filter(i=>!have.has(pftKey(i))));}
+          e=fresh.length===pg.items.length*n&&pg.next?{at:Date.now(),items:fresh,next:pg.next,pages:n}   // still a gap → start over from here
+            :{...hit,at:Date.now(),items:fresh.concat(hit.items)};
+        }else e={at:Date.now(),items:pg.items,next:pg.next,pages:1};
+        e.done=pftDone(e);c[k]=e;pftCache.save();return e;
+      }catch(err){if(hit)return hit;throw err;}
+    };
+    /* one more (older) page */
+    const pftMore=async(addr,tok)=>{
+      const k=addr+'|'+tok,c=pftCache.get(),e=c[k];if(!e||e.done)return e;
+      const pg=await pftPage(addr,tok,e.next);
+      const have=new Set(e.items.map(pftKey));
+      const n={...e,items:e.items.concat(pg.items.filter(i=>!have.has(pftKey(i)))),next:pg.next,pages:(e.pages||1)+1};
+      n.done=pftDone(n);c[k]=n;pftCache.save();return n;
     };
     /* round 13 (Shaka: "double check your types … those ones from 0bd0 show as Stake, but they were sells"). Checked live on
        PulseScan: EVERY PTGC transfer — sells, buys, plain sends — splits off fee legs to the token contract, the staking contract
@@ -118,13 +149,21 @@
             rows.sort((a,b)=>b.t-a.t).forEach(r=>{if(r.type==='Move'){const k=r.h+r.tok;if(seen.has(k))return;seen.add(k);if(r.amt<0){r.amt=-r.amt;}}out.push(r);});
             return out;
           };
-          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const items=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
+          /* round 18: chart coverage — a wallet + token is complete back to its oldest transfer unless it hit the page cap / a year */
+          const cov=()=>{const o={};got.forEach(g=>{o[g.addr+'|'+g.tok]=g.done?0:(g.items.length?g.items[g.items.length-1].t:Date.now());});return o;};
+          const tell=()=>{if(onRows&&live)onRows({rows:build(),cov:cov(),failed});};
+          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items:e.items,done:e.done});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
+          tell();
+          /* phase 2: the older pages, two at a time, the list and the chart updating as they land */
+          let q2=0;const deep=got.filter(g=>!g.done);
+          const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;}catch(err){break;}
+            if(live){setSt(s=>({...s,rows:build()}));tell();}}}};
+          await Promise.all([w2(),w2()]);
+          if(!live)return;
           const rows=build();
-          /* round 14: hand the trades to the value chart (its buy / sell dots). A wallet+token that filled a whole page (50) is
-             only complete back to its oldest item — older than that, the chart keeps its balance-change dots. */
-          if(onRows){let since=0;got.forEach(g=>{if(g.items.length>=50){const o=Math.min(...g.items.map(i=>i.t));if(o>since)since=o;}});if(failed)since=Date.now();onRows({rows,since});}
+          tell();
           setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
         })();
         return()=>{live=false;};
@@ -181,7 +220,7 @@
               <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span></div>{g.rows.map(row)}</React.Fragment>);})}</div>
             {list.length>lim&&<button className="pf2-more" onClick={()=>setLim(l=>l+30)}>Show {Math.min(30,list.length-lim)} more</button>}
             <div className="pf2-txf">{st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
-              <span className="src">From PulseScan {'·'} the latest 50 transfers per wallet and token</span></div>
+              <span className="src">From PulseScan {'·'} up to a year back per wallet and token</span></div>
           </>}
         </section>
       );

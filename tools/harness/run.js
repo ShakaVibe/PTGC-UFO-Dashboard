@@ -167,6 +167,11 @@ const dsAnswer=(url)=>{
         :[it(1,S,w,'withdrawRewardLock',539_104,'b1'),it(5,P,w,'swapExactETHForTokens',12_456_789,'b2'),it(20,w,O,'transfer',100_000_000,'b3'),it(50,'0x9999999999999999999999999999999999999999',w,'transfer',2_345_678,'b4'),it(60,w,P,'0xe25d4a18',8_500_000,'b5'),it(60,w,tok,'0xe25d4a18',250_000,'b5'),it(60,w,S,'0xe25d4a18',100_000,'b5'),it(60,w,'0x0000000000000000000000000000000000000000','0xe25d4a18',50_000,'b5'),
           /* round 14: an unstake (reward in + fee out, principal only in the call data), a helper-made LP add (looks like a sell) */
           it(80,S,w,'withdraw',20_000,'b7'),it(80,w,S,'withdraw',2_000,'b7'),it(90,w,P,'0xe25d4a18',3_000_000,'b8')];
+      /* PF_TX_PAGES=1 (round 18): wallet 0x1111…'s PTGC list has a 2nd page (older sells, 4–6 days back) behind next_page_params */
+      if(process.env.PF_TX_PAGES&&w==='0x1111111111111111111111111111111111111111'&&!isU){
+        if(/block_number=/.test(u))return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items:[it(100,w,P,'0xe25d4a18',7_000_000,'c1'),it(100,w,S,'0xe25d4a18',70_000,'c1'),it(130,w,P,'0xe25d4a18',6_000_000,'c2'),it(130,w,S,'0xe25d4a18',60_000,'c2')],next_page_params:null})});
+        return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items,next_page_params:{block_number:1,index:1,token:tok}})});
+      }
       return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items})});
     }
     /* round 14: PulseScan's per-tx detail (raw_input for the unstake principal, the tx's other transfers for the LP-mint tell) */

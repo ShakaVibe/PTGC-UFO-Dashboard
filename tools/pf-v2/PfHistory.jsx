@@ -176,12 +176,15 @@
       /* round 15 (Shaka): claims get their own BLUE dot and liquidity adds / removes a YELLOW one (the table's colours) */
       const ev=[];const TIN={Buy:1,Receive:1},TOUT={Sell:1,Send:1},TCL={Claim:1},TLP={'Add LP':1,'Remove LP':1};
       const KINDS=[['in',TIN],['out',TOUT],['cl',TCL],['lp',TLP]];
-      const since=txs?txs.since:Infinity;
-      if(txs){const by=new Map();txs.rows.forEach(r=>{if(!KINDS.some(([,m])=>m[r.type]))return;if(r.t<=vals[0].t||r.t<since)return;
+      /* round 18: dots ONLY from real transactions (the round-8 "token count moved over 1 %" fallback is gone — it hid every
+         normal-sized trade). Each wallet + token is covered back to cov[key] (0 = its whole history in reach); a trade older than
+         its own coverage is left out, and the legend says from when the dots are complete if that's inside the period. */
+      const cov=txs&&txs.cov||{};
+      if(txs){const by=new Map();txs.rows.forEach(r=>{if(!KINDS.some(([,m])=>m[r.type]))return;if(r.t<=vals[0].t||r.t<(cov[r.addr+'|'+r.tok]||0))return;
           const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[]};e.tx.push(r);by.set(p.t,e);});
         by.forEach(e=>{const ks=KINDS.filter(([,m])=>e.tx.some(r=>m[r.type])).map(([k])=>k);
           ks.forEach((k,j)=>ev.push({p:e.p,k,off:(j-(ks.length-1)/2)*12,tx:e.tx}));});}
-      for(let i=1;i<vals.length;i++){const a=vals[i-1],b=vals[i];if(b.t>=since)break;const ch=[];[['PTGC','bp'],['UFO','bu']].forEach(([k,f])=>{if(a[f]==null||b[f]==null)return;const d=b[f]-a[f];if(Math.abs(d)>Math.max(a[f],b[f])*0.01&&Math.abs(d)>1)ch.push({k,d});});if(ch.length)ev.push({p:b,ch,off:0,up:ch.reduce((x,c)=>x+c.d*(c.k==='PTGC'?b.p/(b.bp||1):b.u/(b.bu||1)),0)>=0});}
+      const covFrom=Math.max(0,...Object.values(cov));
       const evAt=t=>ev.find(e=>e.p.t===t);
       const txLine=r=>{const k=TOUT[r.type]?'out':TCL[r.type]?'cl':TLP[r.type]?'lp':'in';const g={out:'\u25BC ',in:'\u25B2 ',cl:'\u2B07 ',lp:r.type==='Add LP'?'\u2295 ':'\u2296 '}[k];
         return <span key={r.id} className={k}>{g}{r.type} {pfAbbr(Math.abs(r.amt))} {r.tok}{r.usd!=null&&<em> {'\u00B7'} {pfhMoney(r.usd)}</em>}</span>;};
@@ -197,7 +200,7 @@
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
               <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;if(e.tx){const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length===1?'transaction':'transactions'} since the point before</small></div>;}return <div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>;})()}</div></>}
           </div>
-          {ev.length>0&&<div className="pf2-hlg"><span><b className="in"></b>bought or received</span><span><b className="out"></b>sold or sent</span><span><b className="cl"></b>rewards claimed</span><span><b className="lp"></b>liquidity added / removed</span>{txs&&since>vals[0].t&&<span className="o">older dots: token count moved over 1 %</span>}</div>}
+          {(ev.length>0||txs)&&<div className="pf2-hlg"><span><b className="in"></b>bought or received</span><span><b className="out"></b>sold or sent</span><span><b className="cl"></b>rewards claimed</span><span><b className="lp"></b>liquidity added / removed</span>{txs&&covFrom>vals[0].t&&<span className="o">dots complete from {pfhDate(covFrom)}</span>}</div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
