@@ -1,0 +1,3 @@
+(async()=>{const q=s=>[...document.querySelectorAll(s)];const bars=q('.pf2-strip .day');const out={lineDots:q('.pf2-hp b.ev').length,bars:bars.length,hot:q('.pf2-strip .day.hot').map(b=>b.dataset.n),legend:(q('.pf2-hlg')[0]||{}).innerText};
+const b=bars[Math.floor(bars.length/2)];if(b){const p=document.querySelector('.pf2-hp');const r=p.getBoundingClientRect();const bx=b.getBoundingClientRect().left+2;p.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:bx,clientY:r.top+40}));await new Promise(r=>setTimeout(r,250));out.tip=(document.querySelector('.pf2-htip')||{}).innerText;out.on=q('.pf2-strip .day.on').length;}
+out.rows=q('.pf2-fr .t1').slice(0,6).map(e=>e.innerText);out.none=(document.querySelector('.pf2-rt .pf2-soon')||{}).innerText;return out;})()

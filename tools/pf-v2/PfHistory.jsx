@@ -56,12 +56,14 @@
     const usePfUfoV1=addrs=>{
       const key=addrs.map(a=>a.toLowerCase()).sort().join(',');
       const[st,setSt]=useState({state:'loading',m:{}});
+      const[nonce,setNonce]=useState(0);   // round 23 (audit A11 / B6): retry + a 20 s timeout per shard
       useEffect(()=>{let live=true;const cs=[...new Set(addrs.map(a=>a.toLowerCase()[2]))];
         if(!cs.length){setSt({state:'ok',m:{}});return;}
-        Promise.all(cs.map(c=>pfV1Shard[c]||(pfV1Shard[c]=fetch(PFH_RAW+'ufo-v1-earned/'+c+'.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).catch(e=>{delete pfV1Shard[c];throw e;}))))
+        const get=c=>{const ac=new AbortController();const to=setTimeout(()=>ac.abort(),20000);return fetch(PFH_RAW+'ufo-v1-earned/'+c+'.json',{signal:ac.signal}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).finally(()=>clearTimeout(to));};
+        Promise.all(cs.map(c=>pfV1Shard[c]||(pfV1Shard[c]=get(c).catch(e=>{delete pfV1Shard[c];throw e;}))))
           .then(ms=>{if(live)setSt({state:'ok',m:Object.assign({},...ms)});}).catch(()=>{if(live)setSt({state:'failed',m:{}});});
-        return()=>{live=false;};},[key]);
-      return{state:st.state,of:a=>st.m[a.toLowerCase().slice(2)]||0};
+        return()=>{live=false;};},[key,nonce]);
+      return{state:st.state,of:a=>st.m[a.toLowerCase().slice(2)]||0,retry:()=>{setSt(s=>({...s,state:'loading'}));setNonce(n=>n+1);}};
     };
     /* prices: the Charts page's prebuilt files (refetched every 30 min) */
     let pfhPx=null,pfhPxAt=0;
@@ -69,6 +71,7 @@
       if(pfhPx&&Date.now()-pfhPxAt<30*60e3)return pfhPx;
       const g=async f=>{try{const r=await fetch(PFH_RAW+f,{cache:'no-cache'});return r.ok?await r.json():null;}catch(e){return null;}};
       const[d,h]=await Promise.all([g('charts-data.json'),g('charts-intraday.json')]);
+      if(!d&&!h){pfhPx=null;throw new Error('price files unavailable');}   // round 23 (audit A3): a failed load is not cached for 30 min
       const ser=(o,k,tier)=>{try{const s=tier?o.tokens[k][tier].series:o.tokens[k].series;return(s||[]).filter(p=>p&&p[1]>0).sort((x,y)=>x[0]-y[0]);}catch(e){return[];}};
       pfhPx={daily:{PTGC:ser(d,'PTGC'),UFO:ser(d,'UFO')},hourly:{PTGC:ser(h,'PTGC','hourly'),UFO:ser(h,'UFO','hourly')}};pfhPxAt=Date.now();
       return pfhPx;
@@ -176,14 +179,16 @@
       /* round 15 (Shaka): claims get their own BLUE dot and liquidity adds / removes a YELLOW one (the table's colours) */
       const ev=[];const TIN={Buy:1,Receive:1},TOUT={Sell:1,Send:1},TCL={Claim:1},TLP={'Add LP':1,'Remove LP':1};
       const KINDS=[['in',TIN],['out',TOUT],['cl',TCL],['lp',TLP]];
-      /* round 18: dots ONLY from real transactions (the round-8 "token count moved over 1 %" fallback is gone — it hid every
-         normal-sized trade). Each wallet + token is covered back to cov[key] (0 = its whole history in reach); a trade older than
-         its own coverage is left out, and the legend says from when the dots are complete if that's inside the period. */
+      /* round 23 (audit A1, Shaka picked option B of mock-dots-v1): NOTHING on the line any more. The transactions become an
+         activity strip under the chart — one thin bar per chart point (a day; 6 h on 7D), stacked green / red / blue / yellow by
+         how many of each kind, taller with more, a count on the busy ones. Dust under $1 is left out. Hovering the chart lights
+         the matching bar and the tooltip lists the transactions. Each wallet + token only counts back to its own coverage. */
       const cov=txs&&txs.cov||{};
-      if(txs){const by=new Map();txs.rows.forEach(r=>{if(!KINDS.some(([,m])=>m[r.type]))return;if(r.t<=vals[0].t||r.t<(cov[r.addr+'|'+r.tok]||0))return;
-          const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[]};e.tx.push(r);by.set(p.t,e);});
-        by.forEach(e=>{const ks=KINDS.filter(([,m])=>e.tx.some(r=>m[r.type])).map(([k])=>k);
-          ks.forEach((k,j)=>ev.push({p:e.p,k,off:(j-(ks.length-1)/2)*12,tx:e.tx}));});}
+      const kindOf=r=>TOUT[r.type]?'out':TCL[r.type]?'cl':TLP[r.type]?'lp':TIN[r.type]?'in':null;
+      if(txs){const by=new Map();txs.rows.forEach(r=>{const k=kindOf(r);if(!k)return;if(r.usd!=null&&r.usd<1)return;if(r.t<=vals[0].t||r.t<(cov[r.addr+'|'+r.tok]||0))return;
+          const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[],n:{in:0,out:0,cl:0,lp:0}};e.tx.push(r);e.n[k]++;by.set(p.t,e);});
+        by.forEach(e=>ev.push(e));}
+      const evMax=ev.reduce((m,e)=>Math.max(m,e.tx.length),0);
       const covFrom=Math.max(0,...Object.values(cov));
       const evAt=t=>ev.find(e=>e.p.t===t);
       const txLine=r=>{const k=TOUT[r.type]?'out':TCL[r.type]?'cl':TLP[r.type]?'lp':'in';const g={out:'\u25BC ',in:'\u25B2 ',cl:'\u2B07 ',lp:r.type==='Add LP'?'\u2295 ':'\u2296 '}[k];
@@ -195,12 +200,14 @@
             {ticks.map((v,i)=><i key={i} className="g" style={{top:Y(v)+'%'}}></i>)}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pfhA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5CE13A" stopOpacity=".5"/><stop offset="1" stopColor="#1F6B12" stopOpacity=".06"/></linearGradient></defs>
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
-            {ev.map((e,i)=><b key={'e'+i} className={`ev ${e.k||(e.up?'in':'out')}`} style={{left:`calc(${X(e.p.t)}% + ${e.off}px)`,top:Y(e.p.v)+'%'}}></b>)}
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;if(e.tx){const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length===1?'transaction':'transactions'} since the point before</small></div>;}return <div className="ev">{e.ch.map(c=><span key={c.k} className={c.d>0?'in':'out'}>{c.d>0?'\u25B2 +':'\u25BC \u2212'}{pfAbbr(Math.abs(c.d))} {c.k}</span>)}<small>since the point before</small></div>;})()}</div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length} {l.length===1?'transaction':'transactions'} {period==='7D'?'in these 6 hours':'this day'}</small></div>;})()}</div></>}
           </div>
-          {(ev.length>0||txs)&&<div className="pf2-hlg"><span><b className="in"></b>bought or received</span><span><b className="out"></b>sold or sent</span><span><b className="cl"></b>rewards claimed</span><span><b className="lp"></b>liquidity added / removed</span>{txs&&covFrom>vals[0].t&&<span className="o">dots complete from {pfhDate(covFrom)}</span>}</div>}
+          {txs&&<div className="pf2-strip" aria-hidden="true"><span className="lab">{period==='7D'?'TRADES / 6H':'TRADES'}</span>
+            {ev.map((e,i)=>{const n=e.tx.length,h=Math.min(26,4+n*4);const on=hov&&hov.t===e.p.t;return(<span key={i} className={`day${on?' on':''}${n>=4?' hot':''}`} data-n={n} style={{left:X(e.p.t)+'%',height:h+'px'}}>
+              {KINDS.map(([k])=>e.n[k]>0&&<i key={k} className={k} style={{flex:e.n[k]}}></i>)}</span>);})}</div>}
+          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {period==='7D'?'6 hours':'day'} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span>{covFrom>vals[0].t&&<span className="o">complete from {pfhDate(covFrom)}</span>}</div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
@@ -355,7 +362,7 @@
       const[px,setPx]=useState(null);useEffect(()=>{pfhPrices().then(setPx).catch(()=>{});},[]);
       const V=pfeView(tok),isU=tok==='UFO',isB=tok==='BOTH',keys0=V.keys,keys=keys0.filter(k=>!hid[k]);
       /* days from the running totals — PTGC and UFO each complete (or not) on their own */
-      const priceOf=(t,mid)=>{let p=px?pfhPriceAt(px,t,mid):null;if(p==null&&prices){const s0=px&&px.hourly[t];const lastT=s0&&s0.length?s0[s0.length-1][0]:0;const cur=prices[t==='UFO'?'ufo':'ptgc'];if(mid>=lastT&&cur>0)p=cur;}return p;};
+      const priceOf=(t,mid)=>{let p=px?pfhPriceAt(px,t,mid):null;if(p==null&&prices){const s0=px&&px.hourly[t];const lastT=s0&&s0.length?s0[s0.length-1][0]:null;const cur=prices[t==='UFO'?'ufo':'ptgc'];if(lastT!=null&&mid>=lastT&&cur>0)p=cur;}return p;};
       const days=React.useMemo(()=>{if(!e.pts)return null;const out=[];
         for(let i=0;i<e.pts.length-1;i++){const a=e.pts[i],b=e.pts[i+1];const d={t0:a.ts,t1:b.ts,okP:true,okU:true,st:0,lk:0,rf:0,uf:0};
           for(const ad of addrs){const va=a.w[ad],vb=b.w[ad];if(!va||!vb){d.okP=d.okU=false;d.whyP=d.whyU='Couldn’t be read from the chain';break;}
@@ -398,7 +405,7 @@
               <div className="p">This takes a little while the first time {'—'} after that it opens almost instantly.</div>
               <div className="steps">
                 <div className={`st${chainDone?' ok':' on'}`}><i>{chainDone?'✓':'1'}</i><span>Daily reward totals from the chain</span><b>{chainDone?'done':Math.round(e.progress*100)+'%'}</b></div>
-                {needU&&<div className={`st${uReady?' ok':' on'}`}><i>{uReady?'✓':'2'}</i><span>Your UFO transfers from PulseScan</span><b>{uReady?'done':!txs?'starting…':(txs.pages||0)+' more page'+((txs.pages||0)===1?'':'s')}</b></div>}
+                {needU&&<div className={`st${uReady?' ok':' on'}`}><i>{uReady?'✓':'2'}</i><span>Your UFO transfers from PulseScan</span><b>{uReady?'done':!txs?'starting…':(txs.pages||0)+' page'+((txs.pages||0)===1?'':'s')+' read'}</b></div>}
               </div>
               <div className="bar"><i style={{width:Math.max(6,Math.min(100,((chainDone?1:e.progress)*(needU?.6:1)+(needU?(uReady?.4:Math.min(.36,((txs&&txs.pages)||0)*.04)):0))*100))+'%'}}></i></div>
             </div>}

@@ -374,3 +374,25 @@ Prices: that day's from the price files, today's live. Harness PF_ED=1 + probes 
 3. Scroll bar always shown: Chrome ignores ::-webkit-scrollbar styling (and macOS then hides the bar until you scroll) when
    `scrollbar-color` is set, so the standard properties are now Firefox-only (@supports); overflow-y:scroll; a fade at the
    bottom of the list hints there's more.
+
+## Round 23 (2026-10-14) — Phase A of the roadmap (handover/PORTFOLIO-ROADMAP.md)
+A1 **Activity strip** (Shaka picked B of `mock-dots-v1.html`, render `renders/dots-v1-1340.jpg`): no dots on the line any more;
+   under the chart one stacked bar per chart point (buys / sells / claims / liquidity), taller with more, a count on 4+, dust
+   under $1 left out; hover lights the bar and lists the transactions. Harness PF_TX_BUSY=1 (a 3-trades-a-day wallet), probe
+   `pf2-strip.js`.
+A2 Clear all → "No wallets are counted. Switch one on…" (was "Reading your wallets…" forever).
+A3 A failed price-file load is no longer cached for 30 min; old rows / days never fall back to today's price unless the price
+   series exists and the row is newer than it.
+A4 Coverage: a wallet+token is "complete" only when PulseScan ran out of pages; capped / aged lists are complete back to their
+   oldest item (fixes UFO day maths + the strip's "complete from" note for busy wallets).
+A5 Transactions cache: debounced saves; on quota the least-recently-read entries are evicted one at a time (was: wipe all);
+   old `grays_pf_tx_v1` / `v2` keys removed.
+A6 The feed hands `busy:false` to the Details window when its run is cut short (wallet set changed / unmounted).
+A7 Loader: "N pages read".  A8 Remove asks first (card ✕ → Remove? Yes/No, auto-dismiss 5 s; Edit window → Yes, remove / Keep);
+   ✕ hit area 26 px.  A9 Empty feed with failed reads says so + Retry.  A10 ADD WALLET with "+ New group" not created → message.
+A11 Old-UFO-contract file failure shows "old contract not included · retry" (Lifetime earned + Reflections box); shard fetch 20 s timeout.
+A12 **Unstake**: PulseScan doesn't decode the staking contract's withdraw — real unstakes are method null + selector 0x2e1a7d4d
+   (checked on two live txs) → the selector is matched too. (deposit 0xb6b55f25 mints a receipt token, nothing in our feed.)
+A13 Buy / Sell only when ANOTHER token moved in the same tx (checked lazily with the per-tx detail we already fetch); a plain
+   transfer to a contract (Safe, bridge, vesting) is Send / Receive. Detail cache → `grays_pf_txd_v2`.
+Also: a stray backspace character in the LP-name regex (`/\bLP\b/` had been written through a non-raw string) fixed.

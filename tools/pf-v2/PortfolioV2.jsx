@@ -68,6 +68,7 @@
       const[grp,setGrp]=useState(w.group||'Default');
       const[newG,setNewG]=useState('');
       const[copied,setCopied]=useState(false);
+      const[rm,setRm]=useState(false);   // round 23 (audit A8): Remove asks first
       const g=grp==='__new'?newG.trim():grp;
       const ok=!(grp==='__new'&&!g);
       const go=()=>{if(ok)save({name:name.trim(),group:g||'Default'});};
@@ -86,7 +87,7 @@
               <option value="__new">+ New group</option>
             </select>
             {grp==='__new'&&<input className="in" value={newG} onChange={e=>setNewG(e.target.value)} placeholder="New group name…" aria-label="New group name" onKeyDown={e=>e.key==='Enter'&&go()}/>}
-            <div className="bt"><button className="rm" onClick={remove}>Remove wallet</button><span style={{flex:1}}></span><button className="q" onClick={close}>Cancel</button><button className="sv" onClick={go} disabled={!ok}>Save</button></div>
+            <div className="bt">{rm?<span className="pf2-rmask in"><span>Remove this wallet?</span><button className="y" onClick={remove}>Yes, remove</button><button className="n" onClick={()=>setRm(false)}>Keep</button></span>:<button className="rm" onClick={()=>setRm(true)}>Remove wallet</button>}<span style={{flex:1}}></span><button className="q" onClick={close}>Cancel</button><button className="sv" onClick={go} disabled={!ok}>Save</button></div>
           </div>
         </PfModal>
       );
@@ -166,7 +167,9 @@
       const[edTok,setEdTok]=useState(null);   // round 20: the 30-day Earned details window (PTGC / UFO)   // round 19: the breakdown address just copied
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
-      const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
+      const[edit,setEdit]=useState(null);
+      const[rmAsk,setRmAsk]=useState(null);   // round 23 (audit A8): the card whose ✕ was just tapped — asks before removing
+      useEffect(()=>{if(!rmAsk)return;const t=setTimeout(()=>setRmAsk(null),5000);return()=>clearTimeout(t);},[rmAsk]);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited   // round 2: the Leagues window (PfTierInfoModal, the dashboard's look)
       const simulated=moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='');
       const gNames=Object.keys(groups);
       useEffect(()=>{if(grp!=='All'&&!groups[grp])setGrp('All');},[gNames.join('|')]);
@@ -206,6 +209,7 @@
         const a=p.inputAddr.trim();
         if(!/^0x[0-9a-fA-F]{40}$/.test(a)){setAddMsg('That is not a wallet address — it should start with 0x and be 42 characters.');return;}
         if(wallets.find(w=>w.address.toLowerCase()===a.toLowerCase())){setAddMsg('That wallet is already in your portfolio.');return;}
+        if(p.inputGroup==='__new'){setAddMsg(p.newGroupName.trim()?'Press Create next to the new group name first (or pick a group).':'Name the new group and press Create first (or pick a group).');return;}   // round 23 (audit A10): used to save the group as "__new"
         setAddMsg('');p.addWallet();
       };
       const pt=agg.ptgc,uf=agg.ufo;
@@ -245,7 +249,7 @@
       const reflBox=()=>uf.reflState==='pending'?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>scanning{'…'}</div><div className="s">{uf.reflPending} wallet{uf.reflPending>1?'s':''}</div></>
         :uf.reflState==='failed'?<><div className="v" style={{fontSize:16,color:'#FFD38A'}}>unavailable</div><div className="s"><button onClick={retryFailedReflScans}>Retry</button></div></>
         :ufoEarned==null?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.5)'}}>loading{'…'}</div><div className="s">old UFO contract</div></>
-        :<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div></>;
+        :<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div>{v1.state==='failed'&&<div className="s warn">old UFO contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></div>}</>;
       return(
         <div className="pf2"><div className="pf2-in">
           {/* ---- title, add capsule, toolbar, the deck ---- */}
@@ -293,7 +297,8 @@
                     <div className="pf2-split" aria-hidden="true">{ps!=null&&<><i className="p" style={{width:ps*100+'%'}}></i><i className="u" style={{width:(1-ps)*100+'%'}}></i></>}</div>
                     <div className="r3"><span className="p">PTGC {ps==null?'—':Math.round(ps*100)+'%'}</span><span className="u">UFO {ps==null?'—':Math.round((1-ps)*100)+'%'}</span></div>
                   </>}
-                  <div className="acts"><button onClick={()=>removeWallet(w.address)} aria-label={`Remove ${label}`} title="Remove this wallet">✕</button></div>
+                  <div className="acts">{rmAsk===a?<span className="pf2-rmask" role="alertdialog" aria-label={`Remove ${label}?`}>Remove? <button className="y" onClick={()=>{removeWallet(w.address);setRmAsk(null);}}>Yes</button><button className="n" onClick={()=>setRmAsk(null)}>No</button></span>
+                    :<button onClick={()=>setRmAsk(a)} aria-label={`Remove ${label}`} title="Remove this wallet">✕</button>}</div>
                 </div>
               );
             })}
@@ -302,8 +307,9 @@
           {moonMathActive&&(()=>{const isAth=customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo);const none=customPrices.ptgc===''&&customPrices.ufo==='';return(
             <div className="pf2-mm"><img src="logos/portfolio/pf-moon.webp" alt=""/>Moon Math is on {'\u2014'} {isAth?'every dollar figure below uses the All-Time High prices.':none?'Custom is selected: type a PTGC and / or UFO price in the Moon Math window (live prices until you do).':'every dollar figure below uses your custom prices.'} <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to Live Prices</button></div>);})()}
 
-          {wallets.length>0&&!anyData&&(()=>{const run=wallets.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=wallets.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
-            <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}
+          {/* round 23 (audit A2): with every wallet switched off this used to say "Reading your wallets…" forever */}
+          {wallets.length>0&&!anyData&&(()=>{const run=counted.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
+            <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{!counted.length?<><b>No wallets are counted.</b> Switch one on above (or <button className="pf2-lnk" onClick={selectAllWallets}>Select all</button>) to see the totals.</>:run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}
           {wallets.length>0&&anyData&&<>
           {/* ---- three summary tiles ---- */}
           <div className="pf2-row3 r4">
@@ -392,7 +398,7 @@
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards per day, last 30 days"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>Details {'\u00B7'} 30D</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
-                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">100% of earned</div></>}</div></div>
+                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">{v1.state==='failed'?<span className="warn">old contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></span>:'100% of earned'}</div></>}</div></div>
                 {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
                     holder reward = the counted UFO ÷ the supply (≈: burned / excluded balances shift it a little). */}
                 {uf.balance>0&&(()=>{const sh=uf.balance/999999999051*100;return(

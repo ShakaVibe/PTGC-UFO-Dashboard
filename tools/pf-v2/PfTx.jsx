@@ -14,8 +14,12 @@
     const PFT_API='https://api.scan.pulsechain.com/api/v2/addresses/';
     const PFT_STAKING='0xc71f597a2ac39e47f07102e849d18489c96f39ef';
     const PFT_TTL=5*60e3,PFT_BACK=365*864e5,PFT_PAGES=20;
-    try{localStorage.removeItem('grays_pf_tx_v2');}catch(e){}
-    const pftCache=(()=>{let c=null;return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_LS)||'{}')||{};}catch(e){c={};}return c;},save(){try{localStorage.setItem(PFT_LS,JSON.stringify(c));}catch(e){try{c={};localStorage.removeItem(PFT_LS);}catch(e2){}}}};})();
+    try{localStorage.removeItem('grays_pf_tx_v1');localStorage.removeItem('grays_pf_tx_v2');}catch(e){}
+    /* round 23 (audit A5): the cache used to be WIPED on a quota error (a 20-wallet portfolio is ~4 MB), so big portfolios never
+       kept one and re-read everything every visit. Now: saves are debounced, and on quota the least recently read wallet+token
+       entries are dropped one at a time until it fits. */
+    const pftCache=(()=>{let c=null,t=null;const write=()=>{for(let i=0;i<60;i++){try{localStorage.setItem(PFT_LS,JSON.stringify(c));return;}catch(e){const ks=Object.keys(c);if(!ks.length)return;const old=ks.sort((a,b)=>(c[a].at||0)-(c[b].at||0))[0];delete c[old];}}};
+      return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_LS)||'{}')||{};}catch(e){c={};}return c;},save(){clearTimeout(t);t=setTimeout(write,400);},flush(){clearTimeout(t);write();}};})();
     const pftPage=async(addr,tok,next)=>{
       const ac=new AbortController();const to=setTimeout(()=>ac.abort(),25000);
       try{
@@ -81,7 +85,9 @@
       const tokAddr=PFH_TOK[tok].toLowerCase();
       const m=(legs[0]&&legs[0].m||'').toLowerCase();
       const fromSt=legs.some(l=>l.f===PFT_STAKING&&l.to===addr);
-      if(m==='withdraw'&&legs.some(l=>l.f===PFT_STAKING||l.to===PFT_STAKING))return{type:'Unstake',net};
+      /* round 23 (audit A12, checked on PulseScan): the staking contract's withdraw(uint256) is NOT decoded there — real unstakes
+         come back with method null and the bare selector 0x2e1a7d4d, so match the selector as well */
+      if((m==='withdraw'||m==='0x2e1a7d4d')&&legs.some(l=>l.f===PFT_STAKING||l.to===PFT_STAKING))return{type:'Unstake',net};
       if(fromSt)return{type:'Claim',net,sub:PFT_CLAIM_SUB[m]||''};
       const main=legs.filter(l=>(l.to===addr||l.f===addr)).map(l=>l.to===addr?{a:l.f,c:l.fc,v:l.v}:{a:l.to,c:l.tc,v:l.v})
         .filter(x=>x.a&&x.a!==addr&&x.a!==tokAddr&&!PFT_FEE.has(x.a)).sort((x,y)=>y.v-x.v)[0];
@@ -99,17 +105,22 @@
     /* per-tx detail, fetched only for the rows on screen that need it, cached for good (past txs never change):
        Sell / Buy → was it really an LP add / remove through a helper (LP tokens minted to / returned by the wallet)?
        Unstake → the principal, decoded from withdraw(uint256)'s argument. */
-    const PFT_DLS='grays_pf_txd_v1';
+    const PFT_DLS='grays_pf_txd_v2';   // v2 (round 23): + swap (another token moved in the tx)
+    try{localStorage.removeItem('grays_pf_txd_v1');}catch(e){}
     const pftD=(()=>{let c=null;return{get(){if(c)return c;try{c=JSON.parse(localStorage.getItem(PFT_DLS)||'{}')||{};}catch(e){c={};}return c;},save(){try{localStorage.setItem(PFT_DLS,JSON.stringify(c));}catch(e){}}};})();
-    const pftDetail=async(h,addr)=>{
-      const c=pftD.get(),k=h+'|'+addr;if(c[k])return c[k];
-      const g=async u=>{const r=await fetch(PFT_API.replace('addresses/','')+u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();};
+    const pftDetail=async(h,addr,tok)=>{
+      const c=pftD.get(),k=h+'|'+addr+'|'+tok;if(c[k])return c[k];
+      const g=async u=>{const ac=new AbortController();const to=setTimeout(()=>ac.abort(),20000);try{const r=await fetch(PFT_API.replace('addresses/','')+u,{signal:ac.signal});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}finally{clearTimeout(to);}};
       const out={};
       const tx=await g('transactions/'+h);
       const raw=tx&&tx.raw_input||'';
       if(raw.startsWith('0x2e1a7d4d')&&raw.length>=74){try{out.principal=Number(BigInt('0x'+raw.slice(10,74)))/1e18;}catch(e){}}
       const tt=await g('transactions/'+h+'/token-transfers');
-      (tt.items||[]).forEach(x=>{const sym=(x.token&&x.token.symbol||''),nm=(x.token&&x.token.name||'');if(!(sym==='PLP'||/LP/.test(nm)))return;
+      /* round 23 (audit A13): a real buy / sell always moves ANOTHER token in the same tx (WPLS, DAI, the other side of the pair).
+         A transfer to / from a contract with nothing else moving is a send / receive (a Safe, a bridge, a vesting contract…). */
+      const mine=(PFH_TOK[tok]||'').toLowerCase();
+      out.swap=(tt.items||[]).some(x=>((x.token&&x.token.address)||'').toLowerCase()!==mine&&!((x.token&&x.token.symbol)==='PLP'));
+      (tt.items||[]).forEach(x=>{const sym=(x.token&&x.token.symbol||''),nm=(x.token&&x.token.name||'');if(!(sym==='PLP'||/\bLP\b/.test(nm)))return;
         const f=(x.from&&x.from.hash||'').toLowerCase(),t=(x.to&&x.to.hash||'').toLowerCase();
         if(t===addr&&/^0x0{40}$/.test(f))out.lp='add';else if(f===addr)out.lp='remove';});
       c[k]=out;pftD.save();return out;
@@ -141,7 +152,7 @@
               Object.values(by).forEach(legs=>{const{type,net,cp:mcp,sub}=pftClassify(legs,addr,own,tok);flows.push({addr,tok,t:legs[0].t,net});if(Math.abs(net)<1e-9&&type!=='Move')return;
                 const t=legs[0].t;let p=px?pfhPriceAt(px,tok,t):null;
                 /* newer than the price files (they refresh hourly) → today's price */
-                if(p==null){const last=px&&px.hourly[tok]&&px.hourly[tok].length?px.hourly[tok][px.hourly[tok].length-1][0]:0;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(t>=last&&cur>0)p=cur;}
+                if(p==null){const ser=px&&px.hourly[tok];const last=ser&&ser.length?ser[ser.length-1][0]:null;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(last!=null&&t>=last&&cur>0)p=cur;}   // round 23 (audit A3): never "today's price" for old rows when the price files failed
                 const cp=mcp;
                 rows.push({id:addr+legs[0].h+tok,t,addr,who:type==='Move'&&cp?(net>=0?(names[cp]||cp.slice(0,6))+' \u2192 '+names[addr]:names[addr]+' \u2192 '+(names[cp]||cp.slice(0,6))):names[addr],tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});
             });
@@ -151,16 +162,18 @@
             return out;
           };
           /* round 18: chart coverage — a wallet + token is complete back to its oldest transfer unless it hit the page cap / a year */
-          const cov=()=>{const o={};got.forEach(g=>{o[g.addr+'|'+g.tok]=g.done?0:(g.items.length?g.items[g.items.length-1].t:Date.now());});return o;};
+          /* round 23 (audit A4): "complete" only when PulseScan ran out of pages; a list that stopped at the page cap or the
+             one-year mark is complete back to its OLDEST item, not to the beginning of time */
+          const cov=()=>{const o={};got.forEach(g=>{o[g.addr+'|'+g.tok]=g.full?0:(g.items.length?g.items[g.items.length-1].t:Date.now());});return o;};
           let busy=true,pages=0;   // round 22: the Details window waits on these (busy = older pages still coming; pages = how many read)
           const tell=()=>{if(onRows&&live){const rows=build();onRows({rows,cov:cov(),failed,flows,busy,pages});}};
-          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items:e.items,done:e.done});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
+          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
           tell();
           /* phase 2: the older pages, two at a time, the list and the chart updating as they land */
           let q2=0;const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
-          const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;pages++;}catch(err){break;}
+          const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;g.full=!e.next;pages++;}catch(err){break;}
             if(live){setSt(s=>({...s,rows:build()}));tell();}}}};
           await Promise.all([w2(),w2()]);
           if(!live)return;
@@ -168,7 +181,9 @@
           busy=false;tell();
           setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
         })();
-        return()=>{live=false;};
+        /* round 23 (audit A6): if this run is cut short (wallet set changed, section unmounted) the Details window must not
+           keep waiting on busy:true */
+        return()=>{live=false;pftCache.flush();if(onRows)onRows(t=>t?{...t,busy:false}:t);};
       },[key,nonce]);
       /* round 17 (Shaka picked option B of mock-tx-v1): an activity feed — one plain-words line per transaction ("Sold 8.91M PTGC"),
          a round type icon with the token's logo on its corner, the wallet (with a copy button) and time underneath, the dollar value
@@ -178,6 +193,7 @@
       /* LP / unstake detail first (it can turn a "Sell" into "Add LP"), so the chips count the corrected types */
       const fix=r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
         if(d.lp&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:d.lp==='add'?'Add LP':'Remove LP'};
+        if(d.swap===false&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:r.type==='Sell'?'Send':'Receive'};
         if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
         return r;};
       const all=st.rows.map(fix);
@@ -185,7 +201,7 @@
       const list=PFT_F[flt]?all.filter(r=>PFT_F[flt].includes(r.type)):all;
       const show=list.slice(0,lim);
       useEffect(()=>{let live=true;const need=show.filter(r=>(r.type==='Sell'||r.type==='Buy'||r.type==='Unstake')&&!det[r.h+'|'+r.addr]);if(!need.length)return;
-        (async()=>{let q=0;const w=async()=>{while(q<need.length){const r=need[q++];try{const d=await pftDetail(r.h,r.addr);if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:d}));}catch(e){if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:{}}));}}};await Promise.all([w(),w()]);})();
+        (async()=>{let q=0;const w=async()=>{while(q<need.length){const r=need[q++];try{const d=await pftDetail(r.h,r.addr,r.tok);if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:d}));}catch(e){if(live)setDet(x=>({...x,[r.h+'|'+r.addr]:{}}));}}};await Promise.all([w(),w()]);})();
         return()=>{live=false;};},[show.map(r=>r.id).join()]);
       const dayKey=t=>{const d=new Date(t);return d.getFullYear()*10000+d.getMonth()*100+d.getDate();};
       const dayName=t=>{const d=new Date(t),n=new Date(),k=dayKey(t),y=new Date(n);y.setDate(n.getDate()-1);
@@ -216,7 +232,7 @@
             <button className="pf2-lnk q" onClick={()=>setNonce(n=>n+1)}>{'↻'} Refresh</button></div>
           {st.state==='loading'&&<div className="pf2-soon">Reading your wallets{'’'} PTGC and UFO transfers from PulseScan{'…'}</div>}
           {st.state==='failed'&&<div className="pf2-soon">Couldn{'’'}t reach PulseScan right now. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></div>}
-          {st.state==='none'&&<div className="pf2-soon">No PTGC or UFO transfers in the counted wallets yet.</div>}
+          {st.state==='none'&&<div className="pf2-soon">{st.failed>0?<>{st.failed} of {st.total} PulseScan reads failed, so some history may be missing. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></>:'No PTGC or UFO transfers in the counted wallets yet.'}</div>}
           {st.state==='ok'&&st.rows.length>0&&<>
             <div className="pf2-feed">{groups.map(g=>{const[d,md]=dayName(g.rows[0].t);return(<React.Fragment key={g.k}>
               <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span></div>{g.rows.map(row)}</React.Fragment>);})}</div>

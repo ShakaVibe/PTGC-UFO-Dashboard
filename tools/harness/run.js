@@ -178,6 +178,13 @@ const dsAnswer=(url)=>{
         :[it(1,S,w,'withdrawRewardLock',539_104,'b1'),it(5,P,w,'swapExactETHForTokens',12_456_789,'b2'),it(20,w,O,'transfer',100_000_000,'b3'),it(50,'0x9999999999999999999999999999999999999999',w,'transfer',2_345_678,'b4'),it(60,w,P,'0xe25d4a18',8_500_000,'b5'),it(60,w,tok,'0xe25d4a18',250_000,'b5'),it(60,w,S,'0xe25d4a18',100_000,'b5'),it(60,w,'0x0000000000000000000000000000000000000000','0xe25d4a18',50_000,'b5'),
           /* round 14: an unstake (reward in + fee out, principal only in the call data), a helper-made LP add (looks like a sell) */
           it(80,S,w,'withdraw',20_000,'b7'),it(80,w,S,'withdraw',2_000,'b7'),it(90,w,P,'0xe25d4a18',3_000_000,'b8')];
+      /* PF_TX_BUSY=1 (round 23): a bot-like wallet — 3 PTGC trades a day for 30 days (one of them dust) */
+      if(process.env.PF_TX_BUSY&&!/block_number=/.test(u)&&w==='0x1111111111111111111111111111111111111111'&&!isU){const L=[];for(let dd=0;dd<30;dd++){for(let k=0;k<3;k++){const h=dd*24+k*5+1,hx=(dd*3+k+100).toString(16).padStart(2,'0');const buy=(dd+k)%2===0,amt=k===2?10:5_000_000+dd*100_000;
+          if(buy)L.push(it(h,P,w,'0xe25d4a18',amt,hx));else{L.push(it(h,w,P,'0xe25d4a18',amt,hx),it(h,w,tok,'0xe25d4a18',amt/38,hx),it(h,w,S,'0xe25d4a18',amt/95,hx));}}}
+        return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items:L.slice(0,50),next_page_params:L.length>50?{block_number:1,index:1,token:tok}:null})});}
+      if(process.env.PF_TX_BUSY&&/block_number=/.test(u)&&w==='0x1111111111111111111111111111111111111111'&&!isU){const L=[];for(let dd=0;dd<30;dd++){for(let k=0;k<3;k++){const h=dd*24+k*5+1,hx=(dd*3+k+100).toString(16).padStart(2,'0');const buy=(dd+k)%2===0,amt=k===2?10:5_000_000+dd*100_000;
+          if(buy)L.push(it(h,P,w,'0xe25d4a18',amt,hx));else{L.push(it(h,w,P,'0xe25d4a18',amt,hx),it(h,w,tok,'0xe25d4a18',amt/38,hx),it(h,w,S,'0xe25d4a18',amt/95,hx));}}}
+        const pg=+(u.match(/index=(\d+)/)||[0,1])[1];const start=pg*50;return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items:L.slice(start,start+50),next_page_params:L.length>start+50?{block_number:1,index:pg+1,token:tok}:null})});}
       /* PF_TX_PAGES=1 (round 18): wallet 0x1111…'s PTGC list has a 2nd page (older sells, 4–6 days back) behind next_page_params */
       if(process.env.PF_TX_PAGES&&w==='0x1111111111111111111111111111111111111111'&&!isU){
         if(/block_number=/.test(u))return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({items:[it(100,w,P,'0xe25d4a18',7_000_000,'c1'),it(100,w,S,'0xe25d4a18',70_000,'c1'),it(130,w,P,'0xe25d4a18',6_000_000,'c2'),it(130,w,S,'0xe25d4a18',60_000,'c2')],next_page_params:null})});
@@ -188,7 +195,8 @@ const dsAnswer=(url)=>{
     /* round 14: PulseScan's per-tx detail (raw_input for the unstake principal, the tx's other transfers for the LP-mint tell) */
     if(/api\.scan\.pulsechain\.com\/api\/v2\/transactions\/0x[0-9a-f]{64}/.test(u)&&process.env.PF_TX){
       const h=u.match(/transactions\/(0x[0-9a-f]{64})/)[1],w='0x1111111111111111111111111111111111111111';
-      const body=/token-transfers/.test(u)?{items:h.startsWith('0xb8')?[{from:{hash:'0x0000000000000000000000000000000000000000'},to:{hash:w},token:{symbol:'PLP',name:'PulseX LP'}}]:[]}
+      /* round 23: every stub swap also moves WPLS (the A13 'another token moved' check); the LP add (b8) mints PLP; the unstake (b7) moves nothing else */
+      const body=/token-transfers/.test(u)?{items:h.startsWith('0xb8')?[{from:{hash:'0x0000000000000000000000000000000000000000'},to:{hash:w},token:{symbol:'PLP',name:'PulseX LP',address:'0x'+'ee'.repeat(20)}}]:h.startsWith('0xb7')?[]:[{from:{hash:w},to:{hash:'0x'+'ab'.repeat(20)},token:{symbol:'WPLS',name:'Wrapped Pulse',address:'0xA1077a294dDE1B09bB078844df40758a5D0f9a27'}}]}
         :{hash:h,raw_input:h.startsWith('0xb7')?'0x2e1a7d4d'+(5_000_000n*10n**18n).toString(16).padStart(64,'0'):'0x'};
       return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(body)});
     }
