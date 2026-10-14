@@ -366,6 +366,10 @@
           const mid=Math.min(Date.now(),(a.ts+b.ts)/2);d.pP=priceOf('PTGC',mid);d.pU=priceOf('UFO',mid);
           out.push(d);}
         return out;},[e.pts,txs,px,addrs.join(),prices&&prices.ptgc,prices&&prices.ufo]);
+      const chainDone=!!e.pts,needU=tok!=='PTGC';
+      const startBt=e.pts&&e.pts[0]?e.pts[0].bt:0;
+      const uReady=!!(txs&&txs.flows&&(!txs.busy||addrs.every(ad=>{const c=txs.cov&&txs.cov[ad+'|UFO'];return c!==undefined&&c<=startBt;})));
+      const waiting=e.state!=='failed'&&(!chainDone||(needU&&!uReady));
       const tot=d=>d&&V.ok(d)?keys.reduce((t,k)=>t+V.val(d,k),0):0;
       const okDays=days?days.filter(V.ok):[];
       const sum=k=>okDays.reduce((t,d)=>t+V.val(d,k),0),sumUsd=k=>okDays.reduce((t,d)=>t+(V.usd(d,k)||0),0),sumTok=k=>okDays.reduce((t,d)=>t+(d[k]||0),0);
@@ -386,19 +390,30 @@
               <div className="tt"><h2>{isB?'ALL REWARDS':tok+' REWARDS'}</h2><div className="sub">{isB?'PTGC + UFO in dollars':'Earned by source'} {'·'} last 30 days {'·'} all counted wallets</div></div>
               <div className="tw">{tabs}</div><button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
             <div className="tm">{tabs}</div>
-            {(e.state==='loading'||e.state==='idle')&&!e.pts&&<div className="pf2-hwait" style={{height:240}}><div>Reading the last 30 days from the chain{'…'} <b>{Math.round(e.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,e.progress*100)+'%'}}></i></div><small>First look reads every day once; after that only today.</small></div>}
+            {/* round 22 (Shaka: "we need like a big loading thing so people realize it and wait"): one big loader until
+                everything this tab needs is in — the 30 days of chain reads, and (Both / UFO) the UFO transfers back to 30 days */}
+            {waiting&&<div className="pf2-edload" role="status" aria-live="polite">
+              <div className="orb"><span className="ring"></span><span className="ring r2"></span>{isB?<span className="two big"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={logo} alt=""/>}</div>
+              <div className="h">Crunching your last 30 days{'…'}</div>
+              <div className="p">This takes a little while the first time {'—'} after that it opens almost instantly.</div>
+              <div className="steps">
+                <div className={`st${chainDone?' ok':' on'}`}><i>{chainDone?'✓':'1'}</i><span>Daily reward totals from the chain</span><b>{chainDone?'done':Math.round(e.progress*100)+'%'}</b></div>
+                {needU&&<div className={`st${uReady?' ok':' on'}`}><i>{uReady?'✓':'2'}</i><span>Your UFO transfers from PulseScan</span><b>{uReady?'done':!txs?'starting…':(txs.pages||0)+' more page'+((txs.pages||0)===1?'':'s')}</b></div>}
+              </div>
+              <div className="bar"><i style={{width:Math.max(6,Math.min(100,((chainDone?1:e.progress)*(needU?.6:1)+(needU?(uReady?.4:Math.min(.36,((txs&&txs.pages)||0)*.04)):0))*100))+'%'}}></i></div>
+            </div>}
             {e.state==='failed'&&!e.pts&&<div className="pf2-hwait" style={{height:200}}><div>Couldn{'’'}t read the last 30 days right now.</div><button className="pf2-lnk" onClick={e.retry}>Retry</button></div>}
-            {days&&<>
+            {days&&!waiting&&<>
               {isB?<div className="sum">
                   <div className="tl tot"><div className="l">Earned {'·'} 30 days</div><div className="v">{fmtDollar(T)}</div><div className="s">PTGC + UFO</div><div className="a">{'≈'} {fmtDollar(T/nd)} a day</div></div>
                   <div className="tl rf"><div className="l"><img src={TOKENS.PTGC.logo} alt=""/>PTGC</div><div className="v">{fmtDollar(P30$)}</div><div className="s">{pfAbbr(P30)} PTGC</div><div className="a">staking + locking + reflections</div><b className="bar" style={{width:(T>0?P30$/T*100:0)+'%',background:'#E8BE3F'}}></b></div>
                   <div className="tl uf"><div className="l"><img src={TOKENS.UFO.logo} alt=""/>UFO</div><div className="v">{fmtDollar(U30$)}</div><div className="s">{pfAbbr(U30)} UFO</div><div className="a">reflections</div><b className="bar" style={{width:(T>0?U30$/T*100:0)+'%',background:'#7CFC00'}}></b></div>
-                  <div className="tl"><div className="l">Best day</div><div className="v">{best?fmtDollar(tot(best)):'—'}</div><div className="s">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div><div className="a">{okDays.length<30?`${okDays.length} of 30 days in reach`:'last 30 days'}</div></div></div>
+                  <div className="tl best"><span className="ico" aria-hidden="true">{'\u{1F3C6}'}</span><div className="l">Best day</div><div className="v">{best?fmtDollar(tot(best)):'—'}</div><div className="s">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div><div className="a">{okDays.length<30?`${okDays.length} of 30 days in reach`:'last 30 days'}</div></div></div>
               :<div className={`sum${isU?' one':''}`}>
                 <div className="tl tot"><div className="l">Earned {'·'} 30 days</div><div className="v">{pfAbbr(T)} {tok}</div><div className="s">{fmtDollar(T$)}</div><div className="a">{'≈'} {pfAbbr(T/nd)} a day {'·'} {fmtDollar(T$/nd)}</div></div>
                 {isU?<>
                   <div className="tl uf"><div className="l"><i style={{background:PFE_C.uf}}></i>Daily average</div><div className="v">{pfAbbr(T/nd)}</div><div className="s">{fmtDollar(T$/nd)}</div><div className="a">per day{okDays.length<30?` · ${okDays.length} days in reach`:', last 30 days'}</div></div>
-                  <div className="tl uf"><div className="l">Best day</div><div className="v">{best?pfAbbr(tot(best)):'—'}</div><div className="s">{best&&best.pU!=null?fmtDollar(tot(best)*best.pU):'—'}</div><div className="a">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div></div>
+                  <div className="tl uf best"><span className="ico" aria-hidden="true">{'\u{1F3C6}'}</span><div className="l">Best day</div><div className="v">{best?pfAbbr(tot(best)):'—'}</div><div className="s">{best&&best.pU!=null?fmtDollar(tot(best)*best.pU):'—'}</div><div className="a">{best?pfeWd(best.t0)+' '+pfeDay(best.t0):''}</div></div>
                 </>:keys0.map(k=>{const v=sum(k);return(<div key={k} className={`tl ${k}`}><div className="l"><i style={{background:PFE_C[k]}}></i>{PFE_N[k]}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(sumUsd(k))}</div><div className="a">{'≈'} {pfAbbr(v/nd)} a day</div><b className="bar" style={{width:(T>0&&!hid[k]?v/T*100:0)+'%',background:PFE_C[k]}}></b></div>);})}
               </div>}
               <div className="ch"><div className="chh"><b>DAILY{isB?' · IN DOLLARS':''}</b>
@@ -407,13 +422,13 @@
                 <PfEdChart days={days} keys={keys} V={V}/></div>
               {/* round 21 (Shaka): every day in one list that scrolls on its own (a styled scroll bar on the right), no "show all" */}
               <div className="tbh"><b>BY DAY</b><span>newest first {'·'} {list.length} days {'·'} scroll for more</span></div>
-              <div className="dts"><table className="dt"><thead><tr><th>DAY</th>
+              <div className="pf2-dtw"><div className="dts"><table className="dt"><thead><tr><th>DAY</th>
                   {isB?<><th><i style={{background:'#E8BE3F'}}></i>PTGC</th><th><i style={{background:PFE_C.uf}}></i>UFO</th></>:keys.map(k=><th key={k}><i style={{background:PFE_C[k]}}></i>{PFE_N[k].toUpperCase()}</th>)}
                   {!isB&&keys.length>1&&<th>TOTAL</th>}<th>VALUE</th></tr></thead>
                 <tbody>{list.map(d=><tr key={d.t0} className={d===best?'best':''}><td className="dd">{dayName(d)}{d===best&&<span className="bd">BEST DAY</span>}</td>
                   {V.ok(d)?(isB?<><td>{pfAbbr(pT(d))}<small>{fmtDollar(pT(d)*d.pP)}</small></td><td>{pfAbbr(uT(d))}<small>{fmtDollar(uT(d)*d.pU)}</small></td><td className="tt">{fmtDollar(tot(d))}</td></>
                     :<>{keys.map(k=><td key={k}>{pfAbbr(V.val(d,k))}</td>)}{keys.length>1&&<td className="tt">{pfAbbr(tot(d))}</td>}<td className="tt">{fmtDollar(keys.reduce((t,k)=>t+(V.usd(d,k)||0),0)||null)}</td></>)
-                    :<td colSpan={isB?3:keys.length+(keys.length>1?2:1)} className="na">{V.why(d)}</td>}</tr>)}</tbody></table></div>
+                    :<td colSpan={isB?3:keys.length+(keys.length>1?2:1)} className="na">{V.why(d)}</td>}</tr>)}</tbody></table></div></div>
               <div className="dl">{list.map(d=>{const t=tot(d);const good=V.ok(d);return(<div key={d.t0} className={d===best?'best':''}><span className="d">{dayName(d)}</span>
                 {good?<><span className="t">{isB?fmtDollar(t):pfAbbr(t)} {!isB&&<small>{fmtDollar(keys.reduce((a,k)=>a+(V.usd(d,k)||0),0)||null)}</small>}</span>
                   {keys.length>1&&<><div className="mini">{keys.map(k=><b key={k} style={{width:(t>0?V.val(d,k)/t*100:0)+'%',background:PFE_C[k]}}></b>)}</div>

@@ -152,19 +152,20 @@
           };
           /* round 18: chart coverage — a wallet + token is complete back to its oldest transfer unless it hit the page cap / a year */
           const cov=()=>{const o={};got.forEach(g=>{o[g.addr+'|'+g.tok]=g.done?0:(g.items.length?g.items[g.items.length-1].t:Date.now());});return o;};
-          const tell=()=>{if(onRows&&live){const rows=build();onRows({rows,cov:cov(),failed,flows});}};
+          let busy=true,pages=0;   // round 22: the Details window waits on these (busy = older pages still coming; pages = how many read)
+          const tell=()=>{if(onRows&&live){const rows=build();onRows({rows,cov:cov(),failed,flows,busy,pages});}};
           const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,nonce>0);got.push({...j,items:e.items,done:e.done});}catch(e){failed++;}done++;if(live)setSt({state:'ok',rows:build(),failed,done,total:jobs.length});}};
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
           tell();
           /* phase 2: the older pages, two at a time, the list and the chart updating as they land */
-          let q2=0;const deep=got.filter(g=>!g.done);
-          const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;}catch(err){break;}
+          let q2=0;const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
+          const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;pages++;}catch(err){break;}
             if(live){setSt(s=>({...s,rows:build()}));tell();}}}};
           await Promise.all([w2(),w2()]);
           if(!live)return;
           const rows=build();
-          tell();
+          busy=false;tell();
           setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
         })();
         return()=>{live=false;};

@@ -363,3 +363,14 @@ Prices: that day's from the price files, today's live. Harness PF_ED=1 + probes 
   scroll bar on the right); on a phone the day cards scroll the same way.
 - Round 21b (his ask, mid-round): the average per day moved out of the plot to a chip right of "DAILY" ("- - Avg 8.59M PTGC / day";
   in Both, dollars); the line in the chart stays, now dashed to match the chip's key.
+
+## Round 22 (2026-10-14) — Details window: loader, tiles, scroll bar
+1. Big loader ("Crunching your last 30 days…": spinning gold/green rings round the logos, two steps — daily totals from the
+   chain (with %) and, for Both / UFO, the UFO transfers from PulseScan (pages read) — and a progress bar) until EVERYTHING the
+   tab needs is in. His screenshot showed Both at $0 with every day "Waiting for your transactions…": Both needs the UFO
+   transfers back 30 days, which arrive in the background paging after the window opened. Recent Transactions now reports
+   `busy` / `pages` and pages UFO first; the window waits until each wallet's UFO history reaches 30 days back (or paging ends).
+2. Tiles dressed up: tinted by source, bigger type (values 31 px, total 36 px, $ 17.5 px), a 🏆 on Best day.
+3. Scroll bar always shown: Chrome ignores ::-webkit-scrollbar styling (and macOS then hides the bar until you scroll) when
+   `scrollbar-color` is set, so the standard properties are now Firefox-only (@supports); overflow-y:scroll; a fade at the
+   bottom of the list hints there's more.
