@@ -219,7 +219,11 @@
       return(
         <div className="pf2-hc">
           <div className="pf2-hy" aria-hidden="true">{ticks.slice().reverse().map((v,i)=><span key={i}>{pfhMoney(v)}</span>)}</div>
-          <div className="pf2-hp" ref={ref} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={()=>setHov(null)} role="img" aria-label={`Portfolio value from ${pfhDate(t0)} to now: ${pfhMoney(vals[0].v)} to ${pfhMoney(last.v)}`}>
+          {/* round 26 (audit D3): the chart is keyboard-readable — Tab to it, ← → step through the points, Home / End; the
+              tooltip text is announced through the live region below */}
+          <div className="pf2-hp" ref={ref} tabIndex={0} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={()=>setHov(null)} onBlur={()=>setHov(null)}
+            onKeyDown={e=>{const i=hov?vals.indexOf(hov):vals.length-1;let j=null;if(e.key==='ArrowLeft')j=Math.max(0,i-1);else if(e.key==='ArrowRight')j=Math.min(vals.length-1,i+1);else if(e.key==='Home')j=0;else if(e.key==='End')j=vals.length-1;else if(e.key==='Escape')setHov(null);if(j!=null){e.preventDefault();setHov(vals[j]);}}}
+            role="img" aria-label={`Portfolio value from ${pfhDate(t0)} to now: ${pfhMoney(vals[0].v)} to ${pfhMoney(last.v)}. Use the arrow keys to step through the points.`}>
             {ticks.map((v,i)=><i key={i} className="g" style={{top:Y(v)+'%'}}></i>)}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pfhA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5CE13A" stopOpacity=".5"/><stop offset="1" stopColor="#1F6B12" stopOpacity=".06"/></linearGradient></defs>
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
@@ -227,6 +231,7 @@
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
               <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length} {l.length===1?'transaction':'transactions'} {stepName==='day'?'this day':'in these '+stepName}</small></div>;})()}</div></>}
           </div>
+          <div className="pf2-sr" aria-live="polite">{hov?`${hov.now?'Now':pfhDate(hov.t,period==='7D')}: ${fmtDollar(hov.v)} (PTGC ${fmtDollar(hov.p,0)}, UFO ${fmtDollar(hov.u,0)})${(()=>{const e=evAt(hov.t);return e?`, ${e.tx.length} transaction${e.tx.length===1?'':'s'}`:'';})()}`:''}</div>
           {txs&&<div className="pf2-strip" aria-hidden="true"><span className="lab">{period==='7D'?'TRADES / 6H':period==='1Y'?'TRADES / 4D':'TRADES'}</span>
             {ev.map((e,i)=>{const n=e.tx.length,h=Math.min(26,4+n*4);const on=hov&&hov.t===e.p.t;return(<span key={i} className={`day${on?' on':''}${n>=4?' hot':''}`} data-n={n} style={{left:X(e.p.t)+'%',height:h+'px'}}>
               {KINDS.map(([k])=>e.n[k]>0&&<i key={k} className={k} style={{flex:e.n[k]}}></i>)}</span>);})}</div>}
@@ -359,7 +364,10 @@
       const move=e=>{const r=ref.current.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;const i=Math.floor((cx-L)/band);setHov(i>=0&&i<n?i:null);};
       const h=hov!=null?days[hov]:null;
       return(
-        <div className="pf2-edplot" ref={ref} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move}>
+        <div className="pf2-edplot" ref={ref} tabIndex={0} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move} onBlur={()=>setHov(null)}
+          onKeyDown={e=>{const i=hov==null?n-1:hov;let j=null;if(e.key==='ArrowLeft')j=Math.max(0,i-1);else if(e.key==='ArrowRight')j=Math.min(n-1,i+1);else if(e.key==='Home')j=0;else if(e.key==='End')j=n-1;else if(e.key==='Escape')setHov(null);if(j!=null){e.preventDefault();setHov(j);}}}
+          aria-label="Daily rewards chart. Use the arrow keys to step through the days.">
+          <div className="pf2-sr" aria-live="polite">{h?(hov===n-1?'Today so far':pfeWd(h.t0)+' '+pfeDay(h.t0))+': '+(V.ok(h)?keys.map(k=>V.name(k)+' '+(V.unit==='$'?fmtDollar(V.val(h,k)):pfAbbr(V.val(h,k)))).join(', '):V.why(h)):''}</div>
           {W>0&&<svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rewards earned per day`}>
             {[0,1,2,3,4].map(i=>{const v=mx*i/4,yy=y(v);return(<g key={i}><line x1={L} x2={W-R} y1={yy} y2={yy} stroke={`rgba(255,255,255,${i?0.07:0.18})`} strokeWidth="1"/><text x={L-8} y={yy+4} textAnchor="end" className="ax">{V.fmt(v)}</text></g>);})}
             {days.map((d,i)=>{const cx=L+band*i+band/2,x=cx-bw/2;let acc=0;const good=V.ok(d);const vis=good?keys.filter(k=>V.val(d,k)>0):[];const dim=hov!=null&&i!==hov;
@@ -418,7 +426,7 @@
       let best=null;okDays.forEach(d=>{if(!best||tot(d)>tot(best))best=d;});
       const list=days?days.slice().reverse():[];
       const logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
-      const tabs=<div className="tabs" role="tablist">{['BOTH','PTGC','UFO'].map(t=><button key={t} role="tab" aria-selected={tok===t} disabled={!hasUfo&&t!=='PTGC'} title={!hasUfo&&t!=='PTGC'?'No UFO in the counted wallets':undefined} className={tok===t?'on':''} onClick={()=>{setTok(t);setHid({});}}>{t==='BOTH'?<span className="two"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>}{t==='BOTH'?'Both':t}</button>)}</div>;
+      const tabs=<div className="tabs" role="group" aria-label="Token">{['BOTH','PTGC','UFO'].map(t=><button key={t} aria-pressed={tok===t} disabled={!hasUfo&&t!=='PTGC'} title={!hasUfo&&t!=='PTGC'?'No UFO in the counted wallets':undefined} className={tok===t?'on':''} onClick={()=>{setTok(t);setHid({});}}>{t==='BOTH'?<span className="two"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span>:<img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>}{t==='BOTH'?'Both':t}</button>)}</div>;
       const dayName=d=>d===list[0]?'Today so far':pfeWd(d.t0)+' '+pfeDay(d.t0);
       const tk=(v,k)=>pfAbbr(v)+(k==='uf'?' UFO':' PTGC');
       /* BOTH: per-token totals for the tiles and the table */

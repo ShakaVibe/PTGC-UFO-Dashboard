@@ -9,24 +9,35 @@
     const PF_TOKEN_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6'};
     const pfFetchBurn=async token=>{try{const to=PF_TOKEN_ADDR[token];const[b,s]=await Promise.all([rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x70a08231000000000000000000000000'+PF_BURN_ADDR.slice(2)},'latest'],id:1}),rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to,data:'0x18160ddd'},'latest'],id:2})]);if(!b||!s||b.result==null||s.result==null)return null;const burned=Number(BigInt(b.result))/1e18,supply=Number(BigInt(s.result))/1e18;return supply>0?{total:burned,supply}:null;}catch(e){return null;}};
     /* = index.html fmtAbbr (a67: the unit is picked AFTER rounding — never "1000.00M"); the classic page keeps its own */
+    /* round 26 (audit D9): clipboard writes REJECT (not throw) when they fail on iOS — the ✓ only shows on success */
+    const pfCopy=text=>{try{if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(text).then(()=>true,()=>false);}catch(e){}
+      try{const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');document.body.removeChild(ta);return Promise.resolve(!!ok);}catch(e){return Promise.resolve(false);}};
     const pfAddr=a=>a?a.slice(0,6)+'\u2026'+a.slice(-4):'';   // round 25 (audit C13): one address style everywhere (the classic page's truncAddr uses three dots)
     const pfAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=999.995e9)return(num/1e12).toFixed(2)+'T';if(num>=999.995e6)return(num/1e9).toFixed(2)+'B';if(num>=999.995e3)return(num/1e6).toFixed(2)+'M';if(num>=999.995)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     const pfFmtInt=n=>n==null||isNaN(n)?'—':Math.floor(Number(n)).toLocaleString('en-US');
+    /* round 26 (audit D1 / D2 / D9): every window traps Tab inside itself, gives focus back to the button that opened it,
+       leaves an autoFocus'd field alone, and locks the page behind on iOS too (position:fixed — overflow:hidden isn't enough there) */
+    const PF_FOCUSABLE='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
     const PfModal=({onClose,label,className='',children})=>{
       const ref=React.useRef(null);const cl=React.useRef(onClose);cl.current=onClose;
-      useEffect(()=>{const prev=document.activeElement,ov=document.body.style.overflow;document.body.style.overflow='hidden';
-        const key=e=>{if(e.key==='Escape'&&cl.current){e.preventDefault();cl.current();}};document.addEventListener('keydown',key);
-        try{ref.current&&ref.current.focus({preventScroll:true});}catch(e){}
-        return()=>{document.removeEventListener('keydown',key);document.body.style.overflow=ov;try{prev&&prev.focus&&prev.focus({preventScroll:true});}catch(e){}};},[]);
+      const prevRef=React.useRef(typeof document!=='undefined'?document.activeElement:null);   // captured at render, before anything inside autofocuses
+      useEffect(()=>{const prev=prevRef.current,b=document.body,saved={ov:b.style.overflow,pos:b.style.position,top:b.style.top,w:b.style.width},y=window.scrollY;
+        b.style.overflow='hidden';b.style.position='fixed';b.style.top=(-y)+'px';b.style.width='100%';
+        const key=e=>{if(e.key==='Escape'&&cl.current){e.preventDefault();cl.current();return;}
+          if(e.key==='Tab'&&ref.current){const f=[...ref.current.querySelectorAll(PF_FOCUSABLE)].filter(x=>x.offsetParent!==null);if(!f.length){e.preventDefault();return;}
+            const i=f.indexOf(document.activeElement);if(e.shiftKey&&(i<=0)){e.preventDefault();f[f.length-1].focus();}else if(!e.shiftKey&&(i===-1||i===f.length-1)){e.preventDefault();f[0].focus();}}};
+        document.addEventListener('keydown',key);
+        try{if(ref.current&&!ref.current.contains(document.activeElement))ref.current.focus({preventScroll:true});}catch(e){}
+        return()=>{document.removeEventListener('keydown',key);b.style.overflow=saved.ov;b.style.position=saved.pos;b.style.top=saved.top;b.style.width=saved.w;window.scrollTo(0,y);try{prev&&prev.focus&&prev.focus({preventScroll:true});}catch(e){}};},[]);
       return ReactDOM.createPortal(<div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className={`fixed inset-0 outline-none ${className}`} onClick={e=>{e.stopPropagation();cl.current&&cl.current();}}>{children}</div>,document.body);
     };
     const PfSupplyToggle=({mode,setMode,color,color2})=>{   // = index.html SupplyBasisToggle (size md)
       const opts=[{k:'start',label:'Starting Supply'},{k:'circ',label:'Circulating Supply'}];const idx=mode==='circ'?1:0;
       return(
-        <div role="tablist" aria-label="Supply basis" className="relative inline-grid grid-cols-2 rounded-full p-1 select-none" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 18px rgba(0,0,0,0.35)'}}>
+        <div role="group" aria-label="Supply basis" className="relative inline-grid grid-cols-2 rounded-full p-1 select-none" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.14)',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 18px rgba(0,0,0,0.35)'}}>
           <div className="absolute top-1 bottom-1 rounded-full transition-transform duration-300 ease-out" style={{left:'4px',width:'calc(50% - 4px)',transform:`translateX(${idx*100}%)`,background:`linear-gradient(180deg, ${color} 0%, ${color2||(color+'cc')} 100%)`,boxShadow:`0 0 14px ${color}66, 0 1px 0 rgba(255,255,255,0.35) inset`}}/>
           {opts.map(o=>{const active=(mode==='circ'?'circ':'start')===o.k;return(
-            <button key={o.k} role="tab" aria-selected={active} onClick={()=>setMode(o.k)} className={`relative z-10 rounded-full font-semibold tracking-wider uppercase whitespace-nowrap transition-colors duration-200 px-3.5 py-1.5 text-[11px] sm:text-xs ${active?'text-black':'text-white/55 hover:text-white'}`}>{o.label}</button>);})}
+            <button key={o.k} aria-pressed={active} onClick={()=>setMode(o.k)} className={`relative z-10 rounded-full font-semibold tracking-wider uppercase whitespace-nowrap transition-colors duration-200 px-3.5 py-1.5 text-[11px] sm:text-xs ${active?'text-black':'text-white/55 hover:text-white'}`}>{o.label}</button>);})}
         </div>);
     };
     const PfLgCoin=({token})=>(

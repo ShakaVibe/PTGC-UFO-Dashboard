@@ -239,7 +239,7 @@
       const VERB={Buy:'Bought',Sell:'Sold',Claim:'Claimed','Add LP':'Added to LP','Remove LP':'Removed from LP',Move:'Moved',Receive:'Received',Send:'Sent',Unstake:'Unstaked'};
       const AMT={Sell:'neg',Send:'neg','Add LP':'neg',Buy:'pos',Receive:'pos',Claim:'pos','Remove LP':'pos'};
       const VAL={Sell:'received',Buy:'paid',Claim:'earned'};
-      const copy=(r)=>{try{navigator.clipboard.writeText(r.addr);}catch(e){}setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);};
+      const copy=(r)=>{pfCopy(r.addr).then(ok=>{if(!ok)return;setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);});};
       const row=r=>{const[c,g]=PFT_TYPE[r.type]||['#fff','•'];
         const extra=r.type==='Claim'&&r.sub?' · from '+r.sub:r.unstake?' · released from staking':'';
         return(<div key={r.id} className="pf2-fr">

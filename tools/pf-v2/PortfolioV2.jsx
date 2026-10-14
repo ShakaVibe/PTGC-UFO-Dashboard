@@ -82,7 +82,7 @@
             <button className="x" onClick={close} aria-label="Close">{'\u00D7'}</button>
             <h2>EDIT WALLET</h2>
             <div className="lb">Address</div>
-            <div className="adr"><span className="mono">{w.address}</span><button onClick={()=>{try{navigator.clipboard.writeText(w.address);setCopied(true);setTimeout(()=>setCopied(false),1500);}catch(e){}}}>{copied?'Copied':'Copy'}</button></div>
+            <div className="adr"><span className="mono">{w.address}</span><button onClick={()=>{pfCopy(w.address).then(ok=>{if(ok){setCopied(true);setTimeout(()=>setCopied(false),1500);}});}}>{copied?'Copied':'Copy'}</button></div>
             <label className="lb" htmlFor="pf2-ew-n">Name</label>
             <input id="pf2-ew-n" className="in" value={name} onChange={e=>setName(e.target.value)} placeholder="Give this wallet a name…" autoFocus onKeyDown={e=>e.key==='Enter'&&go()}/>
             <label className="lb" htmlFor="pf2-ew-g">Group</label>
@@ -136,9 +136,9 @@
       return(
         <div className={`pf2-pn pf2-st mm${on?' on':''}`} ref={ref}>
           <div className="mt"><img className="mo" src="logos/portfolio/pf-moon.webp" alt=""/><b className="oh mmt">MOON MATH</b></div>
-          <div className="pf2-mmt3" role="radiogroup" aria-label="Prices to use">
+          <div className="pf2-mmt3" role="group" aria-label="Prices to use">
             {[['live','Live Prices'],['custom','Custom \u270E'],['ath','\u{1F680} All-Time Highs']].map(([k,l])=>
-              <button key={k} role="radio" aria-checked={mode===k} className={mode===k?'on':''} onClick={()=>pick(k)}>{l}</button>)}
+              <button key={k} aria-pressed={mode===k} className={mode===k?'on':''} onClick={()=>pick(k)}>{l}</button>)}
           </div>
           {pop&&(
             <div className="pf2-mmpop" role="dialog" aria-label="Your own prices">
@@ -296,7 +296,7 @@
               const ps=v>0?(pv||0)/v:null;
               return(
                 <div key={a} className={`pf2-wc ${on?'on':'off'}${st==='bad'?' bad':''}`}>
-                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
+                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} role="img" aria-label={st==='ok'?'Loaded':st==='run'?'Loading':st==='bad'?'Read failed':'Not loaded'} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
                   <div className="ad mono">{w.name?<>{pfAddr(w.address)} {'·'} {w.group||'Default'}</>:<>{(w.group||'Default').toUpperCase()}</>}</div>
                   {st==='bad'?<button className="retry" onClick={()=>fetchWalletData(w.address)}>Read failed {'·'} retry</button>
                   :v==null?<div className="v dim">{st==='run'?'loading…':'—'}</div>
@@ -437,7 +437,7 @@
                 /* group subtotals when more than one group is counted */
                 const gs=[...new Set(rows.map(r=>r.g))];const grouped=gs.length>1;
                 const order=grouped?gs.flatMap(g=>{const rs=rows.filter(r=>r.g===g);return rs.length>1?[...rs,{sub:g,rs}]:rs;}):rows;   // a subtotal only where a group has 2+ wallets
-                const cpy=a=>{try{navigator.clipboard.writeText(a);}catch(e){}setBdCp(a);setTimeout(()=>setBdCp(x=>x===a?null:x),1400);};
+                const cpy=a=>{pfCopy(a).then(ok=>{if(!ok)return;setBdCp(a);setTimeout(()=>setBdCp(x=>x===a?null:x),1400);});};
                 const who=r=><><div className="n"><i style={{background:r.c}}></i>{r.w.name||pfAddr(r.w.address)}</div>
                   <div className="ad">{r.w.name?pfAddr(r.w.address):<span className="g">{r.g}</span>}<button className={`cp${bdCp===r.a?' ok':''}`} onClick={()=>cpy(r.w.address)} title={`Copy ${r.w.address}`} aria-label={`Copy wallet address ${r.w.address}`}>{bdCp===r.a?'\u2713':'\u29C9'}</button></div></>;
                 const cell=(v,$v,k)=><><span className={`tk ${k}`}>{pfAbbr(v)}</span><span className="us">{fmtDollar($v)}</span></>;
@@ -463,7 +463,7 @@
         {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} wallets={counted} hasUfo={uf.balance>0||(ufoEarned||0)>0} close={()=>setEdTok(null)}/>}
         {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
-          <div className="pf2-modal" onClick={()=>setHow(false)} role="dialog" aria-modal="true" aria-label="How it works"><div onClick={e=>e.stopPropagation()}>
+          <PfModal className="pf2-modal" onClose={()=>setHow(false)} label="How it works"><div onClick={e=>e.stopPropagation()}>
             <button className="x" onClick={()=>setHow(false)} aria-label="Close">{'×'}</button>
             <h2>HOW IT WORKS</h2>
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
@@ -472,7 +472,7 @@
             <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned. UFO reflections cover UFO{'\u2019'}s whole life, including the time before the Jul 2026 contract migration.</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
-          </div></div>
+          </div></PfModal>
         )}
         </div>
       );

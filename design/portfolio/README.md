@@ -420,3 +420,13 @@ wallet in the breakdown shows its group instead of the address twice. C14 Moon M
 number above 0 (typing "0." no longer zeroes the page); decimal text inputs. C15 Details: wallet picker (All wallets · each).
 C16 Details: 7D / 30D / 90D (remembered). C17 Breakdown: sort by Value / Name / Added; group subtotal rows where a group has
 2+ wallets. Fixed on the way: a cleanup-scope bug from round 24 (tellT) that threw on every wallet toggle.
+
+## Round 26 (2026-10-14) — Phase D (accessibility)
+D1 PfModal traps Tab inside the window; How it works now goes through PfModal (Esc, focus, scroll lock). D2 Focus goes back to the
+button that opened a window; an autoFocus'd field (Edit → Name) is left alone. D3 Charts are keyboard-readable: Tab to the value
+chart or the daily bars, ← → Home End step the points, a hidden live region announces the tooltip text. D4 Every tap target
+≥ 24 px (switch 40×26 with the track drawn inside, ✎ 26 px, copy buttons 26 px, card ✕ 26 px, Retry 24 px). D5 Wallet status
+dot has an aria-label. D6 Search field gets a visible focus ring; one gold focus ring for every button / switch / chart.
+D7 Moon Math, Details tabs and the supply toggle are aria-pressed buttons (no fake tab / radio semantics). D8 No meaningful text
+under 12 px (harness sweep: 0 small texts, 0 small targets at 390 px). D9 iOS: windows lock the page behind (position:fixed);
+clipboard ✓ only on a successful copy, with an execCommand fallback.
