@@ -353,3 +353,13 @@ Prices: that day's from the price files, today's live. Harness PF_ED=1 + probes 
 - Round 20b hotfix: the window's class `.pf2-ed` clashed with the wallet card's ✎ edit button (also `.pf2-ed`, round 2) — the
   pencil picked up the window's box styling and, while the mouse was over the window, the pencil's `:hover` background made
   the window see-through. Window renamed `.pf2-erw`. Found live-checking round 20 on ptgc-ufo.com.
+
+## Round 21 (2026-10-14) — Details window: BOTH tab (default) + scrolling day list
+- Tabs **Both · PTGC · UFO**, Both the default (whichever card's button opened it). Both is in **dollars** (the two tokens can't
+  share a token scale): tiles Earned 30 days / PTGC $ (+ tokens) / UFO $ (+ tokens) / Best day; stacked daily $ columns —
+  PTGC staking, PTGC locking, PTGC reflections, UFO reflections (legend chips toggle); by-day rows with PTGC and UFO tokens + $
+  and the day's total value. PTGC and UFO days complete independently (UFO needs its transfers in reach).
+- No "show all": every day is in the list, which scrolls inside its own box (sticky header, a wide gold / green / gold-green
+  scroll bar on the right); on a phone the day cards scroll the same way.
+- Round 21b (his ask, mid-round): the average per day moved out of the plot to a chip right of "DAILY" ("- - Avg 8.59M PTGC / day";
+  in Both, dollars); the line in the chart stays, now dashed to match the chip's key.
