@@ -443,3 +443,31 @@ is the one reading of the coverage map (strip, Details days, Details loader). E7
 ones, the PfTx header). E8 Named: PFH_BLOCK_MS, PFH_RPC_TIMEOUT, PFH_BATCH. Left for later: E5 (window.pfUfoRecv → needs a
 classic-code change), E8's remaining literals, E9 (precompiling the JSX is a site-wide decision), the pool() helper.
 Also: Moon Math tile buttons 24 px tall (last sub-24 px target on desktop).
+
+## Round 28 — mock-ups (2026-10-14, after Phase E; v2 still hidden)
+
+Shaka (screenshots of the strip and the 24-wallet deck): "can you make it where you can mouse over or click on the little
+daily bars and it pops a window showing the day's moves? 2) I feel like each of these [wallet cards] are way too big…
+what can we do to drastically make these smaller."
+
+mock-daybar-v1.html (renders/daybar-v1-1340.jpg): each strip bar becomes a button with a 19 px hit area. Hover / tap →
+a tooltip above the bar (day, value, day move, first 5 trades, "click for all N"). Click / Enter → a DAY WINDOW in the
+Details frame: day + move, four tiles (buys / sells / claims / liquidity with counts and $), tokens in / out, every
+transaction of the day in Recent-Transactions rows (scrolling), ◀ ▶ previous / next day with trades, Esc, a "show this
+day in Recent Transactions" link.
+
+mock-wallets-v2.html (renders/wallets-v2-1340.jpg): A mini tiles 7 across (~330 px for 24 wallets, everything kept,
+✕ on hover) · B two-column 32 px list sorted by value (~400 px) · C chips: switch · name · value with the split as a
+line under the pill (~170 px; percentages / dot only in the edit window). Waiting for his pick.
+
+Shaka: "A". Built (round 28, pf-r28.tgz, still hidden):
+- Strip bars are buttons (19 px hit area): hover / tap lights the bar and shows the chart tooltip (5 trades, "N transactions
+  on Oct 4", "+9 more — click the bar for the full list"); click, or Enter on the focused chart, opens PfDayModal (PfHistory.jsx)
+  — title + portfolio move, four tiles, tokens in / out, every trade in PfTxRow rows (now shared with Recent Transactions,
+  PfTx.jsx), ◀ ▶ previous / next bar with trades, Esc, "Go to Recent Transactions". Labels come from the bucket (previous
+  point, this point]: the daily points sit at local midnight, so the bar at Oct 5 00:00 is labelled Oct 4 (the old tooltip
+  said "Oct 5 … this day" — one day off). 7D bars: "Oct 4 12 PM – 6 PM"; 1Y: "Oct 1 – Oct 4"; the live point: "Today".
+- Deck: 7 across (5 under 1100 px, 2 on the phone), 24 wallets ≈ 330 px; group line dropped from the tile (it is in the ✎
+  window and the name's title); ✕ on hover (always faint on touch); Show-all cuts at 28 / 20 / 6; a Value · Name · Added sort
+  in the toolbar (saved in grays_pf_deck_sort, default Value); 24 px switch / ✎ targets, 12 px smallest text.
+Harness: `tools/harness/README.md` r28 line; renders `renders/r28-1440-*.jpg`. Classic hash still 215506704.

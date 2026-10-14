@@ -145,3 +145,9 @@ remove the dot; keep the classic body one more round as a fallback; update HANDO
 3. **Rounds 25–26 — Phase C + D** in two passes (polish, then keyboard/touch).
 4. **Round 27 — Phase E** cleanup (best done once the UI has settled).
 5. **Phase F** one at a time, mock-up first, as he picks.
+
+### Done after the phases (his own asks)
+
+- **Round 28** (2026-10-14): strip bars hover / click → tooltip + day window (`PfDayModal`); the deck shrunk to 7-across mini
+  tiles with a sort (his pick: A of `design/portfolio/mock-wallets-v2.html`). Still hidden. Next: the go-live checklist above
+  when he says, B8 when he says, Phase F one at a time with a mock-up.

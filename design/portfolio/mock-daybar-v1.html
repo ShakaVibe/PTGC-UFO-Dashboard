@@ -1,0 +1,141 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Activity strip: hover a bar → tooltip, click a bar → the day's window — 2026-10-14</title>
+<style>
+@font-face{font-family:Orbitron;src:url(../../tools/harness/node_modules/@fontsource/orbitron/files/orbitron-latin-900-normal.woff2);font-weight:900}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2);font-weight:700}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-600-normal.woff2);font-weight:600}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-500-normal.woff2);font-weight:500}
+</style>
+<link rel="stylesheet" href="../../tools/pf-v2/pf2.css">
+<style>
+body{margin:0;background:#04060a;color:#fff;font-family:Rajdhani;font-weight:500}
+.wrap{padding:28px 40px 60px;max-width:1260px}
+.opt{font-family:Orbitron;font-weight:900;font-size:13px;letter-spacing:.14em;color:#04060a;background:#F2D35B;display:inline-block;padding:5px 12px;border-radius:5px}
+.note{display:block;margin:8px 0 14px;color:rgba(255,255,255,.72);font-size:16px;font-weight:600;max-width:1120px}
+.sep{height:1px;background:linear-gradient(90deg,transparent,rgba(242,211,91,.5),transparent);margin:40px 0 28px}
+/* a cut-down value-history panel: just the bottom of the chart + the strip */
+.pan{border-radius:16px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,#0b0d14,#07080c);padding:16px 22px 14px}
+.chart{position:relative;height:230px;margin-left:60px;border-bottom:1px solid rgba(255,255,255,.08)}
+.chart svg{position:absolute;inset:0;width:100%;height:100%}
+.strip{position:relative;height:42px;margin:6px 0 0 60px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}
+.strip .lab{position:absolute;left:-60px;top:13px;width:54px;text-align:right;font-size:12px;font-weight:700;letter-spacing:.08em;color:rgba(255,255,255,.5)}
+/* NEW: each bar is a button — hover / tap shows the tooltip, click opens the window */
+.strip .day{position:absolute;bottom:4px;width:5px;transform:translateX(-50%);display:flex;flex-direction:column;justify-content:flex-end;gap:1px;border-radius:2px;border:0;padding:0;background:transparent;cursor:pointer}
+.strip .day::before{content:'';position:absolute;left:-7px;right:-7px;top:-14px;bottom:-4px}   /* 19px-wide hit area */
+.strip .day i{display:block;width:100%;border-radius:1px;min-height:2px}
+.strip .day i.in{background:#39E15A}.strip .day i.out{background:#FF4B55}.strip .day i.cl{background:#4AA8FF}.strip .day i.lp{background:#F2D35B}
+.strip .day.hot::after{content:attr(data-n);position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:11.5px;font-weight:700;color:rgba(255,255,255,.75)}
+.strip .day:hover,.strip .day.on{outline:1px solid #fff;outline-offset:2px}
+.strip .day:hover i,.strip .day.on i{filter:brightness(1.25)}
+.strip .day.on{background:rgba(255,255,255,.06)}
+.hx{position:relative;height:22px;margin-left:60px;font-size:14px;font-weight:600;color:rgba(255,255,255,.55)}
+.hx span{position:absolute;top:6px;transform:translateX(-50%);white-space:nowrap}
+.hlg{display:flex;gap:18px;margin:6px 0 0 60px;font-size:14.5px;color:rgba(255,255,255,.65)}
+.hlg span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.hlg b{width:9px;height:9px;border-radius:50%}
+.hlg b.in{background:#39E15A}.hlg b.out{background:#FF4B55}.hlg b.cl{background:#4AA8FF}.hlg b.lp{background:#F2D35B}
+.hlg .o{color:rgba(255,255,255,.6)}
+/* the bar tooltip: same look as the chart tooltip, anchored above the bar */
+.tip{position:absolute;bottom:52px;transform:translateX(-50%);min-width:230px;padding:9px 12px 8px;border-radius:9px;border:1px solid rgba(124,252,0,.4);background:rgba(6,10,8,.96);z-index:2;white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.tip::after{content:'';position:absolute;left:50%;bottom:-6px;width:10px;height:10px;transform:translateX(-50%) rotate(45deg);background:rgba(6,10,8,.96);border-right:1px solid rgba(124,252,0,.4);border-bottom:1px solid rgba(124,252,0,.4)}
+.tip .d{font-size:14px;color:rgba(255,255,255,.6)}.tip .v{font-size:19px;font-weight:700}
+.tip .v em{font-style:normal;font-size:14px;font-weight:600;color:#FF6B73;margin-left:6px}
+.tip .ev{display:grid;gap:1px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.12);font-size:15px;font-weight:700}
+.tip .ev .in{color:#5CF07A}.tip .ev .out{color:#FF6B73}.tip .ev .cl{color:#6BBEFF}.tip .ev .lp{color:#F2D35B}
+.tip .ev em{font-style:normal;font-weight:500;color:rgba(255,255,255,.6)}
+.tip .more{margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.12);font-size:13.5px;font-weight:700;color:#F6E98A;letter-spacing:.04em}
+/* the day window (same frame as the Details window) */
+.dim{position:relative;border-radius:16px;background:rgba(0,0,0,.55);padding:34px 0;display:flex;justify-content:center;border:1px dashed rgba(255,255,255,.12)}
+.dw{position:relative;width:100%;max-width:760px;border-radius:18px;border:1.5px solid rgba(217,202,93,.6);background:radial-gradient(600px 260px at 85% -10%,rgba(120,60,200,.22),transparent 70%),linear-gradient(180deg,#121019,#08090d);box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 40px rgba(217,202,93,.12);padding:20px 22px 18px}
+.dw .hd{display:flex;align-items:flex-start;gap:14px}
+.dw h2{margin:0;font-family:Orbitron;font-weight:900;font-size:19px;letter-spacing:.06em;color:#F6E98A}
+.dw h2 small{display:block;margin-top:4px;font-family:Rajdhani;font-weight:600;font-size:15px;letter-spacing:0;color:rgba(255,255,255,.6)}
+.dw .nav{margin-left:auto;display:flex;gap:6px}
+.dw .nav button,.dw .x{height:32px;min-width:32px;padding:0 10px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:#fff;font:700 14px Rajdhani}
+.dw .x{font-size:18px;line-height:1}
+.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0 14px}
+.sum div{border-radius:12px;padding:10px 12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03)}
+.sum div b{display:block;font-family:Orbitron;font-weight:900;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.55)}
+.sum div span{display:block;font-size:22px;font-weight:700;margin-top:4px;line-height:1.1}
+.sum div small{display:block;font-size:13.5px;color:rgba(255,255,255,.55);margin-top:3px}
+.sum .in{border-color:rgba(57,225,90,.35);background:rgba(57,225,90,.06)}.sum .in b{color:#5CF07A}
+.sum .out{border-color:rgba(255,75,85,.35);background:rgba(255,75,85,.06)}.sum .out b{color:#FF6B73}
+.sum .cl{border-color:rgba(74,168,255,.35);background:rgba(74,168,255,.06)}.sum .cl b{color:#6BBEFF}
+.sum .lp{border-color:rgba(242,211,91,.35);background:rgba(242,211,91,.06)}.sum .lp b{color:#F2D35B}
+.net{display:flex;align-items:center;gap:10px;font-size:15px;color:rgba(255,255,255,.7);margin-bottom:10px}
+.net b{color:#fff;font-size:16px}.net .neg{color:#FF6B73}.net .pos{color:#5CF07A}
+.list{max-height:330px;overflow:auto;padding-right:8px;scrollbar-gutter:stable}
+.list::-webkit-scrollbar{width:10px}.list::-webkit-scrollbar-thumb{background:rgba(242,211,91,.35);border-radius:99px}.list::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:99px}
+.list .pf2-fr{padding:8px 12px}.list .pf2-fr .t1{font-size:17px}.list .pf2-fr .v{font-size:17px}.list .pf2-fr .ic{width:34px;height:34px;font-size:15px}
+.ft{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:14px;color:rgba(255,255,255,.5)}
+.ft button{border:0;background:transparent;color:#F6E98A;font:700 14px Rajdhani;text-decoration:underline;cursor:pointer}
+</style></head><body><div class="wrap">
+
+<div class="opt">BAR TOOLTIP</div>
+<span class="note"><b>Mouse over (or tap) a bar</b> and a tooltip pops right above it: the day, what the portfolio was worth and how it moved that day, then the trades (first 5) and a <span style="color:#F6E98A">click for all 13</span> line on the busy days. Same as the chart tooltip, but anchored to the bar — so you no longer have to find the day on the line. The bar gets a 19px-wide hit area so the thin ones are easy to catch. Hovering the chart still lights the bar as it does now.</span>
+
+<div class="pan">
+  <div class="chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5CE13A" stop-opacity=".5"/><stop offset="1" stop-color="#1F6B12" stop-opacity=".06"/></linearGradient></defs>
+    <path d="M0,30 L8,36 L15,28 L22,38 L27,20 L33,34 L40,40 L48,40 L55,44 L62,48 L68,36 L75,46 L82,50 L88,42 L96,46 L100,86 L100,100 L0,100Z" fill="url(#g)"/><path d="M0,30 L8,36 L15,28 L22,38 L27,20 L33,34 L40,40 L48,40 L55,44 L62,48 L68,36 L75,46 L82,50 L88,42 L96,46 L100,86" fill="none" stroke="#7CFC00" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div>
+  <div class="strip"><span class="lab">TRADES</span>
+    <button class="day" style="left:2%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:6%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day hot" data-n="4" style="left:10%;height:20px"><i class="out" style="flex:3"></i><i class="cl" style="flex:1"></i></button>
+    <button class="day" style="left:14%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:17%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:21%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:25%;height:12px"><i class="out" style="flex:1"></i><i class="in" style="flex:1"></i></button>
+    <button class="day" style="left:29%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day hot" data-n="13" style="left:33%;height:26px"><i class="in" style="flex:5"></i><i class="out" style="flex:7"></i><i class="cl" style="flex:1"></i></button>
+    <button class="day" style="left:37%;height:12px"><i class="out" style="flex:2"></i><i class="cl" style="flex:1"></i></button>
+    <button class="day" style="left:41%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:45%;height:12px"><i class="out" style="flex:1"></i><i class="cl" style="flex:1"></i></button>
+    <button class="day hot" data-n="4" style="left:50%;height:20px"><i class="out" style="flex:3"></i><i class="lp" style="flex:1"></i></button>
+    <button class="day" style="left:54%;height:12px"><i class="out" style="flex:2"></i><i class="cl" style="flex:1"></i></button>
+    <button class="day" style="left:58%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:62%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day on hot" data-n="13" style="left:66%;height:26px"><i class="in" style="flex:2"></i><i class="out" style="flex:9"></i><i class="cl" style="flex:1"></i><i class="lp" style="flex:1"></i></button>
+    <div class="tip" style="left:66%"><div class="d">Saturday, Oct 4</div><div class="v">$3,119,540 <em>▼ −2.2% ($−69,800) this day</em></div>
+      <div class="ev"><span class="out">▼ Sell 2.41M PTGC <em>· $11,900</em></span><span class="out">▼ Sell 1.80M PTGC <em>· $8,870</em></span><span class="in">▲ Buy 118M UFO <em>· $4,120</em></span><span class="cl">⬇ Claim 310K PTGC <em>· $610</em></span><span class="lp">⊕ Add LP 90M UFO <em>· $2,200</em></span></div>
+      <div class="more">+8 more · CLICK FOR ALL 13 →</div></div>
+    <button class="day" style="left:70%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:74%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:78%;height:12px"><i class="out" style="flex:1"></i><i class="in" style="flex:1"></i></button>
+    <button class="day" style="left:82%;height:8px"><i class="cl" style="flex:1"></i></button>
+    <button class="day" style="left:86%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:90%;height:8px"><i class="out" style="flex:1"></i></button>
+    <button class="day" style="left:94%;height:12px"><i class="out" style="flex:1"></i><i class="in" style="flex:1"></i></button>
+    <button class="day hot" data-n="7" style="left:99%;height:26px"><i class="out" style="flex:5"></i><i class="in" style="flex:1"></i><i class="cl" style="flex:1"></i></button>
+  </div>
+  <div class="hx"><span style="left:0;transform:none">Sep 15</span><span style="left:20%">Sep 24</span><span style="left:40%">Sep 29</span><span style="left:60%">Oct 4</span><span style="left:80%">Oct 9</span><span style="left:100%;transform:translateX(-100%)">Now</span></div>
+  <div class="hlg"><span><b class="in"></b>buys</span><span><b class="out"></b>sells</span><span><b class="cl"></b>claims</span><span><b class="lp"></b>liquidity</span><span class="o">one bar per day · taller = more · dust under $1 left out</span><span style="color:#F6E98A;font-weight:700">☝ click a bar for the day’s moves</span></div>
+</div>
+
+<div class="sep"></div>
+
+<div class="opt">DAY WINDOW</div>
+<span class="note"><b>Click a bar</b> (or press Enter on it) and this window opens over the page — same frame as the Details window. Top: the day and how the portfolio moved. Four tiles: how many buys, sells, claims and liquidity moves and their dollar totals. Then every transaction of that day in the same rows as Recent Transactions (copy button, PulseScan link), scrolling if there are many. ◀ ▶ step to the previous / next day with trades, Esc closes. On the phone it fills the screen.</span>
+
+<div class="dim"><div class="dw">
+  <div class="hd"><h2>SATURDAY, OCT 4<small>13 transactions · portfolio $3,189,340 → $3,119,540 <span style="color:#FF6B73">▼ −2.2%</span></small></h2>
+    <div class="nav"><button title="Previous day with trades">◀ Oct 2</button><button title="Next day with trades">Oct 5 ▶</button></div><button class="x" aria-label="Close">×</button></div>
+  <div class="sum">
+    <div class="in"><b>BUYS</b><span>2</span><small>$6,320 paid</small></div>
+    <div class="out"><b>SELLS</b><span>9</span><small>$31,540 received</small></div>
+    <div class="cl"><b>CLAIMS</b><span>1</span><small>$610 earned</small></div>
+    <div class="lp"><b>LIQUIDITY</b><span>1</span><small>$2,200 added</small></div>
+  </div>
+  <div class="net">Tokens out <b class="neg">−$33,740</b> · tokens in <b class="pos">+$9,130</b> · across <b>4 wallets</b></div>
+  <div class="list">
+    <div class="pf2-fr"><div class="ic" style="color:#FF4B55;border-color:#FF4B5588;background:#FF4B551f">▼<img src="../../logos/ptgc/logo-512.webp" alt=""></div><div class="m"><div class="t1">Sold <em class="neg">2.41M</em> PTGC</div><div class="t2"><span class="w">Duhawks</span><button class="cp">⧉</button><span class="tm">· 9:42 PM</span></div></div><div class="v">$11,900<small>received</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#FF4B55;border-color:#FF4B5588;background:#FF4B551f">▼<img src="../../logos/ptgc/logo-512.webp" alt=""></div><div class="m"><div class="t1">Sold <em class="neg">1.80M</em> PTGC</div><div class="t2"><span class="w">Duhawks</span><button class="cp">⧉</button><span class="tm">· 9:40 PM</span></div></div><div class="v">$8,870<small>received</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#39E15A;border-color:#39E15A88;background:#39E15A1f">▲<img src="../../logos/ufo/logo-512.webp" alt=""></div><div class="m"><div class="t1">Bought <em class="pos">118M</em> UFO</div><div class="t2"><span class="w">UFO OA</span><button class="cp">⧉</button><span class="tm">· 6:12 PM</span></div></div><div class="v">$4,120<small>paid</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#4AA8FF;border-color:#4AA8FF88;background:#4AA8FF1f">⬇<img src="../../logos/ptgc/logo-512.webp" alt=""></div><div class="m"><div class="t1">Claimed <em class="pos">310K</em> PTGC</div><div class="t2"><span class="w">0x38E3…166A</span><button class="cp">⧉</button><span class="tm">· 4:05 PM · from staking</span></div></div><div class="v">$610<small>earned</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#F2D35B;border-color:#F2D35B88;background:#F2D35B1f">⊕<img src="../../logos/ufo/logo-512.webp" alt=""></div><div class="m"><div class="t1">Added <em class="neg">90M</em> UFO to liquidity</div><div class="t2"><span class="w">Hayden LP</span><button class="cp">⧉</button><span class="tm">· 2:31 PM</span></div></div><div class="v">$2,200<small>value</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#FF4B55;border-color:#FF4B5588;background:#FF4B551f">▼<img src="../../logos/ufo/logo-512.webp" alt=""></div><div class="m"><div class="t1">Sold <em class="neg">61M</em> UFO</div><div class="t2"><span class="w">snowflake</span><button class="cp">⧉</button><span class="tm">· 1:58 PM</span></div></div><div class="v">$2,140<small>received</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#FF4B55;border-color:#FF4B5588;background:#FF4B551f">▼<img src="../../logos/ptgc/logo-512.webp" alt=""></div><div class="m"><div class="t1">Sold <em class="neg">640K</em> PTGC</div><div class="t2"><span class="w">Duhawks</span><button class="cp">⧉</button><span class="tm">· 11:20 AM</span></div></div><div class="v">$3,150<small>received</small></div><a class="lk" href="#">↗</a></div>
+    <div class="pf2-fr"><div class="ic" style="color:#39E15A;border-color:#39E15A88;background:#39E15A1f">▲<img src="../../logos/ptgc/logo-512.webp" alt=""></div><div class="m"><div class="t1">Bought <em class="pos">445K</em> PTGC</div><div class="t2"><span class="w">PTGC OA</span><button class="cp">⧉</button><span class="tm">· 9:03 AM</span></div></div><div class="v">$2,200<small>paid</small></div><a class="lk" href="#">↗</a></div>
+  </div>
+  <div class="ft"><span>Dust under $1 left out · times in your local time</span><button>Show this day in Recent Transactions ↓</button></div>
+</div></div>
+
+</div></body></html>

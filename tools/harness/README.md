@@ -113,3 +113,4 @@ HTML=boom.html node run.js "#/ptgc" 1280 900 out/boom "wait=4000;evalfile=probes
 ```
 
 `sawSkeletonAfterRefresh` must be **false**. It was true before a51.
+W8="[…8 wallets…]"; CHROME=… HEAD_BLOCK=27100000 PF_STAKE=1 PF_HIST=1 PF_TX=1 PF_TX_BUSY=1 HTML=portfolio.html node run.js "" 1440 1000 out/r28 "wait=1200;eval=localStorage.setItem('ptgc_ufo_portfolio',JSON.stringify($W8));eval=localStorage.setItem('grays_pf_v2_preview','1');reload=14000;eval=document.querySelector('.pf2-vh').scrollIntoView();wait=300;evalfile=probes/pf2-day.js;shot=chart;evalfile=probes/pf2-day2.js;shot=day;key=Escape"   # round 28: the strip bars (mouseover → tooltip + .on bar, aria-label "Saturday, Oct 4: 13 transactions"), the mini deck (7 across, sort), then pf2-day2.js clicks the busiest bar → the day window (title, four tiles, net line, rows, ◀ ▶); Escape closes. Classic hash: no PF_STAKE, no preview flag → h=215506704

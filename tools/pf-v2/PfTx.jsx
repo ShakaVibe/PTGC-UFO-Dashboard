@@ -136,13 +136,35 @@
         if(t===addr&&/^0x0{40}$/.test(f))out.lp='add';else if(f===addr)out.lp='remove';});
       c[k]=out;pftD.save();return out;
     };
+    /* round 28 (Shaka: "mouse over or click on the little daily bars and it pops a window showing the day's moves"): the feed
+       row is a shared component now — Recent Transactions AND the Value History day window (PfDayModal, PfHistory.jsx) draw
+       the same rows. pftNameOf(wallets) → a→label; pftWhoOf(nameOf,r) → "A → B" for moves. */
+    const PFT_VERB={Buy:'Bought',Sell:'Sold',Claim:'Claimed','Add LP':'Added to LP','Remove LP':'Removed from LP',Move:'Moved',Receive:'Received',Send:'Sent',Unstake:'Unstaked'};
+    const PFT_AMT={Sell:'neg',Send:'neg','Add LP':'neg',Buy:'pos',Receive:'pos',Claim:'pos','Remove LP':'pos'};
+    const PFT_VAL={Sell:'received',Buy:'paid',Claim:'earned'};
+    const pftTm=t=>new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const pftNameOf=wallets=>{const m={};wallets.forEach(w=>{m[w.address.toLowerCase()]=w.name||pfAddr(w.address);});return a=>m[a]||(a?a.slice(0,6)+'…'+a.slice(-4):'');};
+    const pftWhoOf=(nameOf,r)=>r.type==='Move'&&r.cp?(r.dir>=0?nameOf(r.cp)+' → '+nameOf(r.addr):nameOf(r.addr)+' → '+nameOf(r.cp)):nameOf(r.addr);
+    const PfTxRow=({r,who,cp,onCopy})=>{const[c,g]=PFT_TYPE[r.type]||['#fff','•'];
+      const extra=r.type==='Claim'&&r.sub?' · from '+r.sub:r.unstake?' · released from staking':'';
+      return(<div className="pf2-fr">
+        <div className="ic" style={{color:c,borderColor:c+'88',background:c+'1f'}}>{g}<img src={r.tok==='PTGC'?TOKENS.PTGC.logo:TOKENS.UFO.logo} alt={r.tok}/></div>
+        <div className="m"><div className="t1">{PFT_VERB[r.type]||r.type} <em className={PFT_AMT[r.type]||''}>{pfAbbr(Math.abs(r.amt))}</em> {r.tok}</div>
+          <div className="t2"><span className="w">{who}</span><button className={`cp${cp?' ok':''}`} onClick={()=>onCopy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp?'✓':'⧉'}</button><span className="tm">{'·'} {pftTm(r.t)}{extra}</span></div></div>
+        <div className="v">{fmtDollar(r.usd)}<small>{PFT_VAL[r.type]||'value'}</small></div>
+        <a className="lk" href={`https://scan.pulsechain.com/tx/${r.h}`} target="_blank" rel="noopener noreferrer" title="Open on PulseScan" aria-label="Open this transaction on PulseScan">{'↗'}</a>
+      </div>);};
+    /* the "copied ✓" flash shared by the feed and the day window: returns [copiedId, copy(r)] */
+    const usePftCopy=()=>{const[cp,setCp]=useState(null);
+      const copy=React.useCallback(r=>{pfCopy(r.addr).then(ok=>{if(!ok)return;setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);});},[]);
+      return[cp,copy];};
     const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],Unstake:['#B9C4FF','\u21E7'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
     const PfRecentTx=({wallets,prices,onRows})=>{
       const pxNow=React.useRef(prices);pxNow.current=prices;
       const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});
       const[lim,setLim]=useState(10);      // round 17: rows shown (10, +30 per Show more)
       const[flt,setFlt]=useState('All');    // round 17: filter chip
-      const[cp,setCp]=useState(null);       // round 17: the row whose wallet address was just copied
+      const[cp,copy]=usePftCopy();         // round 17: the row whose wallet address was just copied
       const[nonce,setNonce]=useState(0);
       const force=React.useRef(false);   // round 24 (audit B2): Refresh re-reads page 1 ONCE (nonce>0 used to force it on every later toggle)
       const secRef=React.useRef(null);
@@ -212,8 +234,8 @@
          a round type icon with the token's logo on its corner, the wallet (with a copy button) and time underneath, the dollar value
          on the right; grouped by day; filter chips with counts; "Show 30 more". The same layout on a phone. */
       const PFT_F={All:null,Buys:['Buy'],Sells:['Sell'],Claims:['Claim'],Unstakes:['Unstake'],LP:['Add LP','Remove LP'],Transfers:['Move','Receive','Send']};   // round 25 (audit C9): Unstakes have their own chip
-      const nameOf=React.useMemo(()=>{const m={};wallets.forEach(w=>{m[w.address.toLowerCase()]=w.name||pfAddr(w.address);});return a=>m[a]||(a?a.slice(0,6)+'\u2026'+a.slice(-4):'');},[wallets]);
-      const whoOf=r=>r.type==='Move'&&r.cp?(r.dir>=0?nameOf(r.cp)+' \u2192 '+nameOf(r.addr):nameOf(r.addr)+' \u2192 '+nameOf(r.cp)):nameOf(r.addr);
+      const nameOf=React.useMemo(()=>pftNameOf(wallets),[wallets]);
+      const whoOf=r=>pftWhoOf(nameOf,r);
       /* round 25 (audit C1): dust — rows under $1 are hidden until "Show dust" is on (a bot wallet is full of $0.18 buys) */
       const[dust,setDust]=useState(false);
       const isDust=r=>r.usd!=null&&r.usd<1&&r.type!=='Move'&&r.type!=='Claim'&&r.type!=='Unstake';
@@ -240,20 +262,7 @@
         if(n-d<6*864e5)return[d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase(),md];
         return[md.toUpperCase(),d.getFullYear()!==n.getFullYear()?String(d.getFullYear()):''];};
       const groups=[];show.forEach(r=>{const k=dayKey(r.t);const g=groups[groups.length-1];if(g&&g.k===k)g.rows.push(r);else groups.push({k,rows:[r]});});
-      const fmtTm=t=>new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-      const VERB={Buy:'Bought',Sell:'Sold',Claim:'Claimed','Add LP':'Added to LP','Remove LP':'Removed from LP',Move:'Moved',Receive:'Received',Send:'Sent',Unstake:'Unstaked'};
-      const AMT={Sell:'neg',Send:'neg','Add LP':'neg',Buy:'pos',Receive:'pos',Claim:'pos','Remove LP':'pos'};
-      const VAL={Sell:'received',Buy:'paid',Claim:'earned'};
-      const copy=(r)=>{pfCopy(r.addr).then(ok=>{if(!ok)return;setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);});};
-      const row=r=>{const[c,g]=PFT_TYPE[r.type]||['#fff','•'];
-        const extra=r.type==='Claim'&&r.sub?' · from '+r.sub:r.unstake?' · released from staking':'';
-        return(<div key={r.id} className="pf2-fr">
-          <div className="ic" style={{color:c,borderColor:c+'88',background:c+'1f'}}>{g}<img src={r.tok==='PTGC'?TOKENS.PTGC.logo:TOKENS.UFO.logo} alt={r.tok}/></div>
-          <div className="m"><div className="t1">{VERB[r.type]||r.type} <em className={AMT[r.type]||''}>{pfAbbr(Math.abs(r.amt))}</em> {r.tok}</div>
-            <div className="t2"><span className="w">{whoOf(r)}</span><button className={`cp${cp===r.id?' ok':''}`} onClick={()=>copy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp===r.id?'✓':'⧉'}</button><span className="tm">{'·'} {fmtTm(r.t)}{extra}</span></div></div>
-          <div className="v">{fmtDollar(r.usd)}<small>{VAL[r.type]||'value'}</small></div>
-          <a className="lk" href={`https://scan.pulsechain.com/tx/${r.h}`} target="_blank" rel="noopener noreferrer" title="Open on PulseScan" aria-label="Open this transaction on PulseScan">{'↗'}</a>
-        </div>);};
+      const row=r=><PfTxRow key={r.id} r={r} who={whoOf(r)} cp={cp===r.id} onCopy={copy}/>;
       return(
         <section className="pf2-pn pf2-sec pf2-rt" ref={secRef}>
           <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>

@@ -1,0 +1,3 @@
+(async()=>{const q=s=>[...document.querySelectorAll(s)];const bars=q('.pf2-strip .day');const out={bars:bars.length,tiles:q('.pf2-wc').length,deckH:(document.querySelector('.pf2-deck')||{}).offsetHeight,sort:q('.pf2-tools .pf2-bds button.on').map(b=>b.innerText),names:q('.pf2-wc .nm').map(e=>e.innerText),more:(document.querySelector('.pf2-deck .pf2-more')||{}).innerText||null};
+const b=bars.find(x=>x.classList.contains('hot'))||bars[Math.floor(bars.length/2)];if(b){b.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));await new Promise(r=>setTimeout(r,300));out.tip=(document.querySelector('.pf2-htip')||{}).innerText;out.on=q('.pf2-strip .day.on').length;out.label=b.getAttribute('aria-label');}
+return out;})()

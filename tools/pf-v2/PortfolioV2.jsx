@@ -157,6 +157,7 @@
       const[bdOpen,setBdOpen]=useState(false);
       const[bdCp,setBdCp]=useState(null);
       const[bdSort,setBdSort]=useState('value');   // round 25 (audit C17): value | name | added
+      const[dkSort,setDkSort]=useState(()=>{try{return localStorage.getItem('grays_pf_deck_sort')||'value';}catch(e){return 'value';}});   // round 28: the deck's own sort
       const[edTok,setEdTok]=useState(null);   // round 20: the Earned details window (which token it opened on)
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
@@ -196,6 +197,8 @@
       const pPrev=prev(ptgcUSD,changes.ptgc),uPrev=prev(ufoUSD,changes.ufo);
       const tChg=h24&&liveV!=null&&h24.v>0?(liveV-h24.v)/h24.v*100:simulated||total==null||(ptgcUSD>0&&pPrev==null)||(ufoUSD>0&&uPrev==null)?null:(()=>{const pr=(pPrev||0)+(uPrev||0);return pr>0?(total-pr)/pr*100:null;})();
       const shown=wallets.filter(w=>(grp==='All'||(w.group||'Default')===grp)&&(!q.trim()||(w.name||'').toLowerCase().includes(q.trim().toLowerCase())||w.address.toLowerCase().includes(q.trim().toLowerCase())));
+      if(dkSort==='value')shown.sort((x,y)=>(wv(y).v||0)-(wv(x).v||0));else if(dkSort==='name')shown.sort((x,y)=>(x.name||x.address).localeCompare(y.name||y.address));   // 'added' = the saved order
+      const cutN=typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width:700px)').matches?6:window.matchMedia&&window.matchMedia('(max-width:1100px)').matches?20:28;   // matches pf2.css .cut
       const allOn=wallets.length>0&&wallets.every(w=>isWalletChecked(w.address));
       const noneOn=wallets.every(w=>!isWalletChecked(w.address));
       const add=()=>{
@@ -261,6 +264,7 @@
             {wallets.length>0&&(()=>{const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;}).length;return <span className="sum">{'·'} <strong>{counted.length}</strong> counted {'·'} <strong>{fmtDollar(total)}</strong>{bad>0&&<span className="warn"> {'·'} {bad} unreadable</span>}</span>;})()}
             {wallets.length>0&&<><button className="pf2-lnk" onClick={selectAllWallets} disabled={allOn}>Select all</button><button className="pf2-lnk q" onClick={deselectAllWallets} disabled={noneOn}>Clear</button></>}
             <span className="sp"></span>
+            {wallets.length>2&&<div className="pf2-bds" role="group" aria-label="Sort wallets"><span>Sort</span>{[['value','Value'],['name','Name'],['added','Added']].map(([k,l])=><button key={k} className={dkSort===k?'on':''} aria-pressed={dkSort===k} onClick={()=>{setDkSort(k);try{localStorage.setItem('grays_pf_deck_sort',k);}catch(e){}}}>{l}</button>)}</div>}
             {gNames.length>1&&<div className="pf2-seg" role="group" aria-label="Show group">{['All',...gNames].map(g=><button key={g} className={grp===g?'on':''} aria-pressed={grp===g} onClick={()=>setGrp(g)}>{g}</button>)}</div>}
             {wallets.length>4&&<div className="pf2-srch"><span aria-hidden="true">{'⌕'}</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search wallets…" aria-label="Search wallets"/></div>}
             <button className="pf2-how" onClick={()=>setHow(true)}>{'ⓘ'} HOW IT WORKS</button>
@@ -275,8 +279,7 @@
               const ps=v>0?(pv||0)/v:null;
               return(
                 <div key={a} className={`pf2-wc ${on?'on':'off'}${st==='bad'?' bad':''}`}>
-                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} style={w.name?null:{fontSize:14}} title={w.address}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} role="img" aria-label={st==='ok'?'Loaded':st==='run'?'Loading':st==='bad'?'Read failed':'Not loaded'} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
-                  <div className="ad mono">{w.name?<>{pfAddr(w.address)} {'·'} {w.group||'Default'}</>:<>{(w.group||'Default').toUpperCase()}</>}</div>
+                  <div className="r1"><button className="pf2-tg" role="switch" aria-checked={on} aria-label={`Count ${label} in the totals`} onClick={()=>toggleWallet(w.address)}></button><span className={w.name?'nm':'nm mono'} title={w.name?`${w.address} \u00B7 ${w.group||'Default'}`:(w.group||'Default')}>{label}</span><button className="pf2-ed" onClick={()=>setEdit(w.address.toLowerCase())} aria-label={`Edit ${label}`} title="Edit name / group">✎</button><span className={`pf2-dot ${st==='ok'?'':st}`} role="img" aria-label={st==='ok'?'Loaded':st==='run'?'Loading':st==='bad'?'Read failed':'Not loaded'} title={st==='ok'?'Loaded':st==='run'?'Loading…':st==='bad'?'The chain read failed':''}></span></div>
                   {st==='bad'?<button className="retry" onClick={()=>fetchWalletData(w.address)}>Read failed {'·'} retry</button>
                   :v==null?<div className="v dim">{st==='run'?'loading…':'—'}</div>
                   :<>
@@ -289,7 +292,7 @@
                 </div>
               );
             })}
-            {!showAll&&shown.length>6&&<button className="pf2-more" onClick={()=>setShowAll(true)}>Show all {shown.length} wallets {'▾'}</button>}
+            {!showAll&&shown.length>cutN&&<button className="pf2-more" onClick={()=>setShowAll(true)}>Show all {shown.length} wallets {'▾'}</button>}
           </div>
           {moonMathActive&&(()=>{const isAth=customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo);const none=customPrices.ptgc===''&&customPrices.ufo==='';return(
             <div className="pf2-mm"><img src="logos/portfolio/pf-moon.webp" alt=""/>Moon Math is on {'\u2014'} {isAth?'your holdings, rewards and totals are valued at the All-Time High prices.':none?'Custom is selected: type a PTGC and / or UFO price in the Moon Math window (live prices until you do).':'your holdings, rewards and totals are valued at your custom prices.'} <span className="mmn">(The value history and the transactions stay at real prices.)</span> <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to Live Prices</button></div>);})()}
@@ -398,7 +401,7 @@
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
-          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs}/>
+          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs} wallets={wallets}/>
           <PfRecentTx wallets={counted} prices={prices} onRows={setTxs}/>
 
           {/* ---- the two folds ---- */}

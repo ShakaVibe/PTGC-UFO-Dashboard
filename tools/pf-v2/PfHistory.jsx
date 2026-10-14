@@ -181,8 +181,10 @@
       return(<svg className="pf2-spk" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".42"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs><path d={d+`L${W} ${H}L0 ${H}Z`} fill={`url(#${id})`}/><path d={d} fill="none" stroke={col} strokeWidth="1.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 3px ${col})`}}/></svg>);
     };
     /* the chart: one series (the total), area + 2 px line, recessive grid, crosshair + tooltip on hover / touch */
-    const PfHistChart=React.memo(({pts,period,txs})=>{   // round 24 (audit B1): memoised — redraws only when its points / period / transactions change
+    const PfHistChart=React.memo(({pts,period,txs,wallets})=>{   // round 24 (audit B1): memoised — redraws only when its points / period / transactions / wallets change
       const ref=React.useRef(null);const[hov,setHov]=useState(null);
+      const[day,setDay]=useState(null);   // round 28: the strip bar (its chart-point time) whose day window is open
+      const nameOf=React.useMemo(()=>pftNameOf(wallets||[]),[wallets]);
       const vals=pts.filter(p=>p.v!=null);
       if(vals.length<2)return <div className="pf2-hwait">Not enough points yet.</div>;
       const t0=pts[0].t,t1=pts[pts.length-1].t;const mx=Math.max(...vals.map(p=>p.v));
@@ -215,9 +217,22 @@
       if(txs){const by=new Map();txs.rows.forEach(r=>{const k=kindOf(r);if(!k)return;if(r.usd!=null&&r.usd<1)return;if(r.t<=vals[0].t||!pftCovered(txs,r.addr,r.tok,r.t))return;
           const p=vals.find(q=>q.t>=r.t)||vals[vals.length-1];const e=by.get(p.t)||{p,tx:[],n:{in:0,out:0,cl:0,lp:0}};e.tx.push(r);e.n[k]++;by.set(p.t,e);});
         by.forEach(e=>ev.push(e));}
-      const evMax=ev.reduce((m,e)=>Math.max(m,e.tx.length),0);
+      ev.sort((a,b)=>a.p.t-b.p.t);
       const covFrom=Math.max(0,...Object.values(cov));
       const evAt=t=>ev.find(e=>e.p.t===t);
+      /* round 28 (Shaka: "mouse over or click on the little daily bars and it pops a window showing the day's moves"): each bar
+         is a button — hover / tap lights it and shows the chart tooltip (5 trades + "click the bar for all N"), click or Enter
+         on the chart opens PfDayModal with every transaction of that step. A bar's trades fall in (previous point, this point]:
+         the daily points sit at local midnight, so the bar at Oct 5 00:00 holds OCT 4's trades — bucketName labels it so. */
+      const step=period==='7D'?6*PFH_H:period==='1Y'?4*PFH_D:PFH_D;
+      const bucketOf=e=>{const k=vals.indexOf(e.p);return{a:k>0?vals[k-1].t:e.p.t-step,b:e.p.t,now:!!e.p.now};};
+      const bucketName=(e,long)=>{const{a,b,now}=bucketOf(e);
+        if(period==='7D')return pfhDate(a,true)+' \u2013 '+(now?'now':new Date(b).toLocaleTimeString('en-US',{hour:'numeric'}));
+        if(period==='1Y'||b-a>1.5*PFH_D)return pfhDate(a)+' \u2013 '+(now?'now':pfhDate(b-1));
+        if(now)return long?'Today':'today';
+        return long?new Date(b-1).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}):pfhDate(b-1);};
+      const when=e=>{const n=bucketName(e);return period==='7D'||period==='1Y'||n.indexOf('\u2013')>=0?n:e.p.now?n:'on '+n;};
+      const di=day!=null?ev.findIndex(e=>e.p.t===day):-1;
       const txLine=r=>{const k=TOUT[r.type]?'out':TCL[r.type]?'cl':TLP[r.type]?'lp':'in';const g={out:'\u25BC ',in:'\u25B2 ',cl:'\u2B07 ',lp:r.type==='Add LP'?'\u2295 ':'\u2296 '}[k];
         return <span key={r.id} className={k}>{g}{r.type} {pfAbbr(Math.abs(r.amt))} {r.tok}{r.usd!=null&&<em> {'\u00B7'} {pfhMoney(r.usd)}</em>}</span>;};
       return(
@@ -226,25 +241,49 @@
           {/* round 26 (audit D3): the chart is keyboard-readable — Tab to it, ← → step through the points, Home / End; the
               tooltip text is announced through the live region below */}
           <div className="pf2-hp" ref={ref} tabIndex={0} onMouseMove={move} onMouseLeave={()=>setHov(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={()=>setHov(null)} onBlur={()=>setHov(null)}
-            onKeyDown={e=>{const i=hov?vals.indexOf(hov):vals.length-1;let j=null;if(e.key==='ArrowLeft')j=Math.max(0,i-1);else if(e.key==='ArrowRight')j=Math.min(vals.length-1,i+1);else if(e.key==='Home')j=0;else if(e.key==='End')j=vals.length-1;else if(e.key==='Escape')setHov(null);if(j!=null){e.preventDefault();setHov(vals[j]);}}}
-            role="img" aria-label={`Portfolio value from ${pfhDate(t0)} to now: ${pfhMoney(vals[0].v)} to ${pfhMoney(last.v)}. Use the arrow keys to step through the points.`}>
+            onKeyDown={e=>{const i=hov?vals.indexOf(hov):vals.length-1;let j=null;if(e.key==='ArrowLeft')j=Math.max(0,i-1);else if(e.key==='ArrowRight')j=Math.min(vals.length-1,i+1);else if(e.key==='Home')j=0;else if(e.key==='End')j=vals.length-1;else if(e.key==='Escape')setHov(null);else if(e.key==='Enter'&&hov){const x=evAt(hov.t);if(x){e.preventDefault();setDay(x.p.t);}}if(j!=null){e.preventDefault();setHov(vals[j]);}}}
+            role="img" aria-label={`Portfolio value from ${pfhDate(t0)} to now: ${pfhMoney(vals[0].v)} to ${pfhMoney(last.v)}. Use the arrow keys to step through the points; Enter opens that day's transactions.`}>
             {ticks.map((v,i)=><i key={i} className="g" style={{top:Y(v)+'%'}}></i>)}
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pfhA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5CE13A" stopOpacity=".5"/><stop offset="1" stopColor="#1F6B12" stopOpacity=".06"/></linearGradient></defs>
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,4).map(txLine)}{l.length>4&&<small>+{l.length-4} more {'\u2014'} see Recent Transactions</small>}<small>{l.length} {l.length===1?'transaction':'transactions'} {stepName==='day'?'this day':'in these '+stepName}</small></div>;})()}</div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,5).map(txLine)}<small>{l.length} {l.length===1?'transaction':'transactions'} {when(e)}</small><small className="go">{l.length>5?`+${l.length-5} more \u2014 `:''}click the bar for the full list {'\u2192'}</small></div>;})()}</div></>}
           </div>
           <div className="pf2-sr" aria-live="polite">{hov?`${hov.now?'Now':pfhDate(hov.t,period==='7D')}: ${fmtDollar(hov.v)} (PTGC ${fmtDollar(hov.p,0)}, UFO ${fmtDollar(hov.u,0)})${(()=>{const e=evAt(hov.t);return e?`, ${e.tx.length} transaction${e.tx.length===1?'':'s'}`:'';})()}`:''}</div>
-          {txs&&<div className="pf2-strip" aria-hidden="true"><span className="lab">{period==='7D'?'TRADES / 6H':period==='1Y'?'TRADES / 4D':'TRADES'}</span>
-            {ev.map((e,i)=>{const n=e.tx.length,h=Math.min(26,4+n*4);const on=hov&&hov.t===e.p.t;return(<span key={i} className={`day${on?' on':''}${n>=4?' hot':''}`} data-n={n} style={{left:X(e.p.t)+'%',height:h+'px'}}>
-              {KINDS.map(([k])=>e.n[k]>0&&<i key={k} className={k} style={{flex:e.n[k]}}></i>)}</span>);})}</div>}
-          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {stepName} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span>{covFrom>vals[0].t&&<span className="o">complete from {pfhDate(covFrom)}</span>}</div>}
+          {txs&&<div className="pf2-strip" role="group" aria-label={`Trades per ${stepName}`} onMouseLeave={()=>setHov(null)}><span className="lab" aria-hidden="true">{period==='7D'?'TRADES / 6H':period==='1Y'?'TRADES / 4D':'TRADES'}</span>
+            {ev.map((e,i)=>{const n=e.tx.length,h=Math.min(26,4+n*4);const on=hov&&hov.t===e.p.t;return(<button key={i} type="button" tabIndex={-1} className={`day${on?' on':''}${n>=4?' hot':''}`} data-n={n} style={{left:X(e.p.t)+'%',height:h+'px'}}
+              aria-label={`${bucketName(e,true)}: ${n} transaction${n===1?'':'s'}`} title={`${bucketName(e,true)} \u00B7 ${n} transaction${n===1?'':'s'} \u00B7 click for the list`} onMouseEnter={()=>setHov(e.p)} onTouchStart={ev2=>{ev2.stopPropagation();setHov(e.p);}} onClick={()=>setDay(e.p.t)}>
+              {KINDS.map(([k])=>e.n[k]>0&&<i key={k} className={k} style={{flex:e.n[k]}}></i>)}</button>);})}</div>}
+          {di>=0&&<PfDayModal ev={ev} i={di} go={setDay} close={()=>setDay(null)} vals={vals} bucketName={bucketName} kindOf={kindOf} nameOf={nameOf}/>}
+          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {stepName} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span><span className="go">{'\u261D'} click a bar for the {stepName==='day'?'day\u2019s':stepName+'\u2019'} moves</span>{covFrom>vals[0].t&&<span className="o">complete from {pfhDate(covFrom)}</span>}</div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
     });
-    const PfValueHistory=({addrs,live,period,setPeriod,txs})=>{
+    /* round 28: the day window — every transaction of one strip bar, in the Recent Transactions rows (PfTxRow, PfTx.jsx) */
+    const PfDayModal=({ev,i,go,close,vals,bucketName,kindOf,nameOf})=>{
+      const e=ev[i];const l=e.tx.slice().sort((a,b)=>b.t-a.t);
+      const[cp,copy]=usePftCopy();
+      const k=vals.indexOf(e.p),prev=k>0?vals[k-1]:null;const chg=prev&&prev.v>0?(e.p.v-prev.v)/prev.v*100:null;
+      const K={in:{n:0,usd:0},out:{n:0,usd:0},cl:{n:0,usd:0},lp:{n:0,usd:0}};let tin=0,tout=0;
+      l.forEach(r=>{const x=K[kindOf(r)];if(x){x.n++;x.usd+=r.usd||0;}const s=PFT_AMT[r.type];if(s==='neg')tout+=r.usd||0;else if(s==='pos')tin+=r.usd||0;});
+      const nw=new Set(l.map(r=>r.addr)).size;const title=bucketName(e,true);
+      const toFeed=()=>{close();setTimeout(()=>{const s=document.querySelector('.pf2-rt');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},60);};
+      return(
+        <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${title}: ${l.length} transaction${l.length===1?'':'s'}`}>
+          <div className="pf2-dw" onClick={ev2=>ev2.stopPropagation()}>
+            <div className="hd"><h2 className="oh">{title}<small>{l.length} transaction{l.length===1?'':'s'}{prev&&prev.v!=null&&e.p.v!=null&&<> {'\u00B7'} portfolio {fmtDollar(prev.v,0)} {'\u2192'} {fmtDollar(e.p.v,0)}{chg!=null&&<b className={chg<0?'neg':'pos'}> {chg<0?'\u25BC':'\u25B2'} {chg>=0?'+':'\u2212'}{Math.abs(chg).toFixed(1)}%</b>}</>}</small></h2>
+              <div className="nav"><button disabled={i===0} onClick={()=>go(ev[i-1].p.t)} aria-label="Previous day with trades">{'\u25C0'} {i>0?bucketName(ev[i-1]):''}</button><button disabled={i>=ev.length-1} onClick={()=>go(ev[i+1].p.t)} aria-label="Next day with trades">{i<ev.length-1?bucketName(ev[i+1]):''} {'\u25B6'}</button></div>
+              <button className="x" onClick={close} aria-label="Close">{'\u00D7'}</button></div>
+            <div className="pf2-dsum">{[['in','BUYS','paid'],['out','SELLS','received'],['cl','CLAIMS','earned'],['lp','LIQUIDITY','moved']].map(([q,n,w])=><div key={q} className={q}><b>{n}</b><span>{K[q].n}</span><small>{K[q].n?fmtDollar(K[q].usd,0)+' '+w:'\u2014'}</small></div>)}</div>
+            <div className="net">Tokens out <b className="neg">{'\u2212'}{fmtDollar(tout,0)}</b> {'\u00B7'} tokens in <b className="pos">+{fmtDollar(tin,0)}</b> {'\u00B7'} across <b>{nw} wallet{nw===1?'':'s'}</b></div>
+            <div className="list">{l.map(r=><PfTxRow key={r.id} r={r} who={pftWhoOf(nameOf,r)} cp={cp===r.id} onCopy={copy}/>)}</div>
+            <div className="ft"><span>Dust under $1 left out {'\u00B7'} times in your local time</span><button onClick={toFeed}>Go to Recent Transactions {'\u2193'}</button></div>
+          </div>
+        </PfModal>);
+    };
+    const PfValueHistory=({addrs,live,period,setPeriod,txs,wallets})=>{
       const s=usePfSeries(addrs,period);
       const lv=live&&live.v!=null?live:null;
       const pts=React.useMemo(()=>s.pts.length&&lv?[...s.pts,{t:Date.now(),v:lv.v,p:lv.p,u:lv.u,bp:lv.bp,bu:lv.bu,now:true}]:s.pts,[s.pts,lv&&lv.v,lv&&lv.p,lv&&lv.u,lv&&lv.bp,lv&&lv.bu]);   // round 24 (audit B1): stable between renders
@@ -259,7 +298,7 @@
             <div className="pf2-vhc">
               {s.state==='loading'&&!s.pts.length&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
               {s.state==='failed'&&<div className="pf2-hwait"><div>Couldn{'’'}t read the history from the chain right now.</div><button className="pf2-lnk" onClick={s.retry}>Retry</button></div>}
-              {(s.state==='ok'||(s.state==='loading'&&s.pts.length>0))&&<div className={s.state==='loading'?'pf2-hstale':''}>{s.state==='loading'&&<span className="pf2-upd">updating{'\u2026'} {Math.round(s.progress*100)}%</span>}<PfHistChart pts={pts} period={period} txs={txs}/></div>}   {/* round 25 (audit C4): the old chart stays while a toggle / period change reloads */}
+              {(s.state==='ok'||(s.state==='loading'&&s.pts.length>0))&&<div className={s.state==='loading'?'pf2-hstale':''}>{s.state==='loading'&&<span className="pf2-upd">updating{'\u2026'} {Math.round(s.progress*100)}%</span>}<PfHistChart pts={pts} period={period} txs={txs} wallets={wallets}/></div>}   {/* round 25 (audit C4): the old chart stays while a toggle / period change reloads */}
               {s.state==='ok'&&s.gaps>0&&<div className="pf2-hnote">{s.gaps} point{s.gaps>1?'s':''} could not be read and {s.gaps>1?'are':'is'} left as a gap. <button onClick={s.retry}>Retry</button></div>}
             </div>
             <div className="pf2-vhs">
