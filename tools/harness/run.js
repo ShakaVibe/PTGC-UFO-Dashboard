@@ -72,6 +72,15 @@ const rpcAnswer=(body)=>{
       const asks=(Array.isArray(topics[0])?topics[0]:[topics[0]]).includes(swapTopic);
       const to=f.toBlock==='latest'?HEAD:parseInt(f.toBlock,16),from=parseInt(f.fromBlock,16);
       result=[];
+      /* PF_LOGS=1 (B8, 2026-10-16): the UFO token's Transfer logs for a wallet — fixed blocks so a cached + incremental read must
+         equal a cold read: IN 3 × 1e9 at launch+1000, launch+100500, 27104950 (only those inside the asked range); OUT one
+         send of 94e8 to a stranger + its 5e8 fee leg to the contract at launch+50000, and one more pair at 27104900 */
+      const xferTopic='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+      if(process.env.PF_LOGS&&f.address&&/49ed499433bee42dd34c169470fef2c8f9fae6e6/i.test(f.address)&&topics[0]===xferTopic){const L=26989200;const toW=topics[2],fromW=topics[1];const fromB=parseInt(f.fromBlock,16),toB=f.toBlock==='latest'?HEAD:parseInt(f.toBlock,16);const mk=(b,t1,t2,amt,i)=>({address:f.address,topics:[xferTopic,t1,t2],data:pad(amt),blockNumber:hex(b),transactionHash:'0x'+(b*10+i).toString(16).padStart(64,'0'),logIndex:hex(i),removed:false});
+        const out=[];const inRange=b=>b>=fromB&&b<=toB;const contractT=pad(f.address).toLowerCase().replace(/^0x/,'0x');
+        if(toW&&!fromW){[L+1000,L+100500,27104950].forEach((b,i)=>{if(inRange(b))out.push(mk(b,pad(0x55),toW,1_000_000_000n*10n**18n,i));});}
+        if(fromW&&!toW){[L+50000,27104900].forEach((b,i)=>{if(inRange(b)){out.push(mk(b,fromW,pad(0x66),94n*10n**8n*10n**18n/1n,i*2));out.push(mk(b,fromW,pad(BigInt(f.address)),5n*10n**8n*10n**18n,i*2+1));}});}
+        result=out;}
       if(n&&asks)for(let i=0;i<n;i++){const b=HEAD-i*3;if(b<from||b>to)continue;const buy=i%3!==2;const amt=pad((1000n+BigInt(i)*250n)*10n**18n).slice(2);const z=pad(0).slice(2);
         result.push({address:'0x'+'ab'.repeat(20),topics:[swapTopic,pad(1),pad(2)],data:'0x'+(buy?z+z+z+amt:z+amt+z+z),blockNumber:hex(b),transactionHash:'0x'+(i+1).toString(16).padStart(64,'0'),logIndex:hex(i),removed:false});}
     }

@@ -610,3 +610,10 @@ load unchanged); R6 "No PTGC or UFO found · check the address" on an empty wall
 device (`usePfFold`, grays_pf_folds); S2 the deck's Show-all styled like the fold pills; S4 icon-only ◀ ▶ in the day window
 on the phone; S6 a "Moon Math prices" tag on the claim spotlight when custom prices are on; S7 HOW IT WORKS rewritten for
 rounds 28–37. Squeeze scan clean 390–1440; classic 215506704. Left: R2 / R3 / R4 (check live with his deck first), S3, S5.
+
+## Round 42 — DAY BY DAY buttons (2026-10-15)
+
+Shaka: the two "Details · 30D" buttons "really should be called breakdown… and we shouldn't put the 30d… need these
+buttons to stand out more." Named DAY BY DAY (not "Breakdown" — the Per-wallet Breakdown fold already owns that word); no
+period in the label (the window has 7 / 30 / 90); solid gold (PTGC) / green (UFO) Orbitron buttons like + ADD WALLET, with
+a glow. The Reflections row's link reads "Day by day → 7 / 30 / 90 days". HOW IT WORKS updated. Still hidden; classic 215506704.
