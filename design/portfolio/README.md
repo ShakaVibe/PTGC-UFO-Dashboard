@@ -577,3 +577,9 @@ with a reason when a wallet's coverage doesn't reach it. The bar: "🛸 Reflecti
 +762M"; inside `.pf2-r7`: a row per day (newest first) with a bar scaled to the best day, UFO and $, a one-line method note
 and "Full 30 days → Details" (opens the UFO Details window). The excluded-address list is no longer shown (the audit's
 `pfUfoEligible().list` stays for the share). Still hidden; classic 215506704.
+
+## Round 38 — bigger tile fonts (2026-10-15)
+
+Shaka: "increase all these font sizes" (the Earned-by-source tiles and the Your-holdings value tiles). `.pf2-src`: label
+13.5 / amount 29 / $ 18 / share 14.5 (was 12.5 / 25 / 16.5 / 13.5); `.pf2-row3.r4 .pf2-st`: label 13.5 / value 28 / 24 h
+16.5 / period line 15 (was 12.5 / 25 / 14.5 / 13.5). No overflow at 1440 or 390 with the stub's $9.4M. Still hidden.
