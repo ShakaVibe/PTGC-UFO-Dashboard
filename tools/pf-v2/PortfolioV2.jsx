@@ -414,7 +414,7 @@
                       <div className="v">{'\u2248'} {shs}%<small>of every holder reward</small></div>
                       <div className="u">1% of every UFO buy, sell and transfer {'\u2014'} paid straight to your wallet, nothing to claim</div>
                       <div className="bar" aria-hidden="true"><i style={{width:Math.max(0.5,Math.min(100,sh))+'%',background:'#7CFC00'}}></i></div>
-                      <div className="lg">{el?<><span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the <b>{pfAbbr(el.elig)}</b> UFO that earns rewards</span><span><i style={{background:'rgba(255,255,255,.3)'}}></i>Not earning: <b>{pfAbbr(el.burn)}</b> burned {'\u00B7'} <b>{pfAbbr(el.pools)}</b> in liquidity pools {'\u00B7'} <b>{pfAbbr(el.wallets)}</b> excluded</span></>
+                      <div className="lg">{el?<><span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the <b>{pfAbbr(el.elig)}</b> UFO that earns rewards</span></>
                         :<span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the total supply {'\u00B7'} reading the reward-eligible supply{'\u2026'}</span>}</div>
                     </div>
                   </div>);})()}

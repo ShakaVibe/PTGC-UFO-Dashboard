@@ -543,3 +543,16 @@ the burn address, the contract, the excluded wallet and the 13 pools with balanc
 and the feed header (`usePfTick` 30 s, `pfAgo`; `s.at` / `st.at`). 5 The coverage note left the legend for the chart
 tooltip ("trades before Oct 9 still loading / not available" only when hovering before the coverage). 6 The Total tile shows
 the period change under the 24 h one ("▲ +392.31% (30D)", `onChg` from PfValueHistory). Still hidden; classic 215506704.
+
+## Round 35 — the feed as a ledger, rolled up (2026-10-15)
+
+Shaka (screenshot): "so much dead space between the text on the left and the dollar value on the right. Rethink how this
+lays out… clean, easy to read, and sexy." mock-feed-v2.html (renders/feed-v2-1380.jpg): A ledger columns · B two-up cards ·
+C slim timeline with dotted leaders. He: "lets go with mock up A", plus "have recent transactions roll up into a bar that you
+click to expand, like the per wallet breakdown", and "take the bullet point away that says not earning" (UFO spotlight).
+Built: `PfTxRow` is a ledger row (icon · action + note · wallet + copy · price per token (value ÷ amount, Buy / Sell only,
+`fmtPriceNode`) · time · value · link), `PfTxColh` headers, zebra via `z`, no card borders, day headers with the net; the
+section is a `.pf2-fold` with `.pf2-foldh` ("RECENT TRANSACTIONS · 997 transactions · all wallets · read 2 min ago"), closed
+by default, opened by the day window's "Go to Recent Transactions" (window event `pf2-open-feed`); reads still run while
+closed (the chart's strip needs them). Phone: card rows again (price / time columns hidden, time inline); the day window
+hides the price column. UFO spotlight legend is one line now. Still hidden; classic 215506704.

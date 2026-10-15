@@ -269,7 +269,7 @@
       const K={in:{n:0,usd:0},out:{n:0,usd:0},cl:{n:0,usd:0},lp:{n:0,usd:0}};let tin=0,tout=0;
       l.forEach(r=>{const x=K[kindOf(r)];if(x){x.n++;x.usd+=r.usd||0;}const s=PFT_AMT[r.type];if(s==='neg')tout+=r.usd||0;else if(s==='pos')tin+=r.usd||0;});
       const nw=new Set(l.map(r=>r.addr)).size;const title=bucketName(e,true);
-      const toFeed=()=>{close();setTimeout(()=>{const s=document.querySelector('.pf2-rt');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},60);};
+      const toFeed=()=>{close();window.dispatchEvent(new Event('pf2-open-feed'));setTimeout(()=>{const s=document.querySelector('.pf2-rt');if(s)s.scrollIntoView({behavior:'smooth',block:'start'});},60);};
       return(
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${title}: ${l.length} transaction${l.length===1?'':'s'}`}>
           <div className="pf2-dw" onClick={ev2=>ev2.stopPropagation()}>
@@ -278,7 +278,7 @@
               <button className="x" onClick={close} aria-label="Close">{'\u00D7'}</button></div>
             <div className="pf2-dsum">{[['in','BUYS','paid'],['out','SELLS','received'],['cl','CLAIMS','earned'],['lp','LIQUIDITY','moved']].map(([q,n,w])=><div key={q} className={q}><b>{n}</b><span>{K[q].n}</span><small>{K[q].n?fmtDollar(K[q].usd,0)+' '+w:'\u2014'}</small></div>)}</div>
             <div className="net">Tokens out <b className="neg">{'\u2212'}{fmtDollar(tout,0)}</b> {'\u00B7'} tokens in <b className="pos">+{fmtDollar(tin,0)}</b> {'\u00B7'} across <b>{nw} wallet{nw===1?'':'s'}</b></div>
-            <div className="list">{l.map(r=><PfTxRow key={r.id} r={r} who={pftWhoOf(nameOf,r)} cp={cp===r.id} onCopy={copy}/>)}</div>
+            <div className="list">{l.map((r,i)=><PfTxRow key={r.id} r={r} who={pftWhoOf(nameOf,r)} cp={cp===r.id} onCopy={copy} z={i%2===1}/>)}</div>
             <div className="ft"><span>Dust under $1 left out {'\u00B7'} times in your local time</span><button onClick={toFeed}>Go to Recent Transactions {'\u2193'}</button></div>
           </div>
         </PfModal>);

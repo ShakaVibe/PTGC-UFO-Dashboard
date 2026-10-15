@@ -145,15 +145,23 @@
     const pftTm=t=>new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     const pftNameOf=wallets=>{const m={};wallets.forEach(w=>{m[w.address.toLowerCase()]=w.name||pfAddr(w.address);});return a=>m[a]||(a?a.slice(0,6)+'…'+a.slice(-4):'');};
     const pftWhoOf=(nameOf,r)=>r.type==='Move'&&r.cp?(r.dir>=0?nameOf(r.cp)+' → '+nameOf(r.addr):nameOf(r.addr)+' → '+nameOf(r.cp)):nameOf(r.addr);
-    const PfTxRow=({r,who,cp,onCopy})=>{const[c,g]=PFT_TYPE[r.type]||['#fff','•'];
-      const extra=r.type==='Claim'&&r.sub?' · from '+r.sub:r.unstake?' · released from staking':'';
-      return(<div className="pf2-fr">
+    /* round 35 (Shaka: "so much dead space between the text on the left and the dollar value on the right" — picked A of
+       mock-feed-v2): a LEDGER row — icon · action (+ note) · wallet · price per token · time · value · link, column headers above
+       (PfTxColh), a soft zebra by `z`. The phone and the day window drop the price column (pf2.css). */
+    const PfTxRow=({r,who,cp,onCopy,z})=>{const[c,g]=PFT_TYPE[r.type]||['#fff','•'];
+      const note=r.type==='Claim'&&r.sub?'from '+r.sub:r.unstake?'released from staking':r.type==='Move'?'between your wallets':'';
+      const px=(r.type==='Buy'||r.type==='Sell')&&r.usd!=null&&Math.abs(r.amt)>0?r.usd/Math.abs(r.amt):null;
+      return(<div className={`pf2-fr${z?' z':''}`}>
         <div className="ic" style={{color:c,borderColor:c+'88',background:c+'1f'}}>{g}<img src={r.tok==='PTGC'?TOKENS.PTGC.logo:TOKENS.UFO.logo} alt={r.tok}/></div>
         <div className="m"><div className="t1">{PFT_VERB[r.type]||r.type} <em className={PFT_AMT[r.type]||''}>{pfAbbr(Math.abs(r.amt))}</em> {r.tok}</div>
-          <div className="t2"><span className="w">{who}</span><button className={`cp${cp?' ok':''}`} onClick={()=>onCopy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp?'✓':'⧉'}</button><span className="tm">{'·'} {pftTm(r.t)}{extra}</span></div></div>
+          <div className="t2">{note&&<span className="nt">{note}</span>}<span className="tmi">{note?' \u00B7 ':''}{pftTm(r.t)}</span></div></div>
+        <div className="w"><span className={/^0x/i.test(who)?'wc mono':'wc'}>{who}</span><button className={`cp${cp?' ok':''}`} onClick={()=>onCopy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp?'✓':'⧉'}</button></div>
+        <div className="px">{px!=null?<>{fmtPriceNode(px)}<small>per {r.tok}</small></>:<span className="na">{'\u2014'}</span>}</div>
+        <div className="tm">{pftTm(r.t)}</div>
         <div className="v">{fmtDollar(r.usd)}<small>{PFT_VAL[r.type]||'value'}</small></div>
         <a className="lk" href={`https://scan.pulsechain.com/tx/${r.h}`} target="_blank" rel="noopener noreferrer" title="Open on PulseScan" aria-label="Open this transaction on PulseScan">{'↗'}</a>
       </div>);};
+    const PfTxColh=()=><div className="pf2-colh" aria-hidden="true"><span></span><span>ACTION</span><span>WALLET</span><span>PRICE</span><span>TIME</span><span className="r">VALUE</span><span></span></div>;
     /* the "copied ✓" flash shared by the feed and the day window: returns [copiedId, copy(r)] */
     const usePftCopy=()=>{const[cp,setCp]=useState(null);
       const copy=React.useCallback(r=>{pfCopy(r.addr).then(ok=>{if(!ok)return;setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);});},[]);
@@ -265,12 +273,17 @@
         if(n-d<6*864e5)return[d.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase(),md];
         return[md.toUpperCase(),d.getFullYear()!==n.getFullYear()?String(d.getFullYear()):''];};
       const groups=[];show.forEach(r=>{const k=dayKey(r.t);const g=groups[groups.length-1];if(g&&g.k===k)g.rows.push(r);else groups.push({k,rows:[r]});});
-      const row=r=><PfTxRow key={r.id} r={r} who={whoOf(r)} cp={cp===r.id} onCopy={copy}/>;
+      const row=(r,i)=><PfTxRow key={r.id} r={r} who={whoOf(r)} cp={cp===r.id} onCopy={copy} z={i%2===1}/>;
+      /* round 35: the section rolls up into a bar like Per-wallet breakdown; the day window's link opens it */
+      const[open,setOpen]=useState(false);useEffect(()=>{const h=()=>setOpen(true);window.addEventListener('pf2-open-feed',h);return()=>window.removeEventListener('pf2-open-feed',h);},[]);
       return(
-        <section className="pf2-pn pf2-sec pf2-rt" ref={secRef}>
-          <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>
+        <section className="pf2-pn pf2-fold pf2-rt" ref={secRef}>
+          <button className="pf2-foldh" aria-expanded={open} onClick={()=>setOpen(!open)}><b className="oh">RECENT TRANSACTIONS</b><span>{st.state==='ok'?<>{all0.length} transaction{all0.length===1?'':'s'} {'\u00B7'} all wallets</>:st.state==='loading'?'reading PulseScan\u2026':'all wallets'}</span>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
             {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={new Date(st.at).toLocaleString()}>read {pfAgo(st.at,tick)}</span>}
+            <span className="chev">{'\u25BE'}</span></button>
+          {open&&<div className="pf2-foldb">
+          <div className="pf2-sech">
             {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}
               {nDust>0&&<button className={`dust${dust?' on':''}`} aria-pressed={dust} onClick={()=>setDust(!dust)} title="Transactions worth under $1">{dust?'Hide':'Show'} dust<b>{nDust}</b></button>}</div>}
             <button className="pf2-lnk q" onClick={()=>{force.current=true;setNonce(n=>n+1);}}>{'↻'} Refresh</button></div>
@@ -278,6 +291,7 @@
           {st.state==='failed'&&<div className="pf2-soon">Couldn{'’'}t reach PulseScan right now. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></div>}
           {st.state==='none'&&<div className="pf2-soon">{st.failed>0?<>{st.failed} of {st.total} PulseScan reads failed, so some history may be missing. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></>:'No PTGC or UFO transfers in the counted wallets yet.'}</div>}
           {st.state==='ok'&&st.rows.length>0&&<>
+            <PfTxColh/>
             <div className="pf2-feed">{groups.map(g=>{const[d,md]=dayName(g.rows[0].t);return(<React.Fragment key={g.k}>
               {/* round 34: the day's net (tokens in − tokens out, in dollars) on the header — what the day window works out */}
               <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span>{(()=>{let i=0,o=0;g.rows.forEach(r=>{const s=PFT_AMT[r.type];if(s==='pos')i+=r.usd||0;else if(s==='neg')o+=r.usd||0;});const n=i-o;if(!i&&!o)return null;return <em className={n<0?'neg':'pos'} title={`in ${fmtDollar(i)} \u00B7 out ${fmtDollar(o)}`}>{n<0?'\u2212':'+'}{fmtDollar(Math.abs(n),0)} net</em>;})()}</div>{g.rows.map(row)}</React.Fragment>);})}</div>
@@ -285,6 +299,7 @@
             <div className="pf2-txf">{st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
               <span className="src">From PulseScan {'·'} up to a year back per wallet and token</span></div>
           </>}
+          </div>}
         </section>
       );
     };
