@@ -556,3 +556,12 @@ section is a `.pf2-fold` with `.pf2-foldh` ("RECENT TRANSACTIONS · 997 transact
 by default, opened by the day window's "Go to Recent Transactions" (window event `pf2-open-feed`); reads still run while
 closed (the chart's strip needs them). Phone: card rows again (price / time columns hidden, time inline); the day window
 hides the price column. UFO spotlight legend is one line now. Still hidden; classic 215506704.
+
+## Round 36 — spotlight alignment, fold bars (2026-10-15)
+
+Shaka (screenshots): 1) the UFO Reflections tile was shorter while "scanning…" → it keeps its three lines (scanning… / — /
+"reading the UFO transfers…"). 2) the spotlights touched the tiles → the stretch rule lost its `margin-top:auto`, 12 px again.
+3) the two spotlights line up graphically: the same 84 px icon column, the same 38 px amount line (UFO's small 20 px), one-line
+`.u` for both ("1% of every UFO buy, sell and transfer — nothing to claim"), one-line legends; the harness measures both at the
+same top and height. 4) the two fold bars "blend in too much" → gold border, hover glow, a "Show ▾ / Hide ▴" pill on the
+right (`.pf2-foldh .chev` draws it), and 18 px between the chart and Recent Transactions. Still hidden; classic 215506704.

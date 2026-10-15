@@ -281,7 +281,7 @@
           <button className="pf2-foldh" aria-expanded={open} onClick={()=>setOpen(!open)}><b className="oh">RECENT TRANSACTIONS</b><span>{st.state==='ok'?<>{all0.length} transaction{all0.length===1?'':'s'} {'\u00B7'} all wallets</>:st.state==='loading'?'reading PulseScan\u2026':'all wallets'}</span>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
             {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={new Date(st.at).toLocaleString()}>read {pfAgo(st.at,tick)}</span>}
-            <span className="chev">{'\u25BE'}</span></button>
+            <span className="chev" aria-hidden="true"></span></button>
           {open&&<div className="pf2-foldb">
           <div className="pf2-sech">
             {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}

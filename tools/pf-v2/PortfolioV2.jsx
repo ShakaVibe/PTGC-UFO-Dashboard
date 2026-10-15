@@ -403,7 +403,7 @@
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards per day, last 30 days"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>Details {'\u00B7'} 30D</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
-                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">{v1.state==='failed'?<span className="warn">old contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></span>:'100% of earned'}</div></>}</div></div>
+                <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<><div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)',lineHeight:'30px'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div><div className="s">{'\u2014'}</div><div className="p">{uf.reflState==='failed'?'the chain read failed':'reading the UFO transfers\u2026'}</div></>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">{v1.state==='failed'?<span className="warn">old contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></span>:'100% of earned'}</div></>}</div></div>
                 {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
                     holder reward = the counted UFO ÷ the REWARD-ELIGIBLE supply (round 31: supply − burned − pools − excluded wallets, PfLeagues.jsx). */}
                 {/* round 33 (Shaka: "The UFO side needs to match the look of the ptgc side"): the same spotlight — the share big, a bar of
@@ -412,7 +412,7 @@
                   <div className="pf2-spot u"><img src={TOKENS.UFO.logo} alt=""/>
                     <div className="b"><div className="k"><i aria-hidden="true"></i>PAID TO YOUR WALLET AUTOMATICALLY</div>
                       <div className="v">{'\u2248'} {shs}%<small>of every holder reward</small></div>
-                      <div className="u">1% of every UFO buy, sell and transfer {'\u2014'} paid straight to your wallet, nothing to claim</div>
+                      <div className="u">1% of every UFO buy, sell and transfer {'\u2014'} nothing to claim</div>
                       <div className="bar" aria-hidden="true"><i style={{width:Math.max(0.5,Math.min(100,sh))+'%',background:'#7CFC00'}}></i></div>
                       <div className="lg">{el?<><span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the <b>{pfAbbr(el.elig)}</b> UFO that earns rewards</span></>
                         :<span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the total supply {'\u00B7'} reading the reward-eligible supply{'\u2026'}</span>}</div>
@@ -441,7 +441,7 @@
           {/* ---- the two folds ---- */}
           <div className="pf2-folds one">
             <section className="pf2-pn pf2-fold">
-              <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}><b className="oh">PER-WALLET BREAKDOWN</b><span>{counted.length} wallet{counted.length===1?'':'s'}</span><span className="chev">{'▾'}</span></button>
+              <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}><b className="oh">PER-WALLET BREAKDOWN</b><span>{counted.length} wallet{counted.length===1?'':'s'}</span><span className="chev" aria-hidden="true"></span></button>
               {/* round 19 (option A of mock-r18-v1, cards on a phone): tokens with $ under each, Pending to claim in PTGC yellow, UFO as one
                   total, a Total column with each wallet's share (bar split PTGC yellow / UFO green), copy buttons, an All-wallets row. */}
               {bdOpen&&(()=>{const COL=['#B26BFF','#F2D35B','#22D3EE','#FF8A3D','#EC4899','#7CFC00','#6FA8FF','#FF6B73'];
