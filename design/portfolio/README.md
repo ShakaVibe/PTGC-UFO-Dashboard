@@ -644,3 +644,14 @@ Squeeze scan clean 1280→390 (390 keeps the known feed ellipsis); classic hash 
 Shaka: "many may think that means clear all the wallets, and be scared to push it." The MY WALLETS toolbar's second button
 now reads "Deselect all" beside "Select all" (it only switches the counted toggles off; nothing is removed). Fits at 390.
 Still hidden.
+
+## Round 46 — the Total tile's 24H / 30D changes as two pills (2026-10-15)
+
+Shaka's screenshot: "−11.39% (24h)" over "▼ −53.52% (30D)" — two stacked lines, different sizes, one arrow — "that looks like
+shit… mock up a better window." mock-total-v1.html (renders/total-v1.jpg): A two tinted pills, B one labelled line, C a stat
+strip across the bottom. His pick: A. Built: `pfPill(c,period)` → `.pf2-st .pill` (arrow · number · small period tag; red /
+green tint, grey "—" when the 24h change can't be worked out), the pair in a `.ch` row that sits on its own line under the
+number, aligned with it (`margin-left:64px` = the art), the sparkline beside the number as before. The two `.s`/`.s2` lines
+are gone (the Moon Math "prices" note keeps `.s`). In the 4-across desktop row the tile is 296px wide, so the pills could not
+share the number's line with the sparkline — hence their own row. Squeeze scan clean 1380→390 (the known feed ellipsis
+only). Still hidden.

@@ -39,6 +39,8 @@
       );
     };
     const pfPct=(v,t)=>{if(!(t>0)||v==null)return'—';const p=v/t*100;return(p>0&&p<0.1?p.toFixed(2):p.toFixed(1))+'%';};
+    /* round 46 (his pick A of mock-total-v1): the Total tile's 24H / 30D changes as two tinted pills — arrow, number, period tag */
+    const pfPill=(c,p)=>c==null||isNaN(c)?<span className="pill na" key={p}>{'\u2014'}<small>{p}</small></span>:<span className={`pill ${c>=0?'pos':'neg'}`} key={p}><i>{c>=0?'\u25B2':'\u25BC'}</i>{Math.abs(c).toFixed(2)}%<small>{p}</small></span>;
     const pfChg=c=>c==null||isNaN(c)?<span className="na">{'—'} (24h)</span>:<span className={c>=0?'pos':'neg'}>{c>=0?'+':'−'}{Math.abs(c).toFixed(2)}% (24h)</span>;
     /* round 25 (audit C11): the creature row used the classic 6-tier list (stops at Turtle) while the League goes to Shrimp /
        Shell — a Shrimp-sized bag showed "League: Shrimp" over an empty row. Same 8 tiers as the League now. */
@@ -316,7 +318,8 @@
           {/* ---- three summary tiles ---- */}
           <div className="pf2-row3 r4 hd">
             <section className="pf2-pn pf2-st t"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div>
-              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div>{!simulated&&hChg&&<div className={`s2 ${hChg.chg>=0?'pos':'neg'}`}>{hChg.chg>=0?'\u25B2 +':'\u25BC \u2212'}{Math.abs(hChg.chg).toFixed(2)}% ({hChg.period})</div>}</div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></section>
+              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div>{simulated&&<div className="s"><span className="na">Moon Math prices</span></div>}</div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/>
+              {!simulated&&<div className="ch">{pfPill(tChg,'24H')}{hChg&&pfPill(hChg.chg,hChg.period)}</div>}</section>
             <section className="pf2-pn pf2-st p"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div>
               <div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div><div className="s" style={{color:'#F2D35B'}}>{pfPct(ptgcUSD,total)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></section>
             <section className="pf2-pn pf2-st u"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div>

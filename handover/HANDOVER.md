@@ -11,7 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
-- **Portfolio v2 (2026-10-13→15, HIDDEN, 45 rounds, all pushed; GO-LIVE FRIDAY 2026-10-17 on his word — the held package `Claude outputs/pf-golive-friday.tgz` = round 44 + B8 + `PF_V2_LIVE=true`, recipe in `sessions/2026-10-15.md`):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
+- **Portfolio v2 (2026-10-13→15, HIDDEN, 46 rounds, all pushed; GO-LIVE FRIDAY 2026-10-17 on his word — the held package `Claude outputs/pf-golive-friday.tgz` = round 46 + B8 + `PF_V2_LIVE=true`, recipe in `sessions/2026-10-15.md`):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
 - **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
@@ -38,7 +38,7 @@ Update it at the end of every session.
 
 ## Current state (2026-10-15)
 
-**2026-10-15 (Thursday): PORTFOLIO v2 rounds 29–44 — polish day, all pushed by him (last `e05c99caf`), STILL HIDDEN behind the dot.**
+**2026-10-15 (Thursday): PORTFOLIO v2 rounds 29–46 — polish day, all pushed by him (last `e05c99caf`), STILL HIDDEN behind the dot.**
 Morning: B8 explained and parked ("we will wait on that"). Then polish, every visual from a mock-up he picked: the wallets panel +
 "YOUR HOLDINGS" heading (29, his C), the Details loader over the chart while PulseScan reads + the ledger dressed like the page
 (30), the UFO share audited on chain — the reward-eligible supply excludes burn, the token contract, the UFO OA wallet and 13
@@ -49,13 +49,13 @@ under Earned by source (31, his C), the UFO spotlight to match + the period-chan
 the mid-width squeeze fixes with a new `probes/pf2-squeeze.js` scan at ten widths (39), Audit II (`PORTFOLIO-ROADMAP.md` "Audit II"
 P/R/S tables; 40–42 knocked out, R2–R4 closed by a live measurement: 103 PulseScan reads, 1.26 MB localStorage, 1Y chart no gaps,
 ~50 s cold for 22 wallets), the DAY BY DAY buttons (42), the Day-by-day loader on a period change (43), the two fold bars dressed
-up — icon tile, live chips, gold SHOW (44, his A with B's button). Late: "Clear" → "Deselect all" in the wallets toolbar (45). Harness recipe for every round in `tools/harness/README.md`;
+up — icon tile, live chips, gold SHOW (44, his A with B's button). Late: "Clear" → "Deselect all" in the wallets toolbar (45); the Total tile's 24H / 30D changes as two tinted pills (46, his A of mock-total-v1). Harness recipe for every round in `tools/harness/README.md`;
 decisions in `design/portfolio/README.md` rounds 29–44. **Classic body unchanged all day** (round 44's classic hash equals round
 43's). **He said: "I am not going to go live until tomorrow, Friday."**
 
 **NEXT (Friday 2026-10-17, only when he says go):** (1) his hard-refresh look on Chrome / Safari / iPhone with the dot on; (2) unpack
 `Claude outputs/pf-golive-friday.tgz` on the Mac (the same tar loop as a round, then `python3 tools/pf-v2.py` twice — it holds
-round 44 + B8 + `PF_V2_LIVE=true` — **REBUILD IT ON ROUND 45 FIRST**, recipe in `sessions/2026-10-15.md`), commit "Portfolio v2 GO LIVE + B8"; (3) live check with the test wallets
+round 46 + B8 + `PF_V2_LIVE=true`, already rebuilt on the last round — if anything else ships first, rebuild it again, recipe in `sessions/2026-10-15.md`), commit "Portfolio v2 GO LIVE + B8"; (3) live check with the test wallets
 `0x5f203BD7c8453eF8B812635fc3cDAcecae7b9ed5` and `0xEC1904931777ff32f30f939D6D278cb28F30a03e` — UFO reflections equal before /
 after (B8 must not move the number), no dot, v2 for a plain visitor, `grays_ufo_refl_v1:*` written; (4) update this file. If any
 hidden round ships before that, REBUILD the package on it (`sessions/2026-10-15.md`, corrected splice recipe). After go-live:
@@ -1402,7 +1402,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
-- `sessions/2026-10-15.md` — Portfolio v2 rounds 29–45 (polish day): wallets panel, loaders, UFO share audited on chain, the
+- `sessions/2026-10-15.md` — Portfolio v2 rounds 29–46 (polish day): wallets panel, loaders, UFO share audited on chain, the
   spotlights, the Recent Transactions bar, Reflections last 7 days, squeeze fixes, Audit II, DAY BY DAY, the fold bars. The held
   Friday go-live package (round 44 + B8) and its corrected splice recipe. Still hidden; go-live Friday on his word.
 - `sessions/2026-10-14.md` — Portfolio v2 rounds 17–28: the activity feed, strip, Details window, the audit + roadmap and its
