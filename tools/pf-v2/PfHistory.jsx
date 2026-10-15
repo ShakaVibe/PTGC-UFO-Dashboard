@@ -296,11 +296,19 @@
             <div className="pf2-pp" role="group" aria-label="Period">{Object.keys(PFH_PERIODS).map(k=><button key={k} className={period===k?'on':''} aria-pressed={period===k} onClick={()=>setPeriod(k)}>{k}</button>)}</div></div>
           <div className="pf2-vhb">
             <div className="pf2-vhc">
-              {s.state==='loading'&&!s.pts.length&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
+              {/* round 33 (Shaka: "you still get the old little updating badge — use the new loading graphic"): the Details loader for the
+                  history too — in-flow on the first look, over the stale chart on a period / wallet change */}
+              {s.state==='loading'&&(()=>{const pct=Math.round(s.progress*100),stale=s.pts.length>0;const L=(
+                <div className="pf2-edload ov h"><div className="orb"><span className="ring"></span><span className="ring r2"></span><span className="two big"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span></div>
+                  <div className="h">Reading your {period} history{'\u2026'}</div>
+                  <div className="p">{addrs.length} wallet{addrs.length===1?'':'s'} {'\u00B7'} balances at every point, straight from the chain. {stale?'The old chart stays until it lands.':'The first look reads every day; after that only what is new.'}</div>
+                  <div className="steps"><div className="st on"><i>{'\u29D7'}</i><span>Chain reads</span><b>{pct}%</b></div></div>
+                  <div className="bar"><i style={{width:Math.max(6,pct)+'%'}}></i></div></div>);
+                return stale?<div className="pf2-txload" role="status" aria-live="polite">{L}</div>:<div className="pf2-hload" role="status" aria-live="polite">{L}</div>;})()}
               {s.state==='failed'&&<div className="pf2-hwait"><div>Couldn{'’'}t read the history from the chain right now.</div><button className="pf2-lnk" onClick={s.retry}>Retry</button></div>}
               {/* round 30 (Shaka: "a cool loading graphic over the chart since it is waiting for that data to populate the trades"
                   — the Details window's loader, reused): shown until the first PulseScan read of every wallet is in (txs lands) */}
-              {!txs&&txp&&(s.state==='ok'||s.pts.length>0)&&(()=>{const pOk=txp.pd>=txp.pt,uOk=txp.ud>=txp.ut;return(
+              {!txs&&txp&&s.state==='ok'&&(()=>{const pOk=txp.pd>=txp.pt,uOk=txp.ud>=txp.ut;return(
                 <div className="pf2-txload" role="status" aria-live="polite"><div className="pf2-edload ov">
                   <div className="orb"><span className="ring"></span><span className="ring r2"></span><span className="two big"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span></div>
                   <div className="h">Reading your trades{'\u2026'}</div>
@@ -311,7 +319,7 @@
                   </div>
                   <div className="bar"><i style={{width:Math.max(6,Math.min(100,txp.total?txp.done/txp.total*100:0))+'%'}}></i></div>
                 </div></div>);})()}
-              {(s.state==='ok'||(s.state==='loading'&&s.pts.length>0))&&<div className={s.state==='loading'?'pf2-hstale':''}>{s.state==='loading'&&<span className="pf2-upd">updating{'\u2026'} {Math.round(s.progress*100)}%</span>}<PfHistChart pts={pts} period={period} txs={txs} wallets={wallets}/></div>}   {/* round 25 (audit C4): the old chart stays while a toggle / period change reloads */}
+              {(s.state==='ok'||(s.state==='loading'&&s.pts.length>0))&&<div className={s.state==='loading'?'pf2-hstale':''}><PfHistChart pts={pts} period={period} txs={txs} wallets={wallets}/></div>}   {/* round 25 (audit C4): the old chart stays while a toggle / period change reloads */}
               {s.state==='ok'&&s.gaps>0&&<div className="pf2-hnote">{s.gaps} point{s.gaps>1?'s':''} could not be read and {s.gaps>1?'are':'is'} left as a gap. <button onClick={s.retry}>Retry</button></div>}
             </div>
             <div className="pf2-vhs">

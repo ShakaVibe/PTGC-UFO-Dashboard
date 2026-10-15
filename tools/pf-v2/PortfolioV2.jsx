@@ -347,7 +347,7 @@
                   <div className="pf2-spot"><img src="logos/portfolio/pf-claim2.webp" alt=""/>
                     <div className="b"><div className="k"><i aria-hidden="true"></i>READY TO CLAIM</div>
                       <div className="v">{pfAbbr(tp)}<small>PTGC</small></div>
-                      <div className="u">{tp>0?<>{fmtDollar(usd(tp,dp.ptgc))} waiting in the staking contract</>:<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>}</div>
+                      <div className="u">{tp>0?<>{fmtDollar(usd(tp,dp.ptgc))} waiting to be claimed</>:<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>}</div>
                       {tp>0&&<><div className="bar" aria-hidden="true"><i style={{width:ps/tp*100+'%',background:'#B26BFF'}}></i><i style={{width:pl/tp*100+'%',background:'#EC4899'}}></i></div>
                         <div className="lg"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(ps)}</b> {'\u00B7'} {fmtDollar(usd(ps,dp.ptgc))}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pl)}</b> {'\u00B7'} {fmtDollar(usd(pl,dp.ptgc))}</span></div></>}
                     </div>
@@ -404,12 +404,17 @@
                 <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">{v1.state==='failed'?<span className="warn">old contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></span>:'100% of earned'}</div></>}</div></div>
                 {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
                     holder reward = the counted UFO ÷ the REWARD-ELIGIBLE supply (round 31: supply − burned − pools − excluded wallets, PfLeagues.jsx). */}
-                {uf.balance>0&&(()=>{const el=ufoElig;const sh=uf.balance/(el?el.elig:PF_SUPPLY.UFO)*100;return(
-                  <div className="pf2-rtc u"><img src={TOKENS.UFO.logo} alt=""/>
-                    <div className="b"><div className="t">Paid to your wallet automatically <span>{'\u00B7'} nothing to claim</span></div>
-                      <div className="sub"><span>You get <b>{'\u2248'} {sh<0.01?'<0.01':sh.toFixed(sh<1?3:2)}%</b> of every holder reward</span><span>1% of every UFO buy, sell &amp; transfer</span></div>
-                      {/* round 31: the share is of the UFO that actually earns — burned tokens, the liquidity pools and the excluded wallets get nothing */}
-                      <div className="basis">{el?<>Your {pfAbbr(uf.balance)} of the <b>{pfAbbr(el.elig)}</b> UFO that earns rewards {'\u00B7'} the {pfAbbr(el.burn)} burned, {pfAbbr(el.pools)} in liquidity pools and {pfAbbr(el.wallets)} in excluded wallets earn nothing</>:<>Of the total supply {'\u00B7'} the exact reward-eligible supply is being read{'\u2026'}</>}</div></div>
+                {/* round 33 (Shaka: "The UFO side needs to match the look of the ptgc side"): the same spotlight — the share big, a bar of
+                    your slice of the reward-eligible supply (round 31), the excluded balances as the legend */}
+                {uf.balance>0&&(()=>{const el=ufoElig;const den=el?el.elig:PF_SUPPLY.UFO;const sh=uf.balance/den*100;const shs=sh<0.01?'<0.01':sh.toFixed(sh<1?3:2);return(
+                  <div className="pf2-spot u"><img src={TOKENS.UFO.logo} alt=""/>
+                    <div className="b"><div className="k"><i aria-hidden="true"></i>PAID TO YOUR WALLET AUTOMATICALLY</div>
+                      <div className="v">{'\u2248'} {shs}%<small>of every holder reward</small></div>
+                      <div className="u">1% of every UFO buy, sell and transfer {'\u2014'} paid straight to your wallet, nothing to claim</div>
+                      <div className="bar" aria-hidden="true"><i style={{width:Math.max(0.5,Math.min(100,sh))+'%',background:'#7CFC00'}}></i></div>
+                      <div className="lg">{el?<><span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the <b>{pfAbbr(el.elig)}</b> UFO that earns rewards</span><span><i style={{background:'rgba(255,255,255,.3)'}}></i>Not earning: <b>{pfAbbr(el.burn)}</b> burned {'\u00B7'} <b>{pfAbbr(el.pools)}</b> in liquidity pools {'\u00B7'} <b>{pfAbbr(el.wallets)}</b> excluded</span></>
+                        :<span><i style={{background:'#7CFC00'}}></i>Your <b>{pfAbbr(uf.balance)}</b> of the total supply {'\u00B7'} reading the reward-eligible supply{'\u2026'}</span>}</div>
+                    </div>
                   </div>);})()}
               </div>
             </section>

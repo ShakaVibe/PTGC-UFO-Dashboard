@@ -520,3 +520,14 @@ Shaka: "I like C, but I want to put that ready to claim box under the Earned by 
 old strip's place: green-gold panel, pulsing READY TO CLAIM, the amount 38 px + PTGC, "$… waiting in the staking contract",
 a Staking / Locks bar with the legend; "Nothing to claim yet — rewards build up while you stake" when staked but 0 pending;
 phone 28 px. The UFO strip (`.pf2-rtc.u`) is unchanged. Render renders/r32-1440-spot.jpg. Still hidden; classic 215506704.
+
+## Round 33 — claim wording, the UFO spotlight, the history loader (2026-10-15)
+
+Shaka: 1) "waiting in the staking contract" → "waiting to be claimed". 2) "The UFO side needs to match the look of the ptgc
+side" → `.pf2-spot.u`: the same spotlight (green border, 84 px logo), PAID TO YOUR WALLET AUTOMATICALLY, the share at 34 px
+"of every holder reward", one line of plain words, a bar of your slice of the reward-eligible supply, legend "Your X of the
+734B UFO that earns rewards" / "Not earning: burned · pools · excluded". The old `.pf2-rtc.u` strip is gone. 3) "you still
+get the old little updating badge" → the Details loader for the history too: `.pf2-hload` in-flow on the first look
+("Reading your 30D history… Chain reads N %"), `.pf2-txload` over the stale chart on a period / wallet change; `.pf2-upd`
+and the old `.pf2-hwait` bar removed. The trades loader waits for the history (only one overlay at a time).
+4) He asked for more suggestions — see the chat / sessions/2026-10-15.md. Still hidden; classic 215506704.
