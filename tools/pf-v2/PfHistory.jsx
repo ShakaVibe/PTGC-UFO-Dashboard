@@ -415,12 +415,14 @@
             const val=(ad,p)=>p.ts==='now'?nowV[ad]:(c.v[ad]||{})[p.ts];
             const out=pts.map(p=>({ts:p.ts==='now'?Date.now():p.ts,bt:p.bt,w:Object.fromEntries(addrs.map(ad=>[ad,val(ad,p)||null]))}));
             if(!live)return;
-            setSt({state:'ok',progress:1,pts:out});
+            setSt({state:'ok',progress:1,pts:out,key});
           }catch(e){if(live)setSt(s=>({...s,state:s.pts?'ok':'failed'}));}
         })();
         return()=>{live=false;};
       },[key,open,nonce]);
-      return{...st,retry:()=>setNonce(n=>n+1)};
+      /* round 43 (Shaka: "when you click to 90 days it doesn't refresh right away and doesn't show the loading artwork"): `fresh`
+         is false while the points on hand belong to another period / wallet pick — the window shows the loader again */
+      return{...st,fresh:st.pts!=null&&st.key===key,retry:()=>setNonce(n=>n+1)};
     };
     const PFE_LS_DAYS='grays_pf_ed_days';
     const PFE_C={st:'#A970FF',lk:'#EC4899',rf:'#E8BE3F',uf:'#7CFC00'};
@@ -496,7 +498,7 @@
           const mid=Math.min(Date.now(),(a.ts+b.ts)/2);d.pP=priceOf('PTGC',mid);d.pU=priceOf('UFO',mid);
           out.push(d);}
         return out;},[e.pts,txs,px,addrs.join(),prices&&prices.ptgc,prices&&prices.ufo]);
-      const chainDone=!!e.pts,needU=tok!=='PTGC';
+      const chainDone=!!e.pts&&e.fresh,needU=tok!=='PTGC';
       const startBt=e.pts&&e.pts[0]?e.pts[0].bt:0;
       const uReady=!!(txs&&txs.flows&&(!txs.busy||addrs.every(ad=>pftCovered(txs,ad,'UFO',startBt))));
       const waiting=e.state!=='failed'&&(!chainDone||(needU&&!uReady));

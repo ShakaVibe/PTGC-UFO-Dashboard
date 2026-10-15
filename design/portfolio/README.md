@@ -617,3 +617,11 @@ Shaka: the two "Details · 30D" buttons "really should be called breakdown… an
 buttons to stand out more." Named DAY BY DAY (not "Breakdown" — the Per-wallet Breakdown fold already owns that word); no
 period in the label (the window has 7 / 30 / 90); solid gold (PTGC) / green (UFO) Orbitron buttons like + ADD WALLET, with
 a glow. The Reflections row's link reads "Day by day → 7 / 30 / 90 days". HOW IT WORKS updated. Still hidden; classic 215506704.
+
+## Round 43 — the Day-by-day window shows its loader on a period change (2026-10-15)
+
+Shaka: "when you click to 90 days it doesn't refresh the data right away, and it doesn't show the loading artwork, so you
+think it's broken." `usePfEarned` kept the old points (state 'ok') while the new period read, so the window showed the
+30-day rows until the 90 landed. Now the hook returns `fresh` (the points belong to the current period + wallet pick) and
+`chainDone=!!e.pts&&e.fresh` — the loader ("Crunching your last 90 days…") comes back the moment 7D / 30D / 90D or a wallet
+is picked, until the new rows are in. Harness SLOW=1200 confirms. The held Friday package was rebuilt with it.
