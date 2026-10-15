@@ -625,3 +625,16 @@ think it's broken." `usePfEarned` kept the old points (state 'ok') while the new
 30-day rows until the 90 landed. Now the hook returns `fresh` (the points belong to the current period + wallet pick) and
 `chainDone=!!e.pts&&e.fresh` — the loader ("Crunching your last 90 days…") comes back the moment 7D / 30D / 90D or a wallet
 is picked, until the new rows are in. Harness SLOW=1200 confirms. The held Friday package was rebuilt with it.
+
+## Round 44 — the two fold bars dressed up (2026-10-15)
+
+Shaka: "I still believe these are a bit too blah… mock up some new looks for these two drop down bars." mock-folds-v1.html
+(renders/folds-v1-1380.jpg): A stat bars (icon tile, title + meta, live chips, Show pill), B card headers with art and a
+gold OPEN button, C peek bars (the first rows fade out to the right). His pick: "A… but make the Show buttons yellow like
+the ones you have in B." Built as A with B's button: a 46px gold-tinted icon tile (bar-chart glyph / the wallet art),
+Orbitron 16 title with the meta line under it (the read stamp joins the meta line), chips on the right — Recent
+Transactions shows the first four filter counts with a colour dot (Buys green, Sells red, Claims blue, Unstakes lilac,
+LP gold, Transfers grey); Per-wallet Breakdown shows Total and the PTGC / UFO split with a 110px bar — and a solid gold
+Orbitron SHOW ▾ / HIDE ▴ (the DAY BY DAY style). The panel gets a faint gold wash on its left edge. ≤1100 the chips drop
+to a second row; ≤700 everything a size down; ≤440 the icon tile goes so the title stays one line beside the button.
+Squeeze scan clean 1280→390 (390 keeps the known feed ellipsis); classic hash equal to round 43. Still hidden.

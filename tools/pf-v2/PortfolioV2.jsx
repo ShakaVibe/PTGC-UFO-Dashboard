@@ -455,7 +455,13 @@
           {/* ---- the two folds ---- */}
           <div className="pf2-folds one">
             <section className="pf2-pn pf2-fold">
-              <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}><b className="oh">PER-WALLET BREAKDOWN</b><span>{counted.length} wallet{counted.length===1?'':'s'}</span><span className="chev" aria-hidden="true"></span></button>
+              {/* round 44 (his pick A of mock-folds-v1): wallet art, title + what's inside, Total and the PTGC / UFO split as chips, gold SHOW */}
+              <button className="pf2-foldh" aria-expanded={bdOpen} onClick={()=>setBdOpen(!bdOpen)}>
+                <span className="ic" aria-hidden="true"><img src="logos/portfolio/pf-wallet.webp" alt=""/></span>
+                <span className="tt"><b className="oh">PER-WALLET BREAKDOWN</b><span className="mt">{counted.length} wallet{counted.length===1?'':'s'} {'\u00B7'} PTGC, pending, UFO and the total for each</span></span>
+                {(()=>{let p=0,u=0;counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(!d||d.error)return;p+=usd(d.ptgc.totalHolding||0,dp.ptgc)||0;u+=usd(d.ufo.balance||0,dp.ufo)||0;});const t=p+u;if(!(t>0))return null;const pp=Math.round(p/t*100);
+                  return <span className="chips" aria-hidden="true"><span className="chip">Total<b>{fmtDollar(t)}</b></span><span className="chip sp"><i style={{background:'#F2D35B'}}></i>PTGC<b>{pp}%</b><span className="sb"><b style={{width:pp+'%',background:'#F2D35B'}}></b><b style={{width:(100-pp)+'%',background:'#7CFC00'}}></b></span><i style={{background:'#7CFC00'}}></i>UFO<b>{100-pp}%</b></span></span>;})()}
+                <span className="chev" aria-hidden="true"></span></button>
               {/* round 19 (option A of mock-r18-v1, cards on a phone): tokens with $ under each, Pending to claim in PTGC yellow, UFO as one
                   total, a Total column with each wallet's share (bar split PTGC yellow / UFO green), copy buttons, an All-wallets row. */}
               {bdOpen&&(()=>{const COL=['#B26BFF','#F2D35B','#22D3EE','#FF8A3D','#EC4899','#7CFC00','#6FA8FF','#FF6B73'];

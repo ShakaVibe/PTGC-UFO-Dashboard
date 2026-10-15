@@ -244,6 +244,7 @@
       /* round 17 (Shaka picked option B of mock-tx-v1): an activity feed — one plain-words line per transaction ("Sold 8.91M PTGC"),
          a round type icon with the token's logo on its corner, the wallet (with a copy button) and time underneath, the dollar value
          on the right; grouped by day; filter chips with counts; "Show 30 more". The same layout on a phone. */
+      const PFT_CHIP=[['Buys','#39E15A'],['Sells','#FF4B55'],['Claims','#4AA8FF'],['Unstakes','#B9C4FF'],['LP','#F2D35B'],['Transfers','#9AA4B2']];   // round 44: the bar's chips (first four with a count)
       const PFT_F={All:null,Buys:['Buy'],Sells:['Sell'],Claims:['Claim'],Unstakes:['Unstake'],LP:['Add LP','Remove LP'],Transfers:['Move','Receive','Send']};   // round 25 (audit C9): Unstakes have their own chip
       const nameOf=React.useMemo(()=>pftNameOf(wallets),[wallets]);
       const whoOf=r=>pftWhoOf(nameOf,r);
@@ -278,9 +279,13 @@
       const[open,setOpen]=usePfFold('rt');useEffect(()=>{const h=()=>setOpen(true);window.addEventListener('pf2-open-feed',h);return()=>window.removeEventListener('pf2-open-feed',h);},[]);
       return(
         <section className="pf2-pn pf2-fold pf2-rt" ref={secRef}>
-          <button className="pf2-foldh" aria-expanded={open} onClick={()=>setOpen(!open)}><b className="oh">RECENT TRANSACTIONS</b><span>{st.state==='ok'?<>{all0.length} transaction{all0.length===1?'':'s'} {'\u00B7'} all wallets</>:st.state==='loading'?'reading PulseScan\u2026':'all wallets'}</span>
-            {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
-            {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={`Read at ${new Date(st.at).toLocaleString()} \u00B7 \u21BB Refresh reads again`}>read {pfAgo(st.at,tick)}</span>}
+          {/* round 44 (his pick A of mock-folds-v1): an icon tile, title + meta line, live chips (the filter counts) and a solid gold SHOW button */}
+          <button className="pf2-foldh" aria-expanded={open} onClick={()=>setOpen(!open)}>
+            <span className="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#F6E98A" strokeWidth="2" strokeLinecap="round"><path d="M4 19h16"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-6"/></svg></span>
+            <span className="tt"><b className="oh">RECENT TRANSACTIONS</b><span className="mt">{st.state==='ok'?<>{all0.length} transaction{all0.length===1?'':'s'} {'\u00B7'} all wallets</>:st.state==='loading'?'reading PulseScan\u2026':'all wallets'}
+              {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl"> {'\u00B7'} reading {st.done} / {st.total}{'…'}</span>}
+              {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={`Read at ${new Date(st.at).toLocaleString()} \u00B7 \u21BB Refresh reads again`}> {'\u00B7'} read {pfAgo(st.at,tick)}</span>}</span></span>
+            {st.state==='ok'&&all.length>0&&<span className="chips" aria-hidden="true">{PFT_CHIP.filter(([k])=>cnt(k)>0).slice(0,4).map(([k,c])=><span key={k} className="chip"><i style={{background:c}}></i>{k}<b>{cnt(k)}</b></span>)}</span>}
             <span className="chev" aria-hidden="true"></span></button>
           {open&&<div className="pf2-foldb">
           <div className="pf2-sech">
