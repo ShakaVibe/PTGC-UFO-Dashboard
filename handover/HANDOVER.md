@@ -11,7 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
-- **Portfolio v2 (2026-10-13/14, HIDDEN, 28 rounds, all pushed):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
+- **Portfolio v2 (2026-10-13→15, HIDDEN, 44 rounds, all pushed; GO-LIVE FRIDAY 2026-10-17 on his word — the held package `Claude outputs/pf-golive-friday.tgz` = round 44 + B8 + `PF_V2_LIVE=true`, recipe in `sessions/2026-10-15.md`):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
 - **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
@@ -36,7 +36,32 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (2026-10-14)
+## Current state (2026-10-15)
+
+**2026-10-15 (Thursday): PORTFOLIO v2 rounds 29–44 — polish day, all pushed by him (last `e05c99caf`), STILL HIDDEN behind the dot.**
+Morning: B8 explained and parked ("we will wait on that"). Then polish, every visual from a mock-up he picked: the wallets panel +
+"YOUR HOLDINGS" heading (29, his C), the Details loader over the chart while PulseScan reads + the ledger dressed like the page
+(30), the UFO share audited on chain — the reward-eligible supply excludes burn, the token contract, the UFO OA wallet and 13
+PulseX pools (`PF_UFO_EXCL`, `pfUfoEligible`, `tools/ufo-reward-excluded.py`; 23.2 % → ≈31.6 %) — and the READY TO CLAIM spotlight
+under Earned by source (31, his C), the UFO spotlight to match + the period-change loader + day headers in the feed + lock header
++ "read N ago" stamps + the 30D change on the Total tile (32–34), Recent Transactions rolled into a bar like the breakdown (35),
+"Reflections last 7 days" row instead of the excluded-address list (36–37, "I like the reflections last 7 days"), fonts up (38),
+the mid-width squeeze fixes with a new `probes/pf2-squeeze.js` scan at ten widths (39), Audit II (`PORTFOLIO-ROADMAP.md` "Audit II"
+P/R/S tables; 40–42 knocked out, R2–R4 closed by a live measurement: 103 PulseScan reads, 1.26 MB localStorage, 1Y chart no gaps,
+~50 s cold for 22 wallets), the DAY BY DAY buttons (42), the Day-by-day loader on a period change (43), the two fold bars dressed
+up — icon tile, live chips, gold SHOW (44, his A with B's button). Harness recipe for every round in `tools/harness/README.md`;
+decisions in `design/portfolio/README.md` rounds 29–44. **Classic body unchanged all day** (round 44's classic hash equals round
+43's). **He said: "I am not going to go live until tomorrow, Friday."**
+
+**NEXT (Friday 2026-10-17, only when he says go):** (1) his hard-refresh look on Chrome / Safari / iPhone with the dot on; (2) unpack
+`Claude outputs/pf-golive-friday.tgz` on the Mac (the same tar loop as a round, then `python3 tools/pf-v2.py` twice — it holds
+round 44 + B8 + `PF_V2_LIVE=true`), commit "Portfolio v2 GO LIVE + B8"; (3) live check with the test wallets
+`0x5f203BD7c8453eF8B812635fc3cDAcecae7b9ed5` and `0xEC1904931777ff32f30f939D6D278cb28F30a03e` — UFO reflections equal before /
+after (B8 must not move the number), no dot, v2 for a plain visitor, `grays_ufo_refl_v1:*` written; (4) update this file. If any
+hidden round ships before that, REBUILD the package on it (`sessions/2026-10-15.md`, corrected splice recipe). After go-live:
+keep the classic body one round, then Phase F ideas one at a time, MOCK-UP FIRST. `sessions/2026-10-15.md`.
+
+## Before that (2026-10-14)
 
 **2026-10-14 (Wednesday): PORTFOLIO v2 rounds 17–28 — all built, pushed by him (last `0f39d5c5c`), STILL HIDDEN behind the dot.**
 Morning: Recent Transactions as an activity feed (his pick B of `mock-tx-v1`), bigger fonts, the chart's trade dots → an activity
@@ -1377,6 +1402,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
+- `sessions/2026-10-15.md` — Portfolio v2 rounds 29–44 (polish day): wallets panel, loaders, UFO share audited on chain, the
+  spotlights, the Recent Transactions bar, Reflections last 7 days, squeeze fixes, Audit II, DAY BY DAY, the fold bars. The held
+  Friday go-live package (round 44 + B8) and its corrected splice recipe. Still hidden; go-live Friday on his word.
 - `sessions/2026-10-14.md` — Portfolio v2 rounds 17–28: the activity feed, strip, Details window, the audit + roadmap and its
   five phases, round 28's day window + mini tiles. Still hidden; go-live / B8 / Phase F wait for his word.
 - `sessions/2026-10-13.md` — Portfolio v2 step 1 (mock v1–v4, the wallet cards, hidden behind the dot) and step 2 (value history
