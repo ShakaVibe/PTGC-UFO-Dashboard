@@ -191,3 +191,13 @@ ten widths, failure stubs (RPC down, logs down, prices down), the empty / all-of
 ### Go-live checklist (unchanged, only on his word)
 Hard-refresh test Chrome / Safari / iPhone · 10-wallet cold load timing · `PF_V2_LIVE=true` · remove the dot · keep the
 classic body one round · update HANDOVER.md. B8 in the same push.
+
+### Audit II — measured live (2026-10-15 evening, 22 real wallets in the built-in browser, cold cache)
+- R2 PulseScan volume: **103 page reads** for 22 wallets × 2 tokens (1,208 transactions, deep paging complete) — not the
+  ~1,000 estimated; most wallets have one page. No throttle needed. Closed.
+- R3 localStorage: **1.26 MB total** for the whole site with those 22 wallets (~0.9 MB ours). Far from the quota. Closed.
+- R4 1Y chart: loaded with **no gaps** on the public RPC. Closed; re-check only if the note appears live.
+- Timing: tiles + first pages ≈ 50 s cold for 22 wallets (PulseScan is the long pole), 1Y history ~45 s. That is the number
+  for the go-live checklist's "cold load" line.
+- S3 dropped (the hover is already gone when the period buttons are clicked). S5 → the "read N ago" tooltips now say
+  "Read at … · ↻ Refresh reads again" (the page has no auto-refresh; adding one is a product call).

@@ -280,7 +280,7 @@
         <section className="pf2-pn pf2-fold pf2-rt" ref={secRef}>
           <button className="pf2-foldh" aria-expanded={open} onClick={()=>setOpen(!open)}><b className="oh">RECENT TRANSACTIONS</b><span>{st.state==='ok'?<>{all0.length} transaction{all0.length===1?'':'s'} {'\u00B7'} all wallets</>:st.state==='loading'?'reading PulseScan\u2026':'all wallets'}</span>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
-            {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={new Date(st.at).toLocaleString()}>read {pfAgo(st.at,tick)}</span>}
+            {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={`Read at ${new Date(st.at).toLocaleString()} \u00B7 \u21BB Refresh reads again`}>read {pfAgo(st.at,tick)}</span>}
             <span className="chev" aria-hidden="true"></span></button>
           {open&&<div className="pf2-foldb">
           <div className="pf2-sech">

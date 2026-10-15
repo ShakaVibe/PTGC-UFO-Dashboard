@@ -311,7 +311,7 @@
       useEffect(()=>{if(onChg)onChg(chg!=null&&s.state==='ok'?{chg,period,abs:cur-first.v}:null);},[chg,period,s.state]);   // round 34: the Total tile shows the period change too
       return(
         <section className="pf2-pn pf2-sec pf2-vh">
-          <div className="pf2-sech"><div><h2 className="oh">PORTFOLIO VALUE HISTORY{s.state==='ok'&&s.at&&<span className="pf2-asof" title={new Date(s.at).toLocaleString()}>read {pfAgo(s.at,tick)}</span>}</h2><div className="pf2-vhn">Your real balances, read from the chain {'—'} sells show as drops, buys as rises.</div></div>
+          <div className="pf2-sech"><div><h2 className="oh">PORTFOLIO VALUE HISTORY{s.state==='ok'&&s.at&&<span className="pf2-asof" title={`Read at ${new Date(s.at).toLocaleString()} \u00B7 \u21BB REFRESH in the header reads again`}>read {pfAgo(s.at,tick)}</span>}</h2><div className="pf2-vhn">Your real balances, read from the chain {'—'} sells show as drops, buys as rises.</div></div>
             <div className="pf2-pp" role="group" aria-label="Period">{Object.keys(PFH_PERIODS).map(k=><button key={k} className={period===k?'on':''} aria-pressed={period===k} onClick={()=>setPeriod(k)}>{k}</button>)}</div></div>
           <div className="pf2-vhb">
             <div className="pf2-vhc">
