@@ -655,3 +655,15 @@ number, aligned with it (`margin-left:64px` = the art), the sparkline beside the
 are gone (the Moon Math "prices" note keeps `.s`). In the 4-across desktop row the tile is 296px wide, so the pills could not
 share the number's line with the sparkline — hence their own row. Squeeze scan clean 1380→390 (the known feed ellipsis
 only). Still hidden.
+
+## Round 47 — the three value tiles dressed up (2026-10-15, late)
+
+Shaka: "so much black space in them, specially the PTGC and UFO… mock up some much better, sexier options." mock-tiles-v1.html
+(renders/tiles-v1.jpg): A facts + share bar, B the sparkline as a glowing backdrop with corner facts, C a 2×2 stat grid. He liked
+B but worried the line would cross the text → mock-tiles-v2.html (renders/tiles-v2.jpg) showed B with guard rails (the line in
+its own strip, a scrim under the facts) on the worst shapes; then "actually lets go with A". Built A (`.pf2-st.v3`): art 68–76px,
+number 32px, a facts line — Total: the 24H / 30D pills + "N wallets"; PTGC / UFO: balance · price · the token's own 24H pill
+(`pChg` / `uChg`, the holding's value vs 24 h ago, same method as the Total; falls back to the price change) — a share bar (the
+Total's split in both colours) and a 12px caps footer: "PTGC 67.9% / UFO 32.1%", "67.9% of portfolio / 3.0B staking",
+"32.1% of portfolio / +1.43B today" (the 7-day reflections calc moved up to component scope as `ufoD` so the tile and the
+Reflections row share it). Sizes step down at ≤1280 / ≤1180 / ≤980 / ≤700. Squeeze scan clean 1380→390. Still hidden.

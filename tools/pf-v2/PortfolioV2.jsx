@@ -216,6 +216,20 @@
         setAddMsg('');p.addWallet();
       };
       const pt=agg.ptgc,uf=agg.ufo;
+      /* round 37's 7-day reflections (midnight balances minus own moves) — lifted here in round 47 so the UFO tile's footer and the
+         card's Reflections row share it */
+      const ufoD=(()=>{const r7=ufo7;const px=r7.px;const nowT=Date.now();
+        const fl=[];if(txs&&txs.flows)txs.flows.forEach(f=>{if(f.tok==='UFO'&&hAddrs.includes(f.addr))fl.push(f);});
+        const price=(mid)=>{let p=px?pfhPriceAt(px,'UFO',mid):null;if(p==null&&dp.ufo>0)p=dp.ufo;return p;};
+        const days=r7.state==='ok'?r7.times.map((a,i)=>{const last=i===r7.times.length-1;const b=last?nowT:r7.times[i+1];const va=r7.bal[i],vb=last?uf.balance:r7.bal[i+1];
+          let ok=va!=null&&vb!=null&&!!(txs&&txs.flows)&&hAddrs.every(ad=>pftCovered(txs,ad,'UFO',a));let net=0;fl.forEach(f=>{if(f.t>a&&f.t<=b)net+=f.net;});
+          const uf7=ok?Math.max(0,(vb-va)-net):null;const p=price(Math.min(nowT,(a+b)/2));
+          return{a,b,last,ok,uf:uf7,usd:uf7!=null&&p!=null?uf7*p:null,why:va==null||vb==null?'not read':!(txs&&txs.flows)?'waiting for transactions':'transactions out of reach'};}).reverse():null;
+        const todayD=days&&days[0];const full=days?days.slice(1).filter(d=>d.ok):[];const avg=full.length?full.reduce((t,d)=>t+d.uf,0)/full.length:null;
+        return{days,todayD,avg};})();
+      /* round 47 (his pick A of mock-tiles-v1): each token's own 24h change of its holding value (same method as the Total's) */
+      const tokChg=(liveX,prevX,chg)=>h24&&liveX!=null&&prevX>0?(liveX-prevX)/prevX*100:(simulated||liveX==null?null:(chg==null||isNaN(chg)?null:chg));
+      const pChg=tokChg(liveP,h24&&h24.p,changes.ptgc),uChg=tokChg(liveU,h24&&h24.u,changes.ufo);
       const ufoRefl=uf.reflState==='ok'?uf.reflections:null;
       /* round 6 (Shaka: "make sure your math is right … what if they earned a lot of reflections early on, and they sold most of
          that … the yield would look super high because it's against the current total"). Reflections here are LIFETIME
@@ -317,13 +331,25 @@
           <div className="pf2-hsec"><h2 className="oh">YOUR HOLDINGS <span>{counted.length} wallet{counted.length===1?'':'s'} counted</span></h2><i aria-hidden="true"></i></div>
           {/* ---- three summary tiles ---- */}
           <div className="pf2-row3 r4 hd">
-            <section className="pf2-pn pf2-st t"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div>
-              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div>{simulated&&<div className="s"><span className="na">Moon Math prices</span></div>}</div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/>
-              {!simulated&&<div className="ch">{pfPill(tChg,'24H')}{hChg&&pfPill(hChg.chg,hChg.period)}</div>}</section>
-            <section className="pf2-pn pf2-st p"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div>
-              <div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div><div className="s" style={{color:'#F2D35B'}}>{pfPct(ptgcUSD,total)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></section>
-            <section className="pf2-pn pf2-st u"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div>
-              <div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div><div className="s" style={{color:'#8DFF3A'}}>{pfPct(ufoUSD,total)}</div></div><PfSpark vals={spk('u')} col="#7CFC00"/></section>
+            {/* round 47 (his pick A of mock-tiles-v1): bigger art + number, a facts line, a share bar with a one-line footer */}
+            {(()=>{const pS=total>0?(ptgcUSD||0)/total*100:0,uS=total>0?(ufoUSD||0)/total*100:0;const staked=(pt.stakedOnly||0)+(pt.locked||0);const td=ufoD.todayD;
+              return(<>
+            <section className="pf2-pn pf2-st v3 t">
+              <div className="hd"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div><div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div></div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></div>
+              <div className="f">{simulated?<span className="na">Moon Math prices</span>:<>{pfPill(tChg,'24H')}{hChg&&pfPill(hChg.chg,hChg.period)}</>}<span className="sp">{counted.length} wallet{counted.length===1?'':'s'}</span></div>
+              <div className="bar" aria-hidden="true"><b style={{width:pS+'%',background:'#F2D35B'}}></b><b style={{width:uS+'%',background:'#7CFC00'}}></b></div>
+              <div className="f2"><span className="gold">PTGC {pS.toFixed(1)}%</span><span className="grn">UFO {uS.toFixed(1)}%</span></div></section>
+            <section className="pf2-pn pf2-st v3 p">
+              <div className="hd"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div><div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></div>
+              <div className="f"><b>{pfAbbr(pt.totalHolding)} PTGC</b>{dp.ptgc>0&&<><span className="dot">{'·'}</span><span className="pr">{fmtPriceNode(dp.ptgc)}</span></>}{!simulated&&<span className="sp">{pfPill(pChg,'24H')}</span>}</div>
+              <div className="bar" aria-hidden="true"><b style={{width:pS+'%',background:'#F2D35B'}}></b></div>
+              <div className="f2"><span className="gold">{pS.toFixed(1)}% of portfolio</span><span>{staked>0?<>{pfAbbr(staked)} staking</>:pt.totalHolding>0?'nothing staked':''}</span></div></section>
+            <section className="pf2-pn pf2-st v3 u">
+              <div className="hd"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div><div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div></div><PfSpark vals={spk('u')} col="#7CFC00"/></div>
+              <div className="f"><b>{pfAbbr(uf.balance)} UFO</b>{dp.ufo>0&&<><span className="dot">{'·'}</span><span className="pr">{fmtPriceNode(dp.ufo)}</span></>}{!simulated&&<span className="sp">{pfPill(uChg,'24H')}</span>}</div>
+              <div className="bar" aria-hidden="true"><b style={{width:uS+'%',background:'#7CFC00'}}></b></div>
+              <div className="f2"><span className="grn">{uS.toFixed(1)}% of portfolio</span><span>{td&&td.ok?<>+{pfAbbr(td.uf)} today</>:uf.balance>0?'reflections…':''}</span></div></section>
+              </>);})()}
             {/* round 10 (Shaka: "shrink the three boxes a hair so we can move the moon math box to the end there") */}
             <PfMoonTile on={moonMathActive} setOn={setMoonMathActive} customPrices={customPrices} setCustomPrices={setCustomPrices} prices={prices} ATH_PRICES={ATH_PRICES}/>
           </div>
@@ -428,14 +454,7 @@
               {/* round 37 (his pick A of mock-ufo-row6-v1 — "I am not sure we want to show this" about the excluded list): the UFO
                   card's sixth row is REFLECTIONS, LAST 7 DAYS — today in the bar, a row per day inside, from the chart's midnight
                   balances minus the day's own transfers (no extra reads once the chart has run) */}
-              {uf.balance>0&&(()=>{const r7=ufo7;const px=r7.px;const nowT=Date.now();
-                const fl=[];if(txs&&txs.flows)txs.flows.forEach(f=>{if(f.tok==='UFO'&&hAddrs.includes(f.addr))fl.push(f);});
-                const price=(mid)=>{let p=px?pfhPriceAt(px,'UFO',mid):null;if(p==null&&dp.ufo>0)p=dp.ufo;return p;};
-                const days=r7.state==='ok'?r7.times.map((a,i)=>{const last=i===r7.times.length-1;const b=last?nowT:r7.times[i+1];const va=r7.bal[i],vb=last?uf.balance:r7.bal[i+1];
-                  let ok=va!=null&&vb!=null&&!!(txs&&txs.flows)&&hAddrs.every(ad=>pftCovered(txs,ad,'UFO',a));let net=0;fl.forEach(f=>{if(f.t>a&&f.t<=b)net+=f.net;});
-                  const uf7=ok?Math.max(0,(vb-va)-net):null;const p=price(Math.min(nowT,(a+b)/2));
-                  return{a,b,last,ok,uf:uf7,usd:uf7!=null&&p!=null?uf7*p:null,why:va==null||vb==null?'not read':!(txs&&txs.flows)?'waiting for transactions':'transactions out of reach'};}).reverse():null;
-                const todayD=days&&days[0];const full=days?days.slice(1).filter(d=>d.ok):[];const avg=full.length?full.reduce((t,d)=>t+d.uf,0)/full.length:null;
+              {uf.balance>0&&(()=>{const r7=ufo7;const{days,todayD,avg}=ufoD;
                 const mx=days?Math.max(1e-9,...days.filter(d=>d.ok).map(d=>d.uf)):1;
                 const lbl=d=>d.last?'Today':new Date(d.a).toLocaleDateString('en-US',{month:'short',day:'numeric'});
                 return(
