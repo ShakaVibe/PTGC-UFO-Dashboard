@@ -159,6 +159,7 @@
       const[bdSort,setBdSort]=useState('value');   // round 25 (audit C17): value | name | added
       const[dkSort,setDkSort]=useState(()=>{try{return localStorage.getItem('grays_pf_deck_sort')||'value';}catch(e){return 'value';}});   // round 28: the deck's own sort
       const[edTok,setEdTok]=useState(null);   // round 20: the Earned details window (which token it opened on)
+      const ufoElig=usePfUfoEligible();      // round 31: the reward-eligible UFO supply (supply − burned − pools − excluded wallets)
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
       const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited
@@ -396,11 +397,13 @@
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
                 <div className="pf2-src3 one"><div className="pf2-src rf"><div className="l">Reflections</div>{ufoEarned==null?<div className="v" style={{fontSize:16,color:'rgba(255,255,255,.55)'}}>{uf.reflState==='failed'?'unavailable':'scanning\u2026'}</div>:<><div className="v">{pfAbbr(ufoEarned)}</div><div className="s">{fmtDollar(usd(ufoEarned,dp.ufo))}</div><div className="p">{v1.state==='failed'?<span className="warn">old contract not included {'\u00B7'} <button onClick={v1.retry}>retry</button></span>:'100% of earned'}</div></>}</div></div>
                 {/* round 19 (option B of mock-r18-v1): mirrors PTGC's Ready to claim — UFO pays automatically, nothing to claim. Share of every
-                    holder reward = the counted UFO ÷ the supply (≈: burned / excluded balances shift it a little). */}
-                {uf.balance>0&&(()=>{const sh=uf.balance/PF_SUPPLY.UFO*100;return(
+                    holder reward = the counted UFO ÷ the REWARD-ELIGIBLE supply (round 31: supply − burned − pools − excluded wallets, PfLeagues.jsx). */}
+                {uf.balance>0&&(()=>{const el=ufoElig;const sh=uf.balance/(el?el.elig:PF_SUPPLY.UFO)*100;return(
                   <div className="pf2-rtc u"><img src={TOKENS.UFO.logo} alt=""/>
                     <div className="b"><div className="t">Paid to your wallet automatically <span>{'\u00B7'} nothing to claim</span></div>
-                      <div className="sub"><span>You get <b>{'\u2248'} {sh<0.01?'<0.01':sh.toFixed(sh<1?3:2)}%</b> of every holder reward</span><span>1% of every UFO buy, sell &amp; transfer</span></div></div>
+                      <div className="sub"><span>You get <b>{'\u2248'} {sh<0.01?'<0.01':sh.toFixed(sh<1?3:2)}%</b> of every holder reward</span><span>1% of every UFO buy, sell &amp; transfer</span></div>
+                      {/* round 31: the share is of the UFO that actually earns — burned tokens, the liquidity pools and the excluded wallets get nothing */}
+                      <div className="basis">{el?<>Your {pfAbbr(uf.balance)} of the <b>{pfAbbr(el.elig)}</b> UFO that earns rewards {'\u00B7'} the {pfAbbr(el.burn)} burned, {pfAbbr(el.pools)} in liquidity pools and {pfAbbr(el.wallets)} in excluded wallets earn nothing</>:<>Of the total supply {'\u00B7'} the exact reward-eligible supply is being read{'\u2026'}</>}</div></div>
                   </div>);})()}
               </div>
             </section>

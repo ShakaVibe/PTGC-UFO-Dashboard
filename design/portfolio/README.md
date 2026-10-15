@@ -496,3 +496,20 @@ Ledger: 17 px base, names / amounts 19 px, dollars 15 px, 12 px rows with a soft
 (dot hidden in the table), logos in the column headers, 120 px share bar, ALL WALLETS a gold band (26 px total, its own
 share bar), group subtotal bands kept; the fold header gold 15 px. Sprite `logos/portfolio/pf-saucer.webp` cut from the UFO
 badge (unused now, kept for later). Harness `SLOW_SCAN=ms` delays only the PulseScan reads. Still hidden; classic 215506704.
+
+## Round 31 — the UFO share audited, Ready to claim mock-up, chart padding (2026-10-15)
+
+Shaka: "audit this number [You get ≈ 23.22% of every holder reward]… tokens that have been burned are not getting rewards…
+a percentage of circulating supply not starting supply." Audit (tools/ufo-reward-excluded.py, on chain 2026-10-15):
+the holder reward is split by balance among holders NOT excluded from rewards. Excluded (balance never moves by
+reflections): the burn address 0x…369 (95.76 B), the token contract, the EOA 0x92DD…574D (71.76 B — "UFO OA" in his deck,
+excluded by the owner) and 13 PulseX pools (6.0 → 19.7 B each). Four untouched holders' reflections ÷ balance × the window's
+total reflected fee all imply 735.87 B eligible; supply − the excluded balances = 734.1 B. So the old figure (÷ the 1,000 B
+supply) understated everyone's share by ~26 % (his 23.22 % is really ≈ 31.6 %). Built: `PF_UFO_EXCL` + `pfUfoEligible()` /
+`usePfUfoEligible()` in PfLeagues.jsx (one batched RPC read of supply + 16 balances, 10-min memory cache, localStorage
+fallback `grays_pf_ufo_elig`), share = balance ÷ eligible, and a third line under the strip: "Your 232B of the 734B UFO that
+earns rewards · the 95.8B burned, 170B in liquidity pools and 71.8B in excluded wallets earn nothing". If the RPC is down and
+nothing is cached it falls back to the supply and says so.
+3) `.pf2-sec.pf2-vh{margin-top:34px}` — more air between the token cards and the chart.
+2) Ready to claim: mock-claim-v1.html (renders/claim-v1-1380.jpg): A gold vault banner in place (+ CLAIM ↗ button if there is
+a dapp URL) · B a fourth green tile in the Earned row · C a spotlight under the holdings tiles. Waiting for his pick.
