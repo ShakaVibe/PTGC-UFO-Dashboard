@@ -341,11 +341,17 @@
                   {[['Staking','st',pt.claimed],['Locking','lk',pt.lockClaimed],['Reflections','rf',pt.reflections]].map(([n,c,v])=>(
                     <div key={n} className={`pf2-src ${c}`}><div className="l">{n}</div><div className="v">{pfAbbr(v)}</div><div className="s">{fmtDollar(usd(v,dp.ptgc))}</div><div className="p">{pfPct(v,ptEarned)} of earned</div></div>))}
                 </div>
-                {(pt.totalPending>0||pt.staked>0)&&(
-                  <div className="pf2-rtc"><img src="logos/portfolio/pf-claim2.webp" alt=""/>
-                    <div className="b"><div className="t">Ready to claim <b>{pfAbbr(pt.totalPending)} PTGC</b><span>{fmtDollar(usd(pt.totalPending,dp.ptgc))}</span></div>
-                      <div className="sub"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(pt.pendingStake)}</b> {fmtDollar(usd(pt.pendingStake,dp.ptgc))}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pt.pendingLocks)}</b> {fmtDollar(usd(pt.pendingLocks,dp.ptgc))}</span></div></div>
-                  </div>)}
+                {/* round 32 (Shaka: "this ready to claim section needs help… looks like a footer" — picked C of mock-claim-v1, kept
+                    under the Earned-by-source tiles): a green-gold spotlight — the amount big, the dollars, a Staking / Locks bar */}
+                {(pt.totalPending>0||pt.staked>0)&&(()=>{const tp=pt.totalPending||0,ps=pt.pendingStake||0,pl=pt.pendingLocks||0;return(
+                  <div className="pf2-spot"><img src="logos/portfolio/pf-claim2.webp" alt=""/>
+                    <div className="b"><div className="k"><i aria-hidden="true"></i>READY TO CLAIM</div>
+                      <div className="v">{pfAbbr(tp)}<small>PTGC</small></div>
+                      <div className="u">{tp>0?<>{fmtDollar(usd(tp,dp.ptgc))} waiting in the staking contract</>:<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>}</div>
+                      {tp>0&&<><div className="bar" aria-hidden="true"><i style={{width:ps/tp*100+'%',background:'#B26BFF'}}></i><i style={{width:pl/tp*100+'%',background:'#EC4899'}}></i></div>
+                        <div className="lg"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(ps)}</b> {'\u00B7'} {fmtDollar(usd(ps,dp.ptgc))}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pl)}</b> {'\u00B7'} {fmtDollar(usd(pl,dp.ptgc))}</span></div></>}
+                    </div>
+                  </div>);})()}
               </div>
               <div className="pf2-extw">
               {pt.locks.length>0&&(()=>{

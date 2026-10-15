@@ -513,3 +513,10 @@ nothing is cached it falls back to the supply and says so.
 3) `.pf2-sec.pf2-vh{margin-top:34px}` — more air between the token cards and the chart.
 2) Ready to claim: mock-claim-v1.html (renders/claim-v1-1380.jpg): A gold vault banner in place (+ CLAIM ↗ button if there is
 a dapp URL) · B a fourth green tile in the Earned row · C a spotlight under the holdings tiles. Waiting for his pick.
+
+## Round 32 — Ready to claim spotlight (2026-10-15)
+
+Shaka: "I like C, but I want to put that ready to claim box under the Earned by source boxes." Built `.pf2-spot` in the
+old strip's place: green-gold panel, pulsing READY TO CLAIM, the amount 38 px + PTGC, "$… waiting in the staking contract",
+a Staking / Locks bar with the legend; "Nothing to claim yet — rewards build up while you stake" when staked but 0 pending;
+phone 28 px. The UFO strip (`.pf2-rtc.u`) is unchanged. Render renders/r32-1440-spot.jpg. Still hidden; classic 215506704.
