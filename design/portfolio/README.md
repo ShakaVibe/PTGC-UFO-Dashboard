@@ -583,3 +583,17 @@ and "Full 30 days → Details" (opens the UFO Details window). The excluded-addr
 Shaka: "increase all these font sizes" (the Earned-by-source tiles and the Your-holdings value tiles). `.pf2-src`: label
 13.5 / amount 29 / $ 18 / share 14.5 (was 12.5 / 25 / 16.5 / 13.5); `.pf2-row3.r4 .pf2-st`: label 13.5 / value 28 / 24 h
 16.5 / period line 15 (was 12.5 / 25 / 14.5 / 13.5). No overflow at 1440 or 390 with the stub's $9.4M. Still hidden.
+
+## Round 39 — the squeeze zone (2026-10-15)
+
+Shaka (screenshots at ~1100 px): "the spark lines get behind the text, and the text goes out past the paid-to-your-wallet
+box… double check the page for more of these." New probe `tools/harness/probes/pf2-squeeze.js`: at a given width, every
+text node under .pf2 is checked against its box's padding edge (spill), against nowrap+ellipsis clipping (clip) and against
+sibling elements' rects (hit — e.g. a sparkline). Run at 1280 / 1180 / 1100 / 1024 / 900 / 800 / 700 / 600 / 480 / 390
+with every fold open. Found: spotlight sentence / share / legend clipped 1024–1180 and on the phone, donut legend labels
+clipped 1024–1180, wallet-tile names hitting the ✎ at 1180, the ledger's copy button colliding with text at 800–900.
+Fixes: the sparkline now yields before the number (`flex:0 4 84px;min-width:26px`, `.tx{flex:1 1 auto}`); ≤1280 the value
+tiles shrink a step (24 px, 54 px sparkline, 44 px icons) and the deck is 6 across; the 3-column tile row starts at 1180
+(was 1100); 981–1280 the spotlights wrap instead of clipping (64 px icon, 30 px amount, `white-space:normal`), the donut
+legend wraps; the ledger's card layout now applies ≤980 (was ≤700); phone lets the spotlight text and legend wrap.
+Re-scan: clean at every width (390 keeps two ellipses on long notes). Still hidden; classic 215506704.
