@@ -124,7 +124,7 @@
       return out.filter(t=>t<now-60e3);};
     /* the series for a set of wallets + period: [{t,p,u,v}] (null v = a gap), plus the live "now" point added by the caller */
     const usePfSeries=(addrs,period,enabled=true)=>{
-      const[st,setSt]=useState({state:'idle',pts:[],progress:0});
+      const[st,setSt]=useState({state:'idle',pts:[],progress:0});const stRef=React.useRef(st);stRef.current=st;
       const key=addrs.slice().sort().join(',')+'|'+period;
       const[nonce,setNonce]=useState(0);
       useEffect(()=>{
@@ -132,6 +132,7 @@
         let live=true;
         (async()=>{
           setSt(s=>({...s,state:'loading',progress:0}));
+          if(stRef.current.pts&&stRef.current.pts.length){await new Promise(r=>setTimeout(r,400));if(!live)return;}   // round 40 (audit II R5): a toggle storm (Select all / Clear) re-reads once
           try{
             const[a,px]=await Promise.all([pfhGetAnchors(),pfhPrices()]);
             const times=pfhTimes(period);
@@ -291,7 +292,7 @@
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${title}: ${l.length} transaction${l.length===1?'':'s'}`}>
           <div className="pf2-dw" onClick={ev2=>ev2.stopPropagation()}>
             <div className="hd"><h2 className="oh">{title}<small>{l.length} transaction{l.length===1?'':'s'}{prev&&prev.v!=null&&e.p.v!=null&&<> {'\u00B7'} portfolio {fmtDollar(prev.v,0)} {'\u2192'} {fmtDollar(e.p.v,0)}{chg!=null&&<b className={chg<0?'neg':'pos'}> {chg<0?'\u25BC':'\u25B2'} {chg>=0?'+':'\u2212'}{Math.abs(chg).toFixed(1)}%</b>}</>}</small></h2>
-              <div className="nav"><button disabled={i===0} onClick={()=>go(ev[i-1].p.t)} aria-label="Previous day with trades">{'\u25C0'} {i>0?bucketName(ev[i-1]):''}</button><button disabled={i>=ev.length-1} onClick={()=>go(ev[i+1].p.t)} aria-label="Next day with trades">{i<ev.length-1?bucketName(ev[i+1]):''} {'\u25B6'}</button></div>
+              <div className="nav"><button disabled={i===0} onClick={()=>go(ev[i-1].p.t)} aria-label="Previous day with trades">{'\u25C0'}<span className="nl"> {i>0?bucketName(ev[i-1]):''}</span></button><button disabled={i>=ev.length-1} onClick={()=>go(ev[i+1].p.t)} aria-label="Next day with trades"><span className="nl">{i<ev.length-1?bucketName(ev[i+1]):''} </span>{'\u25B6'}</button></div>
               <button className="x" onClick={close} aria-label="Close">{'\u00D7'}</button></div>
             <div className="pf2-dsum">{[['in','BUYS','paid'],['out','SELLS','received'],['cl','CLAIMS','earned'],['lp','LIQUIDITY','moved']].map(([q,n,w])=><div key={q} className={q}><b>{n}</b><span>{K[q].n}</span><small>{K[q].n?fmtDollar(K[q].usd,0)+' '+w:'\u2014'}</small></div>)}</div>
             <div className="net">Tokens out <b className="neg">{'\u2212'}{fmtDollar(tout,0)}</b> {'\u00B7'} tokens in <b className="pos">+{fmtDollar(tin,0)}</b> {'\u00B7'} across <b>{nw} wallet{nw===1?'':'s'}</b></div>

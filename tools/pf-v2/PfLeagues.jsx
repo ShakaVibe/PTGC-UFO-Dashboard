@@ -26,6 +26,11 @@
     const usePfTick=(ms=30000)=>{const[t,setT]=useState(Date.now());useEffect(()=>{const i=setInterval(()=>setT(Date.now()),ms);return()=>clearInterval(i);},[ms]);return t;};
     const pfAgo=(at,now)=>{const s=Math.max(0,Math.round(((now||Date.now())-at)/1000));if(s<45)return'just now';const m=Math.round(s/60);if(m<60)return m+' min ago';const h=Math.round(m/60);if(h<24)return h+' h ago';return Math.round(h/24)+' d ago';};
     const pfIn=sec=>{const s=Math.max(0,sec);if(s<3600)return Math.max(1,Math.round(s/60))+' min';if(s<86400)return Math.round(s/3600)+' h';const d=Math.round(s/86400);if(d<60)return d+' d';if(d<365)return Math.round(d/30)+' mo';return (d/365).toFixed(1).replace(/\.0$/,'')+' y';};
+    /* round 40 (audit II S1): the fold bars remember open / closed per device — grays_pf_folds {rt,bd,lk,x} */
+    const PF_FOLDS_LS='grays_pf_folds';
+    const usePfFold=(key,def=false)=>{const[v,setV]=useState(()=>{try{const o=JSON.parse(localStorage.getItem(PF_FOLDS_LS)||'{}');return typeof o[key]==='boolean'?o[key]:def;}catch(e){return def;}});
+      const set=React.useCallback(x=>{setV(prev=>{const n=typeof x==='function'?x(prev):x;try{const o=JSON.parse(localStorage.getItem(PF_FOLDS_LS)||'{}');o[key]=n;localStorage.setItem(PF_FOLDS_LS,JSON.stringify(o));}catch(e){}return n;});},[key]);
+      return[v,set];};
     const PF_UFO_ELIG_LS='grays_pf_ufo_elig';let pfUfoEligP=null,pfUfoEligMem=null;
     const pfUfoEligible=()=>{
       if(pfUfoEligMem&&Date.now()-pfUfoEligMem.at<10*60e3)return Promise.resolve(pfUfoEligMem);

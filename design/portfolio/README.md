@@ -597,3 +597,16 @@ tiles shrink a step (24 px, 54 px sparkline, 44 px icons) and the deck is 6 acro
 (was 1100); 981–1280 the spotlights wrap instead of clipping (64 px icon, 30 px amount, `white-space:normal`), the donut
 legend wraps; the ledger's card layout now applies ≤980 (was ≤700); phone lets the spotlight text and legend wrap.
 Re-scan: clean at every width (390 keeps two ellipses on long notes). Still hidden; classic 215506704.
+
+## Round 40 — Audit II, batch 1 (2026-10-15)
+
+Shaka: "go for it lets start knocking them out." Built (handover/PORTFOLIO-ROADMAP.md "Audit II"): P1 / P2 two-row bars on
+the phone (title + Show pill, meta on row 2; `::after` line break); P3 two-line feed cards ≤980 (wallet ⧉ · time on one
+line, `.tmw`; the note line only when there is one, `:has(.nt)`); P4 "3 tx" on the phone; P5 tablet 701–980: value tiles
+2-up, the chart's side stats under the chart from 900 (two-column grid); P6 the UFO share 22 px on the phone; R1 "Live
+price unavailable — the dollar value fills in when it returns" on the claim spotlight, $ hidden in its legend, one amber
+note above YOUR HOLDINGS while DexScreener is down; R5 a 400 ms settle before the chart re-reads on a wallet toggle (first
+load unchanged); R6 "No PTGC or UFO found · check the address" on an empty wallet tile; S1 the four folds remembered per
+device (`usePfFold`, grays_pf_folds); S2 the deck's Show-all styled like the fold pills; S4 icon-only ◀ ▶ in the day window
+on the phone; S6 a "Moon Math prices" tag on the claim spotlight when custom prices are on; S7 HOW IT WORKS rewritten for
+rounds 28–37. Squeeze scan clean 390–1440; classic 215506704. Left: R2 / R3 / R4 (check live with his deck first), S3, S5.

@@ -153,10 +153,10 @@
       const[showAll,setShowAll]=useState(false);
       const[how,setHow]=useState(false);
       const[allLocks,setAllLocks]=useState(false);
-      const[lkOpen,setLkOpen]=useState(false);
-      const[xOpen,setXOpen]=useState(false);   // round 34: the UFO card's "Not earning rewards" fold
+      const[lkOpen,setLkOpen]=usePfFold('lk');   // round 40 (S1): remembered per device
+      const[xOpen,setXOpen]=usePfFold('x');
       const[hChg,setHChg]=useState(null);      // round 34: the value history's period change → the Total tile
-      const[bdOpen,setBdOpen]=useState(false);
+      const[bdOpen,setBdOpen]=usePfFold('bd');
       const[bdCp,setBdCp]=useState(null);
       const[bdSort,setBdSort]=useState('value');   // round 25 (audit C17): value | name | added
       const[dkSort,setDkSort]=useState(()=>{try{return localStorage.getItem('grays_pf_deck_sort')||'value';}catch(e){return 'value';}});   // round 28: the deck's own sort
@@ -293,7 +293,8 @@
                   :<>
                     <div className="v">{fmtDollar(v)}</div>
                     <div className="pf2-split" aria-hidden="true">{ps!=null&&<><i className="p" style={{width:ps*100+'%'}}></i><i className="u" style={{width:(1-ps)*100+'%'}}></i></>}</div>
-                    <div className="r3"><span className="p">PTGC {ps==null?'—':Math.round(ps*100)+'%'}</span><span className="u">UFO {ps==null?'—':Math.round((1-ps)*100)+'%'}</span></div>
+                    {v===0&&st==='ok'?<div className="r3 none">No PTGC or UFO found {'\u00B7'} check the address</div>   /* round 40 (audit II R6) */
+                    :<div className="r3"><span className="p">PTGC {ps==null?'—':Math.round(ps*100)+'%'}</span><span className="u">UFO {ps==null?'—':Math.round((1-ps)*100)+'%'}</span></div>}
                   </>}
                   <div className="acts">{rmAsk===a?<span className="pf2-rmask" role="alertdialog" aria-label={`Remove ${label}?`}>Remove? <button className="y" onClick={()=>{removeWallet(w.address);setRmAsk(null);}}>Yes</button><button className="n" onClick={()=>setRmAsk(null)}>No</button></span>
                     :<button onClick={()=>setRmAsk(a)} aria-label={`Remove ${label}`} title="Remove this wallet">✕</button>}</div>
@@ -310,6 +311,7 @@
           {wallets.length>0&&!anyData&&(()=>{const run=counted.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
             <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{!counted.length?<><b>No wallets are counted.</b> Switch one on above (or <button className="pf2-lnk" onClick={selectAllWallets}>Select all</button>) to see the totals.</>:run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}
           {wallets.length>0&&anyData&&<>
+          {!simulated&&!(dp.ptgc>0&&dp.ufo>0)&&<div className="pf2-mm px" role="status">Live prices are unavailable right now {'\u2014'} token amounts are exact, dollar values show {'\u2014'} until DexScreener answers again.</div>}   {/* round 40 (audit II R1) */}
           <div className="pf2-hsec"><h2 className="oh">YOUR HOLDINGS <span>{counted.length} wallet{counted.length===1?'':'s'} counted</span></h2><i aria-hidden="true"></i></div>
           {/* ---- three summary tiles ---- */}
           <div className="pf2-row3 r4 hd">
@@ -350,9 +352,9 @@
                   <div className="pf2-spot"><img src="logos/portfolio/pf-claim2.webp" alt=""/>
                     <div className="b"><div className="k"><i aria-hidden="true"></i>READY TO CLAIM</div>
                       <div className="v">{pfAbbr(tp)}<small>PTGC</small></div>
-                      <div className="u">{tp>0?<>{fmtDollar(usd(tp,dp.ptgc))} waiting to be claimed</>:<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>}</div>
+                      <div className="u">{tp>0?(usd(tp,dp.ptgc)==null?<>Live price unavailable {'\u2014'} the dollar value fills in when it returns</>:<>{fmtDollar(usd(tp,dp.ptgc))} waiting to be claimed{simulated&&<span className="mmtag">Moon Math prices</span>}</>):<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>}</div>
                       {tp>0&&<><div className="bar" aria-hidden="true"><i style={{width:ps/tp*100+'%',background:'#B26BFF'}}></i><i style={{width:pl/tp*100+'%',background:'#EC4899'}}></i></div>
-                        <div className="lg"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(ps)}</b> {'\u00B7'} {fmtDollar(usd(ps,dp.ptgc))}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pl)}</b> {'\u00B7'} {fmtDollar(usd(pl,dp.ptgc))}</span></div></>}
+                        <div className="lg"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(ps)}</b>{usd(ps,dp.ptgc)!=null&&<> {'\u00B7'} {fmtDollar(usd(ps,dp.ptgc))}</>}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pl)}</b>{usd(pl,dp.ptgc)!=null&&<> {'\u00B7'} {fmtDollar(usd(pl,dp.ptgc))}</>}</span></div></>}
                     </div>
                   </div>);})()}
               </div>
@@ -497,9 +499,10 @@
             <h2>HOW IT WORKS</h2>
             <p><b>Add any wallet</b> by pasting its address. Nothing to connect or sign {'—'} the page only reads public balances from the PulseChain blockchain.</p>
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
-            <p><b>PTGC</b> holdings are the wallet's full balance; the PTGC staking contract tells us how much of it is staked or locked, and what rewards are waiting to be claimed. <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
-            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections (UFO pays reflections only). UFO{'\u2019'}s principal / reflections split of today{'\u2019'}s bag is pro rata to everything ever received and earned. UFO reflections cover UFO{'\u2019'}s whole life, including the time before the Jul 2026 contract migration.</p>
-            <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down.</p>
+            <p><b>PTGC</b> holdings are the wallet's full balance; the staking contract tells us what is staked or locked and what is <b>ready to claim</b> (staking and lock rewards {'—'} claim them on the staking dapp). <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
+            <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections; UFO pays reflections only, straight into your wallet, nothing to claim. UFO reflections cover UFO{'\u2019'}s whole life, including the time before the Jul 2026 contract migration. <b>Your share of every UFO holder reward</b> is your UFO divided by the UFO that actually earns {'—'} the supply minus burned tokens, the liquidity pools and the excluded wallets. <b>Reflections today</b> and <b>Details {'\u00B7'} 30D</b> show it day by day.</p>
+            <p><b>Portfolio value history</b> is your real balances at every point, read from the chain and priced at the time; the bars under it are your trades, one bar per day {'—'} click a bar for that day{'\u2019'}s moves. <b>Recent transactions</b> lists every buy, sell, claim, unstake, liquidity move and transfer, with the price each trade got. Both open and close with their Show / Hide buttons.</p>
+            <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down. <b>Moon Math</b> re-values your holdings at the all-time highs or at prices you type; the history and the transactions stay at real prices.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></PfModal>
         )}

@@ -151,3 +151,43 @@ remove the dot; keep the classic body one more round as a fallback; update HANDO
 - **Round 28** (2026-10-14): strip bars hover / click → tooltip + day window (`PfDayModal`); the deck shrunk to 7-across mini
   tiles with a sort (his pick: A of `design/portfolio/mock-wallets-v2.html`). Still hidden. Next: the go-live checklist above
   when he says, B8 when he says, Phase F one at a time with a mock-up.
+
+## Audit II (2026-10-15 evening, after round 39) — the deep pass he asked for
+
+Method: full-page renders at 390 / 768 / 1440 with every fold open (8 wallets, busy trades, locks), the squeeze probe at
+ten widths, failure stubs (RPC down, logs down, prices down), the empty / all-off states, a11y scans, a code read.
+
+### Phone / tablet (390–980)
+| # | What | Fix |
+|---|---|---|
+| P1 | The fold bar titles wrap on the phone ("RECENT / TRANSACTIONS", "PER-WALLET / BREAKDOWN") and the meta ("92 transactions · all wallets", "read just now") stacks in odd places next to the Show pill. | Two-row header on the phone: title + pill on row 1, meta on row 2. |
+| P2 | "Lock positions" and "Reflections today" bar titles wrap mid-word ("Lock / positions", "Reflections / today"); the count line wraps under them. | Same two-row treatment; title nowrap. |
+| P3 | Feed cards on the phone are three lines (title / time / wallet ⧉). | Wallet inline with the time: "A ⧉ · 9:01 AM" → two lines, ~25 % shorter list. |
+| P4 | Day headers wrap on the phone ("Oct 14 · 3 / transactions"). | "3 tx" on the phone, or let the net drop to its own line. |
+| P5 | Tablet (768–980): the value tiles stack one per row with a tiny sparkline on the far right; the chart keeps its side panel (170 px) so the x-axis crowds ("Sep 16 Sep 20 Sep 25…"). | Tiles 2-up between 768 and 980; the chart's side panel stacks under the chart below ~900 (now 700). |
+| P6 | The UFO spotlight's share line wraps to two lines at 390 ("≈ 31.64% / of every holder reward"). | Smaller "small" on the phone or drop "of every holder reward" to the `.u` line there. |
+
+### Resilience / data
+| # | What | Fix |
+|---|---|---|
+| R1 | Prices down (DexScreener): the spotlight says "— waiting to be claimed", tiles "—". Honest but reads oddly. | "$ unavailable" wording / hide the $ line while prices are missing; one amber note "live prices unavailable" at the top. |
+| R2 | PulseScan volume for a 24-wallet deck: 48 first pages + up to 20 deep pages each ≈ 1,000 requests on a cold cache; one 429 retry per page. | Global concurrency + back-off (pause 30 s after 3 × 429), and stop deep paging past 6 months by default with "load the full year" on demand. |
+| R3 | localStorage: the tx cache is ~200 KB per wallet+token; 24 wallets can approach the 5 MB quota (eviction exists, so it degrades rather than breaks). | Store only the fields the page uses (drop raw legs), or move to IndexedDB. Verify the real size on his 24-wallet deck first. |
+| R4 | Archive reads on public RPCs: the 1Y chart needs balances at blocks up to 12 months old; some public nodes prune. The stub shows "6 points could not be read" — check the live 1Y with 24 wallets. | Fallback endpoint order already exists; add an explicit "archive" node first for old blocks if gaps show up live. |
+| R5 | The 7-day reflections row and the chart both re-read when a wallet is toggled (cache hits mostly). Fine, but the toggles are not debounced. | Debounce 400 ms on toggle storms (Select all / Clear). |
+| R6 | A wallet added with a typo (valid hex, no balances) sits in the deck at $0.00 with no hint. | "No PTGC or UFO found — check the address" on the tile after the first read. |
+
+### Polish
+| # | What |
+|---|---|
+| S1 | Fold bars: remember open / closed per device (localStorage), like the deck sort. |
+| S2 | The deck's "Show all N wallets" button is the only dashed element on the page; a Show pill like the folds would match. |
+| S3 | The chart's period change could keep the hovered date (re-hover after reload). |
+| S4 | The day window: ◀ ▶ buttons label the neighbouring day; on the phone they could be icon-only to keep the title on one line. |
+| S5 | "read just now" ticks on 30 s but the auto-refresh cadence isn't shown; "auto-refreshes every 5 min" in the title tooltip. |
+| S6 | Moon Math banner + Custom prices: the spotlights and reflections rows show $ at custom prices without the purple hint the tiles have. |
+| S7 | HOW IT WORKS text predates rounds 28–37 (ledger, folds, reflections row, eligible supply). Update the copy. |
+
+### Go-live checklist (unchanged, only on his word)
+Hard-refresh test Chrome / Safari / iPhone · 10-wallet cold load timing · `PF_V2_LIVE=true` · remove the dot · keep the
+classic body one round · update HANDOVER.md. B8 in the same push.

@@ -155,7 +155,7 @@
         <div className="ic" style={{color:c,borderColor:c+'88',background:c+'1f'}}>{g}<img src={r.tok==='PTGC'?TOKENS.PTGC.logo:TOKENS.UFO.logo} alt={r.tok}/></div>
         <div className="m"><div className="t1">{PFT_VERB[r.type]||r.type} <em className={PFT_AMT[r.type]||''}>{pfAbbr(Math.abs(r.amt))}</em> {r.tok}</div>
           <div className="t2">{note&&<span className="nt">{note}</span>}<span className="tmi">{note?' \u00B7 ':''}{pftTm(r.t)}</span></div></div>
-        <div className="w"><span className={/^0x/i.test(who)?'wc mono':'wc'}>{who}</span><button className={`cp${cp?' ok':''}`} onClick={()=>onCopy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp?'✓':'⧉'}</button></div>
+        <div className="w"><span className={/^0x/i.test(who)?'wc mono':'wc'}>{who}</span><button className={`cp${cp?' ok':''}`} onClick={()=>onCopy(r)} title={`Copy ${r.addr}`} aria-label={`Copy wallet address ${r.addr}`}>{cp?'✓':'⧉'}</button><span className="tmw">{'\u00B7'} {pftTm(r.t)}</span></div>
         <div className="px">{px!=null?<>{fmtPriceNode(px)}<small>per {r.tok}</small></>:<span className="na">{'\u2014'}</span>}</div>
         <div className="tm">{pftTm(r.t)}</div>
         <div className="v">{fmtDollar(r.usd)}<small>{PFT_VAL[r.type]||'value'}</small></div>
@@ -275,7 +275,7 @@
       const groups=[];show.forEach(r=>{const k=dayKey(r.t);const g=groups[groups.length-1];if(g&&g.k===k)g.rows.push(r);else groups.push({k,rows:[r]});});
       const row=(r,i)=><PfTxRow key={r.id} r={r} who={whoOf(r)} cp={cp===r.id} onCopy={copy} z={i%2===1}/>;
       /* round 35: the section rolls up into a bar like Per-wallet breakdown; the day window's link opens it */
-      const[open,setOpen]=useState(false);useEffect(()=>{const h=()=>setOpen(true);window.addEventListener('pf2-open-feed',h);return()=>window.removeEventListener('pf2-open-feed',h);},[]);
+      const[open,setOpen]=usePfFold('rt');useEffect(()=>{const h=()=>setOpen(true);window.addEventListener('pf2-open-feed',h);return()=>window.removeEventListener('pf2-open-feed',h);},[]);
       return(
         <section className="pf2-pn pf2-fold pf2-rt" ref={secRef}>
           <button className="pf2-foldh" aria-expanded={open} onClick={()=>setOpen(!open)}><b className="oh">RECENT TRANSACTIONS</b><span>{st.state==='ok'?<>{all0.length} transaction{all0.length===1?'':'s'} {'\u00B7'} all wallets</>:st.state==='loading'?'reading PulseScan\u2026':'all wallets'}</span>
@@ -294,7 +294,7 @@
             <PfTxColh/>
             <div className="pf2-feed">{groups.map(g=>{const[d,md]=dayName(g.rows[0].t);return(<React.Fragment key={g.k}>
               {/* round 34: the day's net (tokens in − tokens out, in dollars) on the header — what the day window works out */}
-              <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span>{(()=>{let i=0,o=0;g.rows.forEach(r=>{const s=PFT_AMT[r.type];if(s==='pos')i+=r.usd||0;else if(s==='neg')o+=r.usd||0;});const n=i-o;if(!i&&!o)return null;return <em className={n<0?'neg':'pos'} title={`in ${fmtDollar(i)} \u00B7 out ${fmtDollar(o)}`}>{n<0?'\u2212':'+'}{fmtDollar(Math.abs(n),0)} net</em>;})()}</div>{g.rows.map(row)}</React.Fragment>);})}</div>
+              <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} <i className="tw">transaction{g.rows.length===1?'':'s'}</i><i className="tx">tx</i></span>{(()=>{let i=0,o=0;g.rows.forEach(r=>{const s=PFT_AMT[r.type];if(s==='pos')i+=r.usd||0;else if(s==='neg')o+=r.usd||0;});const n=i-o;if(!i&&!o)return null;return <em className={n<0?'neg':'pos'} title={`in ${fmtDollar(i)} \u00B7 out ${fmtDollar(o)}`}>{n<0?'\u2212':'+'}{fmtDollar(Math.abs(n),0)} net</em>;})()}</div>{g.rows.map(row)}</React.Fragment>);})}</div>
             {list.length>lim&&<button className="pf2-more" onClick={()=>setLim(l=>l+30)}>Show {Math.min(30,list.length-lim)} more</button>}
             <div className="pf2-txf">{st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
               <span className="src">From PulseScan {'·'} up to a year back per wallet and token</span></div>
