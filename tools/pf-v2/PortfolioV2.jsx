@@ -154,6 +154,8 @@
       const[how,setHow]=useState(false);
       const[allLocks,setAllLocks]=useState(false);
       const[lkOpen,setLkOpen]=useState(false);
+      const[xOpen,setXOpen]=useState(false);   // round 34: the UFO card's "Not earning rewards" fold
+      const[hChg,setHChg]=useState(null);      // round 34: the value history's period change → the Total tile
       const[bdOpen,setBdOpen]=useState(false);
       const[bdCp,setBdCp]=useState(null);
       const[bdSort,setBdSort]=useState('value');   // round 25 (audit C17): value | name | added
@@ -311,7 +313,7 @@
           {/* ---- three summary tiles ---- */}
           <div className="pf2-row3 r4 hd">
             <section className="pf2-pn pf2-st t"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div>
-              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div></div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></section>
+              <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div>{!simulated&&hChg&&<div className={`s2 ${hChg.chg>=0?'pos':'neg'}`}>{hChg.chg>=0?'\u25B2 +':'\u25BC \u2212'}{Math.abs(hChg.chg).toFixed(2)}% ({hChg.period})</div>}</div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></section>
             <section className="pf2-pn pf2-st p"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div>
               <div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div><div className="s" style={{color:'#F2D35B'}}>{pfPct(ptgcUSD,total)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></section>
             <section className="pf2-pn pf2-st u"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div>
@@ -363,7 +365,7 @@
                 const ready=locks.filter(l=>l.endTime<=now).length;
                 return(
                 <div className={`pf2-lkd${lkOpen?' open':''}`}>
-                  <button className="pf2-lkh" aria-expanded={lkOpen} onClick={()=>setLkOpen(!lkOpen)}><span className="t">{'\u{1F512}'} Lock positions</span><span className="n">{locks.length}{ready?<> {'\u00B7'} <b>{ready} unlockable</b></>:null}</span><span className="chev">{'\u25BE'}</span></button>
+                  <button className="pf2-lkh" aria-expanded={lkOpen} onClick={()=>setLkOpen(!lkOpen)}><span className="t">{'\u{1F512}'} Lock positions</span><span className="n">{locks.length}{ready?<> {'\u00B7'} <b>{ready} unlockable</b></>:null}{(()=>{const nx=locks.find(l=>l.endTime>now);return nx?<> {'\u00B7'} next unlock in {pfIn(nx.endTime-now)}</>:null;})()}</span><span className="chev">{'\u25BE'}</span></button>
                   {lkOpen&&<div className="pf2-lkb">
                     <a className="pf2-rlv" href="https://goptgc.com" target="_blank" rel="noopener noreferrer">Verify on goptgc.com before unlocking {'\u2197'}</a>
                     {shownL.map((l,i)=>{
@@ -417,11 +419,23 @@
                     </div>
                   </div>);})()}
               </div>
+              {/* round 34 (Shaka: "I want them to look aligned always"): the UFO card's sixth row, opposite Lock positions — the
+                  balances that earn no holder reward (the round-31 audit made visible) */}
+              {uf.balance>0&&(()=>{const el=ufoElig;const list=el&&el.list?el.list.filter(x=>x.v>0).sort((a,b)=>b.v-a.v):[];const tot=list.reduce((t,x)=>t+x.v,0);
+                const name=x=>x.k==='burn'?'Burn address':x.k==='contract'?'UFO token contract':x.k==='wallet'?'Excluded wallet':x.a.toLowerCase()===TOKENS.UFO.mainPair.toLowerCase()?'UFO / WPLS pool (main)':'PulseX liquidity pool';
+                return(
+                <div className={`pf2-lkd x${xOpen?' open':''}`}>
+                  <button className="pf2-lkh" aria-expanded={xOpen} onClick={()=>setXOpen(!xOpen)}><span className="t">{'\u{1F6F8}'} Not earning rewards</span><span className="n">{el?<>{list.length} addresses {'\u00B7'} <b>{pfAbbr(tot)} UFO</b></>:'reading\u2026'}</span><span className="chev">{'\u25BE'}</span></button>
+                  {xOpen&&<div className="pf2-lkb">
+                    <div className="pf2-xn">These balances are excluded from the holder reward, so the 1% of every transfer is shared among the other {el?pfAbbr(el.elig):'\u2014'} UFO {'\u2014'} that is what your share above is measured against.</div>
+                    {list.map(x=><div key={x.a} className={`pf2-lk x ${x.k}`}><div className="a"><b>{name(x)}</b><span className="mono">{pfAddr(x.a)}</span></div><div className="t"><b>{pfAbbr(x.v)} UFO</b><span>{el&&el.supply>0?(x.v/el.supply*100).toFixed(2):'\u2014'}% of supply</span></div><a className="r lk" href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" aria-label={`${name(x)} on PulseScan`}>{'\u2197'}</a></div>)}
+                  </div>}
+                </div>);})()}
             </section>
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
-          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs} txp={txP} wallets={wallets}/>
+          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs} txp={txP} wallets={wallets} onChg={setHChg}/>
           <PfRecentTx wallets={counted} prices={prices} onRows={setTxs} onProgress={setTxP}/>
 
           {/* ---- the two folds ---- */}

@@ -22,6 +22,10 @@
        balance ÷ (supply − excluded balances), read live and cached 10 min (localStorage fallback when the RPC is down). */
     const PF_UFO_EXCL={wallets:['0x92DD8E86fDb206fA41E451398A9f03fbd36d574D'],
       pools:['0x9aBD84EAE174c6cf7FBf67cBb550930845866e05','0x145BC3a8a5EC0C84061511a5DB6023360caDF654','0xE221e6fC30e5787F0d551f980B4da1055D832A03','0x1693b411Ca2dF63C15292ad1fCcF8Ff06a643b25','0xF7d75A0BbE1EF90CDA220DEa7450105a956Abf19','0x3fE128f60797E371aAF43c038955bb37356d1e8a','0xe61AA9A9B7a13cEEdEaa8D26BFf5222003A40634','0xc4434600F1f263Ee38c38dfe32c8DEf8c0047C0b','0x6e60E4fA05e1f2a4Ab5706B17b52ddd8EA92372D','0x1a813F71324C02a57e02a0b79460Bb2dD675ae02','0x50771B2B774541937D657144e034D7e2215542AD','0x865bEbb526a61d5aA75A379Ea84fa8d710eA25be','0x9Dc651b1435eAD1cC2dDf8745e9BaB7A3C94f1ca']};
+    /* round 34: "read 2 min ago" stamps — a 30 s tick so they stay honest, and the words */
+    const usePfTick=(ms=30000)=>{const[t,setT]=useState(Date.now());useEffect(()=>{const i=setInterval(()=>setT(Date.now()),ms);return()=>clearInterval(i);},[ms]);return t;};
+    const pfAgo=(at,now)=>{const s=Math.max(0,Math.round(((now||Date.now())-at)/1000));if(s<45)return'just now';const m=Math.round(s/60);if(m<60)return m+' min ago';const h=Math.round(m/60);if(h<24)return h+' h ago';return Math.round(h/24)+' d ago';};
+    const pfIn=sec=>{const s=Math.max(0,sec);if(s<3600)return Math.max(1,Math.round(s/60))+' min';if(s<86400)return Math.round(s/3600)+' h';const d=Math.round(s/86400);if(d<60)return d+' d';if(d<365)return Math.round(d/30)+' mo';return (d/365).toFixed(1).replace(/\.0$/,'')+' y';};
     const PF_UFO_ELIG_LS='grays_pf_ufo_elig';let pfUfoEligP=null,pfUfoEligMem=null;
     const pfUfoEligible=()=>{
       if(pfUfoEligMem&&Date.now()-pfUfoEligMem.at<10*60e3)return Promise.resolve(pfUfoEligMem);
@@ -32,7 +36,8 @@
       pfUfoEligP=pfhRpc(body).then(res=>{const by={};res.forEach(r=>{by[r.id]=r&&r.result&&r.result!=='0x'?Number(BigInt(r.result))/1e18:null;});
         const supply=by[0];if(!(supply>0))throw new Error('no supply');let excl=0,burn=0,wallets=0,pools=0;
         addrs.forEach((a,i)=>{const v=by[i+1];if(v==null)throw new Error('no balance');excl+=v;if(i===0)burn=v;else if(i<=1+PF_UFO_EXCL.wallets.length)wallets+=v;else pools+=v;});
-        const o={supply,elig:supply-excl,burn,wallets,pools,at:Date.now()};pfUfoEligMem=o;try{localStorage.setItem(PF_UFO_ELIG_LS,JSON.stringify(o));}catch(e){}return o;})
+        const list=addrs.map((a,i)=>({a,v:by[i+1],k:i===0?'burn':i===1?'contract':i<=1+PF_UFO_EXCL.wallets.length?'wallet':'pool'}));
+        const o={supply,elig:supply-excl,burn,wallets,pools,list,at:Date.now()};pfUfoEligMem=o;try{localStorage.setItem(PF_UFO_ELIG_LS,JSON.stringify(o));}catch(e){}return o;})
         .catch(()=>{try{const s=localStorage.getItem(PF_UFO_ELIG_LS);if(s){const o=JSON.parse(s);if(o&&o.elig>0)return o;}}catch(e){}return null;})
         .finally(()=>{pfUfoEligP=null;});
       return pfUfoEligP;};

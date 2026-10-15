@@ -148,7 +148,7 @@
             });
             if(!live)return;
             const gaps=pts.filter(x=>x.v==null).length;
-            setSt({state:gaps===pts.length?'failed':'ok',pts,progress:1,gaps});
+            setSt({state:gaps===pts.length?'failed':'ok',pts,progress:1,gaps,at:Date.now()});
           }catch(e){if(live)setSt({state:'failed',pts:[],progress:0});}
         })();
         return()=>{live=false;};
@@ -248,7 +248,7 @@
               <path d={area} fill="url(#pfhA)"/><path d={d} fill="none" stroke="#7CFC00" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>
             <b className="dot" style={{left:X(last.t)+'%',top:Y(last.v)+'%'}}></b>
             {hov&&<><i className="xh" style={{left:X(hov.t)+'%'}}></i><b className="dot h" style={{left:X(hov.t)+'%',top:Y(hov.v)+'%'}}></b>
-              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,5).map(txLine)}<small>{l.length} {l.length===1?'transaction':'transactions'} {when(e)}</small><small className="go">{l.length>5?`+${l.length-5} more \u2014 `:''}click the bar for the full list {'\u2192'}</small></div>;})()}</div></>}
+              <div className={`pf2-htip${X(hov.t)>62?' l':''}`} style={{left:X(hov.t)+'%'}}><div className="d">{hov.now?'Now':pfhDate(hov.t,period==='7D')}</div><div className="v">{fmtDollar(hov.v)}</div><div className="s"><span className="p">PTGC {fmtDollar(hov.p,0)}</span><span className="u">UFO {fmtDollar(hov.u,0)}</span></div>{covFrom>hov.t&&txs&&<div className="cov">trades before {pfhDate(covFrom)} {txs.busy?'still loading':'not available'}</div>}{(()=>{const e=evAt(hov.t);if(!e)return null;const l=e.tx.slice().sort((a,b)=>b.t-a.t);return <div className="ev">{l.slice(0,5).map(txLine)}<small>{l.length} {l.length===1?'transaction':'transactions'} {when(e)}</small><small className="go">{l.length>5?`+${l.length-5} more \u2014 `:''}click the bar for the full list {'\u2192'}</small></div>;})()}</div></>}
           </div>
           <div className="pf2-sr" aria-live="polite">{hov?`${hov.now?'Now':pfhDate(hov.t,period==='7D')}: ${fmtDollar(hov.v)} (PTGC ${fmtDollar(hov.p,0)}, UFO ${fmtDollar(hov.u,0)})${(()=>{const e=evAt(hov.t);return e?`, ${e.tx.length} transaction${e.tx.length===1?'':'s'}`:'';})()}`:''}</div>
           {txs&&<div className="pf2-strip" role="group" aria-label={`Trades per ${stepName}`} onMouseLeave={()=>setHov(null)}><span className="lab" aria-hidden="true">{period==='7D'?'TRADES / 6H':period==='1Y'?'TRADES / 4D':'TRADES'}</span>
@@ -256,7 +256,7 @@
               aria-label={`${bucketName(e,true)}: ${n} transaction${n===1?'':'s'}`} title={`${bucketName(e,true)} \u00B7 ${n} transaction${n===1?'':'s'} \u00B7 click for the list`} onMouseEnter={()=>setHov(e.p)} onTouchStart={ev2=>{ev2.stopPropagation();setHov(e.p);}} onClick={()=>setDay(e.p.t)}>
               {KINDS.map(([k])=>e.n[k]>0&&<i key={k} className={k} style={{flex:e.n[k]}}></i>)}</button>);})}</div>}
           {di>=0&&<PfDayModal ev={ev} i={di} go={setDay} close={()=>setDay(null)} vals={vals} bucketName={bucketName} kindOf={kindOf} nameOf={nameOf}/>}
-          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {stepName} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span><span className="go">{'\u261D'} click a bar for the {stepName==='day'?'day\u2019s':stepName+'\u2019'} moves</span>{covFrom>vals[0].t&&<span className="o">complete from {pfhDate(covFrom)}</span>}</div>}
+          {txs&&<div className="pf2-hlg"><span><b className="in"></b>buys</span><span><b className="out"></b>sells</span><span><b className="cl"></b>claims</span><span><b className="lp"></b>liquidity</span><span className="o">one bar per {stepName} {'\u00B7'} taller = more {'\u00B7'} dust under $1 left out</span><span className="go">{'\u261D'} click a bar for the {stepName==='day'?'day\u2019s':stepName+'\u2019'} moves</span></div>}
           <div className="pf2-hx" aria-hidden="true">{xl.map((t,i)=><span key={i} style={{left:(i/nx*100)+'%'}}>{i===nx?'Now':pfhDate(t)}</span>)}</div>
         </div>
       );
@@ -283,16 +283,17 @@
           </div>
         </PfModal>);
     };
-    const PfValueHistory=({addrs,live,period,setPeriod,txs,txp,wallets})=>{
-      const s=usePfSeries(addrs,period);
+    const PfValueHistory=({addrs,live,period,setPeriod,txs,txp,wallets,onChg})=>{
+      const s=usePfSeries(addrs,period);const tick=usePfTick();
       const lv=live&&live.v!=null?live:null;
       const pts=React.useMemo(()=>s.pts.length&&lv?[...s.pts,{t:Date.now(),v:lv.v,p:lv.p,u:lv.u,bp:lv.bp,bu:lv.bu,now:true}]:s.pts,[s.pts,lv&&lv.v,lv&&lv.p,lv&&lv.u,lv&&lv.bp,lv&&lv.bu]);   // round 24 (audit B1): stable between renders
       const vals=pts.filter(p=>p.v!=null);
       const first=vals[0],hi=vals.reduce((a,p)=>!a||p.v>a.v?p:a,null),lo=vals.reduce((a,p)=>!a||p.v<a.v?p:a,null);
       const cur=live&&live.v!=null?live.v:null;const chg=first&&cur!=null&&first.v>0?(cur-first.v)/first.v*100:null;
+      useEffect(()=>{if(onChg)onChg(chg!=null&&s.state==='ok'?{chg,period,abs:cur-first.v}:null);},[chg,period,s.state]);   // round 34: the Total tile shows the period change too
       return(
         <section className="pf2-pn pf2-sec pf2-vh">
-          <div className="pf2-sech"><div><h2 className="oh">PORTFOLIO VALUE HISTORY</h2><div className="pf2-vhn">Your real balances, read from the chain {'—'} sells show as drops, buys as rises.</div></div>
+          <div className="pf2-sech"><div><h2 className="oh">PORTFOLIO VALUE HISTORY{s.state==='ok'&&s.at&&<span className="pf2-asof" title={new Date(s.at).toLocaleString()}>read {pfAgo(s.at,tick)}</span>}</h2><div className="pf2-vhn">Your real balances, read from the chain {'—'} sells show as drops, buys as rises.</div></div>
             <div className="pf2-pp" role="group" aria-label="Period">{Object.keys(PFH_PERIODS).map(k=><button key={k} className={period===k?'on':''} aria-pressed={period===k} onClick={()=>setPeriod(k)}>{k}</button>)}</div></div>
           <div className="pf2-vhb">
             <div className="pf2-vhc">

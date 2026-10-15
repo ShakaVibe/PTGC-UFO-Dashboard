@@ -531,3 +531,15 @@ get the old little updating badge" → the Details loader for the history too: `
 ("Reading your 30D history… Chain reads N %"), `.pf2-txload` over the stale chart on a period / wallet change; `.pf2-upd`
 and the old `.pf2-hwait` bar removed. The trades loader waits for the history (only one overlay at a time).
 4) He asked for more suggestions — see the chat / sessions/2026-10-15.md. Still hidden; classic 215506704.
+
+## Round 34 — six small ones he picked from the review (2026-10-15)
+
+1 Day headers in Recent Transactions carry the day's net ("−$1,468 net", in/out on hover; dust / filter respected).
+2 Lock positions header: "9 · 3 unlockable · next unlock in 13 h" (`pfIn`). 3 The two token cards align always: the
+Earned-by-source block is a flex column so the shorter spotlight stretches to the other's bottom, the folds sit at the row's
+end (`align-self:end`), and the UFO card got its sixth row — a "🛸 Not earning rewards" fold opposite Lock positions listing
+the burn address, the contract, the excluded wallet and the 13 pools with balances and % of supply (from the round-31
+`pfUfoEligible()` list, PulseScan links; two-column rows on the phone). 4 "read 2 min ago" stamps on the Value History title
+and the feed header (`usePfTick` 30 s, `pfAgo`; `s.at` / `st.at`). 5 The coverage note left the legend for the chart
+tooltip ("trades before Oct 9 still loading / not available" only when hovering before the coverage). 6 The Total tile shows
+the period change under the 24 h one ("▲ +392.31% (30D)", `onChg` from PfValueHistory). Still hidden; classic 215506704.

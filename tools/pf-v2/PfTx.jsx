@@ -165,6 +165,7 @@
       const[lim,setLim]=useState(10);      // round 17: rows shown (10, +30 per Show more)
       const[flt,setFlt]=useState('All');    // round 17: filter chip
       const[cp,copy]=usePftCopy();         // round 17: the row whose wallet address was just copied
+      const tick=usePfTick();               // round 34: the "read N min ago" stamp
       const[nonce,setNonce]=useState(0);
       const force=React.useRef(false);   // round 24 (audit B2): Refresh re-reads page 1 ONCE (nonce>0 used to force it on every later toggle)
       const secRef=React.useRef(null);
@@ -226,7 +227,7 @@
           if(!live)return;
           const rows=lastRows=build();
           busy=false;tell(true);
-          setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length});
+          setSt({state:rows.length?'ok':failed===jobs.length?'failed':'none',rows,failed,done,total:jobs.length,at:Date.now()});
         })();
         /* round 23 (audit A6): if this run is cut short (wallet set changed, section unmounted) the Details window must not
            keep waiting on busy:true */
@@ -269,6 +270,7 @@
         <section className="pf2-pn pf2-sec pf2-rt" ref={secRef}>
           <div className="pf2-sech"><h2 className="oh">RECENT TRANSACTIONS <span>(ALL WALLETS)</span></h2>
             {st.state==='ok'&&st.done<st.total&&<span className="pf2-rtl">reading {st.done} / {st.total}{'…'}</span>}
+            {st.state==='ok'&&st.done>=st.total&&st.at&&<span className="pf2-rtl" title={new Date(st.at).toLocaleString()}>read {pfAgo(st.at,tick)}</span>}
             {st.state==='ok'&&st.rows.length>0&&<div className="pf2-chips" role="group" aria-label="Show">{Object.keys(PFT_F).map(k=>{const n=cnt(k);if(!n&&k!=='All')return null;return <button key={k} className={flt===k?'on':''} aria-pressed={flt===k} onClick={()=>{setFlt(k);setLim(10);}}>{k}<b>{n}</b></button>;})}
               {nDust>0&&<button className={`dust${dust?' on':''}`} aria-pressed={dust} onClick={()=>setDust(!dust)} title="Transactions worth under $1">{dust?'Hide':'Show'} dust<b>{nDust}</b></button>}</div>}
             <button className="pf2-lnk q" onClick={()=>{force.current=true;setNonce(n=>n+1);}}>{'↻'} Refresh</button></div>
@@ -277,7 +279,8 @@
           {st.state==='none'&&<div className="pf2-soon">{st.failed>0?<>{st.failed} of {st.total} PulseScan reads failed, so some history may be missing. <button className="pf2-lnk" onClick={()=>setNonce(n=>n+1)}>Retry</button></>:'No PTGC or UFO transfers in the counted wallets yet.'}</div>}
           {st.state==='ok'&&st.rows.length>0&&<>
             <div className="pf2-feed">{groups.map(g=>{const[d,md]=dayName(g.rows[0].t);return(<React.Fragment key={g.k}>
-              <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span></div>{g.rows.map(row)}</React.Fragment>);})}</div>
+              {/* round 34: the day's net (tokens in − tokens out, in dollars) on the header — what the day window works out */}
+              <div className="pf2-fday">{d}<span>{md}{md?' · ':''}{g.rows.length} transaction{g.rows.length===1?'':'s'}</span>{(()=>{let i=0,o=0;g.rows.forEach(r=>{const s=PFT_AMT[r.type];if(s==='pos')i+=r.usd||0;else if(s==='neg')o+=r.usd||0;});const n=i-o;if(!i&&!o)return null;return <em className={n<0?'neg':'pos'} title={`in ${fmtDollar(i)} \u00B7 out ${fmtDollar(o)}`}>{n<0?'\u2212':'+'}{fmtDollar(Math.abs(n),0)} net</em>;})()}</div>{g.rows.map(row)}</React.Fragment>);})}</div>
             {list.length>lim&&<button className="pf2-more" onClick={()=>setLim(l=>l+30)}>Show {Math.min(30,list.length-lim)} more</button>}
             <div className="pf2-txf">{st.failed>0&&<span className="pf2-hnote">{st.failed} of {st.total} reads failed {'—'} <button onClick={()=>setNonce(n=>n+1)}>retry</button></span>}
               <span className="src">From PulseScan {'·'} up to a year back per wallet and token</span></div>
