@@ -160,7 +160,8 @@ const dsAnswer=(url)=>{
   await page.route('**/*',async r=>{
     const u=r.request().url();
     if(slow&&/rpc\.pulsechain|g4mm4|publicnode|api\.dexscreener\.com|api\.scan\.pulsechain/.test(u))await sleep(slow);
-    if(slowUfo&&UFO_ADDR.test(u))await sleep(slowUfo);   // SLOW_UFO=ms: only the UFO token's DexScreener calls wait → the UFO load always lands AFTER a PTGC load started later (a7)
+    if(slowUfo&&UFO_ADDR.test(u))await sleep(slowUfo);
+    if(process.env.SLOW_SCAN&&/api\.scan\.pulsechain/.test(u))await sleep(+process.env.SLOW_SCAN);   // SLOW_SCAN=ms (round 30): only the PulseScan reads wait → the chart's trades loader stays up   // SLOW_UFO=ms: only the UFO token's DexScreener calls wait → the UFO load always lands AFTER a PTGC load started later (a7)
     if(slow&&process.env.SLOW_DATA&&/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/data\//.test(u))await sleep(slow);   // SLOW_DATA=1: the repo's data/*.json wait too (a35: sibling pages that only read those)
     if(slowHist&&/data\/[a-z-]*history[a-z-]*\.json/.test(u))await sleep(slowHist);   // SLOW_HISTORY=ms: delay the data/*history*.json files only (u13)
     if(u.startsWith(`http://localhost:${port}`)||u.startsWith(`http://127.0.0.1:${port}`))return r.continue();

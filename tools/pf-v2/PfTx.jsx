@@ -159,7 +159,7 @@
       const copy=React.useCallback(r=>{pfCopy(r.addr).then(ok=>{if(!ok)return;setCp(r.id);setTimeout(()=>setCp(c=>c===r.id?null:c),1400);});},[]);
       return[cp,copy];};
     const PFT_TYPE={Buy:['#39E15A','▲'],Sell:['#FF6B73','▼'],Receive:['#39E15A','↙'],Send:['#FF6B73','↗'],Claim:['#5AB8FF','⬇'],'Add LP':['#F2D35B','\u2295'],Unstake:['#B9C4FF','\u21E7'],'Remove LP':['#F2D35B','\u2296'],Move:['#B26BFF','⇄']};
-    const PfRecentTx=({wallets,prices,onRows})=>{
+    const PfRecentTx=({wallets,prices,onRows,onProgress})=>{   // round 30: onProgress({done,total,pd,pt,ud,ut,failed}) during the first read (the chart's loader)
       const pxNow=React.useRef(prices);pxNow.current=prices;
       const[st,setSt]=useState({state:'idle',rows:[],failed:0,done:0,total:0});
       const[lim,setLim]=useState(10);      // round 17: rows shown (10, +30 per Show more)
@@ -176,6 +176,7 @@
           const own=new Set(wallets.map(w=>w.address.toLowerCase()));
           const names={};wallets.forEach(w=>{names[w.address.toLowerCase()]=w.name||(w.address.slice(0,6)+'…'+w.address.slice(-4));});
           const jobs=[];wallets.forEach(w=>['PTGC','UFO'].forEach(tok=>jobs.push({addr:w.address.toLowerCase(),tok})));
+          const prog=()=>{if(!onProgress||!live)return;const n=t=>jobs.filter(j=>j.tok===t).length,d=t=>got.filter(g=>g.tok===t).length;onProgress({done,total:jobs.length,pd:d('PTGC'),pt:n('PTGC'),ud:d('UFO'),ut:n('UFO'),failed});};
           setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
           const got=[];let failed=0,done=0,q=0;
           const px=await pfhPrices().catch(()=>null);
@@ -206,7 +207,8 @@
           let lastRows=null,lastTell=0;
           const tell=(final)=>{if(!onRows||!live)return;const now=Date.now();if(!final&&now-lastTell<500){clearTimeout(tellT);tellT=setTimeout(()=>tell(true),520-(now-lastTell));return;}
             clearTimeout(tellT);lastTell=now;onRows({rows:lastRows||(lastRows=build()),cov:cov(),failed,flows,busy,pages});};
-          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,forceNow);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live){lastRows=build();setSt({state:'ok',rows:lastRows,failed,done,total:jobs.length});}}};
+          const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,forceNow);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live){lastRows=build();setSt({state:'ok',rows:lastRows,failed,done,total:jobs.length});prog();}}};
+          prog();
           await Promise.all([worker(),worker(),worker()]);
           if(!live)return;
           tell(true);

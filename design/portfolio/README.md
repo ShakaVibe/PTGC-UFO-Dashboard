@@ -482,3 +482,17 @@ border, 12/14 px padding; the toolbar inside loses 2 px of gap and the search bo
 `.pf2-hsec` heading "YOUR HOLDINGS · N wallets counted" 34 px below it, the tiles row `.hd` with no top margin. Tile name gap
 3 px / mono letter-spacing −.04em so the short address still fits 7-across inside the panel. Phone: panel 10 px, heading 26 px.
 Still hidden. Classic hash 215506704.
+
+## Round 30 — the trades loader + the ledger (2026-10-15)
+
+Shaka: "1) while the transactions are loading… put a cool loading graphic over the chart… 2) The per wallet break down needs
+a major cosmetic upgrade… Text is too small." Mock-up mock-r30-v1.html (renders/r30-v1-1380.jpg): loader L-A (a UFO saucer
+scanning the strip) / L-B (radar veil); breakdown B-A (the ledger, bigger + dressed) / B-B (wallet row-cards). He: "I dont
+like the loading one at all. Can we use the one you created that shows up when you hit the details 30 days button" + B-A.
+Built: `.pf2-txload` — the Details loader (`.pf2-edload.ov`, two-coin orb, rings, steps PTGC · UFO "n / N wallets", bar)
+over the chart column while the first PulseScan read runs (PfRecentTx → `onProgress`, PortfolioV2 `txP` → PfValueHistory
+`txp`; shown while `!txs`, i.e. until every wallet's first page is in — the side stats stay visible; compact on the phone).
+Ledger: 17 px base, names / amounts 19 px, dollars 15 px, 12 px rows with a soft zebra, wallet colour as a 3 px left accent
+(dot hidden in the table), logos in the column headers, 120 px share bar, ALL WALLETS a gold band (26 px total, its own
+share bar), group subtotal bands kept; the fold header gold 15 px. Sprite `logos/portfolio/pf-saucer.webp` cut from the UFO
+badge (unused now, kept for later). Harness `SLOW_SCAN=ms` delays only the PulseScan reads. Still hidden; classic 215506704.

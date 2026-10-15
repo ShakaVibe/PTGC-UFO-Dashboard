@@ -187,6 +187,7 @@
       const[hPeriod,setHPeriod]=useState('30D');
       const v1=usePfUfoV1(hAddrs);   // round 15: UFO reflections earned on the OLD contract (see usePfUfoV1)
       const[txs,setTxs]=useState(null);   // round 14: Recent Transactions → the value chart's buy / sell dots
+      const[txP,setTxP]=useState(null);   // round 30: the first PulseScan read's progress → the chart's loader
       const liveP=anyData?usd(agg.ptgc.totalHolding,prices.ptgc):null,liveU=anyData?usd(agg.ufo.balance,prices.ufo):null;
       const liveV=liveP==null&&liveU==null?null:(liveP||0)+(liveU||0);
       const live={v:liveV,p:liveP||0,u:liveU||0,bp:anyData?agg.ptgc.totalHolding:null,bu:anyData?agg.ufo.balance:null};
@@ -406,8 +407,8 @@
           </div>
 
           {/* ---- step 2: value history (real chain balances) + recent transactions ---- */}
-          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs} wallets={wallets}/>
-          <PfRecentTx wallets={counted} prices={prices} onRows={setTxs}/>
+          <PfValueHistory addrs={hAddrs} live={live} period={hPeriod} setPeriod={setHPeriod} txs={txs} txp={txP} wallets={wallets}/>
+          <PfRecentTx wallets={counted} prices={prices} onRows={setTxs} onProgress={setTxP}/>
 
           {/* ---- the two folds ---- */}
           <div className="pf2-folds one">
@@ -432,9 +433,10 @@
                 const subRow=g=><tr key={'g'+g.sub} className="sub"><td><div className="n">{g.sub}</div></td><td>{cell(S('pT',g.rs),S('p$',g.rs),'p')}</td><td>{cell(S('pc',g.rs),S('c$',g.rs),'p')}</td><td>{cell(S('uT',g.rs),S('u$',g.rs),'u')}</td><td><span className="tot">{fmtDollar(S('t$',g.rs))}</span><div className="bar"><small>{all>0?(S('t$',g.rs)/all*100).toFixed(1):'0.0'}%</small></div></td></tr>;
                 return(<div className="pf2-foldb pf2-bd">
                   <div className="pf2-bds"><span>Sort</span>{[['value','Value'],['name','Name'],['added','Added']].map(([k,l])=><button key={k} className={bdSort===k?'on':''} aria-pressed={bdSort===k} onClick={()=>setBdSort(k)}>{l}</button>)}</div>
-                  <table className="pf2-bdt"><thead><tr><th>WALLET</th><th>PTGC</th><th>PENDING TO CLAIM</th><th>UFO</th><th>TOTAL</th></tr></thead><tbody>
-                    {order.map(r=>r.sub?subRow(r):<tr key={r.a}><td>{who(r)}</td><td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
-                    {rows.length>1&&<tr className="sum"><td><div className="n">ALL WALLETS</div></td><td>{cell(S('pT'),S('p$'),'p')}</td><td>{cell(S('pc'),S('c$'),'p')}</td><td>{cell(S('uT'),S('u$'),'u')}</td><td><span className="tot">{fmtDollar(all)}</span></td></tr>}
+                  <table className="pf2-bdt"><thead><tr><th>WALLET</th><th><img src={TOKENS.PTGC.logo} alt=""/>PTGC</th><th><img src={TOKENS.PTGC.logo} alt=""/>PENDING TO CLAIM</th><th><img src={TOKENS.UFO.logo} alt=""/>UFO</th><th>TOTAL {'\u00B7'} SHARE</th></tr></thead><tbody>
+                    {/* round 30 (his pick B-A of mock-r30-v1): the ledger dressed like the rest of the page — bigger type, zebra, the wallet colour as a left accent, logos in the headers, a gold ALL WALLETS band */}
+                    {order.map(r=>r.sub?subRow(r):<tr key={r.a} style={{'--c':r.c}}><td>{who(r)}</td><td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
+                    {rows.length>1&&<tr className="sum"><td><div className="n">ALL WALLETS</div></td><td>{cell(S('pT'),S('p$'),'p')}</td><td>{cell(S('pc'),S('c$'),'p')}</td><td>{cell(S('uT'),S('u$'),'u')}</td><td><span className="tot">{fmtDollar(all)}</span><div className="bar"><span><b style={{width:(all>0?S('p$')/all*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(all>0?S('u$')/all*100:0)+'%',background:'#7CFC00'}}></b></span><small>100%</small></div></td></tr>}
                   </tbody></table>
                   <div className="pf2-bdc">{order.map(r=>r.sub?<div key={'g'+r.sub} className="wsum g"><span className="l">{r.sub}</span><b>{fmtDollar(S('t$',r.rs))}</b></div>:<div key={r.a} className="wc"><div className="top"><div className="who">{who(r)}</div><div className="tv">{fmtDollar(r.t$)}<small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}% of portfolio</small></div></div>
                       <div className="sb"><b style={{width:(r.t$>0?r.p$/r.t$*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(r.t$>0?r.u$/r.t$*100:0)+'%',background:'#7CFC00'}}></b></div>

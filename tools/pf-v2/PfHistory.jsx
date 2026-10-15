@@ -283,7 +283,7 @@
           </div>
         </PfModal>);
     };
-    const PfValueHistory=({addrs,live,period,setPeriod,txs,wallets})=>{
+    const PfValueHistory=({addrs,live,period,setPeriod,txs,txp,wallets})=>{
       const s=usePfSeries(addrs,period);
       const lv=live&&live.v!=null?live:null;
       const pts=React.useMemo(()=>s.pts.length&&lv?[...s.pts,{t:Date.now(),v:lv.v,p:lv.p,u:lv.u,bp:lv.bp,bu:lv.bu,now:true}]:s.pts,[s.pts,lv&&lv.v,lv&&lv.p,lv&&lv.u,lv&&lv.bp,lv&&lv.bu]);   // round 24 (audit B1): stable between renders
@@ -298,6 +298,19 @@
             <div className="pf2-vhc">
               {s.state==='loading'&&!s.pts.length&&<div className="pf2-hwait"><div>Reading {addrs.length} wallet{addrs.length===1?'':'s'} from the chain{'…'} <b>{Math.round(s.progress*100)}%</b></div><div className="bar"><i style={{width:Math.max(4,s.progress*100)+'%'}}></i></div><small>The first look reads every day; after that only what is new.</small></div>}
               {s.state==='failed'&&<div className="pf2-hwait"><div>Couldn{'’'}t read the history from the chain right now.</div><button className="pf2-lnk" onClick={s.retry}>Retry</button></div>}
+              {/* round 30 (Shaka: "a cool loading graphic over the chart since it is waiting for that data to populate the trades"
+                  — the Details window's loader, reused): shown until the first PulseScan read of every wallet is in (txs lands) */}
+              {!txs&&txp&&(s.state==='ok'||s.pts.length>0)&&(()=>{const pOk=txp.pd>=txp.pt,uOk=txp.ud>=txp.ut;return(
+                <div className="pf2-txload" role="status" aria-live="polite"><div className="pf2-edload ov">
+                  <div className="orb"><span className="ring"></span><span className="ring r2"></span><span className="two big"><img src={TOKENS.PTGC.logo} alt=""/><img src={TOKENS.UFO.logo} alt=""/></span></div>
+                  <div className="h">Reading your trades{'\u2026'}</div>
+                  <div className="p">Buys, sells, claims and liquidity from PulseScan {'\u2014'} for the bars under the chart and the list below.</div>
+                  <div className="steps">
+                    <div className={`st${pOk?' ok':' on'}`}><i>{pOk?'\u2713':'1'}</i><span>PTGC</span><b>{pOk?'done':`${txp.pd} / ${txp.pt} wallet${txp.pt===1?'':'s'}`}</b></div>
+                    <div className={`st${uOk?' ok':' on'}`}><i>{uOk?'\u2713':'2'}</i><span>UFO</span><b>{uOk?'done':`${txp.ud} / ${txp.ut} wallet${txp.ut===1?'':'s'}`}</b></div>
+                  </div>
+                  <div className="bar"><i style={{width:Math.max(6,Math.min(100,txp.total?txp.done/txp.total*100:0))+'%'}}></i></div>
+                </div></div>);})()}
               {(s.state==='ok'||(s.state==='loading'&&s.pts.length>0))&&<div className={s.state==='loading'?'pf2-hstale':''}>{s.state==='loading'&&<span className="pf2-upd">updating{'\u2026'} {Math.round(s.progress*100)}%</span>}<PfHistChart pts={pts} period={period} txs={txs} wallets={wallets}/></div>}   {/* round 25 (audit C4): the old chart stays while a toggle / period change reloads */}
               {s.state==='ok'&&s.gaps>0&&<div className="pf2-hnote">{s.gaps} point{s.gaps>1?'s':''} could not be read and {s.gaps>1?'are':'is'} left as a gap. <button onClick={s.retry}>Retry</button></div>}
             </div>
