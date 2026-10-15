@@ -187,6 +187,7 @@
       /* 24h: today's holdings at yesterday's prices (the price move, not trades) — step 2 swaps in real balances */
       /* step 2 (value history, option C): the counted wallets' real balances from the chain */
       const hAddrs=counted.map(w=>w.address.toLowerCase());
+      const tick7=usePfTick(60000);const ufo7=usePfUfo7(hAddrs,tick7);   // round 37: UFO balances at the last 8 midnights (the chart's cache)
       const[hPeriod,setHPeriod]=useState('30D');
       const v1=usePfUfoV1(hAddrs);   // round 15: UFO reflections earned on the OLD contract (see usePfUfoV1)
       const[txs,setTxs]=useState(null);   // round 14: Recent Transactions → the value chart's buy / sell dots
@@ -419,16 +420,27 @@
                     </div>
                   </div>);})()}
               </div>
-              {/* round 34 (Shaka: "I want them to look aligned always"): the UFO card's sixth row, opposite Lock positions — the
-                  balances that earn no holder reward (the round-31 audit made visible) */}
-              {uf.balance>0&&(()=>{const el=ufoElig;const list=el&&el.list?el.list.filter(x=>x.v>0).sort((a,b)=>b.v-a.v):[];const tot=list.reduce((t,x)=>t+x.v,0);
-                const name=x=>x.k==='burn'?'Burn address':x.k==='contract'?'UFO token contract':x.k==='wallet'?'Excluded wallet':x.a.toLowerCase()===TOKENS.UFO.mainPair.toLowerCase()?'UFO / WPLS pool (main)':'PulseX liquidity pool';
+              {/* round 37 (his pick A of mock-ufo-row6-v1 — "I am not sure we want to show this" about the excluded list): the UFO
+                  card's sixth row is REFLECTIONS, LAST 7 DAYS — today in the bar, a row per day inside, from the chart's midnight
+                  balances minus the day's own transfers (no extra reads once the chart has run) */}
+              {uf.balance>0&&(()=>{const r7=ufo7;const px=r7.px;const nowT=Date.now();
+                const fl=[];if(txs&&txs.flows)txs.flows.forEach(f=>{if(f.tok==='UFO'&&hAddrs.includes(f.addr))fl.push(f);});
+                const price=(mid)=>{let p=px?pfhPriceAt(px,'UFO',mid):null;if(p==null&&dp.ufo>0)p=dp.ufo;return p;};
+                const days=r7.state==='ok'?r7.times.map((a,i)=>{const last=i===r7.times.length-1;const b=last?nowT:r7.times[i+1];const va=r7.bal[i],vb=last?uf.balance:r7.bal[i+1];
+                  let ok=va!=null&&vb!=null&&!!(txs&&txs.flows)&&hAddrs.every(ad=>pftCovered(txs,ad,'UFO',a));let net=0;fl.forEach(f=>{if(f.t>a&&f.t<=b)net+=f.net;});
+                  const uf7=ok?Math.max(0,(vb-va)-net):null;const p=price(Math.min(nowT,(a+b)/2));
+                  return{a,b,last,ok,uf:uf7,usd:uf7!=null&&p!=null?uf7*p:null,why:va==null||vb==null?'not read':!(txs&&txs.flows)?'waiting for transactions':'transactions out of reach'};}).reverse():null;
+                const todayD=days&&days[0];const full=days?days.slice(1).filter(d=>d.ok):[];const avg=full.length?full.reduce((t,d)=>t+d.uf,0)/full.length:null;
+                const mx=days?Math.max(1e-9,...days.filter(d=>d.ok).map(d=>d.uf)):1;
+                const lbl=d=>d.last?'Today':new Date(d.a).toLocaleDateString('en-US',{month:'short',day:'numeric'});
                 return(
                 <div className={`pf2-lkd x${xOpen?' open':''}`}>
-                  <button className="pf2-lkh" aria-expanded={xOpen} onClick={()=>setXOpen(!xOpen)}><span className="t">{'\u{1F6F8}'} Not earning rewards</span><span className="n">{el?<>{list.length} addresses {'\u00B7'} <b>{pfAbbr(tot)} UFO</b></>:'reading\u2026'}</span><span className="chev">{'\u25BE'}</span></button>
+                  <button className="pf2-lkh" aria-expanded={xOpen} onClick={()=>setXOpen(!xOpen)}><span className="t">{'\u{1F6F8}'} Reflections today</span><span className="n">{todayD&&todayD.ok?<><b>+{pfAbbr(todayD.uf)} UFO</b>{todayD.usd!=null&&<> {'\u00B7'} {fmtDollar(todayD.usd)}</>}{avg!=null&&<> {'\u00B7'} 7-day avg +{pfAbbr(avg)}</>}</>:r7.state==='failed'?'couldn\u2019t read the chain':r7.state==='ok'?'waiting for your transactions\u2026':'reading\u2026'}</span><span className="chev">{'\u25BE'}</span></button>
                   {xOpen&&<div className="pf2-lkb">
-                    <div className="pf2-xn">These balances are excluded from the holder reward, so the 1% of every transfer is shared among the other {el?pfAbbr(el.elig):'\u2014'} UFO {'\u2014'} that is what your share above is measured against.</div>
-                    {list.map(x=><div key={x.a} className={`pf2-lk x ${x.k}`}><div className="a"><b>{name(x)}</b><span className="mono">{pfAddr(x.a)}</span></div><div className="t"><b>{pfAbbr(x.v)} UFO</b><span>{el&&el.supply>0?(x.v/el.supply*100).toFixed(2):'\u2014'}% of supply</span></div><a className="r lk" href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" aria-label={`${name(x)} on PulseScan`}>{'\u2197'}</a></div>)}
+                    {days?<div className="pf2-r7">{days.map(d=><div key={d.a} className={`r${d.ok?'':' na'}`}><span className="d">{lbl(d)}</span><span className="g" aria-hidden="true">{d.ok&&<i style={{width:Math.max(2,d.uf/mx*100)+'%'}}></i>}</span><b>{d.ok?'+'+pfAbbr(d.uf):'\u2014'}</b><span className="u">{d.ok?(d.usd!=null?fmtDollar(d.usd,0):''):d.why}</span></div>)}</div>
+                    :<div className="pf2-xn">{r7.state==='failed'?'Couldn\u2019t read the midnight balances from the chain right now.':'Reading the last 7 days from the chain\u2026'}</div>}
+                    <div className="pf2-xn" style={{marginTop:8}}>Each day = your UFO balance at midnight to midnight, minus what you moved yourself. Today runs to now.</div>
+                    <button className="pf2-lnk" style={{marginTop:6}} onClick={()=>setEdTok('UFO')}>Full 30 days {'\u2192'} Details</button>
                   </div>}
                 </div>);})()}
             </section>

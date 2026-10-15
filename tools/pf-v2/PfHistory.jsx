@@ -155,6 +155,23 @@
       },[key,enabled,nonce]);
       return{...st,retry:()=>setNonce(n=>n+1)};
     };
+    /* round 37 (Shaka picked A of mock-ufo-row6-v1, "Reflections, last 7 days"): the UFO balance of the counted wallets at the
+       last 8 local midnights — the same reads (and cache) as the chart, UFO only — so a day's reflections = Δbalance − that
+       day's net UFO transfers (Recent Transactions' flows). Today runs midnight → the live balance. */
+    const usePfUfo7=(addrs,tick)=>{
+      const[st,setSt]=useState({state:'idle'});const today=pfhLocalMidnight(tick||Date.now());
+      const key=addrs.slice().sort().join(',')+'|'+today;
+      useEffect(()=>{if(!addrs.length){setSt({state:'empty'});return;}let live=true;
+        (async()=>{setSt(s=>({...s,state:'loading'}));
+          try{const[a,px]=await Promise.all([pfhGetAnchors(),pfhPrices()]);
+            const d0=new Date(today);const times=[];for(let k=7;k>=0;k--){const d=new Date(d0);d.setDate(d0.getDate()-k);times.push(d.getTime());}
+            const jobs=[];times.forEach(ts=>{const block=pfhBlockAt(a,ts);addrs.forEach(addr=>jobs.push({addr,tok:'UFO',ts,block}));});
+            await pfhRead(jobs);const c=pfhLoad();
+            const bal=times.map(ts=>{let u=0,ok=true;addrs.forEach(ad=>{const b=(c.v[ad+'|UFO']||{})[ts];if(b==null)ok=false;else u+=b;});return ok?u:null;});
+            if(live)setSt({state:'ok',times,bal,px,at:Date.now()});
+          }catch(e){if(live)setSt({state:'failed'});}})();
+        return()=>{live=false;};},[key]);
+      return st;};
     /* the real 24 h change: every counted wallet's balances exactly 24 h ago × the price then, vs now */
     const pf24Mem={};   // round 24 (audit B2): per-wallet balances 24 h ago, keyed by the 10-minute slot — a toggle no longer re-reads every wallet
     const usePf24h=addrs=>{

@@ -565,3 +565,15 @@ Shaka (screenshots): 1) the UFO Reflections tile was shorter while "scanning…"
 `.u` for both ("1% of every UFO buy, sell and transfer — nothing to claim"), one-line legends; the harness measures both at the
 same top and height. 4) the two fold bars "blend in too much" → gold border, hover glow, a "Show ▾ / Hide ▴" pill on the
 right (`.pf2-foldh .chev` draws it), and 18 px between the chart and Recent Transactions. Still hidden; classic 215506704.
+
+## Round 37 — Reflections, last 7 days (2026-10-15)
+
+Shaka: "I am not sure we want to show this [Not earning rewards]… what other options" → mock-ufo-row6-v1.html (renders/
+ufo-row6-v1-1300.jpg): A reflections last 7 days · B your reward rate · C where you stand (holder rank) · D how reflections
+work. "I like the reflections last 7 days." Built: `usePfUfo7(addrs,tick)` (PfHistory.jsx) reads the counted wallets' UFO
+balance at the last 8 local midnights through the chart's `pfhRead` + cache (no new reads when the chart has run); a day's
+reflections = Δbalance − the day's net UFO flows (Recent Transactions), today = midnight → the live balance; a day is "—"
+with a reason when a wallet's coverage doesn't reach it. The bar: "🛸 Reflections today +301M UFO · $42,860 · 7-day avg
++762M"; inside `.pf2-r7`: a row per day (newest first) with a bar scaled to the best day, UFO and $, a one-line method note
+and "Full 30 days → Details" (opens the UFO Details window). The excluded-address list is no longer shown (the audit's
+`pfUfoEligible().list` stays for the share). Still hidden; classic 215506704.
