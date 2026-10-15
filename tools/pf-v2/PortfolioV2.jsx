@@ -259,6 +259,9 @@
             <div className="pf2-newg"><input value={p.newGroupName} onChange={e=>p.setNewGroupName(e.target.value)} placeholder="New group name…" aria-label="New group name" onKeyDown={e=>{if(e.key==='Enter'&&p.newGroupName.trim()){p.setInputGroup(p.newGroupName.trim());p.setNewGroupName('');}}}/><button className="pf2-lnk" onClick={()=>{if(p.newGroupName.trim()){p.setInputGroup(p.newGroupName.trim());p.setNewGroupName('');}}}>Create</button></div>
           )}
           {addMsg&&<div className="pf2-addmsg" role="alert">{addMsg}</div>}
+          {/* round 29 (Shaka: "better visual separation from the wallets to the start of all the data" — picked C of mock-sep-v1):
+              the toolbar + deck (+ the Moon Math banner) sit in their own bordered panel, then the YOUR HOLDINGS heading */}
+          <section className="pf2-pn pf2-wpan" aria-label="My wallets">
           <div className="pf2-tools">
             <b>MY WALLETS <span>({wallets.length})</span></b>
             {wallets.length>0&&(()=>{const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;}).length;return <span className="sum">{'·'} <strong>{counted.length}</strong> counted {'·'} <strong>{fmtDollar(total)}</strong>{bad>0&&<span className="warn"> {'·'} {bad} unreadable</span>}</span>;})()}
@@ -296,13 +299,15 @@
           </div>
           {moonMathActive&&(()=>{const isAth=customPrices.ptgc===String(ATH_PRICES.ptgc)&&customPrices.ufo===String(ATH_PRICES.ufo);const none=customPrices.ptgc===''&&customPrices.ufo==='';return(
             <div className="pf2-mm"><img src="logos/portfolio/pf-moon.webp" alt=""/>Moon Math is on {'\u2014'} {isAth?'your holdings, rewards and totals are valued at the All-Time High prices.':none?'Custom is selected: type a PTGC and / or UFO price in the Moon Math window (live prices until you do).':'your holdings, rewards and totals are valued at your custom prices.'} <span className="mmn">(The value history and the transactions stay at real prices.)</span> <button className="pf2-mmoff" onClick={()=>{setCustomPrices({ptgc:'',ufo:'',pls:''});setMoonMathActive(false);}}>Back to Live Prices</button></div>);})()}
+          </section>
 
           {/* round 23 (audit A2): with every wallet switched off this used to say "Reading your wallets…" forever */}
           {wallets.length>0&&!anyData&&(()=>{const run=counted.some(w=>loadingAddrs[w.address.toLowerCase()]);const bad=counted.filter(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&d.error;});return(
             <section className="pf2-pn pf2-sec" style={{marginTop:20}}><div className="pf2-soon" role="status">{!counted.length?<><b>No wallets are counted.</b> Switch one on above (or <button className="pf2-lnk" onClick={selectAllWallets}>Select all</button>) to see the totals.</>:run||!bad.length?<><b>Reading your wallets from the chain{'\u2026'}</b></>:<><b>Couldn{'\u2019'}t read your wallets from the chain right now.</b> The PulseChain node did not answer {'\u2014'} nothing is wrong with your list.<div style={{marginTop:12}}><button className="pf2-lnk" onClick={()=>bad.forEach(w=>fetchWalletData(w.address))}>Retry all</button></div></>}</div></section>);})()}
           {wallets.length>0&&anyData&&<>
+          <div className="pf2-hsec"><h2 className="oh">YOUR HOLDINGS <span>{counted.length} wallet{counted.length===1?'':'s'} counted</span></h2><i aria-hidden="true"></i></div>
           {/* ---- three summary tiles ---- */}
-          <div className="pf2-row3 r4">
+          <div className="pf2-row3 r4 hd">
             <section className="pf2-pn pf2-st t"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div>
               <div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div><div className="s">{simulated?<span className="na">Moon Math prices</span>:pfChg(tChg)}</div></div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></section>
             <section className="pf2-pn pf2-st p"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div>

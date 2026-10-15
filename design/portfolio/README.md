@@ -471,3 +471,14 @@ Shaka: "A". Built (round 28, pf-r28.tgz, still hidden):
   window and the name's title); ✕ on hover (always faint on touch); Show-all cuts at 28 / 20 / 6; a Value · Name · Added sort
   in the toolbar (saved in grays_pf_deck_sort, default Value); 24 px switch / ✎ targets, 12 px smallest text.
 Harness: `tools/harness/README.md` r28 line; renders `renders/r28-1440-*.jpg`. Classic hash still 215506704.
+
+## Round 29 — separation between the wallets and the data (2026-10-15)
+
+Shaka (screenshot): "I dont like how all the wallets go right into the total port value etc boxes.. we need some more
+seperation there?" → mock-sep-v1.html (renders/sep-v1-1380.jpg): A a YOUR HOLDINGS section heading with a fading rule ·
+B a glowing gold-to-green divider with the two coins · C the wallets (toolbar + deck + Moon Math banner) in their own bordered
+panel, then the heading from A. He said A, then "actually C please". Built: `.pf2-wpan` (a `.pf2-pn` with a gold-tinted
+border, 12/14 px padding; the toolbar inside loses 2 px of gap and the search box 24 px so HOW IT WORKS stays on the line),
+`.pf2-hsec` heading "YOUR HOLDINGS · N wallets counted" 34 px below it, the tiles row `.hd` with no top margin. Tile name gap
+3 px / mono letter-spacing −.04em so the short address still fits 7-across inside the panel. Phone: panel 10 px, heading 26 px.
+Still hidden. Classic hash 215506704.
