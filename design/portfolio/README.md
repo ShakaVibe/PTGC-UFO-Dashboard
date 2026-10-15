@@ -638,3 +638,9 @@ LP gold, Transfers grey); Per-wallet Breakdown shows Total and the PTGC / UFO sp
 Orbitron SHOW ▾ / HIDE ▴ (the DAY BY DAY style). The panel gets a faint gold wash on its left edge. ≤1100 the chips drop
 to a second row; ≤700 everything a size down; ≤440 the icon tile goes so the title stays one line beside the button.
 Squeeze scan clean 1280→390 (390 keeps the known feed ellipsis); classic hash equal to round 43. Still hidden.
+
+## Round 45 — "Clear" → "Deselect all" (2026-10-15)
+
+Shaka: "many may think that means clear all the wallets, and be scared to push it." The MY WALLETS toolbar's second button
+now reads "Deselect all" beside "Select all" (it only switches the counted toggles off; nothing is removed). Fits at 390.
+Still hidden.
