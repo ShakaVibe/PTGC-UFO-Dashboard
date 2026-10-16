@@ -9,15 +9,25 @@ Design: design/portfolio/mock-portfolio-v4.html (+ README.md, every decision). E
   3. PortfolioPage: the pfV2 state (PF_V2_LIVE || this device's saved preview) + its toggle
   4. the classic body (address input … per-wallet breakdown) wrapped: pfV2 ? <PortfolioV2/> : classic — the modals stay shared
   5. the faint dot bottom-right (only while PF_V2_LIVE is false); the classic footer only under classic (v2 has its own foot)
-Go-live later = PF_V2_LIVE=true in portfolio.html (one constant).
+LIVE since 2026-10-16: PF_V2_LIVE=true. THE CONSTANT LIVES IN tools/pf-v2/PortfolioV2.jsx (line 8) and this script syncs it into
+portfolio.html with the rest of the component — editing it in portfolio.html alone is undone by the next run. The guard below
+refuses to run when the two disagree, so a flip can never be silent.
 """
-import os, sys, hashlib
+import os, re, sys, hashlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(ROOT, 'tools', 'pf-v2')
 F = os.path.join(ROOT, 'portfolio.html')
 s = open(F, encoding='utf-8').read()
 edits = 0
+
+# guard (2026-10-16): PF_V2_LIVE must read the same in the JSX source and in portfolio.html — the JSX is the source of truth
+def _live(txt):
+    m = re.search(r'const PF_V2_LIVE=(true|false);', txt); return m and m.group(1)
+_jsx = open(os.path.join(HERE, 'PortfolioV2.jsx'), encoding='utf-8').read()
+if _live(_jsx) is None: sys.exit('pf-v2: PF_V2_LIVE not found in tools/pf-v2/PortfolioV2.jsx')
+if _live(s) is not None and _live(s) != _live(_jsx):
+    sys.exit(f'pf-v2: PF_V2_LIVE is {_live(s)} in portfolio.html but {_live(_jsx)} in tools/pf-v2/PortfolioV2.jsx — change it in the JSX (the source), then rerun')
 
 def once(marker, fn):
     global s, edits

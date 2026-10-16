@@ -11,7 +11,7 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
-- **Portfolio v2 (2026-10-13→15, HIDDEN, 47 rounds, all pushed; GO-LIVE FRIDAY 2026-10-17 on his word — the held package `Claude outputs/pf-golive-friday.tgz` = round 47 + B8 + `PF_V2_LIVE=true`, recipe in `sessions/2026-10-15.md`):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
+- **Portfolio v2 — LIVE since 2026-10-16 (`bc8e60b8b`, 47 rounds + B8; `PF_V2_LIVE=true` lives in `tools/pf-v2/PortfolioV2.jsx`, the build syncs it):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
 - **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
@@ -36,7 +36,22 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (2026-10-15)
+## Current state (2026-10-16)
+
+**2026-10-16 (Friday): PORTFOLIO v2 IS LIVE — `bc8e60b8b` "Portfolio v2 GO LIVE + B8".** `PF_V2_LIVE=true` (set in
+`tools/pf-v2/PortfolioV2.jsx`, synced into portfolio.html by `pf-v2.py`, which now REFUSES to run if the two disagree), the dot is
+gone, every visitor gets v2; B8 (UFO reflections scan cached per wallet in `grays_ufo_refl_v1:<addr>`, incremental after the
+first visit) shipped in the same push. Live-verified from the built-in browser with two random current-UFO holders: cold
+full scan = cached incremental (635.74M lifetime earned), no console errors, no dot. Announcement copy + six screenshot
+captions written in chat (random PulseScan wallets in the shots). `sessions/2026-10-16.md`.
+
+**NEXT:** (1) keep the classic body one round, then remove it + `PfV2Dot` + the preview flag (`tools/pf-v2.py` step 3–5 become
+dead) — a cleanup round, mock-up not needed; (2) watch the first days live (PulseScan volume, the 1Y chart gaps note, the
+"Live price unavailable" note) and fix what real wallets surface; (3) Phase F ideas one at a time, MOCK-UP FIRST — he approves
+every visual before it is built (F1 cost basis & P&L, F2 CSV/PDF export, F3 since-last-visit, F4 `?code=` share link, F5 goals,
+F6 lock calendar, F7 local alerts). The held `Claude outputs/pf-golive-friday.tgz` is now history.
+
+## Before that (2026-10-15)
 
 **2026-10-15 (Thursday): PORTFOLIO v2 rounds 29–47 — polish day, all pushed by him (last `e05c99caf`), STILL HIDDEN behind the dot.**
 Morning: B8 explained and parked ("we will wait on that"). Then polish, every visual from a mock-up he picked: the wallets panel +
@@ -1402,6 +1417,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Session log
 
+- `sessions/2026-10-16.md` — Portfolio v2 GO LIVE + B8 (`bc8e60b8b`): the flip, the live check with two random UFO holders
+  (cold = cached), the announcement copy.
 - `sessions/2026-10-15.md` — Portfolio v2 rounds 29–47 (polish day): wallets panel, loaders, UFO share audited on chain, the
   spotlights, the Recent Transactions bar, Reflections last 7 days, squeeze fixes, Audit II, DAY BY DAY, the fold bars. The held
   Friday go-live package (round 44 + B8) and its corrected splice recipe. Still hidden; go-live Friday on his word.
