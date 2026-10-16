@@ -45,11 +45,14 @@ first visit) shipped in the same push. Live-verified from the built-in browser w
 full scan = cached incremental (635.74M lifetime earned), no console errors, no dot. Announcement copy + six screenshot
 captions written in chat (random PulseScan wallets in the shots). `sessions/2026-10-16.md`.
 
-**NEXT:** (1) keep the classic body one round, then remove it + `PfV2Dot` + the preview flag (`tools/pf-v2.py` step 3–5 become
-dead) — a cleanup round, mock-up not needed; (2) watch the first days live (PulseScan volume, the 1Y chart gaps note, the
-"Live price unavailable" note) and fix what real wallets surface; (3) Phase F ideas one at a time, MOCK-UP FIRST — he approves
-every visual before it is built (F1 cost basis & P&L, F2 CSV/PDF export, F3 since-last-visit, F4 `?code=` share link, F5 goals,
-F6 lock calendar, F7 local alerts). The held `Claude outputs/pf-golive-friday.tgz` is now history.
+**NEXT (agreed with Shaka at the end of 2026-10-16, in this order):** (1) let the page breathe a day or two and fix what real
+wallets surface — watch for PulseScan slowness on the first cold read, the "Live price unavailable" note (DexScreener), 1Y chart
+gaps; (2) the CLEANUP round: strip the classic body, `PfV2Dot` and the preview flag out of portfolio.html and simplify
+`tools/pf-v2.py` (steps 3–5 and the guard become dead) — no mock-up needed, nothing visible changes, but a big diff, so after
+the quiet period; (3) Phase F one at a time, MOCK-UP FIRST — he approves every visual before it is built — in this order:
+F4 share link (`?code=`), F3 since-last-visit, F1 cost basis & P&L (from the buys in Recent Transactions; wants a few days of real
+data first), F2 CSV export, then F5 goals / F6 lock calendar / F7 local alerts. The held `Claude outputs/pf-golive-friday.tgz`
+is history; `Claude outputs/_to_delete_portfolio.r43.html` can go.
 
 ## Before that (2026-10-15)
 
