@@ -5,7 +5,7 @@
        to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
        Same state, same loaders, same maths as the classic body (agg, dp, getHoldingCreatures, LEAGUE_TIERS) — only the look
        is new. Step 2 (not built yet): the value history from real chain balances and Recent Transactions (placeholders below). */
-    const PF_V2_LIVE=false;
+    const PF_V2_LIVE=true;    // GO-LIVE 2026-10-16: Portfolio v2 for everyone (the dot is gone)
     const LS_PF_V2='grays_pf_v2_preview';
     const pfV2Saved=()=>{try{return localStorage.getItem(LS_PF_V2)==='1'}catch(e){return false}};
     const PF_SEA_V=4;   // = index.html SEA_ART_V (the sea art files are shared: logos/panels/sea-*.webp)

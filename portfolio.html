@@ -1359,24 +1359,47 @@
       if(head==null)return null;
       // Scan the token's ENTIRE history, from its deploy block to head. No estimate, no sliding window:
       // no transfer involving this token can predate the block its bytecode first appeared in.
-      const fromBlock=UFO_LAUNCH_BLOCK;
+      /* B8 (Portfolio roadmap, 2026-10-16): the three sums (received, sent, fee legs) only ever grow, so they are SAVED per
+         wallet with the block they were read to (localStorage grays_ufo_refl_v1:<addr>, exact integers as strings). The next
+         visit scans only the blocks after that boundary — a day is ~8,000 blocks, one small call per direction instead of
+         re-reading ~800,000 blocks in 100k chunks. A negative result (balance below the net received — a reorg or a bad save)
+         throws the cache away and rescans from launch. A failed read never touches the cache. */
       const wtopic='0x'+padAddr(address);
-      const [recv,sent]=await Promise.all([
-        getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head),   // to = wallet
-        getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,wtopic,null],fromBlock,head),   // from = wallet
-      ]);
-      if(recv===null||sent===null)return null; // hard chain-read failure -> unavailable, never a fake 0
-      const sumWei=(logs)=>logs.reduce((s,l)=>s+parseWord(l.data),0n);
-      const contractTopic=('0x'+padAddr(UFO_TOKEN_ADDR)).toLowerCase();
-      const inWei=sumWei(recv);                                 // received amounts are emitted at face value
-      const outEmitted=sumWei(sent);                            // = 99% of gross on fee-paying sends
-      // The 5% contract-fee legs are the only sends addressed to the token itself. gross = fee/0.05,
-      // so the unemitted 1% reflection slice = fee/5. Adding it back makes outflow exact.
-      const feeLegs=sumWei(sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic));
-      const outWei=outEmitted+feeLegs/5n;
-      try{(window.pfUfoRecv=window.pfUfoRecv||{})[address.toLowerCase()]=toNum(inWei);}catch(e){}   // Portfolio v2 round 6: yield denominator
-      const reflWei=balanceWei-(inWei-outWei);
-      return reflWei>0n?toNum(reflWei):0;
+      const ck='grays_ufo_refl_v1:'+address.toLowerCase();
+      let c=null;try{const s=localStorage.getItem(ck);if(s){const o=JSON.parse(s);if(o&&o.v===1&&Number.isInteger(o.to)&&o.to>=UFO_LAUNCH_BLOCK&&o.to<=head)c={to:o.to,inW:BigInt(o.inW),outW:BigInt(o.outW),feeW:BigInt(o.feeW)};}}catch(e){c=null;}
+      const scan=async(fromBlock)=>{
+        const [recv,sent]=await Promise.all([
+          getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head),   // to = wallet
+          getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,wtopic,null],fromBlock,head),   // from = wallet
+        ]);
+        if(recv===null||sent===null)return null; // hard chain-read failure -> unavailable, never a fake 0
+        const sumWei=(logs)=>logs.reduce((s,l)=>s+parseWord(l.data),0n);
+        const contractTopic=('0x'+padAddr(UFO_TOKEN_ADDR)).toLowerCase();
+        return{inW:sumWei(recv),                                                                   // received amounts are emitted at face value
+          outW:sumWei(sent),                                                                        // = 99% of gross on fee-paying sends
+          // The 5% contract-fee legs are the only sends addressed to the token itself. gross = fee/0.05,
+          // so the unemitted 1% reflection slice = fee/5. Adding it back makes outflow exact.
+          feeW:sumWei(sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic))};
+      };
+      const finish=(inWei,outEmitted,feeLegs,to)=>{
+        const outWei=outEmitted+feeLegs/5n;
+        const reflWei=balanceWei-(inWei-outWei);
+        if(reflWei<0n)return null;                                                                   // impossible — let the caller rescan
+        try{localStorage.setItem(ck,JSON.stringify({v:1,to,inW:inWei.toString(),outW:outEmitted.toString(),feeW:feeLegs.toString()}));}catch(e){}
+        try{(window.pfUfoRecv=window.pfUfoRecv||{})[address.toLowerCase()]=toNum(inWei);}catch(e){}   // Portfolio v2 round 6: yield denominator
+        return reflWei>0n?toNum(reflWei):0;
+      };
+      if(c){
+        const d=c.to<head?await scan(c.to+1):{inW:0n,outW:0n,feeW:0n};
+        if(d===null)return null;
+        const r=finish(c.inW+d.inW,c.outW+d.outW,c.feeW+d.feeW,head);
+        if(r!==null)return r;
+        try{localStorage.removeItem(ck);}catch(e){}                                                  // fall through: full rescan
+      }
+      const d=await scan(UFO_LAUNCH_BLOCK);
+      if(d===null)return null;
+      const r=finish(d.inW,d.outW,d.feeW,head);
+      return r===null?0:r;                                                                           // balance below net received even from launch: show 0, not a fake number
     };
 
     // Pair display names for UFO LP
@@ -2696,7 +2719,7 @@
        to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
        Same state, same loaders, same maths as the classic body (agg, dp, getHoldingCreatures, LEAGUE_TIERS) — only the look
        is new. Step 2 (not built yet): the value history from real chain balances and Recent Transactions (placeholders below). */
-    const PF_V2_LIVE=false;
+    const PF_V2_LIVE=true;    // GO-LIVE 2026-10-16: Portfolio v2 for everyone (the dot is gone)
     const LS_PF_V2='grays_pf_v2_preview';
     const pfV2Saved=()=>{try{return localStorage.getItem(LS_PF_V2)==='1'}catch(e){return false}};
     const PF_SEA_V=4;   // = index.html SEA_ART_V (the sea art files are shared: logos/panels/sea-*.webp)
