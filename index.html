@@ -4069,17 +4069,49 @@
     let holderHistoryCacheNew = null;
     let tokensInLPHistoryCache = null;
 
+    /* 2026-10-20 (tools/vol-windows-fresh.py): re-read after CG_TTL_MS. It used to be read ONCE per page life, so a tab open
+       overnight judged the hourly file by last night's copy, failed cgVolWindows' 12 h gate and blanked the 7D / 30D / 90D
+       volume windows until a full reload. A failed read keeps the last good copy (the gate still checks its age). */
+    let coingeckoFetchedAt = 0;
+    const CG_TTL_MS = 15*60*1000;
     const fetchCoingeckoData = async () => {
-      if (coingeckoDataCache) return coingeckoDataCache;
+      if (coingeckoDataCache && Date.now()-coingeckoFetchedAt < CG_TTL_MS) return coingeckoDataCache;
       try {
         const r = await fetch(COINGECKO_DATA_URL, DATA_FETCH);
-        coingeckoDataCache = await r.json();
+        if (!r.ok) throw new Error('HTTP '+r.status);
+        const j = await r.json();
+        coingeckoDataCache = j; coingeckoFetchedAt = Date.now();
         console.log('CoinGecko data loaded:', coingeckoDataCache.lastUpdated);
         return coingeckoDataCache;
       } catch (e) {
         console.error('Failed to load CoinGecko data:', e);
-        return null;
+        return coingeckoDataCache;
       }
+    };
+    /* The 7D / 30D / 90D volume windows for `token` from coingecko-data.json, gated — moved here from load() so the 5-min
+       quickRefresh applies the same rules. Coherence guards (roadmap d9; MIGRATION: the repo file was once built for the OLD
+       UFO token): (a) the window is not longer than the token's life (DexScreener's oldest pairCreatedAt in `d`), (b) the
+       series is monotonic (7d <= 30d <= 90d — a series built for another contract or a broken run fails this), (c) the file
+       itself is fresh (< 12 h, c17; it is rebuilt hourly). Anything failing → null → "—", never $0 (a14 / a19). */
+    const cgVolWindows = (token, d) => {
+      const none = { vol7d: null, vol30d: null, vol90d: null };
+      const cg = coingeckoDataCache;
+      if (!cg || !cg[token]) return none;
+      const fp = d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m, Infinity);
+      const ageDays = (fp && isFinite(fp)) ? (Date.now()-fp)/86400000 : null;
+      const cgAgeMs = cg.lastUpdated ? (Date.now()-Date.parse(cg.lastUpdated)) : Infinity;
+      const cgFresh = isFinite(cgAgeMs) && cgAgeMs < 12*3600*1000;
+      const gate = (windowDays, val) => {
+        if (!cgFresh) return null;
+        if (val == null || !isFinite(val) || val <= 0) return null;
+        if (ageDays == null || ageDays < windowDays) return null;  // younger than the window
+        return val;
+      };
+      const cv = cg[token].volume || {};
+      let v7 = gate(7, cv.vol7d), v30 = gate(30, cv.vol30d), v90 = gate(90, cv.vol90d);
+      const mono = (v7==null||v30==null||v7<=v30*1.001) && (v30==null||v90==null||v30<=v90*1.001) && (v7==null||v90==null||v7<=v90*1.001);
+      if (!mono) { console.warn(`${token}: cached volume windows are not monotonic (7d ${v7} / 30d ${v30} / 90d ${v90}); treating as unavailable`); return none; }
+      return { vol7d: v7, vol30d: v30, vol90d: v90 };
     };
 
     const fetchLiquidityHistory = async () => {
@@ -13005,34 +13037,7 @@
              Either guard failing means the cached series doesn't describe this token,
              so we return null and the panel shows "Data unavailable" instead of a number. */
           const v24 = (d?.vol!=null && isFinite(d.vol)) ? d.vol : null;   // a14/a19: unknown → null → "—"
-          const _vFirstPool = d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m, Infinity);
-          const _ageDays = (_vFirstPool && isFinite(_vFirstPool)) ? (Date.now()-_vFirstPool)/86400000 : null;
-          /* Coherence guards, revised (roadmap d9). The old check compared each cached window
-             with the LIVE 24h volume and nulled the window if it was smaller — so a genuine
-             volume spike (the day people most want the number) blanked the 7D/30D/90D panel.
-             The stale-series problem it was written for is caught without the live number:
-               (a) the window is not longer than the token's life,
-               (b) the series is monotonic (7d <= 30d <= 90d — a series built for another
-                   contract or a broken run fails this),
-               (c) the file itself is fresh (< 24h; it is rebuilt hourly). */
-          const cgAgeMs = coingeckoDataCache && coingeckoDataCache.lastUpdated ? (Date.now()-Date.parse(coingeckoDataCache.lastUpdated)) : Infinity;
-          const cgFresh = isFinite(cgAgeMs) && cgAgeMs < 12*3600*1000;   // c17: the file is hourly — 12 h is a long outage, not a normal gap (was 24 h)
-          const gateVol = (windowDays, val) => {
-            if (!cgFresh) return null;
-            if (val == null || !isFinite(val) || val <= 0) return null;
-            if (_ageDays == null || _ageDays < windowDays) return null;  // younger than the window
-            return val;
-          };
-          if (coingeckoDataCache && coingeckoDataCache[token]) {
-            const cv = coingeckoDataCache[token].volume || {};
-            let v7 = gateVol(7, cv.vol7d), v30 = gateVol(30, cv.vol30d), v90 = gateVol(90, cv.vol90d);
-            const mono = (v7==null||v30==null||v7<=v30*1.001) && (v30==null||v90==null||v30<=v90*1.001) && (v7==null||v90==null||v7<=v90*1.001);
-            if (!mono) { console.warn(`${token}: cached volume windows are not monotonic (7d ${v7} / 30d ${v30} / 90d ${v90}); treating as unavailable`); v7=v30=v90=null; }
-            setVolumeByPeriod({ vol24h: v24, vol7d: v7, vol30d: v30, vol90d: v90 });
-          } else {
-            // Fallback - only show 24h
-            setVolumeByPeriod({ vol24h: v24, vol7d: null, vol30d: null, vol90d: null });
-          }
+          setVolumeByPeriod({ vol24h: v24, ...cgVolWindows(token, d) });   // 2026-10-20: the gate lives in cgVolWindows (quickRefresh uses it too)
           
           // Calculate holder history from snapshots
           const _epochSnaps = snapshotsFor(token); // MIGRATION: this token's era only
@@ -13149,6 +13154,9 @@
              above it climbed with every refresh — two figures from the same source disagreeing,
              with no staleness cue. Same null rule as load() (a14/a19): unknown stays unknown. */
           if(d){const nv=(d.vol!=null&&isFinite(d.vol))?d.vol:null;setVolumeByPeriod(v=>(v&&v.vol24h===nv)?v:{...v,vol24h:nv});}
+          /* 2026-10-20: the 7D / 30D / 90D windows too — they were set only in load(), so a tab that had blanked them (file copy
+             past the 12 h gate) never got them back. fetchCoingeckoData re-reads after 15 min; the same gate as load(). */
+          if(d){await fetchCoingeckoData();if(tokenRef.current===t){const w=cgVolWindows(t,d);setVolumeByPeriod(v=>(v&&v.vol7d===w.vol7d&&v.vol30d===w.vol30d&&v.vol90d===w.vol90d)?v:{...v,...w});}}
           // No-op guards: identical values return the previous reference → no re-render.
           if(h!=null)setHolders(prev=>h===prev?prev:h);
           // (was prev.burned — a field fetchBurn never returns, so the guard always short-circuited
