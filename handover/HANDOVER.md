@@ -39,12 +39,13 @@ Update it at the end of every session.
 ## Current state (2026-10-20)
 
 **2026-10-20 (Tuesday): the Volume window's 7D / 30D / 90D "—" FIXED — `tools/vol-windows-fresh.py`, written to the Mac, NOT
-pushed.** His screenshot: 24H filled, the three windows and the Today-vs-averages bars "—". The page read `coingecko-data.json`
+pushed by Shaka as `b2d76a06d`, LIVE-VERIFIED.** His screenshot: 24H filled, the three windows and the Today-vs-averages bars "—". The page read `coingecko-data.json`
 once per page life and gates it at 12 h, so a tab open overnight blanked them on its next load() and never recovered. Now the
 file is re-read every 15 min and the 5-min refresh re-gates the windows (`cgVolWindows`). Harness-proven (stale → recovers;
-missing → "—"). Portfolio v2 live check started (3 real wallets, cold ~17 s, all panels painted) — the console / 1Y chart /
-price-note look still to finish. `sessions/2026-10-20.md`. **NEXT: his push, then Claude's live check (open the ⓘ after a fresh
-load: four figures), then the rest of the 2026-10-16 plan below.**
+missing → "—"). Live: the ⓘ shows all four figures on PTGC + UFO, a forced re-read + Refresh keeps them. Portfolio v2 live check DONE (3 real
+wallets: cold ~17 s, no console errors, no failed requests, no "Live price unavailable", 1Y chart continuous, no sideways scroll
+at the pane's 446 px). `sessions/2026-10-20.md`. **NEXT: the rest of the 2026-10-16 plan below — the CLEANUP round (classic
+body out of portfolio.html) when he says, then Phase F mock-ups starting with F4.**
 
 ## Before that (2026-10-16)
 
