@@ -11,7 +11,11 @@ Update it at the end of every session.
   in Shaka's Claude artifact gallery — 126 items: 59 from the Sep 8 review across five phases
   (u10 dropped 2026-09-09, g7 + g8 added and live) plus **67 from Audit II (2026-09-16, ids
   `a1`–`a67`, group "AUDIT II")**. Full evidence for the a-items: `sessions/2026-09-16-audit.md`.
-- **Portfolio v2 — LIVE since 2026-10-16 (`bc8e60b8b`, 47 rounds + B8; `PF_V2_LIVE=true` lives in `tools/pf-v2/PortfolioV2.jsx`, the build syncs it):** Shaka's portfolio redesign behind a faint dot bottom-right of portfolio.html (`PF_V2_LIVE=false`, `PfV2Dot`, localStorage `grays_pf_v2_preview`) — `PortfolioV2` (`.pf2-*`), build `tools/pf-v2.py` (source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, run it twice: must print `0 edit(s)`), mock-ups + every decision `design/portfolio/README.md`, the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Feature-complete and audited (phases A–E done); **go-live only on his word** (checklist in the roadmap), **B8 (faster UFO load) held** because it changes classic code.
+- **Portfolio v2 — LIVE since 2026-10-16 (`bc8e60b8b`), the ONLY body since 2026-10-20 (cleanup, `tools/pf-cleanup.py`):**
+  `PortfolioV2` (`.pf2-*`) rendered by `PortfolioPage` in portfolio.html, which owns the state and the shared windows (Get / Load
+  Code, Edit wallet, Leagues). Source `tools/pf-v2/PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx` + `pf2.css`, synced
+  into the page by `tools/pf-v2.py` (run it twice: must print `0 edit(s)`). Mock-ups + every decision `design/portfolio/README.md`,
+  the audit + roadmap `handover/PORTFOLIO-ROADMAP.md`. Next: Phase F, one at a time, MOCK-UP FIRST (F4 share link first).
 - **Volume window (2026-10-07):** the Volume tile's ⓘ in the Humans vs Bots look — `VolumeModal` (`.vw-*`), build `tools/volume-window.py`,
   mock-ups + every decision `design/volume-analytics/README.md`; its chart + pool table read `data/swap-volume.json` like HvB.
 - **RH Cores window (2026-10-07):** the Liquidity tile's RH button in the same look — `RhCoresModal` (`.rc-*`, reuses `vw-tile` / `vw-card`),
@@ -37,6 +41,56 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-20)
+
+**NOT PUSHED at the end of 2026-10-20: the Portfolio cleanup round (below) + the holder-rank mock-ups + these notes.** One push
+covers it all (the line is at the end of `sessions/2026-10-20.md`); then Claude's live check of portfolio.html.
+
+**HOLDER RANK PER WALLET — MOCKED UP, HIS LAYOUT CHOSEN, BUILD TOMORROW (2026-10-21) ("save that to the handover and we will
+work on making it live tomorrow").** People asked "where does my wallet rank among holders (not counting LP wallets)". He wants it
+PER WALLET (people have several), PTGC and UFO each, in the **Per-wallet breakdown**. Three mock rounds
+(`design/portfolio/mock-ranks-v1/v2/v3.html`, renders `renders/ranks-v*-1380.png`): v1 A/B/C → "I like C" (rank + top % + TOP 10 /
+100 / 1,000 badge + "▲ N more to pass #N-1" + PTGC rank / UFO rank sort buttons + the ALL WALLETS row ranked "as one wallet" + the
+header chips "Best PTGC rank / Best UFO rank") but "the layout needs to change"; v2 D strip / E in-column / F cards → "I don't like
+those either"; **v3 = his idea: the HOLDER RANK badges in their OWN COLUMN right after the wallet — Wallet · Holder Rank · PTGC ·
+Pending · UFO · Total.** G1 (two-line badges) vs G2 (one-line, "more to pass" at the right end, rows near today's height) NOT yet
+picked — Claude recommends G2; ASK FIRST THING. Plus the CARDS: H3, the rank row in the League box (below). Also owed before
+building: the PHONE mock of both (he wants a mock-up before every build).
+**Tomorrow's order:** (0) his push of 2026-10-20 + Claude's live check of portfolio.html; (1) ask G1 / G2 and the 2+-wallets
+question for H3; (2) the staking check (below); (3) the pipeline step + `data/holder-ranks.json`, run once by hand; (4) phone
+mocks of the breakdown column + the H3 row → his OK; (5) build both (`tools/pf-v2/*` + `python3 tools/pf-v2.py` twice), harness
+(1380 → 390 squeeze scan, ranks against a stub list), push, live check with real wallets.
+**Build plan:** (1) a pipeline step `scripts/build-holder-ranks.mjs` → `data/holder-ranks.json`: page PulseScan
+`/api/v2/tokens/<t>/holders` for both tokens (measured: UFO 5,324 rows ~95 s, PTGC 18,195 rows ~7 min — fine hourly, or every 2–3 h
+in its own lane), drop burn (0x0 / 0x…369 / 0x…dead), the token contracts, LP POOLS (production rule: any contract answering
+`token0()`; ~1,080 PTGC + 334 UFO holders are contracts, many are pools not in our lists — the mock dropped every contract), the UFO OA
+wallet (`PF_UFO_EXCL.wallets`); keep balances ≥ 1 token (12,114 PTGC / 4,906 UFO today); store the sorted balances (whole tokens,
+compact) + counts + generatedAt. (2) the page: rank = 1 + count of listed balances strictly above the wallet's LIVE balance (binary
+search) — live for the visitor, the list up to an hour old; "more to pass" = the balance just above − yours + 1; as-one-wallet = the
+same on the sum. (3) **CHECK FIRST: is all staked / locked PTGC still in the wallet's balance?** The classic code says so
+(`walletFree = balance − uiAmount`, `totalHolding = balance`) but the staking contract 0xC71f…39EF holds 3.31B PTGC — if any staked
+PTGC sits there, stakers rank too low and their stake must be added back (and the staking contract is then not a "holder").
+(4) the foot line: "Rank among N PTGC and N UFO holders (wallets holding at least 1 token). Left out: liquidity pools, the burn
+addresses, the token contracts, the UFO OA wallet. Your balance is read live; the holder list is refreshed hourly · list read N ago."
+**Also mocked (his ask, same evening): the badge on the PTGC / UFO
+CARDS when ONE wallet is counted** — `design/portfolio/mock-ranks-single-v1.html` (built from his screenshot's numbers, 3.88B PTGC =
+#12, 18.04B UFO = #7): H1 a HOLDER RANK pill under the price · H2 a third tile beside Total holdings / Lifetime earned · H3 a rank
+row inside the LEAGUE box with "more to pass" · H4 a spotlight inside Earned by source (fills PTGC's empty space; under the
+"Paid to your wallet" panel on UFO) with a mini ladder #11 / YOU / #13. **HE PICKED H3** ("H3.... add that to the notes … for
+when we make it live"): under the league bar in each card's LEAGUE box (`.pf2-lgb`, after `.pf2-lgbf`), a row split by a hairline —
+left "HOLDER RANK" caps label + the rank in Orbitron (gold on PTGC, green on UFO) + "of 12,114 · top 0.10%" + the TOP 10 / 100 /
+1,000 badge; right "▲ 4.49M more to pass #11". Mock CSS = `.rk3` in `mock-ranks-single-v1.html`. Still open: with 2+ wallets
+counted, hide the row or show "ALL N WALLETS AS ONE · #28" — ASK. Prototype scripts: `design/portfolio/ranks-mock/` (README there; `mock_single.py` + the card
+markup `cards.html` for this one). Open questions he has not answered: DAO treasury / bridges / CEX
+wallets in or out (mock: in, unless a contract); the ≥ 1 token dust floor.
+
+**Later 2026-10-20: THE PORTFOLIO CLEANUP ROUND — written to the Mac, NOT pushed.** "yes please" → `tools/pf-cleanup.py`
+(idempotent) took the classic body (~570 lines), the pfV2 state + toggle, `PfV2Dot`, `PF_V2_LIVE` / `LS_PF_V2` / `pfV2Saved`, the
+dot's CSS, the classic footer and seven classic-only leftovers out (portfolio.html 4,331 → 3,722 lines; a device still holding
+`grays_pf_v2_preview` has it removed once); `tools/pf-v2.py` rewritten to just the sync (135 → 57 lines, the dead wrap / dot /
+guard steps gone). Proof: from a clean main the two scripts rebuild the identical file (sha256 `deebd5b6`); the harness `#root`
+markup before vs after differs only in clock-driven figures at 1380 and 390 px; Load Code / Leagues / Edit wallet windows open the
+same; no errors, no sideways scroll. **NEXT: his push → Claude's live check of portfolio.html (v2 renders, no dot, the three
+windows) → the HOLDER RANK build (above: G1 / G2, phone mock, then build) → Phase F, F4 share link mock-up first.**
 
 **2026-10-20 (Tuesday): the Volume window's 7D / 30D / 90D "—" FIXED — `tools/vol-windows-fresh.py`, written to the Mac, NOT
 pushed by Shaka as `b2d76a06d`, LIVE-VERIFIED.** His screenshot: 24H filled, the three windows and the Today-vs-averages bars "—". The page read `coingecko-data.json`

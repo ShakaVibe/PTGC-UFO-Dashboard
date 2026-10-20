@@ -667,3 +667,21 @@ number 32px, a facts line — Total: the 24H / 30D pills + "N wallets"; PTGC / U
 Total's split in both colours) and a 12px caps footer: "PTGC 67.9% / UFO 32.1%", "67.9% of portfolio / 3.0B staking",
 "32.1% of portfolio / +1.43B today" (the 7-day reflections calc moved up to component scope as `ufoD` so the tile and the
 Reflections row share it). Sizes step down at ≤1280 / ≤1180 / ≤980 / ≤700. Squeeze scan clean 1380→390. Still hidden.
+
+## Holder rank per wallet — mock-ups (2026-10-20, not built)
+Holders asked where their wallet ranks (LP wallets left out). He wants it per wallet, PTGC and UFO, in the Per-wallet breakdown.
+- **v1** (`mock-ranks-v1.html`): A rank under the amounts · B a HOLDER RANK column of pills + best-rank header chips · C = B + "▲ N
+  more to pass #N-1", TOP 10 / 100 / 1,000 badges, PTGC rank / UFO rank sorts, ALL WALLETS ranked "as one wallet". **"I like C"** —
+  but "the overall layout needs to change".
+- **v2** (`mock-ranks-v2.html`): C as D a rank strip under each row · E the rank inside each token column · F wallet cards.
+  **"I don't like those either."**
+- **v3** (`mock-ranks-v3.html`) — **his idea, chosen: the badges in their own column right next to the wallet** (Wallet · Holder
+  Rank · PTGC · Pending · UFO · Total, fixed column widths). G1 two-line badges vs G2 one-line badges — not picked yet (Claude: G2).
+- Ranks in all three are real (PulseScan holder lists 2026-10-20, example balances 900M / 260M / 45M / 1.5M PTGC → #38 / #129 /
+  #666 / #4,024 of 12,114). Badge look: gold pill for PTGC, green for UFO, Orbitron rank, Rajdhani "top x%", gold / green TOP badge.
+- Owed before the build: the phone version of the chosen one.
+- **Single wallet on the token cards** (`mock-ranks-single-v1.html`, from his screenshot: 3.88B PTGC = #12, 18.04B UFO = #7): H1 pill
+  under the price · H2 third tile · **H3 a rank row inside the LEAGUE box — HIS PICK** · H4 spotlight with a #11 / YOU / #13 ladder.
+  H3: hairline over the row; left "HOLDER RANK" + Orbitron rank (gold PTGC / green UFO) + "of N · top x%" + TOP badge; right
+  "▲ N more to pass #N-1". Open: 2+ wallets counted → hide, or "ALL N WALLETS AS ONE · #28".
+

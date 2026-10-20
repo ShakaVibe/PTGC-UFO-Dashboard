@@ -188,7 +188,12 @@ ten widths, failure stubs (RPC down, logs down, prices down), the empty / all-of
 | S6 | Moon Math banner + Custom prices: the spotlights and reflections rows show $ at custom prices without the purple hint the tiles have. |
 | S7 | HOW IT WORKS text predates rounds 28–37 (ledger, folds, reflections row, eligible supply). Update the copy. |
 
-### Go-live checklist (unchanged, only on his word)
+### NEW — Holder rank per wallet (requested by holders, 2026-10-20) — mocked up, build 2026-10-21
+His layout: a HOLDER RANK column right after the wallet in the Per-wallet breakdown (`design/portfolio/mock-ranks-v3.html`, G1 or
+G2 to pick) + on the PTGC / UFO cards when one wallet is counted: H3, a rank row in the LEAGUE box
+(`mock-ranks-single-v1.html`, HIS PICK). Plan, data and open questions: HANDOVER.md "Current state (2026-10-20)". Comes BEFORE Phase F (people asked for it).
+
+### Go-live checklist — DONE 2026-10-16 (`bc8e60b8b`); the classic body + dot + PF_V2_LIVE removed 2026-10-20 (`tools/pf-cleanup.py`)
 Hard-refresh test Chrome / Safari / iPhone · 10-wallet cold load timing · `PF_V2_LIVE=true` · remove the dot · keep the
 classic body one round · update HANDOVER.md. B8 in the same push.
 

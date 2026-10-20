@@ -1,19 +1,13 @@
     /* Expects (all defined before this file runs): PfLeagues.jsx, PfHistory.jsx, PfTx.jsx, plus the classic page's globals
-       (TOKENS, fmtDollar, usd, agg / dp / prices / portfolioData passed in as props, PF_V2_LIVE…). */
+       (TOKENS, fmtDollar, usd, agg / dp / prices / portfolioData passed in as props). */
     /* ===== PORTFOLIO v2 (2026-10-13) — the page body of design/portfolio/mock-portfolio-v4.html, built by tools/pf-v2.py =====
-       HIDDEN: PF_V2_LIVE=false → the classic body stays the default and a faint dot bottom-right (PfV2Dot) flips this device
-       to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
-       Same state, same loaders, same maths as the classic body (agg, dp, getHoldingCreatures, LEAGUE_TIERS) — only the look
-       is new. Step 2 (not built yet): the value history from real chain balances and Recent Transactions (placeholders below). */
-    const PF_V2_LIVE=true;    // GO-LIVE 2026-10-16: Portfolio v2 for everyone (the dot is gone)
-    const LS_PF_V2='grays_pf_v2_preview';
-    const pfV2Saved=()=>{try{return localStorage.getItem(LS_PF_V2)==='1'}catch(e){return false}};
+       LIVE for everyone since 2026-10-16; the classic body, the preview dot and PF_V2_LIVE were removed 2026-10-20
+       (tools/pf-cleanup.py). Same state, same loaders, same maths as the classic page had (agg, dp, getHoldingCreatures,
+       LEAGUE_TIERS) — PortfolioPage owns the state and passes it in. */
+    try{localStorage.removeItem('grays_pf_v2_preview');}catch(e){}   // 2026-10-20: the old preview-dot flag, now meaningless
     const PF_SEA_V=4;   // = index.html SEA_ART_V (the sea art files are shared: logos/panels/sea-*.webp)
     const PF_SEA={'\u{1F531}':'trident','\u{1F40B}':'whale','\u{1F988}':'shark','\u{1F42C}':'dolphin','\u{1F991}':'squid','\u{1F422}':'turtle','\u{1F990}':'shrimp','\u{1F41A}':'shell'};
     const pfSea=e=>`logos/panels/sea-${PF_SEA[e]||'shell'}.webp?v=${PF_SEA_V}`;
-    const PfV2Dot=({on,toggle})=>(
-      <button className="pf2-dotbtn" onClick={toggle} aria-label={on?'Back to the current portfolio page':'Preview the new portfolio page'} title={on?'Back to the current page':'Preview'}></button>
-    );
     /* current tier → next tier, the classic LeagueProgress maths */
     const pfLeague=(balance,supply)=>{
       if(!(balance>0))return null;

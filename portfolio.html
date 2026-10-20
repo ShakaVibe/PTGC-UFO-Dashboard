@@ -52,7 +52,7 @@
     .h2-phone .h2-pfc{width:calc(80*var(--u));height:calc(80*var(--u))}.h2-phone .h2-pfc+.h2-pfc{margin-left:calc(-16*var(--u))}
     .h2-phone .h2-pfchg{font-size:max(calc(14*var(--u)),.65rem);margin-top:calc(5*var(--u))}
     .h2-tabs .h2-mini.h2-pfmini img+img,.h2-phone-mini.h2-pfmini img+img{margin-left:calc(-10*var(--u))}
-    /* ===== Portfolio v2 (2026-10-13, design/portfolio/mock-portfolio-v4.html) — hidden behind the faint dot until PF_V2_LIVE ===== */
+    /* ===== Portfolio v2 (2026-10-13, design/portfolio/mock-portfolio-v4.html) — live since 2026-10-16, the only body since 2026-10-20 ===== */
     .pf2{position:relative;color:#fff;font-family:'Rajdhani',sans-serif;font-weight:500;background:radial-gradient(900px 500px at 12% 8%,rgba(60,40,120,.22),transparent 70%),radial-gradient(800px 600px at 92% 30%,rgba(40,110,40,.14),transparent 70%),radial-gradient(1000px 700px at 50% 85%,rgba(30,50,110,.18),transparent 70%),#04060a;overflow:hidden}
     .pf2::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.55;background-image:radial-gradient(1px 1px at 20px 30px,#fff,transparent),radial-gradient(1px 1px at 140px 90px,rgba(255,255,255,.7),transparent),radial-gradient(1.4px 1.4px at 260px 40px,rgba(255,255,255,.8),transparent),radial-gradient(1px 1px at 330px 170px,#fff,transparent),radial-gradient(1px 1px at 80px 210px,rgba(255,255,255,.6),transparent),radial-gradient(1.2px 1.2px at 210px 260px,rgba(255,255,255,.7),transparent);background-size:380px 300px}
     .pf2-in{position:relative;max-width:1280px;margin:0 auto;padding:22px 24px 40px}
@@ -782,8 +782,6 @@
     .pf2-modal p b{color:#fff}
     .pf2-modal .x{float:right;border:0;background:transparent;color:rgba(255,255,255,.7);font-size:24px;line-height:1}
     /* the faint preview dot (bottom-right) — the NhDot pattern from index.html */
-    .pf2-dotbtn{position:fixed;right:10px;bottom:10px;z-index:70;width:12px;height:12px;border-radius:50%;border:0;padding:0;background:rgba(255,255,255,.14);opacity:.5;cursor:pointer}
-    .pf2-dotbtn:hover{opacity:1;background:rgba(242,211,91,.6)}
     /* round 39 (Shaka: "when the screen is a little smaller the spark lines get behind the text… text goes out past the box"):
        the squeeze zone between the phone rules and the full desktop — probes/pf2-squeeze.js scans it at ten widths */
     @media (max-width:1280px){.pf2-deck{grid-template-columns:repeat(6,minmax(0,1fr))}.pf2-deck.cut .pf2-wc:nth-child(n+25){display:none}
@@ -1003,7 +1001,6 @@
     };
 
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
-    const fmtComma=(n,dec=2)=>n==null||isNaN(n)?'\u2014':Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtDollar=(n,dec=2)=>n==null||isNaN(n)?'\u2014':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
     const fmtAbbr=n=>{if(n==null||isNaN(n))return'\u2014';const num=Number(n);if(num>=1e12)return(num/1e12).toFixed(2)+'T';if(num>=1e9)return(num/1e9).toFixed(2)+'B';if(num>=1e6)return(num/1e6).toFixed(2)+'M';if(num>=1e3)return(num/1e3).toFixed(2)+'K';return Math.floor(num).toLocaleString('en-US')};
     // Abbreviated price with subscript-zero notation, e.g. $0.0₅3764 for very small prices. Returns a React node.
@@ -1216,7 +1213,6 @@
     const PTGC_TOKEN_ADDR='0x94534EeEe131840b1c0F61847c572228bdfDDE93';
     const PTGC_STAKING_ADDR='0xC71f597a2AC39E47F07102E849d18489C96f39EF';
     const UFO_TOKEN_ADDR='0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6';
-    const UFO_TOTAL_SUPPLY=999999999051; // _tTotal from the contract (human units, 18 decimals)
     
     const SEL={
       balanceOf:'0x70a08231',totalSend:'0xc64a041b',totalReceived:'0x4df9cfb3',
@@ -2713,21 +2709,15 @@
     };
 
     /* Expects (all defined before this file runs): PfLeagues.jsx, PfHistory.jsx, PfTx.jsx, plus the classic page's globals
-       (TOKENS, fmtDollar, usd, agg / dp / prices / portfolioData passed in as props, PF_V2_LIVE…). */
+       (TOKENS, fmtDollar, usd, agg / dp / prices / portfolioData passed in as props). */
     /* ===== PORTFOLIO v2 (2026-10-13) — the page body of design/portfolio/mock-portfolio-v4.html, built by tools/pf-v2.py =====
-       HIDDEN: PF_V2_LIVE=false → the classic body stays the default and a faint dot bottom-right (PfV2Dot) flips this device
-       to v2 and back (localStorage LS_PF_V2). Go-live = PF_V2_LIVE=true (the dot goes, v2 for everyone).
-       Same state, same loaders, same maths as the classic body (agg, dp, getHoldingCreatures, LEAGUE_TIERS) — only the look
-       is new. Step 2 (not built yet): the value history from real chain balances and Recent Transactions (placeholders below). */
-    const PF_V2_LIVE=true;    // GO-LIVE 2026-10-16: Portfolio v2 for everyone (the dot is gone)
-    const LS_PF_V2='grays_pf_v2_preview';
-    const pfV2Saved=()=>{try{return localStorage.getItem(LS_PF_V2)==='1'}catch(e){return false}};
+       LIVE for everyone since 2026-10-16; the classic body, the preview dot and PF_V2_LIVE were removed 2026-10-20
+       (tools/pf-cleanup.py). Same state, same loaders, same maths as the classic page had (agg, dp, getHoldingCreatures,
+       LEAGUE_TIERS) — PortfolioPage owns the state and passes it in. */
+    try{localStorage.removeItem('grays_pf_v2_preview');}catch(e){}   // 2026-10-20: the old preview-dot flag, now meaningless
     const PF_SEA_V=4;   // = index.html SEA_ART_V (the sea art files are shared: logos/panels/sea-*.webp)
     const PF_SEA={'\u{1F531}':'trident','\u{1F40B}':'whale','\u{1F988}':'shark','\u{1F42C}':'dolphin','\u{1F991}':'squid','\u{1F422}':'turtle','\u{1F990}':'shrimp','\u{1F41A}':'shell'};
     const pfSea=e=>`logos/panels/sea-${PF_SEA[e]||'shell'}.webp?v=${PF_SEA_V}`;
-    const PfV2Dot=({on,toggle})=>(
-      <button className="pf2-dotbtn" onClick={toggle} aria-label={on?'Back to the current portfolio page':'Preview the new portfolio page'} title={on?'Back to the current page':'Preview'}></button>
-    );
     /* current tier → next tier, the classic LeagueProgress maths */
     const pfLeague=(balance,supply)=>{
       if(!(balance>0))return null;
@@ -3278,14 +3268,11 @@
       const[checkedWallets,setCheckedWallets]=useState({});
       const[editingWallet,setEditingWallet]=useState(null);
       const[editWalletName,setEditWalletName]=useState('');
-      const[showWalletBreakdown,setShowWalletBreakdown]=useState(false);
       const[moonMathActive,setMoonMathActive]=useState(false);
       const[customPrices,setCustomPrices]=useState({ptgc:'',ufo:'',pls:''});
       const[showPtgcLeagues,setShowPtgcLeagues]=useState(false);
       const[showUfoLeagues,setShowUfoLeagues]=useState(false);
-      const[pfV2,setPfV2]=useState(()=>PF_V2_LIVE||pfV2Saved());   // Portfolio v2 (2026-10-13): hidden preview, see PortfolioV2
       const updateWalletV2=(addr,patch)=>setWallets(prev=>prev.map(w=>w.address.toLowerCase()===addr?{...w,...patch}:w));   // Portfolio v2 round 2: the Edit window
-      const togglePfV2=()=>setPfV2(v=>{const n=!v;try{n?localStorage.setItem(LS_PF_V2,'1'):localStorage.removeItem(LS_PF_V2);}catch(e){}try{window.scrollTo(0,0);}catch(e){}return n;});
       
       const ATH_PRICES={ptgc:0.00133,ufo:0.000113,pls:0.00029};
       
@@ -3499,27 +3486,7 @@
       };
       
       const truncAddr=a=>a?a.slice(0,6)+'...'+a.slice(-4):'';
-      const dataLoaded=Object.keys(portfolioData).length>0;
       const anyLoading=Object.keys(loadingAddrs).length>0;
-      
-      // PTGC Donut data (non-overlapping segments)
-      const ptgcDonut=[
-        {label:'Liquid',value:agg.ptgc.walletFree},
-        {label:'Staked (not locked)',value:agg.ptgc.stakedOnly},
-        {label:'Locked & Staked',value:agg.ptgc.locked},
-      ].filter(d=>d.value>0);
-      const ptgcDonutColors=['#D9CA5D','#a855f7','#ec4899'];
-      
-      const formatLockTime=(endTime)=>{
-        if(!endTime)return'—';
-        const now=Date.now()/1000;
-        if(endTime<=now)return'Unlockable';
-        const diff=endTime-now;
-        const days=Math.floor(diff/86400);
-        if(days>365)return Math.floor(days/365)+'y '+Math.floor((days%365)/30)+'m';
-        if(days>30)return Math.floor(days/30)+'m '+days%30+'d';
-        return days+'d';
-      };
       
       return(
         <div className="min-h-screen bg-[#0a0a0a]">
@@ -3573,578 +3540,8 @@
           </header>
           )}
           
-          {/* Portfolio v2 (2026-10-13): the new body behind the faint dot; the classic body below is untouched */}
-          {pfV2?<PortfolioV2 updateWallet={updateWalletV2} wallets={wallets} portfolioData={portfolioData} loadingAddrs={loadingAddrs} scanningAddr={scanningAddr} agg={agg} dp={dp} prices={prices} changes={changes} groups={groups} isWalletChecked={isWalletChecked} toggleWallet={toggleWallet} selectAllWallets={selectAllWallets} deselectAllWallets={deselectAllWallets} removeWallet={removeWallet} fetchWalletData={fetchWalletData} retryFailedReflScans={retryFailedReflScans} truncAddr={truncAddr} initialLoad={initialLoad} inputAddr={inputAddr} setInputAddr={setInputAddr} inputName={inputName} setInputName={setInputName} inputGroup={inputGroup} setInputGroup={setInputGroup} newGroupName={newGroupName} setNewGroupName={setNewGroupName} addWallet={addWallet} setEditingWallet={setEditingWallet} setEditWalletName={setEditWalletName} setShowPtgcLeagues={setShowPtgcLeagues} setShowUfoLeagues={setShowUfoLeagues} moonMathActive={moonMathActive} setMoonMathActive={setMoonMathActive} customPrices={customPrices} setCustomPrices={setCustomPrices} ATH_PRICES={ATH_PRICES}/>:(<>
-          {/* Address Input + Moon Math side by side */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Left: Address Input + Wallet Tags */}
-              <div className="flex-1">
-                <div className="bg-[#111]/80 border border-white/10 rounded-xl p-4">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1">
-                      <input value={inputAddr} onChange={e=>setInputAddr(e.target.value)} placeholder="Paste wallet address (0x...)" className="w-full bg-black/50 border border-white/20 rounded-lg px-4 py-2.5 text-white font-mono text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60 transition-all" onKeyDown={e=>e.key==='Enter'&&addWallet()}/>
-                    </div>
-                    <input value={inputName} onChange={e=>setInputName(e.target.value)} placeholder="Label (optional)" className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/30 focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60"/>
-                    <select value={inputGroup} onChange={e=>setInputGroup(e.target.value)} className="sm:w-36 bg-black/50 border border-white/20 rounded-lg px-3 py-2.5 text-white text-sm focus:border-[#D9CA5D]/50 focus:outline-none focus-visible:outline-white/60">
-                      <option value="Default">Default Group</option>
-                      {Object.keys(groups).filter(g=>g!=='Default').map(g=><option key={g} value={g}>{g}</option>)}
-                      <option value="__new">+ New Group</option>
-                    </select>
-                    <button onClick={addWallet} className="px-6 py-2.5 rounded-lg font-bold text-sm transition-all bg-gradient-to-r from-[#D9CA5D] to-[#7CFC00] text-black hover:opacity-90">+ Add</button>
-                  </div>
-                  {inputGroup==='__new'&&(
-                    <div className="mt-3 flex gap-2">
-                      <input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="New group name..." className="flex-1 bg-black/50 border border-white/20 rounded-lg px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus-visible:outline-white/60"/>
-                      <button onClick={()=>{if(newGroupName.trim()){setInputGroup(newGroupName.trim());setNewGroupName('')}}} className="px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20">Create</button>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Wallet Tags */}
-                {wallets.length>0&&(
-                  <div className="mt-3">
-                    {Object.entries(groups).map(([groupName,groupWallets])=>(
-                      <div key={groupName} className="mb-3">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="text-white/50 text-sm uppercase font-bold">{groupName} ({groupWallets.length})</div>
-                          {(()=>{
-                            const allChecked=wallets.every(w=>isWalletChecked(w.address));
-                            const noneChecked=wallets.every(w=>!isWalletChecked(w.address));
-                            return(
-                              <>
-                                <button onClick={selectAllWallets} className={`px-2.5 py-0.5 rounded text-[11px] font-bold transition-all ${allChecked?'bg-white/5 text-white/20 cursor-default':'bg-[#D9CA5D]/10 border border-[#D9CA5D]/20 text-[#D9CA5D] hover:bg-[#D9CA5D]/20'}`} disabled={allChecked}>Select All</button>
-                                <button onClick={deselectAllWallets} className={`px-2.5 py-0.5 rounded text-[11px] font-bold transition-all ${noneChecked?'bg-white/5 text-white/20 cursor-default':'bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'}`} disabled={noneChecked}>Deselect All</button>
-                              </>
-                            );
-                          })()}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {groupWallets.map(w=>{
-                            const addr=w.address.toLowerCase();
-                            const isLoading=!!loadingAddrs[addr];
-                            const failed=!!(portfolioData[addr]&&portfolioData[addr].error);
-                            const hasData=!!portfolioData[addr]&&!failed;
-                            const checked=isWalletChecked(addr);
-                            return(
-                              <div key={addr} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${!checked?'border-white/5 bg-white/[0.02] opacity-50':hasData?'border-[#D9CA5D]/30 bg-[#D9CA5D]/5':failed?'border-red-400/30 bg-red-400/5':'border-white/10 bg-white/5'} ${isLoading?'animate-pulse-slow':''}`}>
-                                <input type="checkbox" checked={checked} onChange={()=>toggleWallet(addr)} className="w-4 h-4 rounded accent-[#D9CA5D] cursor-pointer" aria-label={`Include ${w.name||truncAddr(w.address)} in totals`}/>
-                                <span className={`w-2 h-2 rounded-full ${hasData?'bg-green-400':isLoading?'bg-yellow-400':failed?'bg-red-400':'bg-white/30'}`}></span>
-                                <span className="text-white/80 font-mono text-sm">{w.name||truncAddr(w.address)}</span>
-                                {failed&&!isLoading&&<button onClick={()=>fetchWalletData(w.address)} className="text-red-300 hover:text-white text-xs px-1.5 py-0.5 rounded border border-red-400/40" aria-label={`Retry ${w.name||truncAddr(w.address)} — the chain read failed`}>read failed · retry</button>}
-                                <button onClick={()=>{setEditingWallet(addr);setEditWalletName(w.name||'')}} className="text-white/30 hover:text-[#D9CA5D] text-sm transition-colors">{'\u270F'}</button>
-                                <button onClick={()=>removeWallet(w.address)} className="text-white/30 hover:text-red-400 text-sm ml-0">{'\u2715'}</button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              {/* Right: Moon Math Box */}
-              <div className={`lg:w-80 flex-shrink-0 self-start rounded-xl border overflow-hidden transition-all ${moonMathActive?'border-purple-500/30 bg-gradient-to-b from-purple-500/10 via-[#111]/90 to-[#111]/90':'border-white/10 bg-[#111]/80'}`}>
-                <button onClick={()=>setMoonMathActive(!moonMathActive)} className={`w-full flex items-center justify-between px-4 group ${moonMathActive?'py-3':'py-[22px]'}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{'\u{1F319}'}</span>
-                    <span className="font-orbitron text-base font-bold" style={{background:'linear-gradient(90deg,#a855f7,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MOON MATH</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${moonMathActive?'bg-green-500/20 text-green-400':'bg-white/5 text-white/30'}`}>{moonMathActive?'ON':'OFF'}</span>
-                  </div>
-                  <span className={`text-white/40 text-base transition-transform ${moonMathActive?'rotate-180':''}`}>{'\u25BC'}</span>
-                </button>
-                {moonMathActive&&(
-                  <div className="px-4 pb-4">
-                    <div className="text-white/40 text-xs mb-3">Enter custom prices — all USD values below will update.</div>
-                    <div className="space-y-2">
-                      <div>
-                        <div className="text-[#D9CA5D] text-xs font-bold uppercase mb-1">PTGC Price</div>
-                        <input type="number" step="any" value={customPrices.ptgc} onChange={e=>setCustomPrices(p=>({...p,ptgc:e.target.value}))} placeholder={prices.ptgc?prices.ptgc.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#D9CA5D]/30 rounded-lg px-3 py-2 text-[#D9CA5D] text-sm font-mono placeholder-white/20 focus:border-[#D9CA5D]/60 focus:outline-none focus-visible:outline-white/60"/>
-                      </div>
-                      <div>
-                        <div className="text-[#7CFC00] text-xs font-bold uppercase mb-1">UFO Price</div>
-                        <input type="number" step="any" value={customPrices.ufo} onChange={e=>setCustomPrices(p=>({...p,ufo:e.target.value}))} placeholder={prices.ufo?prices.ufo.toFixed(6):'0.00'} className="w-full bg-black/50 border border-[#7CFC00]/30 rounded-lg px-3 py-2 text-[#7CFC00] text-sm font-mono placeholder-white/20 focus:border-[#7CFC00]/60 focus:outline-none focus-visible:outline-white/60"/>
-                      </div>
-                      <div>
-                        <div className="text-blue-400 text-xs font-bold uppercase mb-1">PLS Price</div>
-                        <input type="number" step="any" value={customPrices.pls} onChange={e=>setCustomPrices(p=>({...p,pls:e.target.value}))} placeholder={prices.pls?prices.pls.toFixed(6):'0.00'} className="w-full bg-black/50 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-400 text-sm font-mono placeholder-white/20 focus:border-blue-500/60 focus:outline-none focus-visible:outline-white/60"/>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <button onClick={()=>setCustomPrices({ptgc:String(ATH_PRICES.ptgc),ufo:String(ATH_PRICES.ufo),pls:String(ATH_PRICES.pls)})} className="flex-1 px-3 py-2 rounded-lg font-bold text-xs bg-purple-500/20 border border-purple-500/30 text-purple-300 hover:bg-purple-500/30 transition-all">{'\u{1F680}'} All Time Highs</button>
-                      <button onClick={()=>setCustomPrices({ptgc:'',ufo:'',pls:''})} className="flex-1 px-3 py-2 rounded-lg font-bold text-xs bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition-all">Reset to Live</button>
-                    </div>
-                    {(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='')&&(
-                      <div className="mt-2 text-purple-400/60 text-xs">{'\u26A0'} Simulated prices active</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* Empty State */}
-          {wallets.length===0&&!initialLoad&&(
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center">
-              <div className="flex justify-center mb-6 gap-4">
-                <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-24 h-24 opacity-30" style={{filter:'drop-shadow(0 0 15px rgba(217,202,93,0.3))'}}/>
-                <img src={TOKENS.UFO.logo} alt="UFO" className="w-24 h-24 opacity-30" style={{filter:'drop-shadow(0 0 15px rgba(124,252,0,0.3))'}}/>
-              </div>
-              <h2 className="text-3xl font-bold text-white/40 mb-2">No Wallets Added</h2>
-              <p className="text-white/30 text-base mb-6">Paste a wallet address above to view your PTGC & UFO holdings</p>
-              <p className="text-white/25 text-sm">Or use <span className="text-[#D9CA5D]/50">Load Code</span> to restore a saved portfolio</p>
-            </div>
-          )}
-          
-          {/* Loading initial */}
-          {initialLoad&&(
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-[#D9CA5D]/30 border-t-transparent animate-spin"></div>
-              <div className="text-white/50">Initializing...</div>
-            </div>
-          )}
-          
-          {/* Portfolio Data */}
-          {dataLoaded&&(
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8">
-              
-              {moonMathActive&&(customPrices.ptgc!==''||customPrices.ufo!==''||customPrices.pls!=='')&&(
-                <div className="mb-4 px-4 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center gap-2 text-purple-300 text-sm font-medium">
-                  <span>{'\u{1F319}'}</span>
-                  <span>Moon Math Active — USD values below reflect custom prices</span>
-                </div>
-              )}
-              
-              {/* Total Portfolio Summary Bar */}
-              {(()=>{
-                const totalPtgcUSD=usd(agg.ptgc.totalHolding,dp.ptgc);
-                const totalUfoTokens=agg.ufo.balance;
-                const totalUfoUSD=usd(totalUfoTokens,dp.ufo);
-                const grandTotal=(totalPtgcUSD==null&&totalUfoUSD==null)?null:((totalPtgcUSD||0)+(totalUfoUSD||0));
-                const ptgcPct=grandTotal>0?((totalPtgcUSD||0)/grandTotal*100):0;
-                const ufoPct=grandTotal>0?((totalUfoUSD||0)/grandTotal*100):0;
-                return(
-                <div className="mb-6 bg-[#111]/80 border-2 border-white/20 rounded-2xl px-6 py-4">
-                  <div className="flex items-center gap-8">
-                    {/* Mini Donut */}
-                    <div className="flex-shrink-0">
-                      <canvas ref={el=>{
-                        if(!el)return;
-                        const ctx=el.getContext('2d');
-                        const s=90,c=s/2,r=34,lw=16;
-                        el.width=s;el.height=s;
-                        ctx.clearRect(0,0,s,s);
-                        const segs=[{pct:ptgcPct,color:'#D9CA5D'},{pct:ufoPct,color:'#7CFC00'}];
-                        let start=-Math.PI/2;
-                        segs.forEach(seg=>{
-                          if(seg.pct<=0)return;
-                          const angle=(seg.pct/100)*Math.PI*2;
-                          ctx.beginPath();ctx.arc(c,c,r,start,start+angle);
-                          ctx.strokeStyle=seg.color;ctx.lineWidth=lw;ctx.lineCap='butt';ctx.stroke();
-                          start+=angle;
-                        });
-                        if(grandTotal===0){ctx.beginPath();ctx.arc(c,c,r,0,Math.PI*2);ctx.strokeStyle='#333';ctx.lineWidth=lw;ctx.stroke();}
-                      }} className="w-[90px] h-[90px]"/>
-                    </div>
-                    
-                    {/* Total Value */}
-                    <div className="flex-shrink-0">
-                      <div className="text-white/40 text-sm uppercase font-bold mb-1">Total Portfolio Value of the Grays</div>
-                      <div className="text-white text-4xl font-bold">{fmtDollar(grandTotal)}</div>
-                    </div>
-                    
-                    {/* Spacer */}
-                    <div className="flex-1"/>
-                    
-                    {/* PTGC Summary */}
-                    <div className="flex items-center gap-3">
-                      <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-14 h-14 flex-shrink-0"/>
-                      <div className="text-[#D9CA5D] text-3xl font-bold">{fmtAbbr(agg.ptgc.totalHolding)}</div>
-                      <div className="text-white text-2xl font-bold">{fmtDollar(totalPtgcUSD)}</div>
-                      <div className="text-[#D9CA5D] text-2xl font-bold">{ptgcPct.toFixed(1)}%</div>
-                    </div>
-                    
-                    {/* Divider */}
-                    <div className="w-px h-14 bg-white/10"></div>
-                    
-                    {/* UFO Summary */}
-                    <div className="flex items-center gap-3">
-                      <img src={TOKENS.UFO.logo} alt="UFO" className="w-14 h-14 flex-shrink-0"/>
-                      <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(totalUfoTokens)}</div>
-                      <div className="text-white text-2xl font-bold">{fmtDollar(totalUfoUSD)}</div>
-                      <div className="text-[#7CFC00] text-2xl font-bold">{ufoPct.toFixed(1)}%</div>
-                    </div>
-                  </div>
-                </div>
-                );
-              })()}
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                {/* ===== PTGC SECTION ===== */}
-                <div className="bg-gradient-to-b from-[#D9CA5D]/10 via-[#111]/80 to-[#111]/80 border-[3px] border-[#D9CA5D]/40 rounded-2xl overflow-hidden">
-                  {/* PTGC Header */}
-                  <div className="p-5 border-b border-[#D9CA5D]/10">
-                    <div className="flex items-center gap-4 mb-4">
-                      <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-16 h-16" style={{filter:'drop-shadow(0 0 12px rgba(217,202,93,0.7)) drop-shadow(0 0 30px rgba(217,202,93,0.3))'}}/>
-                      <div className="flex-1">
-                        <div className="font-orbitron text-3xl font-bold text-[#D9CA5D]">PTGC</div>
-                        <div className="text-white/40 text-lg">The Grays Currency</div>
-                        <div className="text-[#D9CA5D]/60 text-sm font-medium mt-0.5">Live Price: {fmtPriceNode(prices.ptgc)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[#D9CA5D] text-3xl font-bold">{fmtAbbr(agg.ptgc.totalHolding)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar(usd(agg.ptgc.totalHolding,dp.ptgc))}</div>
-                        {(()=>{
-                          const creatures=getHoldingCreatures(agg.ptgc.totalHolding,'PTGC');
-                          return(
-                            <div className="flex items-center gap-1.5 justify-end mt-1.5" style={{minHeight:'26px'}}>
-                              {creatures.map((c,i)=>(
-                                <div key={i} className="flex items-center gap-0.5 bg-black/30 rounded px-1.5 py-0.5" title={c.name}>
-                                  <span className="text-base">{c.emoji}</span>
-                                  <span className="text-[#D9CA5D]/70 text-xs font-bold">x{c.count}</span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                        <div className="flex justify-end mt-2">
-                          <button onClick={()=>setShowPtgcLeagues(true)} className="px-3 py-1 rounded-lg text-sm font-bold text-purple-300 border border-purple-500/50 bg-purple-500/20 hover:bg-purple-500/30 transition-colors">Leagues</button>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Lifetime Earned - Three Boxes */}
-                    <div className="text-white/50 text-base uppercase font-bold mb-2">{'\u2B50'} Lifetime Earned</div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-center">
-                        <div className="text-purple-400/70 text-base uppercase mb-1">Staking</div>
-                        <div className="text-purple-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.claimed)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.claimed,dp.ptgc))}</div>
-                      </div>
-                      <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-3 text-center">
-                        <div className="text-pink-400/70 text-base uppercase mb-1">Locking</div>
-                        <div className="text-pink-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.lockClaimed)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.lockClaimed,dp.ptgc))}</div>
-                      </div>
-                      <div className="bg-[#D9CA5D]/10 border border-[#D9CA5D]/20 rounded-lg p-3 text-center">
-                        <div className="text-[#D9CA5D]/70 text-base uppercase mb-1">Reflections</div>
-                        <div className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(agg.ptgc.reflections)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.reflections,dp.ptgc))}</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
-                      <div className="text-white/50 text-base uppercase font-bold">Total Lifetime Earned</div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-white font-bold text-2xl">{fmtComma(Math.floor(agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections))} <span className="text-white/40 text-lg font-normal">PTGC</span></span>
-                        <span className="text-white/30">•</span>
-                        <span className="text-green-400 font-bold text-xl">{fmtDollar(usd((agg.ptgc.claimed+agg.ptgc.lockClaimed+agg.ptgc.reflections),dp.ptgc))}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-5">
-                    <LeagueProgress balance={agg.ptgc.totalHolding} supply={333333333333} price={dp.ptgc} accent="#D9CA5D"/>
-                    <div className="flex items-center gap-6 mb-5">
-                      {ptgcDonut.length>0?(
-                        <>
-                          <DonutChart data={ptgcDonut} colors={ptgcDonutColors} size={140}/>
-                          <div className="space-y-3 flex-1">
-                            {ptgcDonut.map((d,i)=>(
-                              <div key={i} className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-3.5 h-3.5 rounded-full" style={{background:ptgcDonutColors[i]}}></div>
-                                  <span className="text-white/60 text-lg">{d.label}</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-white font-bold text-lg">{fmtAbbr(d.value)}</span>
-                                  <span className="text-white/40 text-base ml-2">{agg.ptgc.totalHolding>0?((d.value/agg.ptgc.totalHolding)*100).toFixed(1):'0'}%</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      ):(
-                        <div className="text-center w-full py-4 text-white/40 text-lg">No PTGC holdings found</div>
-                      )}
-                    </div>
-                    
-                    {/* PTGC Detail Cards */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="bg-black/30 border border-[#D9CA5D]/15 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">Liquid</div>
-                        <div className="text-[#D9CA5D] font-bold text-2xl">{fmtAbbr(agg.ptgc.walletFree)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.walletFree,dp.ptgc))}</div>
-                      </div>
-                      <div className="bg-black/30 border border-purple-500/20 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">Staked</div>
-                        <div className="text-purple-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.staked)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.staked,dp.ptgc))}</div>
-                      </div>
-                      <div className="bg-black/30 border border-pink-500/20 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">Locked & Staked</div>
-                        <div className="text-pink-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.locked)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.locked,dp.ptgc))}</div>
-                      </div>
-                      <div className="bg-black/30 border border-green-500/20 rounded-lg p-4">
-                        <div className="text-white/50 text-base uppercase">Pending Rewards</div>
-                        <div className="text-green-400 font-bold text-2xl">{fmtAbbr(agg.ptgc.totalPending)}</div>
-                        <div className="text-white/40 text-base">{fmtDollar(usd(agg.ptgc.totalPending,dp.ptgc))}</div>
-                      </div>
-                    </div>
-                    
-                    {/* Pending Breakdown */}
-                    {(agg.ptgc.pendingStake>0||agg.ptgc.pendingLocks>0)&&(
-                      <div className="bg-black/20 border border-white/5 rounded-lg p-4 mb-4">
-                        <div className="text-[#D9CA5D] text-base uppercase mb-3 font-bold">Claimable Rewards Breakdown</div>
-                        <div className="flex justify-between text-lg mb-2">
-                          <span className="text-white/60">Staking Rewards</span>
-                          <span className="text-purple-400 font-bold">{fmtAbbr(agg.ptgc.pendingStake)} <span className="text-white/40 text-base">({fmtDollar(usd(agg.ptgc.pendingStake,dp.ptgc))})</span></span>
-                        </div>
-                        <div className="flex justify-between text-lg">
-                          <span className="text-white/60">Lock Rewards</span>
-                          <span className="text-pink-400 font-bold">{fmtAbbr(agg.ptgc.pendingLocks)} <span className="text-white/40 text-base">({fmtDollar(usd(agg.ptgc.pendingLocks,dp.ptgc))})</span></span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Lock Positions */}
-                    {agg.ptgc.locks.length>0&&(
-                      <div className="bg-black/20 border border-pink-500/10 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="text-white/50 text-base uppercase">{'\u{1F512}'} Lock Positions ({agg.ptgc.locks.length})</div>
-                          <a href="https://goptgc.com" target="_blank" rel="noopener noreferrer" className="text-yellow-400/60 hover:text-yellow-400 text-sm transition-all">Verify on goptgc.com before unlocking</a>
-                        </div>
-                        <div className="space-y-2">
-                          {agg.ptgc.locks.map((lock,i)=>{
-                            const isUnlockable=lock.endTime<=Date.now()/1000;
-                            return(
-                              <div key={i} className={`grid grid-cols-3 items-center px-4 py-3 rounded-lg border ${isUnlockable?'border-green-500/20 bg-green-500/5':'border-pink-500/10 bg-black/30'}`}>
-                                <div>
-                                  <div className="text-white font-bold text-lg">{fmtAbbr(lock.amount)} PTGC</div>
-                                  <div className="text-white/40 text-base">{fmtDollar(usd(lock.amount,dp.ptgc))}</div>
-                                </div>
-                                <div className="text-center">
-                                  <div className={`text-lg font-bold ${isUnlockable?'text-green-400':'text-pink-400'}`}>{formatLockTime(lock.endTime)}</div>
-                                  <div className="text-white/40 text-base">{isUnlockable?'Ready!':'remaining'}</div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-green-400 text-lg font-bold">+{fmtAbbr(lock.pending)}</div>
-                                  <div className="text-white/40 text-base">pending</div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    
-                  </div>
-                </div>
-                
-                {/* ===== UFO SECTION ===== */}
-                <div className="bg-gradient-to-b from-[#7CFC00]/10 via-[#111]/80 to-[#111]/80 border-[3px] border-[#7CFC00]/40 rounded-2xl overflow-hidden">
-                  {/* UFO Header */}
-                  <div className="p-5 border-b border-[#7CFC00]/10">
-                    <div className="flex items-center gap-4 mb-4">
-                      <img src={TOKENS.UFO.logo} alt="UFO" className="w-16 h-16" style={{filter:'drop-shadow(0 0 12px rgba(124,252,0,0.7)) drop-shadow(0 0 30px rgba(124,252,0,0.3))'}}/>
-                      <div className="flex-1">
-                        <div className="font-orbitron text-3xl font-bold text-[#7CFC00]">UFO</div>
-                        <div className="text-white/40 text-lg">UFO Token</div>
-                        <div className="text-[#7CFC00]/60 text-sm font-medium mt-0.5">Live Price: {fmtPriceNode(prices.ufo)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[#7CFC00] text-3xl font-bold">{fmtAbbr(agg.ufo.balance)}</div>
-                        <div className="text-green-400 text-lg font-bold">{fmtDollar(usd(agg.ufo.balance,dp.ufo))}</div>
-                        {(()=>{
-                          const creatures=getHoldingCreatures(agg.ufo.balance,'UFO');
-                          return(
-                            <div className="flex items-center gap-1.5 justify-end mt-1.5" style={{minHeight:'26px'}}>
-                              {creatures.map((c,i)=>(
-                                <div key={i} className="flex items-center gap-0.5 bg-black/30 rounded px-1.5 py-0.5" title={c.name}>
-                                  <span className="text-base">{c.emoji}</span>
-                                  <span className="text-[#7CFC00]/70 text-xs font-bold">x{c.count}</span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                        <div className="flex justify-end mt-2">
-                          <button onClick={()=>setShowUfoLeagues(true)} className="px-3 py-1 rounded-lg text-sm font-bold text-purple-300 border border-purple-500/50 bg-purple-500/20 hover:bg-purple-500/30 transition-colors">Leagues</button>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Lifetime Earned — single Reflections box centered & sized like a PTGC box; the invisible
-                        total-bar slot below reserves the same space PTGC's "Total Lifetime Earned" uses, so the
-                        league bars and donuts below line up across both cards. */}
-                    <div className="text-white/50 text-base uppercase font-bold mb-2">{'\u2B50'} Lifetime Earned</div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div></div>
-                      <div className="bg-[#7CFC00]/10 border border-[#7CFC00]/20 rounded-lg p-3 text-center">
-                        <div className="text-[#7CFC00]/70 text-base uppercase mb-1">Reflections</div>
-                        {agg.ufo.reflState==='pending'?(
-                          <div className="text-white/40 text-sm italic py-2" role="status">scanning<br/>{agg.ufo.reflPending} wallet{agg.ufo.reflPending>1?'s':''}{'\u2026'}</div>
-                        ):agg.ufo.reflState==='failed'?(
-                          <div className="py-1"><div className="text-amber-300/80 text-sm">unavailable</div><button onClick={retryFailedReflScans} className="mt-1 text-xs px-2 py-0.5 rounded border border-amber-300/40 text-amber-200 hover:text-white" aria-label="Retry the UFO reflections scan for the wallets that failed">Retry</button></div>
-                        ):(
-                          <>
-                            <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(agg.ufo.reflections)}</div>
-                            <div className="text-white/40 text-base">{fmtDollar(usd(agg.ufo.reflections,dp.ufo))}</div>
-                          </>
-                        )}
-                      </div>
-                      <div></div>
-                    </div>
-                    {/* Total Lifetime Earned — styled to match PTGC's bar (white token count · green dollar).
-                        For UFO this equals reflections (its only earning); kept to one line so the row height
-                        matches PTGC's bar and the league/donut below stay aligned. */}
-                    <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-3 flex items-center justify-between">
-                      <div className="text-white/50 text-base uppercase font-bold">Total Lifetime Earned</div>
-                      {agg.ufo.reflState==='pending'?(
-                        <span className="text-white/40 text-base italic">scanning the chain{'\u2026'}</span>
-                      ):agg.ufo.reflState==='failed'?(
-                        <span className="text-amber-300/80 text-base">unavailable {'\u2014'} the chain read failed for {agg.ufo.reflFailed} wallet{agg.ufo.reflFailed>1?'s':''}</span>
-                      ):(
-                        <div className="flex items-center gap-3">
-                          <span className="text-white font-bold text-2xl">{fmtComma(Math.floor(agg.ufo.reflections))} <span className="text-white/40 text-lg font-normal">UFO</span></span>
-                          <span className="text-white/30">•</span>
-                          <span className="text-green-400 font-bold text-xl">{fmtDollar(usd(agg.ufo.reflections,dp.ufo))}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {/* UFO position anatomy */}
-                  <div className="p-5">
-                    <LeagueProgress balance={agg.ufo.balance} supply={UFO_TOTAL_SUPPLY} price={dp.ufo} accent="#7CFC00"/>
-                    {/* Principal vs Reflections donut — the composition of your UFO position (mirrors PTGC's donut) */}
-                    {(()=>{
-                      const bal=agg.ufo.balance, refl=agg.ufo.reflections;
-                      if(!(bal>0)||refl==null)return null;   // wait for reflections to resolve before drawing
-                      const principal=Math.max(0,bal-refl);
-                      const donut=[{label:'Principal',value:principal},{label:'Reflections',value:refl}].filter(d=>d.value>0);
-                      const colors=['#7CFC00','#22d3ee'];
-                      return(
-                        <div className="flex items-center gap-6 mb-5">
-                          <DonutChart data={donut} colors={colors} size={140}/>
-                          <div className="space-y-3 flex-1">
-                            {donut.map((d,i)=>{
-                              const pct=bal>0?(d.value/bal)*100:0;
-                              return(
-                                <div key={i} className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-3.5 h-3.5 rounded-full" style={{background:colors[i]}}></div>
-                                    <span className="text-white/60 text-lg">{d.label}</span>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-white font-bold text-lg">{fmtAbbr(d.value)}</span>
-                                    <span className="text-white/40 text-base ml-2">{pct>0&&pct<0.1?pct.toFixed(3):pct.toFixed(1)}%</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {(()=>{
-                      const bal=agg.ufo.balance;
-                      const refl=agg.ufo.reflections;                                   // number | null (pending)
-                      const principal=refl==null?null:Math.max(0,bal-refl);             // what was acquired
-                      const yieldPct=(refl==null||principal==null||principal<=0)?null:(refl/principal*100);
-                      const supplyPct=bal>0?(bal/UFO_TOTAL_SUPPLY*100):0;
-                      const fmtPct=(p)=>p==null||isNaN(p)?'\u2014':(p>0&&p<0.01?'<0.01%':p.toFixed(p<1?3:2)+'%');
-                      return(
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
-                            <div className="text-white/50 text-base uppercase">Holdings</div>
-                            <div className="text-[#7CFC00] font-bold text-2xl">{fmtAbbr(bal)}</div>
-                            <div className="text-white/40 text-base">{fmtDollar(usd(bal,dp.ufo))}</div>
-                          </div>
-                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
-                            <div className="text-white/50 text-base uppercase">Principal</div>
-                            <div className="text-[#7CFC00] font-bold text-2xl">{principal==null?'\u2014':fmtAbbr(principal)}</div>
-                            <div className="text-white/40 text-base">{principal==null?'acquired':fmtDollar(usd(principal,dp.ufo))}</div>
-                          </div>
-                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
-                            <div className="text-white/50 text-base uppercase">Reflection Yield</div>
-                            <div className="text-[#7CFC00] font-bold text-2xl">{yieldPct==null?'\u2014':fmtPct(yieldPct)}</div>
-                            <div className="text-white/40 text-base">of principal</div>
-                          </div>
-                          <div className="bg-black/30 border border-[#7CFC00]/15 rounded-lg p-4">
-                            <div className="text-white/50 text-base uppercase">Share of Supply</div>
-                            <div className="text-[#7CFC00] font-bold text-2xl">{supplyPct>0?fmtPct(supplyPct):'\u2014'}</div>
-                            <div className="text-white/40 text-base">of 1T UFO</div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Per-Wallet Breakdown (when multiple wallets) */}
-              {wallets.length>1&&(
-                <div className="mt-6">
-                  <button onClick={()=>setShowWalletBreakdown(!showWalletBreakdown)} className="flex items-center gap-3 w-full text-left mb-3 group">
-                    <h3 className="font-orbitron text-xl font-bold group-hover:opacity-80 transition-opacity" style={{background:'linear-gradient(90deg,#D9CA5D,#7CFC00)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>PER-WALLET BREAKDOWN</h3>
-                    <span className="text-white/50 text-base">({wallets.filter(w=>isWalletChecked(w.address)).length} wallets)</span>
-                    <span className={`text-white/40 text-lg transition-transform ${showWalletBreakdown?'rotate-180':''}`}>{'\u25BC'}</span>
-                  </button>
-                  {showWalletBreakdown&&(
-                  <div className="space-y-3">
-                    {wallets.filter(w=>isWalletChecked(w.address)).map(w=>{
-                      const addr=w.address.toLowerCase();
-                      const d=portfolioData[addr];
-                      if(!d||d.error)return null;
-                      return(
-                        <div key={addr} className="bg-[#111]/80 border border-white/10 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <span className="w-3 h-3 rounded-full bg-green-400"></span>
-                            <span className="text-white font-medium text-lg">{w.name||truncAddr(w.address)}</span>
-                            <span className="text-white/40 font-mono text-base">{truncAddr(w.address)}</span>
-                            <span className="text-white/30 text-sm px-2 py-0.5 rounded bg-white/5">{w.group}</span>
-                            <button onClick={()=>{setEditingWallet(addr);setEditWalletName(w.name||'')}} className="text-white/30 hover:text-[#D9CA5D] text-sm ml-auto transition-colors">{'\u270F\uFE0F'} Edit</button>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div className="bg-black/30 rounded-lg p-3">
-                              <div className="text-[#D9CA5D]/60 text-base">PTGC Total</div>
-                              <div className="text-[#D9CA5D] font-bold text-xl">{fmtAbbr(d.ptgc.totalHolding)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(usd(d.ptgc.totalHolding,dp.ptgc))}</div>
-                            </div>
-                            <div className="bg-black/30 rounded-lg p-3">
-                              <div className="text-[#D9CA5D]/60 text-base">PTGC Pending</div>
-                              <div className="text-green-400 font-bold text-xl">{fmtAbbr(d.ptgc.totalPending)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(usd(d.ptgc.totalPending,dp.ptgc))}</div>
-                            </div>
-                            <div className="bg-black/30 rounded-lg p-3">
-                              <div className="text-[#7CFC00]/60 text-base">UFO Balance</div>
-                              <div className="text-[#7CFC00] font-bold text-xl">{fmtAbbr(d.ufo.balance)}</div>
-                              <div className="text-white/40 text-base">{fmtDollar(usd(d.ufo.balance,dp.ufo))}</div>
-                            </div>
-                            <div className="bg-black/30 rounded-lg p-3">
-                              <div className="text-[#7CFC00]/60 text-base">UFO Reflections</div>
-                              {d.ufo.reflections===undefined?(
-                                <div className="text-white/30 text-sm italic mt-1">{scanningAddr===addr?'scanning\u2026':'queued'}</div>
-                              ):d.ufo.reflections===null?(
-                                <div className="text-amber-300/70 text-sm mt-1" title={d.ufo.reflError||''}>unavailable</div>
-                              ):(
-                                <>
-                                  <div className="text-[#7CFC00] font-bold text-xl">{fmtAbbr(d.ufo.reflections)}</div>
-                                  <div className="text-white/40 text-base">{fmtDollar(usd(d.ufo.reflections,dp.ufo))}</div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          
-          </>)}
+          {/* Portfolio v2 — the page body (tools/pf-v2.py); the classic body was removed 2026-10-20 (tools/pf-cleanup.py) */}
+          <PortfolioV2 updateWallet={updateWalletV2} wallets={wallets} portfolioData={portfolioData} loadingAddrs={loadingAddrs} scanningAddr={scanningAddr} agg={agg} dp={dp} prices={prices} changes={changes} groups={groups} isWalletChecked={isWalletChecked} toggleWallet={toggleWallet} selectAllWallets={selectAllWallets} deselectAllWallets={deselectAllWallets} removeWallet={removeWallet} fetchWalletData={fetchWalletData} retryFailedReflScans={retryFailedReflScans} truncAddr={truncAddr} initialLoad={initialLoad} inputAddr={inputAddr} setInputAddr={setInputAddr} inputName={inputName} setInputName={setInputName} inputGroup={inputGroup} setInputGroup={setInputGroup} newGroupName={newGroupName} setNewGroupName={setNewGroupName} addWallet={addWallet} setEditingWallet={setEditingWallet} setEditWalletName={setEditWalletName} setShowPtgcLeagues={setShowPtgcLeagues} setShowUfoLeagues={setShowUfoLeagues} moonMathActive={moonMathActive} setMoonMathActive={setMoonMathActive} customPrices={customPrices} setCustomPrices={setCustomPrices} ATH_PRICES={ATH_PRICES}/>
           
           {/* Get Code Modal */}
           {showCodeModal&&(
@@ -4216,12 +3613,6 @@
             <PortfolioLeaguesModal token="UFO" price={dp.ufo||prices.ufo} close={()=>setShowUfoLeagues(false)}/>
           )}
           
-          {!PF_V2_LIVE&&<PfV2Dot on={pfV2} toggle={togglePfV2}/>}
-          {/* Footer */}
-          {!pfV2&&<footer className="text-center py-6 border-t border-white/10 mt-4">
-            <p className="text-white/30 text-sm">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.</p>
-            <p className="text-white/25 text-sm mt-1">Your portfolio is saved locally in your browser.</p>
-          </footer>}
         </div>
       );
     };
