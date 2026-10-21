@@ -2721,7 +2721,7 @@
           const jobs=[];wallets.forEach(w=>['PTGC','UFO'].forEach(tok=>jobs.push({addr:w.address.toLowerCase(),tok})));
           const prog=()=>{if(!onProgress||!live)return;const n=t=>jobs.filter(j=>j.tok===t).length,d=t=>got.filter(g=>g.tok===t).length;onProgress({done,total:jobs.length,pd:d('PTGC'),pt:n('PTGC'),ud:d('UFO'),ut:n('UFO'),failed});};
           setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
-          const got=[];let failed=0,done=0,q=0;
+          const got=[];let failed=0,done=0,q=0,q2=0;
           const px=await pfhPrices().catch(()=>null);
           let flows=[];   // round 20: every tx's net per wallet + token (moves on BOTH sides) — the Earned details' UFO maths
           const build=()=>{
@@ -2749,7 +2749,11 @@
              wallets). Now one build per page, and the parent is told at most ~2× a second (always at the end). */
           let lastRows=null,lastTell=0;
           const tell=(final)=>{if(!onRows||!live)return;const now=Date.now();if(!final&&now-lastTell<500){clearTimeout(tellT);tellT=setTimeout(()=>tell(true),520-(now-lastTell));return;}
-            clearTimeout(tellT);lastTell=now;onRows({rows:lastRows||(lastRows=build()),cov:cov(),failed,flows,busy,pages});};
+            clearTimeout(tellT);lastTell=now;const jd={};got.forEach(g=>{jd[g.addr+'|'+g.tok]=!!g.done;});onRows({rows:lastRows||(lastRows=build()),cov:cov(),jd,failed,flows,busy,pages,prioritize});};
+          /* 2026-10-21 (the rank window's "show buys & sells" — Shaka: "anything we can do to make it faster"): the window asks for ITS
+             wallet + token first — that job jumps the deep-page queue and the wait-for-scroll before phase 2 is skipped */
+          let pri=null,deepRef=null,goNow=null;
+          const prioritize=(addr,tok)=>{pri=addr+'|'+tok;if(deepRef){const i=deepRef.findIndex((g,k)=>k>=q2&&g.addr+'|'+g.tok===pri);if(i>q2){const[g]=deepRef.splice(i,1);deepRef.splice(q2,0,g);}}if(goNow)goNow();};
           const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,forceNow);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live){lastRows=build();setSt({state:'ok',rows:lastRows,failed,done,total:jobs.length});prog();}}};
           prog();
           await Promise.all([worker(),worker(),worker()]);
@@ -2757,12 +2761,13 @@
           tell(true);
           /* round 24 (audit B7): the deep (older) pages only start once the section has been scrolled into view — or after
              5 s anyway, so the chart's history and the Details window still fill in on a page left open */
-          await new Promise(res=>{let done2=false;const go=()=>{if(!done2){done2=true;res();}};const el=secRef.current;
+          await new Promise(res=>{let done2=false;const go=()=>{if(!done2){done2=true;res();}};goNow=go;if(pri){go();return;}const el=secRef.current;
             if(!el||!('IntersectionObserver' in window)){setTimeout(go,1500);return;}
             const io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting)){io.disconnect();go();}},{rootMargin:'600px'});io.observe(el);setTimeout(()=>{io.disconnect();go();},5000);});
           if(!live)return;
           /* phase 2: the older pages, two at a time, the list and the chart updating as they land */
-          let q2=0;const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
+          const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
+          if(pri){const i=deep.findIndex(g=>g.addr+'|'+g.tok===pri);if(i>0){const[g]=deep.splice(i,1);deep.unshift(g);}}deepRef=deep;
           const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;g.full=!e.next;pages++;}catch(err){break;}
             if(live){lastRows=build();setSt(s=>({...s,rows:lastRows}));tell(false);}}}};
           await Promise.all([w2(),w2()]);
@@ -2937,7 +2942,16 @@
          PTGC is still in the wallet's balance, so an unstake changes nothing. One dot per day per direction. */
       const wa=w&&w.address.toLowerCase();
       const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.type==='Unstake')return;let dir;if(r.addr===wa)dir=r.dir;else if(r.type==='Move'&&r.cp===wa)dir=-r.dir;else return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(dir>0?'i':'o');if(seen.has(k))return;seen.add(k);out.push({i,inn:dir>0,what:r.type==='Move'?(dir>0?'Move in':'Move out'):r.type});});return out;})();
-      const txBusy=!txs||txs.busy;   // the list is still reading pages → say so, or the dots look final when they are not
+      /* is THIS wallet + token read back to the start of the period? (LIFE = a year, as far as the list goes). cov = the time the
+         list is complete back to (0 = its whole history); jd = that job finished (no more pages / the cap / a year). While not:
+         a percentage of the period covered, so the spinner moves. */
+      const txK=wa+'|'+tok,now=Date.now();
+      const perStart=Math.max(h.day0?Date.parse(h.day0+'T00:00:00Z')+i0*86400e3:0,now-365*864e5);
+      const txCov=txs&&txs.cov?txs.cov[txK]:undefined,txJd=!!(txs&&txs.jd&&txs.jd[txK]);
+      const txDone=!!txs&&(txCov===0||(txCov!==undefined&&txCov<=perStart)||txJd||!txs.busy);
+      const txBusy=!txDone;
+      const txPct=!txs||txCov===undefined?0:Math.min(99,Math.max(1,Math.round((now-txCov)/Math.max(1,now-perStart)*100)));
+      useEffect(()=>{if(showTx&&txs&&txs.prioritize&&wa)txs.prioritize(wa,tok);},[showTx,wa,tok,!!(txs&&txs.prioritize)]);
       /* what it takes: milestones from today's list */
       const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];
@@ -2965,7 +2979,7 @@
               {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
               {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
               {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={showTx?evs:[]} tok={tok}/>}
-              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>{const v=e.target.checked;setShowTx(v);try{localStorage.setItem('grays_pf_rank_tx',v?'1':'0');}catch(x){}}}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'}</span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
+              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>{const v=e.target.checked;setShowTx(v);try{localStorage.setItem('grays_pf_rank_tx',v?'1':'0');}catch(x){}}}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'} <b>{txPct}%</b></span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}

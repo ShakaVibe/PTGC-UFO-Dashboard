@@ -187,7 +187,7 @@
           const jobs=[];wallets.forEach(w=>['PTGC','UFO'].forEach(tok=>jobs.push({addr:w.address.toLowerCase(),tok})));
           const prog=()=>{if(!onProgress||!live)return;const n=t=>jobs.filter(j=>j.tok===t).length,d=t=>got.filter(g=>g.tok===t).length;onProgress({done,total:jobs.length,pd:d('PTGC'),pt:n('PTGC'),ud:d('UFO'),ut:n('UFO'),failed});};
           setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
-          const got=[];let failed=0,done=0,q=0;
+          const got=[];let failed=0,done=0,q=0,q2=0;
           const px=await pfhPrices().catch(()=>null);
           let flows=[];   // round 20: every tx's net per wallet + token (moves on BOTH sides) — the Earned details' UFO maths
           const build=()=>{
@@ -215,7 +215,11 @@
              wallets). Now one build per page, and the parent is told at most ~2× a second (always at the end). */
           let lastRows=null,lastTell=0;
           const tell=(final)=>{if(!onRows||!live)return;const now=Date.now();if(!final&&now-lastTell<500){clearTimeout(tellT);tellT=setTimeout(()=>tell(true),520-(now-lastTell));return;}
-            clearTimeout(tellT);lastTell=now;onRows({rows:lastRows||(lastRows=build()),cov:cov(),failed,flows,busy,pages});};
+            clearTimeout(tellT);lastTell=now;const jd={};got.forEach(g=>{jd[g.addr+'|'+g.tok]=!!g.done;});onRows({rows:lastRows||(lastRows=build()),cov:cov(),jd,failed,flows,busy,pages,prioritize});};
+          /* 2026-10-21 (the rank window's "show buys & sells" — Shaka: "anything we can do to make it faster"): the window asks for ITS
+             wallet + token first — that job jumps the deep-page queue and the wait-for-scroll before phase 2 is skipped */
+          let pri=null,deepRef=null,goNow=null;
+          const prioritize=(addr,tok)=>{pri=addr+'|'+tok;if(deepRef){const i=deepRef.findIndex((g,k)=>k>=q2&&g.addr+'|'+g.tok===pri);if(i>q2){const[g]=deepRef.splice(i,1);deepRef.splice(q2,0,g);}}if(goNow)goNow();};
           const worker=async()=>{while(q<jobs.length){const j=jobs[q++];try{const e=await pftFetch(j.addr,j.tok,forceNow);got.push({...j,items:e.items,done:e.done,full:!e.next});}catch(e){failed++;}done++;if(live){lastRows=build();setSt({state:'ok',rows:lastRows,failed,done,total:jobs.length});prog();}}};
           prog();
           await Promise.all([worker(),worker(),worker()]);
@@ -223,12 +227,13 @@
           tell(true);
           /* round 24 (audit B7): the deep (older) pages only start once the section has been scrolled into view — or after
              5 s anyway, so the chart's history and the Details window still fill in on a page left open */
-          await new Promise(res=>{let done2=false;const go=()=>{if(!done2){done2=true;res();}};const el=secRef.current;
+          await new Promise(res=>{let done2=false;const go=()=>{if(!done2){done2=true;res();}};goNow=go;if(pri){go();return;}const el=secRef.current;
             if(!el||!('IntersectionObserver' in window)){setTimeout(go,1500);return;}
             const io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting)){io.disconnect();go();}},{rootMargin:'600px'});io.observe(el);setTimeout(()=>{io.disconnect();go();},5000);});
           if(!live)return;
           /* phase 2: the older pages, two at a time, the list and the chart updating as they land */
-          let q2=0;const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
+          const deep=got.filter(g=>!g.done).sort((a,b)=>(a.tok==='UFO'?0:1)-(b.tok==='UFO'?0:1));   // UFO first — the Details window's UFO days need it
+          if(pri){const i=deep.findIndex(g=>g.addr+'|'+g.tok===pri);if(i>0){const[g]=deep.splice(i,1);deep.unshift(g);}}deepRef=deep;
           const w2=async()=>{while(q2<deep.length&&live){const g=deep[q2++];while(!g.done&&live){try{const e=await pftMore(g.addr,g.tok);if(!e)break;g.items=e.items;g.done=e.done;g.full=!e.next;pages++;}catch(err){break;}
             if(live){lastRows=build();setSt(s=>({...s,rows:lastRows}));tell(false);}}}};
           await Promise.all([w2(),w2()]);

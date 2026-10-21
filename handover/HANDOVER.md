@@ -108,7 +108,14 @@ balance); a move between two of his wallets is read from the row's `cp` for the 
 nudged apart when a day has both; the tooltip names the type. Harness: 7D on the bot wallet ticks → Claim / Move out /
 Receive + Sell (same day, two dots) / Sell; 390 no overflow. Also his "the logos are not next to the names" in the breakdown's table header: the page's base CSS makes every img
 display:block, so each token logo sat on its own line above the label → the header cells are a flex row (`th .h`: logo, then the
-name, right-aligned; PENDING TO CLAIM on two lines). portfolio.html sha256 dd28ef48…
+name, right-aligned; PENDING TO CLAIM on two lines). Then "a percentage complete on the reading your transactions … anything
+to make it faster without breaking anything?" → the spinner shows **N%** = how much of the chart's period the list has read back
+to for THIS wallet + token (`txs.cov[addr|tok]`, the time the list is complete back to; LIFE = a year, as far as the list goes),
+and it stops as soon as the period is covered — a 7D chart is done after page 1, it no longer waits for all 20 pages of every
+wallet. Faster: `txs.prioritize(addr,tok)` (PfTx: `tell()` now also carries `jd` per-job done flags + the hook) — ticking the box
+moves that wallet + token to the front of the deep-page queue and skips the wait-for-scroll before phase 2. PulseScan's page
+reads stay 2-wide (it rate-limits). Harness with SLOW_SCAN=6000: "reading your transactions… 13%" on 30D after page 1, gone
+once page 2 landed, no errors. portfolio.html sha256 1b580890…
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first

@@ -92,7 +92,16 @@
          PTGC is still in the wallet's balance, so an unstake changes nothing. One dot per day per direction. */
       const wa=w&&w.address.toLowerCase();
       const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.type==='Unstake')return;let dir;if(r.addr===wa)dir=r.dir;else if(r.type==='Move'&&r.cp===wa)dir=-r.dir;else return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(dir>0?'i':'o');if(seen.has(k))return;seen.add(k);out.push({i,inn:dir>0,what:r.type==='Move'?(dir>0?'Move in':'Move out'):r.type});});return out;})();
-      const txBusy=!txs||txs.busy;   // the list is still reading pages → say so, or the dots look final when they are not
+      /* is THIS wallet + token read back to the start of the period? (LIFE = a year, as far as the list goes). cov = the time the
+         list is complete back to (0 = its whole history); jd = that job finished (no more pages / the cap / a year). While not:
+         a percentage of the period covered, so the spinner moves. */
+      const txK=wa+'|'+tok,now=Date.now();
+      const perStart=Math.max(h.day0?Date.parse(h.day0+'T00:00:00Z')+i0*86400e3:0,now-365*864e5);
+      const txCov=txs&&txs.cov?txs.cov[txK]:undefined,txJd=!!(txs&&txs.jd&&txs.jd[txK]);
+      const txDone=!!txs&&(txCov===0||(txCov!==undefined&&txCov<=perStart)||txJd||!txs.busy);
+      const txBusy=!txDone;
+      const txPct=!txs||txCov===undefined?0:Math.min(99,Math.max(1,Math.round((now-txCov)/Math.max(1,now-perStart)*100)));
+      useEffect(()=>{if(showTx&&txs&&txs.prioritize&&wa)txs.prioritize(wa,tok);},[showTx,wa,tok,!!(txs&&txs.prioritize)]);
       /* what it takes: milestones from today's list */
       const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];
@@ -120,7 +129,7 @@
               {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
               {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
               {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={showTx?evs:[]} tok={tok}/>}
-              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>{const v=e.target.checked;setShowTx(v);try{localStorage.setItem('grays_pf_rank_tx',v?'1':'0');}catch(x){}}}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'}</span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
+              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>{const v=e.target.checked;setShowTx(v);try{localStorage.setItem('grays_pf_rank_tx',v?'1':'0');}catch(x){}}}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'} <b>{txPct}%</b></span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
