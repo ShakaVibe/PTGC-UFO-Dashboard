@@ -115,7 +115,12 @@ and it stops as soon as the period is covered — a 7D chart is done after page 
 wallet. Faster: `txs.prioritize(addr,tok)` (PfTx: `tell()` now also carries `jd` per-job done flags + the hook) — ticking the box
 moves that wallet + token to the front of the deep-page queue and skips the wait-for-scroll before phase 2. PulseScan's page
 reads stay 2-wide (it rate-limits). Harness with SLOW_SCAN=6000: "reading your transactions… 13%" on 30D after page 1, gone
-once page 2 landed, no errors. portfolio.html sha256 1b580890…
+once page 2 landed, no errors. The tick is OFF every time the window opens (his "always default to off.. even on refresh";
+nothing remembered). Then "to the right of the address, show all the sea creatures of what that wallet is" → `mock-rank-league-v1`
+(A one chip for the window's token / B both tokens' leagues / C the whole ladder) → **B**: two chips in the header's `.sub` — the
+wallet's PTGC league and its UFO league with the League box's sea art (`pfLeague` + `pfSea` from PortfolioV2.jsx), the window's
+token lit (`.lgc.on`, UFO green), the other quiet, a token not held gets no chip; hover = % to the next league + need. Harness
+1200 PTGC / UFO tabs + 390 clean. portfolio.html sha256 d84d4be8…
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first

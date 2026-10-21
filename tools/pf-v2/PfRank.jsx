@@ -110,7 +110,11 @@
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${tok} holder rank`}>
           <div className={`pf2-erw pf2-rkw${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
             <div aria-hidden="true" className={`pf2-rkw-sky${isU?' ufo':''}`}></div>
-            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2><span className="tk">{tok}</span> HOLDER RANK</h2><div className="sub">{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</div></div>
+            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2><span className="tk">{tok}</span> HOLDER RANK</h2><div className="sub"><span>{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</span>
+                {/* 2026-10-21 (his pick B of mock-rank-league-v1): the wallet's league on BOTH tokens — the sea creature the League box
+                   uses, the window's token lit, the other one quiet; a token it does not hold gets no chip */}
+                {d&&!d.error&&['PTGC','UFO'].map(T=>{const b=T==='UFO'?(d.ufo.balance||0):(d.ptgc.totalHolding||0),L=pfLeague(b,PF_SUPPLY[T]);if(!L||!L.cur)return null;
+                  return <span key={T} className={`lgc${T==='UFO'?' u':''}${T===tok?' on':''}`} title={L.next?`${L.pct.toFixed(1)}% to ${L.next.name} · need ${pfAbbr(L.need)} ${T}`:`Top league — ${L.cur.name}`}><img src={pfSea(L.cur.emoji)} alt=""/>{T} {L.cur.name}</span>;})}</div></div>
               <div className="tw"><div className="tabs">{['PTGC','UFO'].map(t=><button key={t} className={tok===t?'on':''} aria-pressed={tok===t} onClick={()=>setTok(t)}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div></div>
               <button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
             {wallets.length>1&&<div className="pf2-edsel"><div className="ws">{wallets.map(x=>{const a=x.address.toLowerCase();return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{x.name||pfAddr(x.address)}</button>;})}</div></div>}
