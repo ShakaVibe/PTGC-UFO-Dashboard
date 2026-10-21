@@ -83,7 +83,14 @@ also flips left when near the edge), WHAT IT TAKES gold-framed with glowing bars
 mountain sky, the window's plate, `cover` at `inset:-3%` so its frame sits on the window's edge; UFO = hue-rotated); the CSS /
 SVG laurels and the Holders sky are gone; ONE end-point label ("BEST #N" when today is the best, else "#N", drops below the
 point at the top edge, dark stroke); the tiles no longer stretch to the hero (`align-items:start`, hero `min-height:132px`).
-Harness 1200 clean. portfolio.html sha256 see the session file.
+His third look ("two bright bars … the bottom one even covers some text", "dollar figures green in what it takes", "best is on top of
+current on the chart … you can only see the 125") + "if they have 0 days in top 100 show days in top 500 … 1000 … 2500 … 5000 … 10000":
+the bars were the plate art's own gold frame — cropped OUT of `rk-plate.webp` (lines at y 36 / 821, x 27 / 1746, 18 px margin,
+1,600 wide, 59 KB; `cover` at `inset:0`, opacity .9, the window's own 2 px gold border is the frame now); `.lad .nd small.usd`
+green #39E15A; the BEST marker is skipped when it sits within 6 % of the chart width of today's point (the end label says
+"BEST #N" when today IS the best, so nothing is lost); `topN` = the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 with
+any days, tile "DAYS IN TOP N" (a #121 → #125 wallet shows BEST #121 and #125 as two clean labels — harness `dress6`).
+Harness 1200 clean, no overflow. portfolio.html sha256 f8fe05a3…
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first

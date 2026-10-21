@@ -50,12 +50,12 @@
         <rect x={L} y={T} width={W-L-R} height={H-T-B} fill={`url(#${gid}d)`}/>
         {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 6px ${col})`}}/>)}
         {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])} r="4" fill={e.buy?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.buy?'Buy':'Sell'} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
-        {(()=>{const right=X(bi[0])>W-R-90,isEnd=bi[0]===n-1;return <>
+        {(()=>{const nearEnd=X(n-1)-X(bi[0])<(W-L-R)*.06;if(nearEnd)return null;const right=X(bi[0])>W-R-110;return <>
           <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/>
-          {!isEnd&&<text x={right?X(bi[0])-8:X(bi[0])+8} y={Y(bi[1])-8} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900">BEST #{bi[1].toLocaleString('en-US')}</text>}
+          <text x={right?X(bi[0])-9:X(bi[0])+9} y={Y(bi[1])<T+16?Y(bi[1])+16:Y(bi[1])-9} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>BEST #{bi[1].toLocaleString('en-US')}</text>
         </>;})()}
         <circle cx={X(n-1)} cy={Y(pts[n-1])} r="6" fill="#0b0d12" stroke={col} strokeWidth="2.5"/><circle cx={X(n-1)} cy={Y(pts[n-1])} r="2.5" fill={col}/>
-        <text x={X(n-1)-12} y={Y(pts[n-1])<T+16?Y(pts[n-1])+5:Y(pts[n-1])-10} textAnchor="end" fontSize="12" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>{bi[0]===n-1?'BEST ':''}#{pts[n-1].toLocaleString('en-US')}</text>{xl}</svg>;
+        <text x={X(n-1)-12} y={Y(pts[n-1])<T+16?Y(pts[n-1])+5:Y(pts[n-1])-10} textAnchor="end" fontSize="12" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>{bi[1]===pts[n-1]?'BEST ':''}#{pts[n-1].toLocaleString('en-US')}</text>{xl}</svg>;
     };
     const PfRankModal=({tok:tok0,wallets,data,ranks,txs,prices,close})=>{
       const[tok,setTok]=useState(tok0);
@@ -78,7 +78,9 @@
       const first=pts.find(r=>r>0)||null,best=held.length?Math.min(...held):null,worst=held.length?Math.max(...held):null;
       const bestI=best!=null?pts.indexOf(best):-1,worstI=worst!=null?pts.lastIndexOf(worst):-1;
       const chg=live&&first?live.r-first:null;
-      const top100=full?full.filter(r=>r>0&&r<=100).length:0,tracked=full?full.filter(r=>r>0).length:0;
+      const tracked=full?full.filter(r=>r>0).length:0;
+      /* DAYS IN TOP N (Shaka, 2026-10-21 pm): the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 the wallet has ever been inside */
+      const topN=full?[100,500,1000,2500,5000,10000].map(n=>[n,full.filter(r=>r>0&&r<=n).length]).find(([n,c])=>c>0)||[10000,0]:[100,0];
       /* buy / sell days from Recent Transactions */
       const evs=(txs&&txs.rows||[]).filter(r=>r.tok===tok&&r.addr===(w&&w.address.toLowerCase())&&(r.type==='Buy'||r.type==='Sell')).map(r=>({i:Math.floor((r.t*1000-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0,buy:r.type==='Buy'})).filter(e=>e.i>=0&&e.i<pts.length);
       /* what it takes: milestones from today's list */
@@ -101,7 +103,7 @@
                 <div className="tl"><div className="l"><PfIco k="trophy"/>BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,i0+bestI),true):''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="down"/>LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,i0+worstI),true):''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="bars"/>{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
-                <div className="tl"><div className="l"><PfIco k="cal"/>DAYS IN TOP 100</div><div className="v">{full?top100.toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="cal"/>DAYS IN TOP {topN[0].toLocaleString('en-US')}</div><div className="v">{full?topN[1].toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
               </div>
             </div>
             <div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
@@ -111,7 +113,7 @@
               <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><span><i style={{background:'#39E15A'}}></i>buy</span><span><i style={{background:'#FF4B55'}}></i>sell</span><span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
-                return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
+                return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
             </div></div>}
             <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</>:null}</div>
           </div>
