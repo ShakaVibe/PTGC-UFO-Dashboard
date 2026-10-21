@@ -33,13 +33,22 @@
       const W=narrow?360:820,H=narrow?230:260,L=narrow?40:48,R=narrow?10:14,T=18,B=narrow?26:30,FS=narrow?12:11;
       const held=pts.map((r,i)=>[i,r]).filter(x=>x[1]>0);
       if(held.length<2)return <div className="pf2-hwait" style={{height:200}}><div>Not enough days with this wallet holding {tok} to draw yet.</div></div>;
-      const lo=Math.min(...held.map(x=>x[1])),hi=Math.max(...held.map(x=>x[1]));const pad=Math.max(1,(hi-lo)*.12);const lo2=Math.max(1,lo-pad),hi2=hi+pad;
-      const n=pts.length;const X=i=>L+(W-L-R)*i/Math.max(1,n-1),Y=v=>T+(H-T-B)*(v-lo2)/(hi2-lo2);
+      const lo=Math.min(...held.map(x=>x[1])),hi=Math.max(...held.map(x=>x[1]));
+      /* 2026-10-21 (Shaka, a whale that dumped: #12 all year then #8,469 — "it's just a straight line … something must be off on the
+         scale"): on a 1 → 9,500 linear scale #12 and #1 are the same pixel. When the period spans more than 8× in rank the scale is
+         LOG, so #12 sits a quarter of the way down and the drop still shows; the top gridline is the period's best, the bottom its
+         worst. A narrow range stays linear with whole-rank gridlines. */
+      const logS=hi/lo>=8;
+      const lo2=logS?Math.max(1,lo/1.12):Math.max(1,lo-Math.max(1,(hi-lo)*.12)),hi2=logS?hi*1.12:hi+Math.max(1,(hi-lo)*.12);
+      const sc=v=>logS?Math.log(v):v;
+      const n=pts.length;const X=i=>L+(W-L-R)*i/Math.max(1,n-1),Y=v=>T+(H-T-B)*(sc(v)-sc(lo2))/(sc(hi2)-sc(lo2));
       /* gaps (rank 0 = not holding) break the line */
       const segs=[];let cur=[];pts.forEach((r,i)=>{if(r>0)cur.push(`${X(i).toFixed(1)},${Y(r).toFixed(1)}`);else if(cur.length){segs.push(cur);cur=[];}});if(cur.length)segs.push(cur);
       const area=segs.map(s=>{const f=s[0].split(','),l=s[s.length-1].split(',');return `M${f[0]},${H-B} L${s.join(' L')} L${l[0]},${H-B} Z`;}).join(' ');
       /* gridlines on whole ranks only — a #1–#2 range used to print "#2, #2, #3, #3" */
-      const gv=[...new Set([0,1,2,3,4].map(k=>Math.round(lo2+(hi2-lo2)*k/4)))].filter(v=>v>=1);
+      const nice=v=>{const m=Math.pow(10,Math.floor(Math.log10(v))-1);return Math.max(1,Math.round(v/m)*m);};   // 2 significant digits
+      const gv=logS?[...new Set([lo,...[1,2,3].map(k=>nice(Math.exp(Math.log(lo)+(Math.log(hi)-Math.log(lo))*k/4))),hi])].filter(v=>v>=1)
+        :[...new Set([0,1,2,3,4].map(k=>Math.round(lo2+(hi2-lo2)*k/4)))].filter(v=>v>=1);
       const grid=gv.map(v=>{const y=Y(v),k=v;return <g key={k}><line x1={L} x2={W-R} y1={y} y2={y} stroke="rgba(255,255,255,.07)"/><text x={L-6} y={y+4} textAnchor="end" fontSize={FS} fill="rgba(255,255,255,.5)" fontFamily="Rajdhani" fontWeight="600">#{Math.round(v).toLocaleString('en-US')}</text></g>;});
       const XL=narrow?[0,2,4]:[0,1,2,3,4];const xl=XL.map(k=>{const i=Math.round((n-1)*k/4),d=pfrDate(day0,i0+i);return <text key={k} x={X(i)} y={H-8} textAnchor="middle" fontSize={FS} fill="rgba(255,255,255,.5)" fontFamily="Rajdhani" fontWeight="600">{n<=120?pfrFmt(d):pfrFmtY(d)}</text>;});
       const bi=held.reduce((m,x)=>x[1]<m[1]?x:m,held[0]);
@@ -50,7 +59,7 @@
         <rect x={L} y={T} width={W-L-R} height={H-T-B} fill={`url(#${gid}d)`}/>
         {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 6px ${col})`}}/>)}
         {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])+(evs.some(o=>o.i===e.i&&o.inn!==e.inn)?(e.inn?-5:5):0)} r={evs.length>40?3:4} fill={e.inn?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.what} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
-        {(()=>{const nearEnd=X(n-1)-X(bi[0])<(W-L-R)*.06;if(nearEnd)return null;const right=X(bi[0])>W-R-110;return <>
+        {(()=>{/* the BEST marker is skipped only when it would sit ON today's label: today IS the best (the end label says BEST), or best is within 6% of the end AND at nearly the same height (a whale that was #12 last week and dumped to #8,469 today keeps its BEST #12) */const nearEnd=X(n-1)-X(bi[0])<(W-L-R)*.06;if(bi[0]===n-1||(nearEnd&&Math.abs(Y(bi[1])-Y(pts[n-1]))<22))return null;const right=X(bi[0])>W-R-110;return <>
           <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/>
           <text x={right?X(bi[0])-9:X(bi[0])+9} y={Y(bi[1])<T+16?Y(bi[1])+16:Y(bi[1])-9} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>BEST #{bi[1].toLocaleString('en-US')}</text>
         </>;})()}

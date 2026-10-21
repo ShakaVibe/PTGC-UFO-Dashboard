@@ -120,7 +120,13 @@ nothing remembered). Then "to the right of the address, show all the sea creatur
 (A one chip for the window's token / B both tokens' leagues / C the whole ladder) → **B**: two chips in the header's `.sub` — the
 wallet's PTGC league and its UFO league with the League box's sea art (`pfLeague` + `pfSea` from PortfolioV2.jsx), the window's
 token lit (`.lgc.on`, UFO green), the other quiet, a token not held gets no chip; hover = % to the next league + need. Harness
-1200 PTGC / UFO tabs + 390 clean. portfolio.html sha256 d84d4be8…
+1200 PTGC / UFO tabs + 390 clean. Evening: his screenshot of Duhawks (0xd376…762d: #12 all year, dumped 3.6B → 11.6K on Oct 18,
+now #8,469) — "it's just a straight line … something must be off on the scale": the data was right, the scale was not — on a
+1 → 9,500 linear axis #12 and #1 are the same pixel. Now the chart is LOG when the period spans ≥ 8× in rank (`logS` in
+PfRankChart; gridlines = the period's best, three 2-significant-digit steps, the worst — "#12 #62 #320 #1,600 #8,469"), linear
+with whole-rank gridlines otherwise; and the BEST marker is skipped only when today IS the best or best sits within 6% of the end
+at nearly the same height (Duhawks keeps its BEST #12 beside the #8,469 end label). Harness: Duhawks 1Y / 30D / LIFE, a normal
+wallet's 90D unchanged. portfolio.html sha256 482b1209…
 **ALL OF IT IS LIVE — his last push today is `c30e47bf3` (working tree clean at sign-off). Claude's live check in the browser
 after it: the window opens from the League box on 0xe4bb…e4e6, header "PTGC SHARK · UFO SHARK", the tick off, the frame-free
 plate, no errors (a first load showed the previous build — his browser / the CDN cache; a cache-busting reload showed the new one,
