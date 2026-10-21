@@ -169,7 +169,7 @@
       const Tag=open?'button':'div';
       return <Tag type={open?'button':undefined} onClick={open} className={`pf2-rkb ${c}${sm?' sm':''}${open?' btn':''}`} title={open?`${tok} holder #${x.r.toLocaleString('en-US')} — rank history`:`${tok} holder #${x.r.toLocaleString('en-US')}`} aria-label={open?`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`:undefined}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>#{x.r.toLocaleString('en-US')}</b>
         {!sm&&<em>{pfPassTxt(x)}</em>}</Tag>;};
-    /* H3: the row under the league bar — "HOLDER RANK" for one wallet, "ALL N WALLETS AS ONE" for several (Shaka, 2026-10-21) */
+    /* H3: the row under the league bar — shown only when ONE wallet is counted (2026-10-21 pm: "all N wallets as one" dropped) */
     /* H3 in the P2 look (Shaka, 2026-10-21 pm, mock-rank-badge-v2 P2): no pill — "HOLDER / RANK" stacked in tiny caps beside a big
        gold / green number; with several wallets the line's own label "ALL N WALLETS AS ONE" sits in front */
     const PfRankRow=({tok,x,label,open})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;

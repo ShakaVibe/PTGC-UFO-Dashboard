@@ -70,7 +70,15 @@ factor to all digits, same holders). All of it is on the Mac (`data/rank-history
 the step, the pipeline wiring). Harness: the window opens from the League box and from the breakdown badges at 1380 / 1024 / 390,
 the PTGC whale's LIFE chart draws 1,107 real days (#15 → #1 in Oct 2023), no overflow. His first live look: "the window gets cut off when it pops up" — the modal lacked the other windows' centring
 classes (`z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80` on PfModal) → fixed; gridlines on whole ranks only.
-portfolio.html sha256 see the session file.
+Then "all 5 wallets as one is useless info … if more than one wallet is selected, we shouldn't show anything on the main
+dashboard, just on the per wallet breakdown" → the League-box rank line only with ONE counted wallet (`rkOne`); the "As one wallet"
+pair in the breakdown's ALL WALLETS row gone too (table + phone cards). Then his AI mock of the window ("best is cut off … try and get ours to look like this one") → dressed to it: the Holders
+window's gold panorama as the plate (`.pf2-rkw-sky`, UFO hue-rotated) under a dark veil, the TODAY hero gold-framed + glowing with
+SVG laurels (`PfLaurel`) either side of the number, gold line icons (`PfIco`: trophy / down / bars / calendar / chart / bolt) on
+the tiles and section titles, the token name gold in the title, the chart's fill solid gold → faded with a dotted grid and a glow
+on the line, the end point labelled "#N" (and "· BEST" when today is the best — the old BEST label ran off the right edge; it
+also flips left when near the edge), WHAT IT TAKES gold-framed with glowing bars. Harness 1200 clean. portfolio.html sha256 see
+the session file.
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first

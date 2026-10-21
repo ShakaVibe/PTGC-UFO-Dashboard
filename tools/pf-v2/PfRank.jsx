@@ -23,6 +23,14 @@
     const pfrDate=(day0,i)=>new Date(Date.parse(day0+'T00:00:00Z')+i*86400e3);
     const pfrFmt=(d,long)=>long?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
     const pfrFmtY=d=>d.toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});
+    /* laurel wreath halves for the hero (his mock): 7 leaves along an arc, drawn once and mirrored */
+    const PfLaurel=({flip})=><svg className="pf2-lrl" viewBox="0 0 34 70" aria-hidden="true" style={flip?{transform:'scaleX(-1)'}:undefined}>
+      <path d="M30 4 C14 14 6 30 7 48 C8 56 12 62 18 67" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+      {[[28,8,-30],[20,13,-20],[14,21,-10],[10,31,0],[9,41,8],[11,51,18],[15,60,28]].map(([x,y,a],i)=><ellipse key={i} cx={x} cy={y} rx="3.2" ry="7" fill="currentColor" transform={`rotate(${a} ${x} ${y})`}/>)}
+    </svg>;
+    /* small gold line icons for the tiles and section titles */
+    const PfIco=({k})=>{const P={trophy:'M6 3h12v3a5 5 0 0 1-3 4.6V13h3v2H6v-2h3v-2.4A5 5 0 0 1 6 6V3zm-3 2h3v2a3 3 0 0 1-3-2zm18 0h-3v2a3 3 0 0 0 3-2z',down:'M5 8l7 8 7-8z',bars:'M4 20V12h3v8zm6.5 0V5h3v15zm6.5 0v-9h3v9z',cal:'M5 5h14v15H5zM5 9h14M8 3v4m8-4v4',chart:'M4 18 9 12l3 3 7-8M19 7h-4m4 0v4',bolt:'M13 2 4 14h6l-1 8 9-12h-6z'};
+      return <svg className={`pf2-ico${k==='down'?' dn':''}`} viewBox="0 0 24 24" aria-hidden="true"><path d={P[k]} fill={k==='bolt'||k==='down'||k==='bars'||k==='trophy'?'currentColor':'none'} stroke="currentColor" strokeWidth={k==='bolt'||k==='trophy'?0:1.8} strokeLinecap="round" strokeLinejoin="round"/></svg>;};
     /* the chart: rank over time, higher = better (y flipped), the period's own scale, buy / sell dots, the best point marked */
     const PfRankChart=({pts,day0,i0,col,evs,tok})=>{
       /* phones: a narrower, taller drawing with bigger type (the 820-wide one shrinks to unreadable at 390 px) */
@@ -42,11 +50,17 @@
       const bi=held.reduce((m,x)=>x[1]<m[1]?x:m,held[0]);
       const gid='pfrg'+(col==='#F2D35B'?'p':'u');
       return <svg viewBox={`0 0 ${W} ${H}`} className="pf2-rkc" role="img" aria-label={`${tok} holder rank over time, best #${bi[1]}`}>
-        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".35"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs>
-        {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.2" strokeLinejoin="round"/>)}
+        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".85"/><stop offset=".55" stopColor={col} stopOpacity=".45"/><stop offset="1" stopColor={col} stopOpacity=".12"/></linearGradient>
+          <pattern id={gid+'d'} width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" fill="rgba(255,255,255,.13)"/></pattern></defs>
+        <rect x={L} y={T} width={W-L-R} height={H-T-B} fill={`url(#${gid}d)`}/>
+        {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 6px ${col})`}}/>)}
         {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])} r="4" fill={e.buy?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.buy?'Buy':'Sell'} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
-        <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/><text x={X(bi[0])+8} y={Y(bi[1])-8} fontSize={narrow?11:11} fill={col} fontFamily="Orbitron" fontWeight="900">BEST #{bi[1].toLocaleString('en-US')}</text>
-        <circle cx={X(n-1)} cy={Y(pts[n-1])} r="5" fill={col}/>{xl}</svg>;
+        {(()=>{const right=X(bi[0])>W-R-90,isEnd=bi[0]===n-1;return <>
+          <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/>
+          {!isEnd&&<text x={right?X(bi[0])-8:X(bi[0])+8} y={Y(bi[1])-8} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900">BEST #{bi[1].toLocaleString('en-US')}</text>}
+        </>;})()}
+        <circle cx={X(n-1)} cy={Y(pts[n-1])} r="6" fill="#0b0d12" stroke={col} strokeWidth="2.5"/><circle cx={X(n-1)} cy={Y(pts[n-1])} r="2.5" fill={col}/>
+        <text x={X(n-1)-9} y={Y(pts[n-1])-11} textAnchor="end" fontSize="12" fill={col} fontFamily="Orbitron" fontWeight="900">#{pts[n-1].toLocaleString('en-US')}{bi[0]===n-1?' · BEST':''}</text>{xl}</svg>;
     };
     const PfRankModal=({tok:tok0,wallets,data,ranks,txs,prices,close})=>{
       const[tok,setTok]=useState(tok0);
@@ -79,27 +93,28 @@
       return(
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${tok} holder rank`}>
           <div className={`pf2-erw pf2-rkw${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
-            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2>{tok} HOLDER RANK</h2><div className="sub">{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</div></div>
+            <div aria-hidden="true" className={`pf2-rkw-sky${isU?' ufo':''}`}></div><div aria-hidden="true" className="pf2-rkw-veil"></div>
+            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2><span className="tk">{tok}</span> HOLDER RANK</h2><div className="sub">{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</div></div>
               <div className="tw"><div className="tabs">{['PTGC','UFO'].map(t=><button key={t} className={tok===t?'on':''} aria-pressed={tok===t} onClick={()=>setTok(t)}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div></div>
               <button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
             {wallets.length>1&&<div className="pf2-edsel"><div className="ws">{wallets.map(x=>{const a=x.address.toLowerCase();return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{x.name||pfAddr(x.address)}</button>;})}</div></div>}
             <div className="hero">
-              <div className="big"><small>TODAY</small><b>{live?'#'+live.r.toLocaleString('en-US'):'—'}</b>
+              <div className="big"><small>TODAY</small><span className="wr"><PfLaurel/><b>{live?'#'+live.r.toLocaleString('en-US'):'—'}</b><PfLaurel flip/></span>
                 {chg==null?<span className="flat">{live?'—':'not holding '+tok}</span>:chg===0?<span className="flat">{'—'} no change</span>:<span className={chg<0?'up':'dn'}>{chg<0?'▲':'▼'} {Math.abs(chg).toLocaleString('en-US')} place{Math.abs(chg)===1?'':'s'}</span>}
                 <em>{per==='LIFE'?'since the first day held':`vs ${nDays} days ago`}</em></div>
               <div className="tiles">
-                <div className="tl"><div className="l">BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,i0+bestI),true):''}</div></div>
-                <div className="tl"><div className="l">LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,i0+worstI),true):''}</div></div>
-                <div className="tl"><div className="l">{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
-                <div className="tl"><div className="l">DAYS IN TOP 100</div><div className="v">{full?top100.toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="trophy"/>BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,i0+bestI),true):''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="down"/>LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,i0+worstI),true):''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="bars"/>{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="cal"/>DAYS IN TOP 100</div><div className="v">{full?top100.toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
               </div>
             </div>
-            <div className="ch"><div className="chh"><span>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
+            <div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
               {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
               {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
               {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={evs} tok={tok}/>}
               <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><span><i style={{background:'#39E15A'}}></i>buy</span><span><i style={{background:'#FF4B55'}}></i>sell</span><span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
-            {live&&ms.length>0&&<div className="wt"><div className="chh"><span>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
+            {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
             </div></div>}
