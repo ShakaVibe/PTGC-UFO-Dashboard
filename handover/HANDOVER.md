@@ -135,7 +135,7 @@ for a rank at/below yours ("that's you" / "you're already above #N"), past the l
 hover / focus: "Cost is a snapshot … slippage and the price rising while you buy aren't included". CSS `.pf2-rkw .ctl`, `.ii`;
 2 columns under 860, 1 under 480. (Gotcha again: the base CSS makes img display:block — the sea art in the tile needed
 inline-block.) Harness 1200 + 390 clean. portfolio.html sha256 d8501938…
-**ALL OF IT IS LIVE — his last push today is `03b8f367e` (the log-scale chart; working tree clean at sign-off). Claude's live check in the browser
+**ALL OF IT IS LIVE — his last push today is `8976af399` (the calculator; working tree clean at sign-off). Live check of the calculator on 0xe4bb…e4e6: #50 → 358.09M PTGC, $6,496, Shark 12.5% to Whale. Claude's live check in the browser
 after it: the window opens from the League box on 0xe4bb…e4e6, header "PTGC SHARK · UFO SHARK", the tick off, the frame-free
 plate, no errors (a first load showed the previous build — his browser / the CDN cache; a cache-busting reload showed the new one,
 so if he reports something "still there" after a push, check the live file with `fetch(…,{cache:'no-store'})` before touching code).
