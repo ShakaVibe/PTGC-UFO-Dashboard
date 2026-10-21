@@ -99,8 +99,8 @@ off the chart → fixed, one dot per day per kind (harness: 30 buys + 30 sells d
 Recent Transactions has loaded (a year or 20 pages back, buys / sells only — a send to a person or a move between his wallets
 is not a dot, same as the list's typing). He pushed; the dots were live (checked in the browser: 88 on 0xe4bb…e4e6's 1Y) but
 "took a long time" (the list reads up to 20 pages per wallet per token) → his call: "default the chart to NOT show buys and
-sells.. a box they can check.. and a loading while it loads" → DONE: a `show buys & sells` tick in the chart legend (off by
-default, remembered in `grays_pf_rank_tx`); ticked → the in / out swatches, a gold spinner "reading your transactions…" while
+sells.. a box they can check.. and a loading while it loads" → DONE: a `show buys & sells` tick in the chart legend (off EVERY time
+the window opens — his "always default to off.. even on refresh" — nothing remembered); ticked → the in / out swatches, a gold spinner "reading your transactions…" while
 Recent Transactions is still reading pages (`txs.busy`), "none in this period" when done and empty. And his "should sends be
 added, because they can send tokens out, which would lower their rank" → yes: a dot is any row that changed the balance —
 IN (green): buy, receive, claim, move in; OUT (red): sell, send, move out; unstakes left out (staked PTGC is already in the
