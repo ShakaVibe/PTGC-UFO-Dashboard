@@ -737,7 +737,11 @@
     /* round 30 (his pick B-A of mock-r30-v1): the ledger dressed like the rest of the page */
     .pf2-bdt{width:100%;border-collapse:separate;border-spacing:0;font-size:17px}
     .pf2-bdt th{text-align:right;font-size:12.5px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.6);padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.1);vertical-align:middle;white-space:nowrap}
-    .pf2-bdt th img{width:18px;height:18px;border-radius:50%;vertical-align:-4px;margin-right:6px}
+    /* 2026-10-21 (Shaka: "the logos are not next to the names"): the page's base CSS makes every img display:block, so the logo sat
+       on a line of its own above the label — the header is a flex row now, logo then name, right-aligned; PENDING TO CLAIM on two lines */
+    .pf2-bdt th .h{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px;text-align:right}
+    .pf2-bdt th .h img{display:inline-block;width:18px;height:18px;border-radius:50%;margin:0;flex:none}
+    .pf2-bdt th .h .two{line-height:1.15;white-space:normal}
     .pf2-bdt tbody tr:nth-child(odd) td{background:rgba(255,255,255,.015)}
     .pf2-bdt tbody tr td:first-child{border-left:3px solid var(--c,transparent)}
     .pf2-bdt .n i{display:none}
@@ -966,6 +970,14 @@
     .pf2-rkc{width:100%;height:auto;display:block}
     .pf2-rkw .lg{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:6px;font:600 12.5px 'Rajdhani',sans-serif;color:rgba(255,255,255,.65)}
     .pf2-rkw .lg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:-1px}.pf2-rkw .lg .r{margin-left:auto;color:rgba(255,255,255,.45)}
+        .pf2-rkw .lg label.tx{display:inline-flex;align-items:center;gap:7px;cursor:pointer;color:rgba(255,255,255,.8);user-select:none}
+    .pf2-rkw .lg label.tx input{position:absolute;opacity:0;width:0;height:0}
+    .pf2-rkw .lg label.tx .bx{width:14px;height:14px;border-radius:4px;border:1.5px solid rgba(242,211,91,.55);background:rgba(242,211,91,.06);display:inline-block;position:relative;transition:background .15s,border-color .15s}
+    .pf2-rkw .lg label.tx input:checked+.bx{background:#F2D35B;border-color:#F2D35B;box-shadow:0 0 8px rgba(242,211,91,.45)}
+    .pf2-rkw .lg label.tx input:checked+.bx::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #05060a;border-width:0 2px 2px 0;transform:rotate(45deg)}
+    .pf2-rkw .lg label.tx input:focus-visible+.bx{outline:2px solid #F2D35B;outline-offset:2px}
+    .pf2-rkw.u .lg label.tx .bx{border-color:rgba(141,255,58,.55);background:rgba(141,255,58,.06)}.pf2-rkw.u .lg label.tx input:checked+.bx{background:#8DFF3A;border-color:#8DFF3A;box-shadow:0 0 8px rgba(141,255,58,.45)}
+    .pf2-rkw .lg .ld{color:#F2D35B;opacity:.85}.pf2-rkw .lg .ld i.sp{width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(242,211,91,.35);border-top-color:#F2D35B;background:none;animation:pf2-rkspin .9s linear infinite}@keyframes pf2-rkspin{to{transform:rotate(360deg)}}
     .pf2-rkw .lad{display:flex;flex-direction:column;gap:7px}
     .pf2-rkw .lad .st{display:grid;grid-template-columns:64px 1fr 220px;align-items:center;gap:12px;font:600 13.5px 'Rajdhani',sans-serif}
     .pf2-rkw .lad .rk{font:900 14px 'Orbitron',sans-serif;color:#F2D35B;text-align:right}.pf2-rkw.u .lad .rk{color:#8DFF3A}
@@ -2882,7 +2894,7 @@
           <pattern id={gid+'d'} width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" fill="rgba(255,255,255,.13)"/></pattern></defs>
         <rect x={L} y={T} width={W-L-R} height={H-T-B} fill={`url(#${gid}d)`}/>
         {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 6px ${col})`}}/>)}
-        {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])} r="4" fill={e.buy?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.buy?'Buy':'Sell'} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
+        {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])+(evs.some(o=>o.i===e.i&&o.inn!==e.inn)?(e.inn?-5:5):0)} r={evs.length>40?3:4} fill={e.inn?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.what} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
         {(()=>{const nearEnd=X(n-1)-X(bi[0])<(W-L-R)*.06;if(nearEnd)return null;const right=X(bi[0])>W-R-110;return <>
           <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/>
           <text x={right?X(bi[0])-9:X(bi[0])+9} y={Y(bi[1])<T+16?Y(bi[1])+16:Y(bi[1])-9} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>BEST #{bi[1].toLocaleString('en-US')}</text>
@@ -2894,6 +2906,9 @@
       const[tok,setTok]=useState(tok0);
       const[sel,setSel]=useState(()=>wallets[0]&&wallets[0].address.toLowerCase());
       const[per,setPer]=useState(()=>{try{return localStorage.getItem('grays_pf_rank_per')||'1Y';}catch(e){return '1Y';}});
+      /* Shaka: "default the chart to NOT show buys and sells.. if they want to see them they can check a box.. and then they get a
+         loading while it loads" — off unless ticked; the tick is remembered */
+      const[showTx,setShowTx]=useState(()=>{try{return localStorage.getItem('grays_pf_rank_tx')==='1';}catch(e){return false;}});
       const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
       const w=wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0];
       const d=w&&data[w.address.toLowerCase()];
@@ -2914,10 +2929,15 @@
       const tracked=full?full.filter(r=>r>0).length:0;
       /* DAYS IN TOP N (Shaka, 2026-10-21 pm): the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 the wallet has ever been inside */
       const topN=full?[100,500,1000,2500,5000,10000].map(n=>[n,full.filter(r=>r>0&&r<=n).length]).find(([n,c])=>c>0)||[10000,0]:[100,0];
-      /* buy / sell days from Recent Transactions (r.t is in MILLISECONDS — the first build multiplied by 1,000 and no dot ever
-         landed inside the chart; Shaka: "there has to be some sells in there for the rank to fall off that much"). One dot per
-         day per kind: a day with both a buy and a sell shows both. */
-      const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.addr!==(w&&w.address.toLowerCase())||(r.type!=='Buy'&&r.type!=='Sell'))return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(r.type==='Buy'?'b':'s');if(seen.has(k))return;seen.add(k);out.push({i,buy:r.type==='Buy'});});return out;})();
+      /* days tokens moved IN or OUT of this wallet, from Recent Transactions (r.t is in MILLISECONDS — the first build multiplied by
+         1,000 and no dot ever landed inside the chart). Shaka: "should sends be added, because they can send tokens out of the
+         wallet, which would lower their rank" → yes: every row that changed the balance counts — buys, receives, claims and LP
+         removes are IN (green); sells, sends and LP adds are OUT (red); a move between two of his wallets is OUT of one and IN to
+         the other (the list keeps one row per move, so the counterparty side is read from cp). Unstakes are left out — staked
+         PTGC is still in the wallet's balance, so an unstake changes nothing. One dot per day per direction. */
+      const wa=w&&w.address.toLowerCase();
+      const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.type==='Unstake')return;let dir;if(r.addr===wa)dir=r.dir;else if(r.type==='Move'&&r.cp===wa)dir=-r.dir;else return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(dir>0?'i':'o');if(seen.has(k))return;seen.add(k);out.push({i,inn:dir>0,what:r.type==='Move'?(dir>0?'Move in':'Move out'):r.type});});return out;})();
+      const txBusy=!txs||txs.busy;   // the list is still reading pages → say so, or the dots look final when they are not
       /* what it takes: milestones from today's list */
       const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];
@@ -2944,8 +2964,8 @@
             <div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
               {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
               {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
-              {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={evs} tok={tok}/>}
-              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><span><i style={{background:'#39E15A'}}></i>buy</span><span><i style={{background:'#FF4B55'}}></i>sell</span><span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
+              {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={showTx?evs:[]} tok={tok}/>}
+              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>{const v=e.target.checked;setShowTx(v);try{localStorage.setItem('grays_pf_rank_tx',v?'1':'0');}catch(x){}}}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'}</span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
@@ -3462,7 +3482,7 @@
                 const subRow=g=><tr key={'g'+g.sub} className="sub"><td><div className="n">{g.sub}</div></td>{hasR&&<td></td>}<td>{cell(S('pT',g.rs),S('p$',g.rs),'p')}</td><td>{cell(S('pc',g.rs),S('c$',g.rs),'p')}</td><td>{cell(S('uT',g.rs),S('u$',g.rs),'u')}</td><td><span className="tot">{fmtDollar(S('t$',g.rs))}</span><div className="bar"><small>{all>0?(S('t$',g.rs)/all*100).toFixed(1):'0.0'}%</small></div></td></tr>;
                 return(<div className={`pf2-foldb pf2-bd${hasR?' rk':''}`}>
                   <div className="pf2-bds"><span>Sort</span>{[['value','Value'],['name','Name'],['added','Added'],...(hasR?[['rp','PTGC rank'],['ru','UFO rank']]:[])].map(([k,l])=><button key={k} className={bdSort===k?'on':''} aria-pressed={bdSort===k} onClick={()=>setBdSort(k)}>{l}</button>)}</div>
-                  <table className={`pf2-bdt${hasR?' rk':''}`}>{hasR&&<colgroup><col style={{width:'13%'}}/><col style={{width:'41%'}}/><col style={{width:'11%'}}/><col style={{width:'11%'}}/><col style={{width:'10%'}}/><col style={{width:'14%'}}/></colgroup>}<thead><tr><th>WALLET</th>{hasR&&<th className="rkh">HOLDER RANK</th>}<th><img src={TOKENS.PTGC.logo} alt=""/>PTGC</th><th><img src={TOKENS.PTGC.logo} alt=""/>PENDING TO CLAIM</th><th><img src={TOKENS.UFO.logo} alt=""/>UFO</th><th>TOTAL {'\u00B7'} SHARE</th></tr></thead><tbody>
+                  <table className={`pf2-bdt${hasR?' rk':''}`}>{hasR&&<colgroup><col style={{width:'13%'}}/><col style={{width:'41%'}}/><col style={{width:'11%'}}/><col style={{width:'11%'}}/><col style={{width:'10%'}}/><col style={{width:'14%'}}/></colgroup>}<thead><tr><th>WALLET</th>{hasR&&<th className="rkh">HOLDER RANK</th>}<th><span className="h"><img src={TOKENS.PTGC.logo} alt=""/><span>PTGC</span></span></th><th><span className="h"><img src={TOKENS.PTGC.logo} alt=""/><span className="two">PENDING<br/>TO CLAIM</span></span></th><th><span className="h"><img src={TOKENS.UFO.logo} alt=""/><span>UFO</span></span></th><th>TOTAL {'\u00B7'} SHARE</th></tr></thead><tbody>
                     {/* round 30 (his pick B-A of mock-r30-v1): the ledger dressed like the rest of the page — bigger type, zebra, the wallet colour as a left accent, logos in the headers, a gold ALL WALLETS band */}
                     {order.map(r=>r.sub?subRow(r):<tr key={r.a} style={{'--c':r.c}}><td>{who(r)}</td>{hasR&&<td className="rkc"><PfRankBadge tok="PTGC" x={r.rp} why={why(r.pT)} open={()=>setRkWin({tok:'PTGC',a:r.a})}/><PfRankBadge tok="UFO" x={r.ru} why={why(r.uT)} open={()=>setRkWin({tok:'UFO',a:r.a})}/></td>}<td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
                     {rows.length>1&&<tr className="sum"><td><div className="n">ALL WALLETS</div></td>{hasR&&<td></td>}<td>{cell(S('pT'),S('p$'),'p')}</td><td>{cell(S('pc'),S('c$'),'p')}</td><td>{cell(S('uT'),S('u$'),'u')}</td><td><span className="tot">{fmtDollar(all)}</span><div className="bar"><span><b style={{width:(all>0?S('p$')/all*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(all>0?S('u$')/all*100:0)+'%',background:'#7CFC00'}}></b></span><small>100%</small></div></td></tr>}

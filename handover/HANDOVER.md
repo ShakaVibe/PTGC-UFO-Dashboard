@@ -97,7 +97,18 @@ serve the framed one; the old `rk-plate.webp` is left in place, unreferenced) an
 dots NEVER drew — `r.t` from Recent Transactions is already milliseconds and the window multiplied by 1,000, so every dot fell
 off the chart → fixed, one dot per day per kind (harness: 30 buys + 30 sells drawn on the bot wallet's 90D). The dots cover what
 Recent Transactions has loaded (a year or 20 pages back, buys / sells only — a send to a person or a move between his wallets
-is not a dot, same as the list's typing). Harness 1200 clean, no overflow. portfolio.html sha256 a304d53d…
+is not a dot, same as the list's typing). He pushed; the dots were live (checked in the browser: 88 on 0xe4bb…e4e6's 1Y) but
+"took a long time" (the list reads up to 20 pages per wallet per token) → his call: "default the chart to NOT show buys and
+sells.. a box they can check.. and a loading while it loads" → DONE: a `show buys & sells` tick in the chart legend (off by
+default, remembered in `grays_pf_rank_tx`); ticked → the in / out swatches, a gold spinner "reading your transactions…" while
+Recent Transactions is still reading pages (`txs.busy`), "none in this period" when done and empty. And his "should sends be
+added, because they can send tokens out, which would lower their rank" → yes: a dot is any row that changed the balance —
+IN (green): buy, receive, claim, move in; OUT (red): sell, send, move out; unstakes left out (staked PTGC is already in the
+balance); a move between two of his wallets is read from the row's `cp` for the other side; one dot per day per direction,
+nudged apart when a day has both; the tooltip names the type. Harness: 7D on the bot wallet ticks → Claim / Move out /
+Receive + Sell (same day, two dots) / Sell; 390 no overflow. Also his "the logos are not next to the names" in the breakdown's table header: the page's base CSS makes every img
+display:block, so each token logo sat on its own line above the label → the header cells are a flex row (`th .h`: logo, then the
+name, right-aligned; PENDING TO CLAIM on two lines). portfolio.html sha256 dd28ef48…
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first

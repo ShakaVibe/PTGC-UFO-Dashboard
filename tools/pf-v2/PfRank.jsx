@@ -49,7 +49,7 @@
           <pattern id={gid+'d'} width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" fill="rgba(255,255,255,.13)"/></pattern></defs>
         <rect x={L} y={T} width={W-L-R} height={H-T-B} fill={`url(#${gid}d)`}/>
         {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 6px ${col})`}}/>)}
-        {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])} r="4" fill={e.buy?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.buy?'Buy':'Sell'} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
+        {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])+(evs.some(o=>o.i===e.i&&o.inn!==e.inn)?(e.inn?-5:5):0)} r={evs.length>40?3:4} fill={e.inn?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.what} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
         {(()=>{const nearEnd=X(n-1)-X(bi[0])<(W-L-R)*.06;if(nearEnd)return null;const right=X(bi[0])>W-R-110;return <>
           <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/>
           <text x={right?X(bi[0])-9:X(bi[0])+9} y={Y(bi[1])<T+16?Y(bi[1])+16:Y(bi[1])-9} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>BEST #{bi[1].toLocaleString('en-US')}</text>
@@ -61,6 +61,9 @@
       const[tok,setTok]=useState(tok0);
       const[sel,setSel]=useState(()=>wallets[0]&&wallets[0].address.toLowerCase());
       const[per,setPer]=useState(()=>{try{return localStorage.getItem('grays_pf_rank_per')||'1Y';}catch(e){return '1Y';}});
+      /* Shaka: "default the chart to NOT show buys and sells.. if they want to see them they can check a box.. and then they get a
+         loading while it loads" — off unless ticked; the tick is remembered */
+      const[showTx,setShowTx]=useState(()=>{try{return localStorage.getItem('grays_pf_rank_tx')==='1';}catch(e){return false;}});
       const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
       const w=wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0];
       const d=w&&data[w.address.toLowerCase()];
@@ -81,10 +84,15 @@
       const tracked=full?full.filter(r=>r>0).length:0;
       /* DAYS IN TOP N (Shaka, 2026-10-21 pm): the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 the wallet has ever been inside */
       const topN=full?[100,500,1000,2500,5000,10000].map(n=>[n,full.filter(r=>r>0&&r<=n).length]).find(([n,c])=>c>0)||[10000,0]:[100,0];
-      /* buy / sell days from Recent Transactions (r.t is in MILLISECONDS — the first build multiplied by 1,000 and no dot ever
-         landed inside the chart; Shaka: "there has to be some sells in there for the rank to fall off that much"). One dot per
-         day per kind: a day with both a buy and a sell shows both. */
-      const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.addr!==(w&&w.address.toLowerCase())||(r.type!=='Buy'&&r.type!=='Sell'))return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(r.type==='Buy'?'b':'s');if(seen.has(k))return;seen.add(k);out.push({i,buy:r.type==='Buy'});});return out;})();
+      /* days tokens moved IN or OUT of this wallet, from Recent Transactions (r.t is in MILLISECONDS — the first build multiplied by
+         1,000 and no dot ever landed inside the chart). Shaka: "should sends be added, because they can send tokens out of the
+         wallet, which would lower their rank" → yes: every row that changed the balance counts — buys, receives, claims and LP
+         removes are IN (green); sells, sends and LP adds are OUT (red); a move between two of his wallets is OUT of one and IN to
+         the other (the list keeps one row per move, so the counterparty side is read from cp). Unstakes are left out — staked
+         PTGC is still in the wallet's balance, so an unstake changes nothing. One dot per day per direction. */
+      const wa=w&&w.address.toLowerCase();
+      const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.type==='Unstake')return;let dir;if(r.addr===wa)dir=r.dir;else if(r.type==='Move'&&r.cp===wa)dir=-r.dir;else return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(dir>0?'i':'o');if(seen.has(k))return;seen.add(k);out.push({i,inn:dir>0,what:r.type==='Move'?(dir>0?'Move in':'Move out'):r.type});});return out;})();
+      const txBusy=!txs||txs.busy;   // the list is still reading pages → say so, or the dots look final when they are not
       /* what it takes: milestones from today's list */
       const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];
@@ -111,8 +119,8 @@
             <div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
               {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
               {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
-              {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={evs} tok={tok}/>}
-              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><span><i style={{background:'#39E15A'}}></i>buy</span><span><i style={{background:'#FF4B55'}}></i>sell</span><span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
+              {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={showTx?evs:[]} tok={tok}/>}
+              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>{const v=e.target.checked;setShowTx(v);try{localStorage.setItem('grays_pf_rank_tx',v?'1':'0');}catch(x){}}}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'}</span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
