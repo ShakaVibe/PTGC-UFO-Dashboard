@@ -68,7 +68,9 @@ UFO 1 MB); the index is schema 2 (4,096 shards by three hex chars, [firstDay, [r
 was 540 KB with run-lengths); the daily step was proven by trimming UFO's last day and letting it rebuild it (same block, same
 factor to all digits, same holders). All of it is on the Mac (`data/rank-history/`, `data/rank-index/` = 6,969 files, the page,
 the step, the pipeline wiring). Harness: the window opens from the League box and from the breakdown badges at 1380 / 1024 / 390,
-the PTGC whale's LIFE chart draws 1,107 real days (#15 → #1 in Oct 2023), no overflow. portfolio.html sha256 `19cdc6cd`.
+the PTGC whale's LIFE chart draws 1,107 real days (#15 → #1 in Oct 2023), no overflow. His first live look: "the window gets cut off when it pops up" — the modal lacked the other windows' centring
+classes (`z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80` on PfModal) → fixed; gridlines on whole ranks only.
+portfolio.html sha256 see the session file.
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first
