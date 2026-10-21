@@ -121,11 +121,17 @@ nothing remembered). Then "to the right of the address, show all the sea creatur
 wallet's PTGC league and its UFO league with the League box's sea art (`pfLeague` + `pfSea` from PortfolioV2.jsx), the window's
 token lit (`.lgc.on`, UFO green), the other quiet, a token not held gets no chip; hover = % to the next league + need. Harness
 1200 PTGC / UFO tabs + 390 clean. portfolio.html sha256 d84d4be8…
-**NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
-live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
-~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first
+**ALL OF IT IS LIVE — his last push today is `c30e47bf3` (working tree clean at sign-off). Claude's live check in the browser
+after it: the window opens from the League box on 0xe4bb…e4e6, header "PTGC SHARK · UFO SHARK", the tick off, the frame-free
+plate, no errors (a first load showed the previous build — his browser / the CDN cache; a cache-busting reload showed the new one,
+so if he reports something "still there" after a push, check the live file with `fetch(…,{cache:'no-store'})` before touching code).
+NEXT when he is back: (1) confirm the pipeline's first `rank-history` run landed (gate 20 h → ~2026-10-22 ~05 UTC; `only=rank-history`
+forces it; look for a commit touching data/rank-history + data/rank-index, then the window's foot "history to <yesterday>");
+(2) he posts the two Telegram pieces (the launch post + the breakdown-screenshot caption, both in sessions/2026-10-21.md);
+(3) Phase F (F4 share link, mock-up first).** Known limits: the window needs a wallet in the index (a wallet that first
 held AFTER the last archive day shows "Not enough days" until the next daily run); "as one wallet" has no history (the window
-opens on the first counted wallet with a picker).**Afternoon 2026-10-21: HOLDER RANK LIVE (`270f1a5d9`), then trimmed on his word — written to the Mac, NOT pushed.** His live look
+opens on the first counted wallet with a picker); the buy / sell dots reach as far as Recent Transactions does (a year or 20
+pages per wallet + token).**Afternoon 2026-10-21: HOLDER RANK LIVE (`270f1a5d9`), then trimmed on his word — written to the Mac, NOT pushed.** His live look
 ("why does it say out of 12,244 … there are over 18k holders"; then "lets not show the Of the part.. Just their ranks, and more
 needed to pass … dont exclude dust wallets"; then "remove the top 1000 and top 100 badges"): (1) **dust counts** — the 1-token floor
 is gone; `build-holder-ranks.mjs` keeps every balance above zero, stored as whole tokens from 1 up and to 6 decimals below 1
