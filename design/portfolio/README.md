@@ -689,4 +689,7 @@ Holders asked where their wallet ranks (LP wallets left out). He wants it per wa
 - **Badge look (2026-10-21 pm):** `mock-rank-badge-v1` (loud: shield / medal / plaque / ring / hex — "too loud"), `-v2` (quiet plaques
   — **P2 picked**: no box, stacked "HOLDER / RANK" tiny caps + big number), `-v3` (plaque + HOLDER RANK, not picked). Breakdown pills
   stay as built, labelled "PTGC RANK" / "UFO RANK" (`mock-ranks-bd-p2.html`). Built the same day.
+- **Rank window (2026-10-21, `mock-rank-window-v1.html` → "perfect!")**: the Earned frame; TODAY big + change over the period;
+  BEST EVER / LOWEST / TO PASS / DAYS IN TOP 100; the chart (y flipped, buy / sell dots, BEST marked; LIFE · 1Y · 90D · 30D · 7D);
+  WHAT IT TAKES to #N-1 / #10 / #5 / #1. Built the same day with the real history (PfRank.jsx).
 

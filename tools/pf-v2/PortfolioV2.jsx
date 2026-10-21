@@ -160,6 +160,7 @@
       const[edTok,setEdTok]=useState(null);   // round 20: the Earned details window (which token it opened on)
       const ufoElig=usePfUfoEligible();      // round 31: the reward-eligible UFO supply (supply − burned − pools − excluded wallets)
       const ranks=usePfRanks();   // 2026-10-21: HOLDER RANK — data/holder-ranks.json (null until read)
+      const[rkWin,setRkWin]=useState(null);   // the rank window: the token it opened on, or {tok, a} from a breakdown badge
       const[addMsg,setAddMsg]=useState('');
       const[lgTok,setLgTok]=useState(null);
       const[edit,setEdit]=useState(null);   // round 2 (Shaka: "we need to be able to edit a saved wallet"): the wallet being edited
@@ -365,7 +366,7 @@
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
                   <div className="pf2-lg2">{parts.map(x=><div className="r" key={x[0]}><i style={{background:x[2]}}></i><span>{x[0]}</span><b>{pfAbbr(x[1])}</b><span className="usd">{fmtDollar(usd(x[1],dp.ptgc))}</span><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
-              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding)} label={rkLabel}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding)} label={rkLabel} open={()=>setRkWin('PTGC')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('PTGC')} aria-label="PTGC rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 <div className="pf2-src3">
@@ -428,7 +429,7 @@
                     <div className="r"><i style={{background:'#22D3EE'}}></i><span>From reflections</span><b>{pfAbbr(ufoReflNow)}</b><span className="usd">{fmtDollar(usd(ufoReflNow,dp.ufo))}</span><em>{pfPct(ufoReflNow,uf.balance)}</em></div>
                   </div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
-              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance)} label={rkLabel}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance)} label={rkLabel} open={()=>setRkWin('UFO')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
@@ -505,12 +506,12 @@
                   <div className="pf2-bds"><span>Sort</span>{[['value','Value'],['name','Name'],['added','Added'],...(hasR?[['rp','PTGC rank'],['ru','UFO rank']]:[])].map(([k,l])=><button key={k} className={bdSort===k?'on':''} aria-pressed={bdSort===k} onClick={()=>setBdSort(k)}>{l}</button>)}</div>
                   <table className={`pf2-bdt${hasR?' rk':''}`}>{hasR&&<colgroup><col style={{width:'13%'}}/><col style={{width:'41%'}}/><col style={{width:'11%'}}/><col style={{width:'11%'}}/><col style={{width:'10%'}}/><col style={{width:'14%'}}/></colgroup>}<thead><tr><th>WALLET</th>{hasR&&<th className="rkh">HOLDER RANK</th>}<th><img src={TOKENS.PTGC.logo} alt=""/>PTGC</th><th><img src={TOKENS.PTGC.logo} alt=""/>PENDING TO CLAIM</th><th><img src={TOKENS.UFO.logo} alt=""/>UFO</th><th>TOTAL {'\u00B7'} SHARE</th></tr></thead><tbody>
                     {/* round 30 (his pick B-A of mock-r30-v1): the ledger dressed like the rest of the page — bigger type, zebra, the wallet colour as a left accent, logos in the headers, a gold ALL WALLETS band */}
-                    {order.map(r=>r.sub?subRow(r):<tr key={r.a} style={{'--c':r.c}}><td>{who(r)}</td>{hasR&&<td className="rkc"><PfRankBadge tok="PTGC" x={r.rp} why={why(r.pT)}/><PfRankBadge tok="UFO" x={r.ru} why={why(r.uT)}/></td>}<td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
+                    {order.map(r=>r.sub?subRow(r):<tr key={r.a} style={{'--c':r.c}}><td>{who(r)}</td>{hasR&&<td className="rkc"><PfRankBadge tok="PTGC" x={r.rp} why={why(r.pT)} open={()=>setRkWin({tok:'PTGC',a:r.a})}/><PfRankBadge tok="UFO" x={r.ru} why={why(r.uT)} open={()=>setRkWin({tok:'UFO',a:r.a})}/></td>}<td>{cell(r.pT,r.p$,'p')}</td><td>{cell(r.pc,r.c$,'p')}</td><td>{cell(r.uT,r.u$,'u')}</td><td><span className="tot">{fmtDollar(r.t$)}</span>{bar(r)}</td></tr>)}
                     {rows.length>1&&<tr className="sum"><td><div className="n">ALL WALLETS</div></td>{hasR&&<td className="rkc"><div className="pf2-asone">As one wallet</div><PfRankBadge tok="PTGC" x={pfRank(ranks,'PTGC',S('pT'))} sm why={why(S('pT'))}/><PfRankBadge tok="UFO" x={pfRank(ranks,'UFO',S('uT'))} sm why={why(S('uT'))}/></td>}<td>{cell(S('pT'),S('p$'),'p')}</td><td>{cell(S('pc'),S('c$'),'p')}</td><td>{cell(S('uT'),S('u$'),'u')}</td><td><span className="tot">{fmtDollar(all)}</span><div className="bar"><span><b style={{width:(all>0?S('p$')/all*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(all>0?S('u$')/all*100:0)+'%',background:'#7CFC00'}}></b></span><small>100%</small></div></td></tr>}
                   </tbody></table>
                   <div className="pf2-bdc">{order.map(r=>r.sub?<div key={'g'+r.sub} className="wsum g"><span className="l">{r.sub}</span><b>{fmtDollar(S('t$',r.rs))}</b></div>:<div key={r.a} className="wc"><div className="top"><div className="who">{who(r)}</div><div className="tv">{fmtDollar(r.t$)}<small>{all>0?(r.t$/all*100).toFixed(1):'0.0'}% of portfolio</small></div></div>
                       <div className="sb"><b style={{width:(r.t$>0?r.p$/r.t$*100:0)+'%',background:'#F2D35B'}}></b><b style={{width:(r.t$>0?r.u$/r.t$*100:0)+'%',background:'#7CFC00'}}></b></div>
-                      {hasR&&<div className="pf2-rkm"><PfRankBadge tok="PTGC" x={r.rp} why={why(r.pT)}/><PfRankBadge tok="UFO" x={r.ru} why={why(r.uT)}/></div>}
+                      {hasR&&<div className="pf2-rkm"><PfRankBadge tok="PTGC" x={r.rp} why={why(r.pT)} open={()=>setRkWin({tok:'PTGC',a:r.a})}/><PfRankBadge tok="UFO" x={r.ru} why={why(r.uT)} open={()=>setRkWin({tok:'UFO',a:r.a})}/></div>}
                       <div className="cols"><div className="cl"><div className="l">PTGC</div>{cell(r.pT,r.p$,'p')}</div><div className="cl"><div className="l">Pending to claim</div>{cell(r.pc,r.c$,'p')}</div><div className="cl"><div className="l">UFO</div>{cell(r.uT,r.u$,'u')}</div></div></div>)}
                     {rows.length>1&&<div className="wsum"><span className="l">ALL WALLETS</span><b>{fmtDollar(all)}</b></div>}
                     {rows.length>1&&hasR&&<div className="pf2-rkm one"><span className="pf2-asone">As one wallet</span><PfRankBadge tok="PTGC" x={pfRank(ranks,'PTGC',S('pT'))} sm why={why(S('pT'))}/><PfRankBadge tok="UFO" x={pfRank(ranks,'UFO',S('uT'))} sm why={why(S('uT'))}/></div>}</div>
@@ -523,6 +524,7 @@
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
         {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
+        {rkWin&&<PfRankModal tok={typeof rkWin==='string'?rkWin:rkWin.tok} wallets={typeof rkWin==='string'?counted:[...counted].sort((x,y)=>(x.address.toLowerCase()===rkWin.a?-1:0)-(y.address.toLowerCase()===rkWin.a?-1:0))} data={portfolioData} ranks={ranks} txs={txs} prices={dp} close={()=>setRkWin(null)}/>}
         {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} wallets={counted} hasUfo={uf.balance>0||(ufoEarned||0)>0} close={()=>setEdTok(null)}/>}
         {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(

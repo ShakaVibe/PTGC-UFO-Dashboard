@@ -42,7 +42,38 @@ Update it at the end of every session.
 
 ## Current state (2026-10-21)
 
-**Afternoon 2026-10-21: HOLDER RANK LIVE (`270f1a5d9`), then trimmed on his word — written to the Mac, NOT pushed.** His live look
+**2026-10-21 afternoon → evening: THE HOLDER RANK WINDOW + RANK HISTORY — built, written to the Mac, NOT pushed (he had to run:
+"keep working on this").** His ask: click the rank badge → "a really nice window with stats on the ranking, a nice looking chart,
+and period selectors" — LIFE · 1Y · 90D · 30D · 7D; the history prefilled from the chain, then recorded daily. Mock
+`design/portfolio/mock-rank-window-v1.html` → "perfect!". **Data:** every real holder's balance at every UTC day end, exact.
+Method (after a slow first try at 49 s/day and a replay-only try that drifted): `design/portfolio/ranks-mock/backfill-fast.mjs`
+streams all Transfer events once (PTGC: 9.1M in 14 min), classifies each address once, reads ONLY the movers at each day end
+(256 concurrent eth_calls, ~390/s), and carries everyone else forward by the day's REFLECTION FACTOR measured on 6 reference
+holders that did not move (reflections scale every untouched balance alike — verified: 30 of 30 random wallet-days match the
+chain's balanceOf exactly for UFO). `to-deltas.mjs` turns that into the archive `data/rank-history/<TOKEN>.json` (schema 2,
+CHANGES only: per day {b, f, m:{addr: key|0}} — UFO 28 MB → 1 MB; a full per-day list would be ~670 MB for PTGC).
+`scripts/build-rank-history.mjs` (pipeline step `rank-history`, gate 20 h, in the holder-ranks lane after holder-ranks —
+`tools/rank-history-pipeline.py`) EXTENDS the archive a day at a time by the same method and REBUILDS the index
+`data/rank-index/<TOKEN>/<xx>.json` (256 shards by address prefix, [firstDay, [[rank, run], …]], rank 0 = not holding) +
+`meta.json`. Ties sort by address so a rank is reproducible. **Page:** `tools/pf-v2/PfRank.jsx` (new, loaded after PfTx.jsx) —
+`usePfRankHist` (meta + the wallet's shard), `PfRankChart` (SVG, y flipped, gaps where not holding, buy / sell dots from Recent
+Transactions, BEST marked; a narrower taller drawing under 700 px), `PfRankModal` (the Earned frame: big rank + change over the
+period, BEST EVER / LOWEST / TO PASS / DAYS IN TOP 100 tiles, the chart + pills (remembered in `grays_pf_rank_per`), WHAT IT
+TAKES to #N-1 / #10 / #5 / #1 with ≈ $, the foot; PTGC / UFO tabs; a wallet picker when several are counted — opens on the
+badge's wallet). Every rank badge and the League-box number are buttons that open it. CSS `.pf2-rkw` at the end of pf2.css.
+Harness: opens from the UFO League box with a real whale (105 real days drawn), LIFE pill, 390 px clean. **DONE while he was away:** PTGC's
+whole life rebuilt (1,107 days, 9.1M transfers streamed in 14 min, 334,642 balance reads in 4 min, 18.6 min in all; 30 of 30 random
+wallet-days match the chain exactly — same for UFO); the archive is written as deltas straight from the backfill (PTGC 19 MB,
+UFO 1 MB); the index is schema 2 (4,096 shards by three hex chars, [firstDay, [rank delta per day]] — PTGC's biggest shard 30 KB,
+was 540 KB with run-lengths); the daily step was proven by trimming UFO's last day and letting it rebuild it (same block, same
+factor to all digits, same holders). All of it is on the Mac (`data/rank-history/`, `data/rank-index/` = 6,969 files, the page,
+the step, the pipeline wiring). Harness: the window opens from the League box and from the breakdown badges at 1380 / 1024 / 390,
+the PTGC whale's LIFE chart draws 1,107 real days (#15 → #1 in Oct 2023), no overflow. portfolio.html sha256 `19cdc6cd`.
+**NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
+live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
+~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first
+held AFTER the last archive day shows "Not enough days" until the next daily run); "as one wallet" has no history (the window
+opens on the first counted wallet with a picker).**Afternoon 2026-10-21: HOLDER RANK LIVE (`270f1a5d9`), then trimmed on his word — written to the Mac, NOT pushed.** His live look
 ("why does it say out of 12,244 … there are over 18k holders"; then "lets not show the Of the part.. Just their ranks, and more
 needed to pass … dont exclude dust wallets"; then "remove the top 1000 and top 100 badges"): (1) **dust counts** — the 1-token floor
 is gone; `build-holder-ranks.mjs` keeps every balance above zero, stored as whole tokens from 1 up and to 6 decimals below 1

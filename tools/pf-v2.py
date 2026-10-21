@@ -3,7 +3,7 @@
 them, twice (the second run must print "0 edit(s)"):   python3 tools/pf-v2.py
 
   1. the pf2-* CSS (tools/pf-v2/pf2.css) + the Leagues window's lg-* CSS copied from index.html, at the end of the page's <style>
-  2. the components (PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PortfolioV2.jsx, in that order) at module scope above PortfolioPage
+  2. the components (PfLeagues.jsx → PfHistory.jsx → PfTx.jsx → PfRank.jsx → PortfolioV2.jsx, in that order) at module scope above PortfolioPage
 Design: design/portfolio/README.md (every decision), audit + roadmap handover/PORTFOLIO-ROADMAP.md.
 History: built 2026-10-13 behind a faint preview dot (this script also wrapped the classic body and added the dot); LIVE
 2026-10-16; the classic body, the dot and PF_V2_LIVE were removed 2026-10-20 by tools/pf-cleanup.py, and those steps with them.
@@ -18,7 +18,7 @@ s = open(F, encoding='utf-8').read()
 edits = 0
 
 css = open(os.path.join(HERE, 'pf2.css'), encoding='utf-8').read().rstrip('\n')
-jsx = '\n\n'.join(open(os.path.join(HERE, n), encoding='utf-8').read().rstrip('\n') for n in ('PfLeagues.jsx', 'PfHistory.jsx', 'PfTx.jsx', 'PortfolioV2.jsx'))
+jsx = '\n\n'.join(open(os.path.join(HERE, n), encoding='utf-8').read().rstrip('\n') for n in ('PfLeagues.jsx', 'PfHistory.jsx', 'PfTx.jsx', 'PfRank.jsx', 'PortfolioV2.jsx'))
 # round 2: the Leagues window's CSS, taken from index.html each run (one design for both pages)
 ix = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
 a = ix.index('    .lg-m{'); b = ix.index('    /* the combined card (Socials', a)

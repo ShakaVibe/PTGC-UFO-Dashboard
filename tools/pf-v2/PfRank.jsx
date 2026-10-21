@@ -1,0 +1,108 @@
+    /* ===== HOLDER RANK WINDOW (2026-10-21, design/portfolio/mock-rank-window-v1.html, "perfect!") =====
+       Opens from any rank badge. Reads data/rank-index/<TOKEN>/meta.json + the wallet's shard (<first three hex>.json): for every
+       wallet that ever held, [firstDayIndex, [rank delta per day]] over the token's life (rank 0 = not holding). Today's point is the
+       LIVE rank from holder-ranks.json (pfRank), so the chart ends where the badge says. Periods LIFE · 1Y · 90D · 30D · 7D. Buy /
+       sell dots = Recent Transactions' rows (t, addr, tok, type). Several wallets → "as one" is not in the index (it is a sum), so
+       the window opens on the FIRST counted wallet with a picker. */
+    const PFR_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/rank-index/';
+    const pfrCache={};
+    const pfrGet=url=>pfrCache[url]||(pfrCache[url]=fetch(url,{cache:'no-cache'}).then(r=>r.ok?r.json():null).catch(()=>null).then(j=>{if(!j)delete pfrCache[url];return j;}));
+    /* → {day0, days, series:[rank|0 per day index], holders:[count per day]} for one wallet, or null */
+    const pfrLoad=async(tok,addr)=>{
+      const a=addr.toLowerCase();
+      const[meta,shard]=await Promise.all([pfrGet(`${PFR_RAW}${tok}/meta.json`),pfrGet(`${PFR_RAW}${tok}/${a.slice(2,5)}.json`)]);
+      if(!meta||meta.schema!==2)return null;
+      const series=new Array(meta.days).fill(0);
+      const rec=shard&&shard[a];
+      if(rec){let i=rec[0],r=0;for(const d of rec[1]){r+=d;if(i<series.length)series[i]=r;i++;}}   // schema 2: [firstDay, [rank delta per day]]
+      return{day0:meta.day0,days:meta.days,series,holders:meta.holders||[],generatedAt:meta.generatedAt,known:!!rec};
+    };
+    const usePfRankHist=(tok,addr)=>{const[d,setD]=useState({state:'loading'});
+      useEffect(()=>{let live=true;setD({state:'loading'});pfrLoad(tok,addr).then(h=>{if(!live)return;setD(h?{state:'ok',...h}:{state:'failed'});});return()=>{live=false;};},[tok,addr]);return d;};
+    const PFR_PERIODS=[['LIFE',Infinity],['1Y',365],['90D',90],['30D',30],['7D',7]];
+    const pfrDate=(day0,i)=>new Date(Date.parse(day0+'T00:00:00Z')+i*86400e3);
+    const pfrFmt=(d,long)=>long?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+    const pfrFmtY=d=>d.toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});
+    /* the chart: rank over time, higher = better (y flipped), the period's own scale, buy / sell dots, the best point marked */
+    const PfRankChart=({pts,day0,i0,col,evs,tok})=>{
+      /* phones: a narrower, taller drawing with bigger type (the 820-wide one shrinks to unreadable at 390 px) */
+      const narrow=typeof window!=='undefined'&&window.innerWidth<=700;
+      const W=narrow?360:820,H=narrow?230:260,L=narrow?40:48,R=narrow?10:14,T=18,B=narrow?26:30,FS=narrow?12:11;
+      const held=pts.map((r,i)=>[i,r]).filter(x=>x[1]>0);
+      if(held.length<2)return <div className="pf2-hwait" style={{height:200}}><div>Not enough days with this wallet holding {tok} to draw yet.</div></div>;
+      const lo=Math.min(...held.map(x=>x[1])),hi=Math.max(...held.map(x=>x[1]));const pad=Math.max(1,(hi-lo)*.12);const lo2=Math.max(1,lo-pad),hi2=hi+pad;
+      const n=pts.length;const X=i=>L+(W-L-R)*i/Math.max(1,n-1),Y=v=>T+(H-T-B)*(v-lo2)/(hi2-lo2);
+      /* gaps (rank 0 = not holding) break the line */
+      const segs=[];let cur=[];pts.forEach((r,i)=>{if(r>0)cur.push(`${X(i).toFixed(1)},${Y(r).toFixed(1)}`);else if(cur.length){segs.push(cur);cur=[];}});if(cur.length)segs.push(cur);
+      const area=segs.map(s=>{const f=s[0].split(','),l=s[s.length-1].split(',');return `M${f[0]},${H-B} L${s.join(' L')} L${l[0]},${H-B} Z`;}).join(' ');
+      const grid=[0,1,2,3,4].map(k=>{const v=lo2+(hi2-lo2)*k/4,y=Y(v);return <g key={k}><line x1={L} x2={W-R} y1={y} y2={y} stroke="rgba(255,255,255,.07)"/><text x={L-6} y={y+4} textAnchor="end" fontSize={FS} fill="rgba(255,255,255,.5)" fontFamily="Rajdhani" fontWeight="600">#{Math.round(v).toLocaleString('en-US')}</text></g>;});
+      const XL=narrow?[0,2,4]:[0,1,2,3,4];const xl=XL.map(k=>{const i=Math.round((n-1)*k/4),d=pfrDate(day0,i0+i);return <text key={k} x={X(i)} y={H-8} textAnchor="middle" fontSize={FS} fill="rgba(255,255,255,.5)" fontFamily="Rajdhani" fontWeight="600">{n<=120?pfrFmt(d):pfrFmtY(d)}</text>;});
+      const bi=held.reduce((m,x)=>x[1]<m[1]?x:m,held[0]);
+      const gid='pfrg'+(col==='#F2D35B'?'p':'u');
+      return <svg viewBox={`0 0 ${W} ${H}`} className="pf2-rkc" role="img" aria-label={`${tok} holder rank over time, best #${bi[1]}`}>
+        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".35"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs>
+        {grid}<path d={area} fill={`url(#${gid})`}/>{segs.map((s,k)=><polyline key={k} points={s.join(' ')} fill="none" stroke={col} strokeWidth="2.2" strokeLinejoin="round"/>)}
+        {evs.map((e,k)=>pts[e.i]>0&&<circle key={k} cx={X(e.i)} cy={Y(pts[e.i])} r="4" fill={e.buy?'#39E15A':'#FF4B55'} stroke="#0b0d12" strokeWidth="1.5"><title>{e.buy?'Buy':'Sell'} · {pfrFmt(pfrDate(day0,i0+e.i),true)}</title></circle>)}
+        <circle cx={X(bi[0])} cy={Y(bi[1])} r="5" fill="#0b0d12" stroke={col} strokeWidth="2"/><text x={X(bi[0])+8} y={Y(bi[1])-8} fontSize={narrow?11:11} fill={col} fontFamily="Orbitron" fontWeight="900">BEST #{bi[1].toLocaleString('en-US')}</text>
+        <circle cx={X(n-1)} cy={Y(pts[n-1])} r="5" fill={col}/>{xl}</svg>;
+    };
+    const PfRankModal=({tok:tok0,wallets,data,ranks,txs,prices,close})=>{
+      const[tok,setTok]=useState(tok0);
+      const[sel,setSel]=useState(()=>wallets[0]&&wallets[0].address.toLowerCase());
+      const[per,setPer]=useState(()=>{try{return localStorage.getItem('grays_pf_rank_per')||'1Y';}catch(e){return '1Y';}});
+      const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
+      const w=wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0];
+      const d=w&&data[w.address.toLowerCase()];
+      const bal=d&&!d.error?(isU?(d.ufo.balance||0):(d.ptgc.totalHolding||0)):0;
+      const live=pfRank(ranks,tok,bal);
+      const h=usePfRankHist(tok,w?w.address:'0x');
+      const nowT=usePfTick();
+      /* the series + today's live point */
+      const full=h.state==='ok'?[...h.series]:null;
+      if(full){const today=Math.floor((Date.now()-Date.parse(h.day0+'T00:00:00Z'))/86400e3);while(full.length<=today)full.push(0);full[today]=live?live.r:0;}
+      const nDays=PFR_PERIODS.find(p=>p[0]===per)[1];
+      const i0=full?Math.max(0,full.length-Math.min(full.length,nDays)):0;
+      const pts=full?full.slice(i0):[];
+      const held=pts.filter(r=>r>0);
+      const first=pts.find(r=>r>0)||null,best=held.length?Math.min(...held):null,worst=held.length?Math.max(...held):null;
+      const bestI=best!=null?pts.indexOf(best):-1,worstI=worst!=null?pts.lastIndexOf(worst):-1;
+      const chg=live&&first?live.r-first:null;
+      const top100=full?full.filter(r=>r>0&&r<=100).length:0,tracked=full?full.filter(r=>r>0).length:0;
+      /* buy / sell days from Recent Transactions */
+      const evs=(txs&&txs.rows||[]).filter(r=>r.tok===tok&&r.addr===(w&&w.address.toLowerCase())&&(r.type==='Buy'||r.type==='Sell')).map(r=>({i:Math.floor((r.t*1000-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0,buy:r.type==='Buy'})).filter(e=>e.i>=0&&e.i<pts.length);
+      /* what it takes: milestones from today's list */
+      const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
+      const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];
+      const px=isU?prices.ufo:prices.ptgc;
+      return(
+        <PfModal onClose={close} label={`${tok} holder rank`}>
+          <div className={`pf2-erw pf2-rkw${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
+            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2>{tok} HOLDER RANK</h2><div className="sub">{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</div></div>
+              <div className="tw"><div className="tabs">{['PTGC','UFO'].map(t=><button key={t} className={tok===t?'on':''} aria-pressed={tok===t} onClick={()=>setTok(t)}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div></div>
+              <button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
+            {wallets.length>1&&<div className="pf2-edsel"><div className="ws">{wallets.map(x=>{const a=x.address.toLowerCase();return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{x.name||pfAddr(x.address)}</button>;})}</div></div>}
+            <div className="hero">
+              <div className="big"><small>TODAY</small><b>{live?'#'+live.r.toLocaleString('en-US'):'—'}</b>
+                {chg==null?<span className="flat">{live?'—':'not holding '+tok}</span>:chg===0?<span className="flat">{'—'} no change</span>:<span className={chg<0?'up':'dn'}>{chg<0?'▲':'▼'} {Math.abs(chg).toLocaleString('en-US')} place{Math.abs(chg)===1?'':'s'}</span>}
+                <em>{per==='LIFE'?'since the first day held':`vs ${nDays} days ago`}</em></div>
+              <div className="tiles">
+                <div className="tl"><div className="l">BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,i0+bestI),true):''}</div></div>
+                <div className="tl"><div className="l">LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,i0+worstI),true):''}</div></div>
+                <div className="tl"><div className="l">{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
+                <div className="tl"><div className="l">DAYS IN TOP 100</div><div className="v">{full?top100.toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
+              </div>
+            </div>
+            <div className="ch"><div className="chh"><span>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
+              {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
+              {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
+              {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={evs} tok={tok}/>}
+              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><span><i style={{background:'#39E15A'}}></i>buy</span><span><i style={{background:'#FF4B55'}}></i>sell</span><span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
+            {live&&ms.length>0&&<div className="wt"><div className="chh"><span>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
+              {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
+                return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
+            </div></div>}
+            <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</>:null}</div>
+          </div>
+        </PfModal>
+      );
+    };
