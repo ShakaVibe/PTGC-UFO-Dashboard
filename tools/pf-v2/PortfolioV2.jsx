@@ -178,7 +178,7 @@
         return{a,st,v,pv,uv};
       };
       const counted=wallets.filter(w=>isWalletChecked(w.address));
-      const rkLabel=counted.length>1?`ALL ${counted.length} WALLETS AS ONE`:'HOLDER RANK';   // H3: one wallet → its rank; several → added together (Shaka, 2026-10-21)
+      const rkLabel=counted.length>1?`ALL ${counted.length} WALLETS AS ONE`:null;   // the P2 badge itself says HOLDER RANK   // H3: one wallet → its rank; several → added together (Shaka, 2026-10-21)
       const anyData=counted.some(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&!d.error;});
       const ptgcUSD=anyData?usd(agg.ptgc.totalHolding,dp.ptgc):null;
       const ufoUSD=anyData?usd(agg.ufo.balance,dp.ufo):null;

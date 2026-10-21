@@ -911,11 +911,12 @@
     .pf2-rkm .pf2-rkb.sm{border-radius:999px;padding:3px 10px 3px 4px}
     .pf2-rkm.one{margin:8px 0 0;flex-direction:row;flex-wrap:wrap;align-items:center}.pf2-rkm.one .pf2-asone{flex-basis:100%;margin:0}
     /* H3 — the row under the league bar */
-    .pf2-rk3{display:flex;align-items:center;justify-content:space-between;gap:6px 10px;margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
-    .pf2-rk3 .l{display:flex;align-items:center;gap:4px 8px;flex-wrap:wrap}
+    .pf2-rk3{display:flex;align-items:center;justify-content:space-between;gap:6px 10px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
+    .pf2-rk3 .l{display:flex;align-items:center;gap:4px 12px;flex-wrap:wrap}
     .pf2-rk3 .k{font:700 12px 'Rajdhani',sans-serif;letter-spacing:.14em;color:rgba(255,255,255,.6);white-space:nowrap}
-    .pf2-rk3 b{font:900 17px 'Orbitron',sans-serif;color:#F2D35B}.pf2-rk3.u b{color:#8DFF3A}
-    .pf2-rk3 small{font:600 13.5px 'Rajdhani',sans-serif;color:rgba(255,255,255,.6);white-space:nowrap}
+    .pf2-rk3 .p2{display:inline-flex;align-items:center;gap:8px}
+    .pf2-rk3 .st{display:flex;flex-direction:column;line-height:1.1;text-align:right}.pf2-rk3 .st small{font:700 8.5px 'Orbitron',sans-serif;letter-spacing:.14em;color:rgba(255,255,255,.45)}
+    .pf2-rk3 b{font:900 24px 'Orbitron',sans-serif;letter-spacing:.02em;color:#F2D35B;line-height:1}.pf2-rk3.u b{color:#8DFF3A}
     .pf2-rk3 .r{font:600 13.5px 'Rajdhani',sans-serif;color:rgba(255,255,255,.6)}.pf2-rk3 .r strong{font-weight:700;color:#fff}
     /* with the rank column the table needs ~1150 px: below that the breakdown is the wallet cards (phone layout), two across */
     @media (max-width:1150px){.pf2-bd.rk .pf2-bdt{display:none}.pf2-bd.rk .pf2-bdc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}.pf2-bd.rk .pf2-bdc>.wsum,.pf2-bd.rk .pf2-bdc>.pf2-rkm.one{grid-column:1/-1}}
@@ -1878,11 +1879,13 @@
     const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
     /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
     const PfRankBadge=({tok,x,sm,why})=>{const c=tok==='UFO'?'u':'p',logo=tok==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo;
-      if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok}</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
-      return <div className={`pf2-rkb ${c}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b>
+      if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
+      return <div className={`pf2-rkb ${c}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>#{x.r.toLocaleString('en-US')}</b>
         {!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
     /* H3: the row under the league bar — "HOLDER RANK" for one wallet, "ALL N WALLETS AS ONE" for several (Shaka, 2026-10-21) */
-    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    /* H3 in the P2 look (Shaka, 2026-10-21 pm, mock-rank-badge-v2 P2): no pill — "HOLDER / RANK" stacked in tiny caps beside a big
+       gold / green number; with several wallets the line's own label "ALL N WALLETS AS ONE" sits in front */
+    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<span className="p2"><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></span></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
 
     /* Expects from PfLeagues.jsx (loaded first): PF_ADDR, PF_TOKEN_ADDR, PF_SUPPLY, pfAbbr, pfAddr, pfLsSet, PfModal. Used by PfTx.jsx
        and PortfolioV2.jsx: PFH_TOK, pfhPrices, pfhPriceAt, pfhRpc, usePfSeries, usePf24h, PfValueHistory, PfEarnedModal, usePfUfoV1.
@@ -2953,7 +2956,7 @@
         return{a,st,v,pv,uv};
       };
       const counted=wallets.filter(w=>isWalletChecked(w.address));
-      const rkLabel=counted.length>1?`ALL ${counted.length} WALLETS AS ONE`:'HOLDER RANK';   // H3: one wallet → its rank; several → added together (Shaka, 2026-10-21)
+      const rkLabel=counted.length>1?`ALL ${counted.length} WALLETS AS ONE`:null;   // the P2 badge itself says HOLDER RANK   // H3: one wallet → its rank; several → added together (Shaka, 2026-10-21)
       const anyData=counted.some(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&!d.error;});
       const ptgcUSD=anyData?usd(agg.ptgc.totalHolding,dp.ptgc):null;
       const ufoUSD=anyData?usd(agg.ufo.balance,dp.ufo):null;

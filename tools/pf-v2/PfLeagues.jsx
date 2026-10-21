@@ -164,8 +164,10 @@
     const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
     /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
     const PfRankBadge=({tok,x,sm,why})=>{const c=tok==='UFO'?'u':'p',logo=tok==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo;
-      if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok}</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
-      return <div className={`pf2-rkb ${c}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b>
+      if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
+      return <div className={`pf2-rkb ${c}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>#{x.r.toLocaleString('en-US')}</b>
         {!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
     /* H3: the row under the league bar — "HOLDER RANK" for one wallet, "ALL N WALLETS AS ONE" for several (Shaka, 2026-10-21) */
-    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    /* H3 in the P2 look (Shaka, 2026-10-21 pm, mock-rank-badge-v2 P2): no pill — "HOLDER / RANK" stacked in tiny caps beside a big
+       gold / green number; with several wallets the line's own label "ALL N WALLETS AS ONE" sits in front */
+    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<span className="p2"><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></span></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;

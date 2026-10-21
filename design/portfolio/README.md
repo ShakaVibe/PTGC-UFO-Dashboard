@@ -686,4 +686,7 @@ Holders asked where their wallet ranks (LP wallets left out). He wants it per wa
   "▲ N more to pass #N-1". Open: 2+ wallets counted → hide, or "ALL N WALLETS AS ONE · #28".
 - **Built 2026-10-21** (`mock-ranks-choices-v1.html` → G2 + "as one wallet"; `mock-ranks-phone-v1.html` → OK). Built as mocked, plus:
   below 1,150 px the breakdown shows the wallet cards two across (the rank column made the table spill at 900–1,100 px).
+- **Badge look (2026-10-21 pm):** `mock-rank-badge-v1` (loud: shield / medal / plaque / ring / hex — "too loud"), `-v2` (quiet plaques
+  — **P2 picked**: no box, stacked "HOLDER / RANK" tiny caps + big number), `-v3` (plaque + HOLDER RANK, not picked). Breakdown pills
+  stay as built, labelled "PTGC RANK" / "UFO RANK" (`mock-ranks-bd-p2.html`). Built the same day.
 

@@ -50,7 +50,18 @@ is gone; `build-holder-ranks.mjs` keeps every balance above zero, stored as whol
 (2) **no "of N", no "top x%", no TOP 10 / 100 / 1,000 badges** anywhere — badge = token + #rank + "▲ N more to pass #N-1", H3 row =
 label + #rank + the same; rank #1 says "Nobody above you"; a dust gap prints decimals (`pfPassAmt`); the foot line no longer counts
 holders ("Ranks count every wallet holding PTGC or UFO, except …"); the `.pf2-md` CSS removed. Harness 1380 / 1024 / 390 clean.
-portfolio.html sha256 `0dd6a29c`. **NEXT: his push → Claude's live check with real wallets.**
+portfolio.html sha256 `0dd6a29c`. **PUSHED and LIVE-VERIFIED** (built-in browser, three real wallets): the column, chips,
+sorts, H3 "ALL 3 WALLETS AS ONE #9 ▲ 233.34M more to pass #8", foot line; a hand count from PulseScan's live holder list (people
+only) matches 5 of 6 ranks exactly — PTGC #14 / #17, UFO #43 / #105 — and the sixth (#137 vs #136) is a holder just above who
+moved after the list was read (the wallet's own stale entry was below its live balance, checked). Known limit: a wallet that SOLD
+since the list was read can sit one place low (its own old entry still counts above it) until the next 2-hour refresh — fixing it
+needs addresses in the file. **Then the badge look (his ask: "more of a badge … something that looks cooler" → five loud ones `mock-rank-badge-v1`
+("no too loud.. b3 is the closest") → four quiet plaques `-v2` + "I like the Holder Rank word… like in B4" → `-v3`): HE PICKED P2 for
+the League box line — no pill, "HOLDER / RANK" stacked in tiny caps beside a big gold / green number (`.pf2-rk3 .p2`, 24 px
+Orbitron); with one wallet the line has no other label, with several "ALL N WALLETS AS ONE" sits in front. The breakdown + phone
+badges keep the live pill but are labelled "PTGC RANK" / "UFO RANK" (`mock-ranks-bd-p2.html`, "do it"). Built, harness clean at
+1380 (1 and 2 wallets) and 390, portfolio.html sha256 `0bde650f` — written to the Mac, NOT pushed. NEXT: his push → live glance →
+Phase F, F4 share link mock-up first.
 
 **2026-10-21 (Wednesday): HOLDER RANK — decisions made, the data side BUILT, the page side waiting on his OK of the phone mock.**
 Morning: his 2026-10-20 push (`2b63c386f`) live-checked (v2 only, no dot / classic footer, two real wallets read, Load Code /
