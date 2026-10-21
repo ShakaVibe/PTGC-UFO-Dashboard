@@ -127,7 +127,7 @@ PfRankChart; gridlines = the period's best, three 2-significant-digit steps, the
 with whole-rank gridlines otherwise; and the BEST marker is skipped only when today IS the best or best sits within 6% of the end
 at nearly the same height (Duhawks keeps its BEST #12 beside the #8,469 end label). Harness: Duhawks 1Y / 30D / LIFE, a normal
 wallet's 90D unchanged. portfolio.html sha256 482b1209…
-**ALL OF IT IS LIVE — his last push today is `c30e47bf3` (working tree clean at sign-off). Claude's live check in the browser
+**ALL OF IT IS LIVE — his last push today is `03b8f367e` (the log-scale chart; working tree clean at sign-off). Claude's live check in the browser
 after it: the window opens from the League box on 0xe4bb…e4e6, header "PTGC SHARK · UFO SHARK", the tick off, the frame-free
 plate, no errors (a first load showed the previous build — his browser / the CDN cache; a cache-busting reload showed the new one,
 so if he reports something "still there" after a push, check the live file with `fetch(…,{cache:'no-store'})` before touching code).
