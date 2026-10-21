@@ -684,4 +684,6 @@ Holders asked where their wallet ranks (LP wallets left out). He wants it per wa
   under the price · H2 third tile · **H3 a rank row inside the LEAGUE box — HIS PICK** · H4 spotlight with a #11 / YOU / #13 ladder.
   H3: hairline over the row; left "HOLDER RANK" + Orbitron rank (gold PTGC / green UFO) + "of N · top x%" + TOP badge; right
   "▲ N more to pass #N-1". Open: 2+ wallets counted → hide, or "ALL N WALLETS AS ONE · #28".
+- **Built 2026-10-21** (`mock-ranks-choices-v1.html` → G2 + "as one wallet"; `mock-ranks-phone-v1.html` → OK). Built as mocked, plus:
+  below 1,150 px the breakdown shows the wallet cards two across (the rank column made the table spill at 900–1,100 px).
 

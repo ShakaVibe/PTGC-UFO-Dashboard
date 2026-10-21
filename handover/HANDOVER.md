@@ -40,7 +40,34 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
-## Current state (2026-10-20)
+## Current state (2026-10-21)
+
+**2026-10-21 (Wednesday): HOLDER RANK — decisions made, the data side BUILT, the page side waiting on his OK of the phone mock.**
+Morning: his 2026-10-20 push (`2b63c386f`) live-checked (v2 only, no dot / classic footer, two real wallets read, Load Code /
+Leagues / Edit wallet open, the old `grays_pf_v2_preview` key removed on load, no errors). "go for it" on Claude's picks: **G2
+one-line badges** in the breakdown column, **H3 with 2+ wallets = "ALL N WALLETS AS ONE · #N"**, **people only** (every contract,
+the burn, the token contracts, the DAO wallets + DAO contract, the UFO OA wallet left out), **floor 1 whole token**. Staking check
+DONE: the eight biggest stakers' `balanceOf` ≥ their `mapUserInfo` amount (e.g. 19,178M balance / 18,966M staked) — staked and
+locked PTGC stays in the wallet, so ranking by balance is right; the staking contract's 3.31B is the reward pool. **Built:**
+`scripts/build-holder-ranks.mjs` → `data/holder-ranks.json` (schema 1: per token `holders`, `listed`, `left{known,contracts,dust}`,
+`readAt`, `b` = whole-token balances high → low; a failed token carries the previous list with ::warning::, both failing = exit 1);
+first real run 13:10 UTC: PTGC 18,344 rows → 12,244 ranked in 205 s, UFO 5,364 → 4,942 in 57 s, 111 KB (the file is on the Mac so
+the page has data at go-live). `tools/holder-ranks-pipeline.py` put it in the pipeline: step `holder-ranks`, gate 2 h, its OWN lane
+(4th), the yml's `only` list + Commit list. Phone mock `design/portfolio/mock-ranks-phone-v1.html` (breakdown cards: the two badges
+between the share bar and the amounts, "more to pass" wraps under; "as one wallet" under ALL WALLETS; the H3 line wraps) — his OK
+("i think so"). **THE PAGE SIDE BUILT — written to the Mac, NOT pushed:** `PfLeagues.jsx` end = `usePfRanks` (reads
+`data/holder-ranks.json`, re-reads every 30 min; a list > 48 h old is `stale` → no ranks), `pfRank` (binary search on the LIVE
+balance, whole tokens), `PfRankBadge` (G2), `PfRankRow` (H3); `PortfolioV2.jsx`: `PfLeague` takes `rankRow`, the cards pass
+"HOLDER RANK" / "ALL N WALLETS AS ONE"; the breakdown gets the HOLDER RANK column (`.pf2-bdt.rk`, fixed widths 13/41/11/11/10/14),
+best-rank header chips, PTGC rank / UFO rank sorts, "As one wallet" in ALL WALLETS, the badges in the phone cards (`.pf2-rkm`), the
+foot line (`.pf2-rkfoot`; "hidden: the list is out of date" when stale); `pf2.css` end = the rank CSS + **below 1,150 px the
+breakdown is the wallet cards two across (one under 700)** — the table with the rank column spilled at 900–1,100 px. Harness
+(2 / 1 wallet, stub balances): squeeze scan clean at 1380 · 1280 · 1180 · 1150 · 1100 · 1024 · 900 · 700 · 480 · 390, no sideways
+scroll, no errors; stale file → no column + the note; missing file → the page exactly as before. portfolio.html sha256 `515fdfbb`.
+**NEXT: his push → the pipeline's first `holder-ranks` run (gate 2 h; the committed file is from 13:10 UTC) → Claude's live check
+with real wallets (ranks match a hand count from PulseScan; tablet / phone).**
+
+## Before that (2026-10-20)
 
 **NOT PUSHED at the end of 2026-10-20: the Portfolio cleanup round (below) + the holder-rank mock-ups + these notes.** One push
 covers it all (the line is at the end of `sessions/2026-10-20.md`); then Claude's live check of portfolio.html.

@@ -1,4 +1,4 @@
-// pipeline-run.mjs — runs the Data Pipeline's steps in THREE PARALLEL LANES (2026-10-06).
+// pipeline-run.mjs — runs the Data Pipeline's steps in PARALLEL LANES (three 2026-10-06; a fourth, holder-ranks, 2026-10-21).
 //
 //   node scripts/pipeline-run.mjs            run (env: ONLY, FORCE, COINGECKO_API_KEY; writes the summary)
 //   node scripts/pipeline-run.mjs --report   after the commit: job summary + annotations, exit 1 if a step failed
@@ -37,6 +37,7 @@ const STEPS = {
   'pair-volume':     { run: 'scripts/build-pair-volume.mjs' },
   'new-holders':     { run: 'scripts/build-new-holders.mjs' },
   'swap-volume':     { run: 'scripts/build-swap-volume.mjs' },   // 2026-10-06: human vs arb-bot volume (reads charts-intraday for prices — last in the rpc lane)
+  'holder-ranks':    { run: 'scripts/build-holder-ranks.mjs',       gate: ['data/holder-ranks.json', 2] },   // 2026-10-21: Portfolio HOLDER RANK — every real holder's balance, sorted (~9 min of PulseScan paging)
 };
 const LANES = [
   { name: 'coingecko-key', steps: ['charts', 'charts-intraday', 'coingecko'] },
@@ -44,6 +45,7 @@ const LANES = [
   // files behind it (burn-summary, treasury, dao-buys, new-holders, swap-volume all stamped 7–8 min after dispatch).
   { name: 'rpc',           steps: ['burn-history', 'treasury', 'dao-buys', 'ufo-ptgc-burns', 'token-allocation', 'lv-snapshot', 'new-holders', 'swap-volume', 'value-generated'] },
   { name: 'pair-volume',   steps: ['pair-volume'] },
+  { name: 'holder-ranks',  steps: ['holder-ranks'] },   // its own lane: ~9 min of PulseScan paging must not lengthen the rpc lane
 ];
 
 const stamp = () => new Date().toISOString().slice(11, 19);

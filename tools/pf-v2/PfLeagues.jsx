@@ -136,3 +136,33 @@
         </PfModal>
       );
     };
+
+    /* ===== HOLDER RANK (2026-10-21, design/portfolio/mock-ranks-v3 G2 + mock-ranks-single-v1 H3 + mock-ranks-phone-v1) =====
+       data/holder-ranks.json (scripts/build-holder-ranks.mjs, every 2 h): per token the whole-token balances of every real holder,
+       high → low — people only (no contracts, burn, token contracts, DAO wallets, UFO OA wallet), at least 1 token. A wallet is ranked
+       by its LIVE balance: rank = 1 + how many listed balances are strictly above it (ties share a rank); "more to pass" = the balance
+       just above − yours + 1. A list more than PF_RANKS_STALE old is not used (the column says so) — never a rank from a dead list. */
+    const PF_RANKS_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/holder-ranks.json';
+    const PF_RANKS_STALE=48*3600e3;
+    let pfRanksP=null,pfRanksAt=0;
+    const pfRanksLoad=()=>{if(pfRanksP&&Date.now()-pfRanksAt<30*60e3)return pfRanksP;pfRanksAt=Date.now();
+      pfRanksP=fetch(PF_RANKS_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>j&&j.schema===1&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO?j:null).catch(()=>null)
+        .then(j=>{if(!j)pfRanksP=null;return j;});return pfRanksP;};
+    const usePfRanks=()=>{const[d,setD]=useState(null);
+      useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
+      const stale=!!d&&!(Date.now()-Date.parse(d.generatedAt)<PF_RANKS_STALE);
+      return d?{...d,stale}:null;};
+    const pfTopPct=p=>'top '+(p>=1?p.toFixed(1):p.toFixed(2))+'%';
+    /* → null when the list is missing / stale or the balance is under 1 token; else {r, n, top, md, pass} */
+    const pfRank=(ranks,tok,bal)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>=1))return null;
+      const b=t.b,x=Math.floor(bal);let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
+      const r=lo+1,n=Math.max(t.holders||b.length,r);
+      return{r,n,top:pfTopPct(r/n*100),md:r<=10?'TOP 10':r<=100?'TOP 100':r<=1000?'TOP 1,000':null,pass:lo>0?b[lo-1]-x+1:null};};
+    const pfPassTxt=x=>x.pass==null?'#1 — nobody above you':`▲ ${pfAbbr(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
+    /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
+    const PfRankBadge=({tok,x,sm,why})=>{const c=tok==='UFO'?'u':'p',logo=tok==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo;
+      if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok}</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
+      return <div className={`pf2-rkb ${c}${x.md?' md':''}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')} of ${x.n.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b><small>{x.top}</small>
+        {x.md&&<i className="pf2-md">{x.md}</i>}{!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
+    /* H3: the row under the league bar — "HOLDER RANK" for one wallet, "ALL N WALLETS AS ONE" for several (Shaka, 2026-10-21) */
+    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b><small>of {x.n.toLocaleString('en-US')} {'·'} {x.top}</small>{x.md&&<i className="pf2-md">{x.md}</i>}</div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfAbbr(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;

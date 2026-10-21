@@ -1,0 +1,113 @@
+// build-holder-ranks.mjs
+// Prebuilds data/holder-ranks.json for the Portfolio page's HOLDER RANK (2026-10-21): every real PTGC and UFO holder's
+// balance, sorted, so the page can say "this wallet is #103 of 12,114 PTGC holders" without reading 18,000 holders itself.
+//
+// Method, per run (full, not incremental — balances move on every transfer and every UFO reflection):
+//   1. Page PulseScan's /api/v2/tokens/<token>/holders (50 a page, already sorted by balance, keyset paging).
+//      Measured 2026-10-20: UFO 5,324 rows ~95 s, PTGC 18,195 rows ~7 min.
+//   2. Leave out what is not a person (Shaka, 2026-10-21 — "people only"): the burn addresses, the token contracts,
+//      the DAO treasury wallets + DAO contract, the UFO OA wallet, and EVERY contract PulseScan flags (`is_contract`):
+//      LP pools of every DEX, the staking contract (its 3.31B is the reward pool — stakers keep their staked PTGC in
+//      their own balance, checked on the eight biggest stakers 2026-10-21), routers, bridges, multisigs.
+//   3. Keep balances of at least FLOOR whole tokens (1 — Shaka, 2026-10-21); store whole tokens, sorted high → low.
+//
+// The page ranks a wallet by its LIVE balance: rank = 1 + how many listed balances are strictly above it (ties share a
+// rank); "more to pass" = the next balance above − yours. The list itself is up to a run old (gate 2 h).
+//
+// Honest-failure rules (gotcha 20): a token whose paging fails, or that comes back with fewer rows than 98 % of
+// PulseScan's own holder count, keeps the PREVIOUS file's entry for that token (`carried: true`, ::warning:: so the run
+// page shows it); both failing → exit 1 and the previous file stays untouched.
+//
+// Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
+import fs from 'node:fs';
+
+const OUT_PATH = process.env.OUT_PATH || 'data/holder-ranks.json';
+const API = process.env.PULSESCAN_API || 'https://api.scan.pulsechain.com/api/v2';
+const FLOOR = 1;                       // whole tokens
+const ONE = 10n ** 18n;
+const TOKENS = {
+  PTGC: '0x94534eeee131840b1c0f61847c572228bdfdde93',
+  UFO:  '0x49ed499433bee42dd34c169470fef2c8f9fae6e6',
+};
+// Never a holder here, contract or not (the contracts are caught by is_contract as well; the list is for EOAs
+// that belong to the project and for safety if PulseScan ever stops flagging a contract).
+const EXCLUDE = new Set([
+  '0x0000000000000000000000000000000000000369',   // burn
+  '0x0000000000000000000000000000000000000000',
+  '0x000000000000000000000000000000000000dead',
+  '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',   // DAO treasury
+  '0x440773b5104a102c00ef26979a5c897155336a34',   // DAO wallet 2
+  '0x305acfab82103c2b82b19543919d1c93b44e55db',   // PTGC DAO contract
+  '0x92dd8e86fdb206fa41e451398a9f03fbd36d574d',   // UFO OA wallet (PF_UFO_EXCL.wallets)
+  '0xc71f597a2ac39e47f07102e849d18489c96f39ef',   // PTGC staking
+  '0x165c3410fc91ef562c50559f7d2289febed552d9',   // PulseX router
+  '0x94534eeee131840b1c0f61847c572228bdfdde93',   // PTGC
+  '0x49ed499433bee42dd34c169470fef2c8f9fae6e6',   // UFO
+  '0x456548a9b56efbbd89ca0309edd17a9e20b04018',   // UFO v1 (retired)
+]);
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function getJson(url) {
+  let last;
+  for (let k = 0; k < 6; k++) {
+    try {
+      const r = await fetch(url, { headers: { accept: 'application/json' } });
+      if (r.status === 429 || r.status >= 500) throw new Error('HTTP ' + r.status);
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' (not retried)');
+      return await r.json();
+    } catch (e) {
+      last = e;
+      if (/not retried/.test(e.message)) break;
+      await sleep(1500 * (k + 1) + Math.random() * 500);
+    }
+  }
+  throw new Error(`${url.replace(API, '')}: ${last && last.message}`);
+}
+
+async function readToken(sym, addr) {
+  const t0 = Date.now();
+  const counters = await getJson(`${API}/tokens/${addr}/counters`);
+  const expected = Number(counters.token_holders_count || 0);
+  let params = null, rows = 0;
+  const kept = [];
+  let leftKnown = 0, leftContracts = 0, leftDust = 0;
+  for (;;) {
+    const q = params ? '?' + new URLSearchParams(params).toString() : '';
+    const j = await getJson(`${API}/tokens/${addr}/holders${q}`);
+    for (const it of j.items || []) {
+      rows++;
+      const a = String(it.address && it.address.hash || '').toLowerCase();
+      if (EXCLUDE.has(a)) { leftKnown++; continue; }
+      if (it.address && it.address.is_contract) { leftContracts++; continue; }
+      const whole = BigInt(it.value) / ONE;
+      if (whole < BigInt(FLOOR)) { leftDust++; continue; }
+      kept.push(Number(whole));
+    }
+    params = j.next_page_params;
+    if (!params) break;
+    if (rows % 2500 === 0) console.log(`${sym}: ${rows} rows read (${Math.round((Date.now() - t0) / 1000)} s)`);
+  }
+  if (expected && rows < expected * 0.98) throw new Error(`${sym}: read ${rows} rows but PulseScan counts ${expected} holders`);
+  kept.sort((x, y) => y - x);
+  console.log(`${sym}: ${rows} rows in ${Math.round((Date.now() - t0) / 1000)} s → ${kept.length} ranked (left out: ${leftKnown} known, ${leftContracts} contracts, ${leftDust} under ${FLOOR} token)`);
+  return { holders: kept.length, listed: rows, left: { known: leftKnown, contracts: leftContracts, dust: leftDust }, readAt: new Date().toISOString(), b: kept };
+}
+
+let prev = null;
+try { prev = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8')); } catch (e) {}
+const out = { schema: 1, generatedAt: null, floorTokens: FLOOR, source: 'PulseScan holders, people only', tokens: {} };
+let ok = 0;
+for (const [sym, addr] of Object.entries(TOKENS)) {
+  try { out.tokens[sym] = await readToken(sym, addr); ok++; }
+  catch (e) {
+    const old = prev && prev.tokens && prev.tokens[sym];
+    console.log(`::warning::holder-ranks ${sym} failed (${e.message})${old ? ' — keeping the previous list from ' + old.readAt : ''}`);
+    if (old) out.tokens[sym] = { ...old, carried: true };
+  }
+}
+if (!ok) { console.error('holder-ranks: both tokens failed — previous file kept'); process.exit(1); }
+if (!out.tokens.PTGC || !out.tokens.UFO) { console.error('holder-ranks: a token is missing and there is no previous list to carry — previous file kept'); process.exit(1); }
+out.generatedAt = new Date().toISOString();
+const body = JSON.stringify(out);
+fs.writeFileSync(OUT_PATH, body);
+console.log(`holder-ranks: wrote ${OUT_PATH} (${(body.length / 1024).toFixed(0)} KB)`);
