@@ -81,8 +81,10 @@
       const tracked=full?full.filter(r=>r>0).length:0;
       /* DAYS IN TOP N (Shaka, 2026-10-21 pm): the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 the wallet has ever been inside */
       const topN=full?[100,500,1000,2500,5000,10000].map(n=>[n,full.filter(r=>r>0&&r<=n).length]).find(([n,c])=>c>0)||[10000,0]:[100,0];
-      /* buy / sell days from Recent Transactions */
-      const evs=(txs&&txs.rows||[]).filter(r=>r.tok===tok&&r.addr===(w&&w.address.toLowerCase())&&(r.type==='Buy'||r.type==='Sell')).map(r=>({i:Math.floor((r.t*1000-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0,buy:r.type==='Buy'})).filter(e=>e.i>=0&&e.i<pts.length);
+      /* buy / sell days from Recent Transactions (r.t is in MILLISECONDS — the first build multiplied by 1,000 and no dot ever
+         landed inside the chart; Shaka: "there has to be some sells in there for the rank to fall off that much"). One dot per
+         day per kind: a day with both a buy and a sell shows both. */
+      const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.addr!==(w&&w.address.toLowerCase())||(r.type!=='Buy'&&r.type!=='Sell'))return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(r.type==='Buy'?'b':'s');if(seen.has(k))return;seen.add(k);out.push({i,buy:r.type==='Buy'});});return out;})();
       /* what it takes: milestones from today's list */
       const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];

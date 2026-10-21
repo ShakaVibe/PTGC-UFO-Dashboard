@@ -928,8 +928,11 @@
     .pf2-rkw{overflow:hidden auto;border-width:2px;border-color:rgba(242,211,91,.7);box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 46px rgba(242,211,91,.18)}
     .pf2-rkw.u{border-color:rgba(124,252,0,.6);box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 46px rgba(124,252,0,.16)}
     /* the plate: the Holders window's gold panorama (UFO hue-rotated, as there), under a dark veil so the tiles read */
-    /* his plate (2026-10-21 pm): the gold-framed mountain sky, rk-plate.webp — its own frame is the window's border (UFO hue-rotated) */
-    .pf2-rkw-sky{position:absolute;inset:0;background:#05060a url(logos/portfolio/rk-plate.webp) center/cover no-repeat;opacity:.9;pointer-events:none}
+    /* his plate (2026-10-21 pm): the mountain sky, rk-plate-nf.webp = his rk-plate.webp with its gold frame cropped OUT (the frame drew two
+       bright bars across the window — the file was renamed so no cache can serve the framed one); the window's own border is the frame.
+       The top and bottom edges fade to the window's black so nothing of the art can ever read as a bar (UFO hue-rotated) */
+    .pf2-rkw-sky{position:absolute;inset:0;background:#05060a url(logos/portfolio/rk-plate-nf.webp) center/cover no-repeat;opacity:.9;pointer-events:none}
+    .pf2-rkw-sky::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#05060a 0,rgba(5,6,10,0) 14%,rgba(5,6,10,0) 86%,#05060a 100%)}
     .pf2-rkw-sky.ufo{filter:hue-rotate(52deg) saturate(1) brightness(.95)}
     .pf2-rkw{background:#05060a;border:2px solid rgba(242,211,91,.75);box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 36px rgba(242,211,91,.22),inset 0 0 0 1px rgba(242,211,91,.25)}.pf2-rkw.u{border-color:rgba(124,252,0,.65);box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 36px rgba(124,252,0,.18),inset 0 0 0 1px rgba(124,252,0,.22)}
     .pf2-rkw>.ehd,.pf2-rkw>.pf2-edsel,.pf2-rkw>.hero,.pf2-rkw>.ch,.pf2-rkw>.wt,.pf2-rkw>.ft{position:relative}
@@ -2911,8 +2914,10 @@
       const tracked=full?full.filter(r=>r>0).length:0;
       /* DAYS IN TOP N (Shaka, 2026-10-21 pm): the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 the wallet has ever been inside */
       const topN=full?[100,500,1000,2500,5000,10000].map(n=>[n,full.filter(r=>r>0&&r<=n).length]).find(([n,c])=>c>0)||[10000,0]:[100,0];
-      /* buy / sell days from Recent Transactions */
-      const evs=(txs&&txs.rows||[]).filter(r=>r.tok===tok&&r.addr===(w&&w.address.toLowerCase())&&(r.type==='Buy'||r.type==='Sell')).map(r=>({i:Math.floor((r.t*1000-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0,buy:r.type==='Buy'})).filter(e=>e.i>=0&&e.i<pts.length);
+      /* buy / sell days from Recent Transactions (r.t is in MILLISECONDS — the first build multiplied by 1,000 and no dot ever
+         landed inside the chart; Shaka: "there has to be some sells in there for the rank to fall off that much"). One dot per
+         day per kind: a day with both a buy and a sell shows both. */
+      const evs=(()=>{const seen=new Set(),out=[];(txs&&txs.rows||[]).forEach(r=>{if(r.tok!==tok||r.addr!==(w&&w.address.toLowerCase())||(r.type!=='Buy'&&r.type!=='Sell'))return;const i=Math.floor((r.t-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-i0;if(i<0||i>=pts.length)return;const k=i+(r.type==='Buy'?'b':'s');if(seen.has(k))return;seen.add(k);out.push({i,buy:r.type==='Buy'});});return out;})();
       /* what it takes: milestones from today's list */
       const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];

@@ -90,7 +90,14 @@ the bars were the plate art's own gold frame — cropped OUT of `rk-plate.webp` 
 green #39E15A; the BEST marker is skipped when it sits within 6 % of the chart width of today's point (the end label says
 "BEST #N" when today IS the best, so nothing is lost); `topN` = the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 with
 any days, tile "DAYS IN TOP N" (a #121 → #125 wallet shows BEST #121 and #125 as two clean labels — harness `dress6`).
-Harness 1200 clean, no overflow. portfolio.html sha256 f8fe05a3…
+He pushed that (`f2ad9e87d`) and the bars were STILL there — the recropped plate had only reached the cloud clone, never the Mac,
+so the framed image went live. Now: the frame-free image is `logos/portfolio/rk-plate-nf.webp` (NEW name, so no browser cache can
+serve the framed one; the old `rk-plate.webp` is left in place, unreferenced) and `.pf2-rkw-sky::after` fades the top and bottom
+14 % to the window's black so nothing of the art can read as a bar. And his "there has to be some sells in there": the buy / sell
+dots NEVER drew — `r.t` from Recent Transactions is already milliseconds and the window multiplied by 1,000, so every dot fell
+off the chart → fixed, one dot per day per kind (harness: 30 buys + 30 sells drawn on the bot wallet's 90D). The dots cover what
+Recent Transactions has loaded (a year or 20 pages back, buys / sells only — a send to a person or a move between his wallets
+is not a dot, same as the list's typing). Harness 1200 clean, no overflow. portfolio.html sha256 a304d53d…
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first
