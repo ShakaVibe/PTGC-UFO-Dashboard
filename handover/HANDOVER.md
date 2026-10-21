@@ -126,7 +126,15 @@ now #8,469) — "it's just a straight line … something must be off on the scal
 PfRankChart; gridlines = the period's best, three 2-significant-digit steps, the worst — "#12 #62 #320 #1,600 #8,469"), linear
 with whole-rank gridlines otherwise; and the BEST marker is skipped only when today IS the best or best sits within 6% of the end
 at nearly the same height (Duhawks keeps its BEST #12 beside the #8,469 end label). Harness: Duhawks 1Y / 30D / LIFE, a normal
-wallet's 90D unchanged. portfolio.html sha256 482b1209…
+wallet's 90D unchanged. Later that evening his add: "a bit of a calculator in WHAT IT TAKES — put in any rank, it tells you how
+many tokens you need and the price" → `mock-rank-calc-v1` (A a ladder row / B a sentence strip / C a block with tiles) → C, then
+`-v2` ("I WANT TO BE RANK" + an ⓘ hover disclaimer, the rank box centred under its label) → BUILT: `.ctl` under the ladder in
+PfRank.jsx — the box (`want` state, digits only, placeholder = half your rank), tiles TOKENS TO BUY (`list[n-1] − pfRankKey(bal) + 1`,
+same maths as the ladder), COST TODAY (× price, green), YOU'D BE A (`pfLeague(bal+need)` → sea art + name + % to the next); messages
+for a rank at/below yours ("that's you" / "you're already above #N"), past the list ("the list ends at #17,253"); the ⓘ's card on
+hover / focus: "Cost is a snapshot … slippage and the price rising while you buy aren't included". CSS `.pf2-rkw .ctl`, `.ii`;
+2 columns under 860, 1 under 480. (Gotcha again: the base CSS makes img display:block — the sea art in the tile needed
+inline-block.) Harness 1200 + 390 clean. portfolio.html sha256 d8501938…
 **ALL OF IT IS LIVE — his last push today is `03b8f367e` (the log-scale chart; working tree clean at sign-off). Claude's live check in the browser
 after it: the window opens from the League box on 0xe4bb…e4e6, header "PTGC SHARK · UFO SHARK", the tick off, the frame-free
 plate, no errors (a first load showed the previous build — his browser / the CDN cache; a cache-busting reload showed the new one,

@@ -73,6 +73,7 @@
       /* Shaka: "default the chart to NOT show buys and sells.. if they want to see them they can check a box.. and then they get a
          loading while it loads" + "should always default to off.. even on refresh" — off every time the window opens, never remembered */
       const[showTx,setShowTx]=useState(false);
+      const[want,setWant]=useState('');   // the calculator's typed rank (his add, 2026-10-21 evening: mock-rank-calc-v2, pick C)
       const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
       const w=wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0];
       const d=w&&data[w.address.toLowerCase()];
@@ -146,7 +147,22 @@
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
-            </div></div>}
+            </div>
+              {/* the calculator (mock-rank-calc-v2, his pick C): type any rank → tokens to buy, cost at today's price, the league it makes you.
+                 The ⓘ: cost is a snapshot — slippage and the price moving as you buy are not in it. */}
+              {(()=>{const n=parseInt(String(want).replace(/[^0-9]/g,''),10);const ok=n>=1&&n<=list.length;const mine=live.r;
+                const need=ok&&n<mine?Math.max(0,(list[n-1]||0)-pfRankKey(bal)+1):0;const c=usd(need,px);
+                const L=ok&&n<mine?pfLeague(bal+need,PF_SUPPLY[tok]):null;const L0=pfLeague(bal,PF_SUPPLY[tok]);
+                const msg=!want?null:!ok?(n>list.length?`the list ends at #${list.length.toLocaleString('en-US')}`:'type a rank'):n>=mine?(n===mine?`that’s you — #${mine.toLocaleString('en-US')} today`:`you’re already above #${n.toLocaleString('en-US')}`):null;
+                return <div className="ctl">
+                  <div className="ask"><div className="l">I WANT TO BE RANK <span className="ii" tabIndex="0" aria-label="About the cost">i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It’s the tokens you’d need at today’s price. A real buy moves the price as it fills — slippage and the price rising while you buy aren’t included, so expect the real cost to be higher.</span></span></div>
+                    <label className="inp"><span>#</span><input inputMode="numeric" pattern="[0-9]*" placeholder={mine>1?String(Math.max(1,Math.ceil(mine/2))):'1'} value={want} onChange={e=>setWant(e.target.value.replace(/[^0-9]/g,'').slice(0,6))} aria-label="The rank you want"/></label>
+                    <div className="s">{msg||<>any rank above your #{mine.toLocaleString('en-US')} {'·'} from today{'’'}s holder list</>}</div></div>
+                  <div className="tl"><div className="l">TOKENS TO BUY</div><div className="v">{ok&&n<mine?pfPassAmt(need):'—'}</div><div className="s">{tok} more than you hold</div></div>
+                  <div className="tl"><div className="l">COST TODAY</div><div className={`v${ok&&n<mine&&c!=null?' usd':''}`}>{ok&&n<mine&&c!=null?fmtDollar(c,0):'—'}</div><div className="s">at {fmtPriceNode(px)} per {tok}</div></div>
+                  <div className="tl"><div className="l">YOU’D BE A</div><div className="v">{L&&L.cur?<><img src={pfSea(L.cur.emoji)} alt=""/>{L.cur.name}</>:'—'}</div><div className="s">{L&&L.cur?(L.next?`${L.pct.toFixed(1)}% of the way to ${L.next.name}`:'the top league'):L0&&L0.cur?`you’re a ${L0.cur.name} now`:''}</div></div>
+                </div>;})()}
+            </div>}
             <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</>:null}</div>
           </div>
         </PfModal>
