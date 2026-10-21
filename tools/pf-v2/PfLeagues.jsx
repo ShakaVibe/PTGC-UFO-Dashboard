@@ -152,17 +152,20 @@
       useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
       const stale=!!d&&!(Date.now()-Date.parse(d.generatedAt)<PF_RANKS_STALE);
       return d?{...d,stale}:null;};
-    const pfTopPct=p=>'top '+(p>=1?p.toFixed(1):p.toFixed(2))+'%';
-    /* → null when the list is missing / stale or the balance is under 1 token; else {r, n, top, md, pass} */
-    const pfRank=(ranks,tok,bal)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>=1))return null;
-      const b=t.b,x=Math.floor(bal);let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
-      const r=lo+1,n=Math.max(t.holders||b.length,r);
-      return{r,n,top:pfTopPct(r/n*100),md:r<=10?'TOP 10':r<=100?'TOP 100':r<=1000?'TOP 1,000':null,pass:lo>0?b[lo-1]-x+1:null};};
-    const pfPassTxt=x=>x.pass==null?'#1 — nobody above you':`▲ ${pfAbbr(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
+    /* 2026-10-21 pm: every balance above zero counts (no 1-token floor) and no "of N" / "top x%" / TOP badges — just the rank and
+       what it takes to pass the next one (Shaka). pfRankKey rounds like build-holder-ranks.mjs's key(): whole tokens from 1 up,
+       6 decimals below 1, never 0 for a holder. */
+    const pfRankKey=bal=>bal>=1?Math.floor(bal):Math.max(1e-6,Math.floor(bal*1e6)/1e6);
+    /* → null when the list is missing / stale or the balance is 0; else {r, pass} */
+    const pfRank=(ranks,tok,bal)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>0))return null;
+      const b=t.b,x=pfRankKey(bal);let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
+      const d=lo>0?b[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&b[lo-1]>=1?d+1:d+1e-6)};};
+    const pfPassAmt=v=>v>=1?pfAbbr(v):String(+v.toFixed(6));   // a dust holder's gap can be 0.000123
+    const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
     /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
     const PfRankBadge=({tok,x,sm,why})=>{const c=tok==='UFO'?'u':'p',logo=tok==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo;
       if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok}</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
-      return <div className={`pf2-rkb ${c}${x.md?' md':''}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')} of ${x.n.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b><small>{x.top}</small>
-        {x.md&&<i className="pf2-md">{x.md}</i>}{!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
+      return <div className={`pf2-rkb ${c}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b>
+        {!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
     /* H3: the row under the league bar — "HOLDER RANK" for one wallet, "ALL N WALLETS AS ONE" for several (Shaka, 2026-10-21) */
-    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b><small>of {x.n.toLocaleString('en-US')} {'·'} {x.top}</small>{x.md&&<i className="pf2-md">{x.md}</i>}</div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfAbbr(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;

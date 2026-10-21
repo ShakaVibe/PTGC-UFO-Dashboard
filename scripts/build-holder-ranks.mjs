@@ -9,7 +9,9 @@
 //      the DAO treasury wallets + DAO contract, the UFO OA wallet, and EVERY contract PulseScan flags (`is_contract`):
 //      LP pools of every DEX, the staking contract (its 3.31B is the reward pool — stakers keep their staked PTGC in
 //      their own balance, checked on the eight biggest stakers 2026-10-21), routers, bridges, multisigs.
-//   3. Keep balances of at least FLOOR whole tokens (1 — Shaka, 2026-10-21); store whole tokens, sorted high → low.
+//   3. Keep EVERY balance above zero (Shaka, 2026-10-21 pm: "dont exclude dust wallets" — the morning's 1-token floor is gone).
+//      Stored high → low as whole tokens at 1 token and up, and to 6 decimals below 1 (at least 0.000001) — `pfRankKey` in
+//      tools/pf-v2/PfLeagues.jsx rounds a live balance the same way, so equal balances compare equal.
 //
 // The page ranks a wallet by its LIVE balance: rank = 1 + how many listed balances are strictly above it (ties share a
 // rank); "more to pass" = the next balance above − yours. The list itself is up to a run old (gate 2 h).
@@ -23,8 +25,11 @@ import fs from 'node:fs';
 
 const OUT_PATH = process.env.OUT_PATH || 'data/holder-ranks.json';
 const API = process.env.PULSESCAN_API || 'https://api.scan.pulsechain.com/api/v2';
-const FLOOR = 1;                       // whole tokens
+const FLOOR = 0;                       // any balance above zero counts (2026-10-21 pm)
 const ONE = 10n ** 18n;
+const MICRO = 10n ** 12n;              // 1e-6 token in wei
+/* whole tokens from 1 up; 6 decimals below 1, never 0 for a holder (must match pfRankKey on the page) */
+const key = v => { const w = v / ONE; if (w >= 1n) return Number(w); const m = v / MICRO; return Math.max(1, Number(m)) / 1e6; };
 const TOKENS = {
   PTGC: '0x94534eeee131840b1c0f61847c572228bdfdde93',
   UFO:  '0x49ed499433bee42dd34c169470fef2c8f9fae6e6',
@@ -79,9 +84,9 @@ async function readToken(sym, addr) {
       const a = String(it.address && it.address.hash || '').toLowerCase();
       if (EXCLUDE.has(a)) { leftKnown++; continue; }
       if (it.address && it.address.is_contract) { leftContracts++; continue; }
-      const whole = BigInt(it.value) / ONE;
-      if (whole < BigInt(FLOOR)) { leftDust++; continue; }
-      kept.push(Number(whole));
+      const v = BigInt(it.value);
+      if (v <= 0n) { leftDust++; continue; }
+      kept.push(key(v));
     }
     params = j.next_page_params;
     if (!params) break;
@@ -89,7 +94,7 @@ async function readToken(sym, addr) {
   }
   if (expected && rows < expected * 0.98) throw new Error(`${sym}: read ${rows} rows but PulseScan counts ${expected} holders`);
   kept.sort((x, y) => y - x);
-  console.log(`${sym}: ${rows} rows in ${Math.round((Date.now() - t0) / 1000)} s → ${kept.length} ranked (left out: ${leftKnown} known, ${leftContracts} contracts, ${leftDust} under ${FLOOR} token)`);
+  console.log(`${sym}: ${rows} rows in ${Math.round((Date.now() - t0) / 1000)} s → ${kept.length} ranked (left out: ${leftKnown} known, ${leftContracts} contracts, ${leftDust} at zero)`);
   return { holders: kept.length, listed: rows, left: { known: leftKnown, contracts: leftContracts, dust: leftDust }, readAt: new Date().toISOString(), b: kept };
 }
 

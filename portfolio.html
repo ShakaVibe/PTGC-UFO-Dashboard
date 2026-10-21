@@ -889,8 +889,6 @@
     }
     @media (prefers-reduced-motion:reduce){.pf2-tg::after,.pf2-foldh .chev,.pf2-wc .acts{transition:none}}
     /* ===== HOLDER RANK (2026-10-21 — mock-ranks-v3 G2, mock-ranks-single-v1 H3, mock-ranks-phone-v1) ===== */
-    .pf2-md{font:900 9.5px 'Orbitron',sans-serif;font-style:normal;letter-spacing:.08em;padding:2px 6px;border-radius:4px;color:#1a1200;background:linear-gradient(180deg,#FFE58A,#E0B53A);white-space:nowrap}
-    .pf2-rkb.u .pf2-md,.pf2-rk3.u .pf2-md{background:linear-gradient(180deg,#B8FF6A,#5ED000);color:#061000}
     .pf2-rkb{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font:700 12.5px 'Rajdhani',sans-serif;letter-spacing:.06em;color:rgba(255,255,255,.65);padding:4px 10px 4px 5px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.35);text-align:left;white-space:nowrap}
     .pf2-rkb+.pf2-rkb{margin-top:6px}
     .pf2-rkb img{width:18px;height:18px;border-radius:50%}
@@ -899,7 +897,6 @@
     .pf2-rkb.u{border-color:rgba(124,252,0,.3);background:linear-gradient(90deg,rgba(124,252,0,.08),rgba(0,0,0,.32) 65%)}.pf2-rkb.u b{color:#8DFF3A}
     .pf2-rkb small{font:600 12.5px 'Rajdhani',sans-serif;letter-spacing:.02em;color:rgba(255,255,255,.55)}
     .pf2-rkb em{margin-left:auto;font:600 12.5px 'Rajdhani',sans-serif;font-style:normal;letter-spacing:.01em;color:rgba(255,255,255,.48)}
-    .pf2-rkb.md.p{box-shadow:0 0 12px rgba(242,211,91,.18)}.pf2-rkb.md.u{box-shadow:0 0 12px rgba(124,252,0,.16)}
     .pf2-rkb.none{opacity:.5}.pf2-rkb.none b{color:rgba(255,255,255,.5)}
     .pf2-rkb.sm{width:max-content;padding:3px 10px 3px 4px}.pf2-rkb.sm b{font-size:12.5px}.pf2-rkb.sm img{width:16px;height:16px}
     .pf2-asone{font:700 11.5px 'Rajdhani',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:5px}
@@ -1869,20 +1866,23 @@
       useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
       const stale=!!d&&!(Date.now()-Date.parse(d.generatedAt)<PF_RANKS_STALE);
       return d?{...d,stale}:null;};
-    const pfTopPct=p=>'top '+(p>=1?p.toFixed(1):p.toFixed(2))+'%';
-    /* → null when the list is missing / stale or the balance is under 1 token; else {r, n, top, md, pass} */
-    const pfRank=(ranks,tok,bal)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>=1))return null;
-      const b=t.b,x=Math.floor(bal);let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
-      const r=lo+1,n=Math.max(t.holders||b.length,r);
-      return{r,n,top:pfTopPct(r/n*100),md:r<=10?'TOP 10':r<=100?'TOP 100':r<=1000?'TOP 1,000':null,pass:lo>0?b[lo-1]-x+1:null};};
-    const pfPassTxt=x=>x.pass==null?'#1 — nobody above you':`▲ ${pfAbbr(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
+    /* 2026-10-21 pm: every balance above zero counts (no 1-token floor) and no "of N" / "top x%" / TOP badges — just the rank and
+       what it takes to pass the next one (Shaka). pfRankKey rounds like build-holder-ranks.mjs's key(): whole tokens from 1 up,
+       6 decimals below 1, never 0 for a holder. */
+    const pfRankKey=bal=>bal>=1?Math.floor(bal):Math.max(1e-6,Math.floor(bal*1e6)/1e6);
+    /* → null when the list is missing / stale or the balance is 0; else {r, pass} */
+    const pfRank=(ranks,tok,bal)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>0))return null;
+      const b=t.b,x=pfRankKey(bal);let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
+      const d=lo>0?b[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&b[lo-1]>=1?d+1:d+1e-6)};};
+    const pfPassAmt=v=>v>=1?pfAbbr(v):String(+v.toFixed(6));   // a dust holder's gap can be 0.000123
+    const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
     /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
     const PfRankBadge=({tok,x,sm,why})=>{const c=tok==='UFO'?'u':'p',logo=tok==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo;
       if(!x)return <div className={`pf2-rkb ${c} none`}><img src={logo} alt=""/><span className="k">{tok}</span><b>{'—'}</b><small>{why||'not ranked'}</small></div>;
-      return <div className={`pf2-rkb ${c}${x.md?' md':''}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')} of ${x.n.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b><small>{x.top}</small>
-        {x.md&&<i className="pf2-md">{x.md}</i>}{!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
+      return <div className={`pf2-rkb ${c}${sm?' sm':''}`} title={`${tok} holder #${x.r.toLocaleString('en-US')}`}><img src={logo} alt=""/><span className="k">{tok}</span><b>#{x.r.toLocaleString('en-US')}</b>
+        {!sm&&<em>{pfPassTxt(x)}</em>}</div>;};
     /* H3: the row under the league bar — "HOLDER RANK" for one wallet, "ALL N WALLETS AS ONE" for several (Shaka, 2026-10-21) */
-    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b><small>of {x.n.toLocaleString('en-US')} {'·'} {x.top}</small>{x.md&&<i className="pf2-md">{x.md}</i>}</div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfAbbr(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    const PfRankRow=({tok,x,label})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l"><span className="k">{label}</span><b>#{x.r.toLocaleString('en-US')}</b></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
 
     /* Expects from PfLeagues.jsx (loaded first): PF_ADDR, PF_TOKEN_ADDR, PF_SUPPLY, pfAbbr, pfAddr, pfLsSet, PfModal. Used by PfTx.jsx
        and PortfolioV2.jsx: PFH_TOK, pfhPrices, pfhPriceAt, pfhRpc, usePfSeries, usePf24h, PfValueHistory, PfEarnedModal, usePfUfoV1.
@@ -3289,7 +3289,7 @@
                       <div className="cols"><div className="cl"><div className="l">PTGC</div>{cell(r.pT,r.p$,'p')}</div><div className="cl"><div className="l">Pending to claim</div>{cell(r.pc,r.c$,'p')}</div><div className="cl"><div className="l">UFO</div>{cell(r.uT,r.u$,'u')}</div></div></div>)}
                     {rows.length>1&&<div className="wsum"><span className="l">ALL WALLETS</span><b>{fmtDollar(all)}</b></div>}
                     {rows.length>1&&hasR&&<div className="pf2-rkm one"><span className="pf2-asone">As one wallet</span><PfRankBadge tok="PTGC" x={pfRank(ranks,'PTGC',S('pT'))} sm why={why(S('pT'))}/><PfRankBadge tok="UFO" x={pfRank(ranks,'UFO',S('uT'))} sm why={why(S('uT'))}/></div>}</div>
-                  {ranks&&(hasR?<div className="pf2-rkfoot">Rank among <b>{ranks.tokens.PTGC.holders.toLocaleString('en-US')}</b> PTGC and <b>{ranks.tokens.UFO.holders.toLocaleString('en-US')}</b> UFO holders (wallets holding at least 1 token). Left out: liquidity pools and every other contract, the burn addresses, the token contracts, the DAO and UFO OA wallets. Your balance is read live; the holder list is refreshed every 2 hours {'\u00B7'} list read {pfAgo(Date.parse(ranks.generatedAt))}</div>
+                  {ranks&&(hasR?<div className="pf2-rkfoot">Ranks count every wallet holding PTGC or UFO, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO and UFO OA wallets. Your balance is read live; the holder list is refreshed every 2 hours {'\u00B7'} list read {pfAgo(Date.parse(ranks.generatedAt))}</div>
                     :<div className="pf2-rkfoot">Holder ranks are hidden: the holder list is out of date (read {pfAgo(Date.parse(ranks.generatedAt))}). They come back with the next refresh.</div>)}
                 </div>);})()}
             </section>

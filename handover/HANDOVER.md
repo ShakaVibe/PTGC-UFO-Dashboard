@@ -42,6 +42,16 @@ Update it at the end of every session.
 
 ## Current state (2026-10-21)
 
+**Afternoon 2026-10-21: HOLDER RANK LIVE (`270f1a5d9`), then trimmed on his word — written to the Mac, NOT pushed.** His live look
+("why does it say out of 12,244 … there are over 18k holders"; then "lets not show the Of the part.. Just their ranks, and more
+needed to pass … dont exclude dust wallets"; then "remove the top 1000 and top 100 badges"): (1) **dust counts** — the 1-token floor
+is gone; `build-holder-ranks.mjs` keeps every balance above zero, stored as whole tokens from 1 up and to 6 decimals below 1
+(`key()`; the page's `pfRankKey` rounds the same way); re-run 13:38 UTC: PTGC 17,253 ranked, UFO 5,025, 156 KB, on the Mac;
+(2) **no "of N", no "top x%", no TOP 10 / 100 / 1,000 badges** anywhere — badge = token + #rank + "▲ N more to pass #N-1", H3 row =
+label + #rank + the same; rank #1 says "Nobody above you"; a dust gap prints decimals (`pfPassAmt`); the foot line no longer counts
+holders ("Ranks count every wallet holding PTGC or UFO, except …"); the `.pf2-md` CSS removed. Harness 1380 / 1024 / 390 clean.
+portfolio.html sha256 `0dd6a29c`. **NEXT: his push → Claude's live check with real wallets.**
+
 **2026-10-21 (Wednesday): HOLDER RANK — decisions made, the data side BUILT, the page side waiting on his OK of the phone mock.**
 Morning: his 2026-10-20 push (`2b63c386f`) live-checked (v2 only, no dot / classic footer, two real wallets read, Load Code /
 Leagues / Edit wallet open, the old `grays_pf_v2_preview` key removed on load, no errors). "go for it" on Claude's picks: **G2
