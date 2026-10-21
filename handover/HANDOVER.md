@@ -77,8 +77,13 @@ window's gold panorama as the plate (`.pf2-rkw-sky`, UFO hue-rotated) under a da
 SVG laurels (`PfLaurel`) either side of the number, gold line icons (`PfIco`: trophy / down / bars / calendar / chart / bolt) on
 the tiles and section titles, the token name gold in the title, the chart's fill solid gold → faded with a dotted grid and a glow
 on the line, the end point labelled "#N" (and "· BEST" when today is the best — the old BEST label ran off the right edge; it
-also flips left when near the edge), WHAT IT TAKES gold-framed with glowing bars. Harness 1200 clean. portfolio.html sha256 see
-the session file.
+also flips left when near the edge), WHAT IT TAKES gold-framed with glowing bars. His second look ("best #24 … messed up", the Today box "ugly, use this background",
+"a background for the overall card", tiles "so tall … empty space"): HIS TWO ART FILES in `logos/portfolio/` — `rk-hero.webp`
+(gold laurel wreath + frame, the Today tile's background, number between the leaves, `center/118%`) and `rk-plate.webp` (gold-framed
+mountain sky, the window's plate, `cover` at `inset:-3%` so its frame sits on the window's edge; UFO = hue-rotated); the CSS /
+SVG laurels and the Holders sky are gone; ONE end-point label ("BEST #N" when today is the best, else "#N", drops below the
+point at the top edge, dark stroke); the tiles no longer stretch to the hero (`align-items:start`, hero `min-height:132px`).
+Harness 1200 clean. portfolio.html sha256 see the session file.
 **NEXT: his push (the line is in sessions/2026-10-21.md — ~7,000 new small files in data/rank-index, a big first commit) →
 live check: open the window on a real wallet, LIFE / 1Y, phone; the pipeline's first `rank-history` run (gate 20 h, so after
 ~2026-10-22 ~05 UTC; `only=rank-history` forces it).** Known limits: the window needs a wallet in the index (a wallet that first

@@ -23,11 +23,6 @@
     const pfrDate=(day0,i)=>new Date(Date.parse(day0+'T00:00:00Z')+i*86400e3);
     const pfrFmt=(d,long)=>long?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
     const pfrFmtY=d=>d.toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});
-    /* laurel wreath halves for the hero (his mock): 7 leaves along an arc, drawn once and mirrored */
-    const PfLaurel=({flip})=><svg className="pf2-lrl" viewBox="0 0 34 70" aria-hidden="true" style={flip?{transform:'scaleX(-1)'}:undefined}>
-      <path d="M30 4 C14 14 6 30 7 48 C8 56 12 62 18 67" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-      {[[28,8,-30],[20,13,-20],[14,21,-10],[10,31,0],[9,41,8],[11,51,18],[15,60,28]].map(([x,y,a],i)=><ellipse key={i} cx={x} cy={y} rx="3.2" ry="7" fill="currentColor" transform={`rotate(${a} ${x} ${y})`}/>)}
-    </svg>;
     /* small gold line icons for the tiles and section titles */
     const PfIco=({k})=>{const P={trophy:'M6 3h12v3a5 5 0 0 1-3 4.6V13h3v2H6v-2h3v-2.4A5 5 0 0 1 6 6V3zm-3 2h3v2a3 3 0 0 1-3-2zm18 0h-3v2a3 3 0 0 0 3-2z',down:'M5 8l7 8 7-8z',bars:'M4 20V12h3v8zm6.5 0V5h3v15zm6.5 0v-9h3v9z',cal:'M5 5h14v15H5zM5 9h14M8 3v4m8-4v4',chart:'M4 18 9 12l3 3 7-8M19 7h-4m4 0v4',bolt:'M13 2 4 14h6l-1 8 9-12h-6z'};
       return <svg className={`pf2-ico${k==='down'?' dn':''}`} viewBox="0 0 24 24" aria-hidden="true"><path d={P[k]} fill={k==='bolt'||k==='down'||k==='bars'||k==='trophy'?'currentColor':'none'} stroke="currentColor" strokeWidth={k==='bolt'||k==='trophy'?0:1.8} strokeLinecap="round" strokeLinejoin="round"/></svg>;};
@@ -60,7 +55,7 @@
           {!isEnd&&<text x={right?X(bi[0])-8:X(bi[0])+8} y={Y(bi[1])-8} textAnchor={right?'end':'start'} fontSize="11" fill={col} fontFamily="Orbitron" fontWeight="900">BEST #{bi[1].toLocaleString('en-US')}</text>}
         </>;})()}
         <circle cx={X(n-1)} cy={Y(pts[n-1])} r="6" fill="#0b0d12" stroke={col} strokeWidth="2.5"/><circle cx={X(n-1)} cy={Y(pts[n-1])} r="2.5" fill={col}/>
-        <text x={X(n-1)-9} y={Y(pts[n-1])-11} textAnchor="end" fontSize="12" fill={col} fontFamily="Orbitron" fontWeight="900">#{pts[n-1].toLocaleString('en-US')}{bi[0]===n-1?' · BEST':''}</text>{xl}</svg>;
+        <text x={X(n-1)-12} y={Y(pts[n-1])<T+16?Y(pts[n-1])+5:Y(pts[n-1])-10} textAnchor="end" fontSize="12" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>{bi[0]===n-1?'BEST ':''}#{pts[n-1].toLocaleString('en-US')}</text>{xl}</svg>;
     };
     const PfRankModal=({tok:tok0,wallets,data,ranks,txs,prices,close})=>{
       const[tok,setTok]=useState(tok0);
@@ -93,13 +88,13 @@
       return(
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${tok} holder rank`}>
           <div className={`pf2-erw pf2-rkw${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
-            <div aria-hidden="true" className={`pf2-rkw-sky${isU?' ufo':''}`}></div><div aria-hidden="true" className="pf2-rkw-veil"></div>
+            <div aria-hidden="true" className={`pf2-rkw-sky${isU?' ufo':''}`}></div>
             <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2><span className="tk">{tok}</span> HOLDER RANK</h2><div className="sub">{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</div></div>
               <div className="tw"><div className="tabs">{['PTGC','UFO'].map(t=><button key={t} className={tok===t?'on':''} aria-pressed={tok===t} onClick={()=>setTok(t)}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div></div>
               <button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
             {wallets.length>1&&<div className="pf2-edsel"><div className="ws">{wallets.map(x=>{const a=x.address.toLowerCase();return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{x.name||pfAddr(x.address)}</button>;})}</div></div>}
             <div className="hero">
-              <div className="big"><small>TODAY</small><span className="wr"><PfLaurel/><b>{live?'#'+live.r.toLocaleString('en-US'):'—'}</b><PfLaurel flip/></span>
+              <div className="big"><small>TODAY</small><span className="wr"><b>{live?'#'+live.r.toLocaleString('en-US'):'—'}</b></span>
                 {chg==null?<span className="flat">{live?'—':'not holding '+tok}</span>:chg===0?<span className="flat">{'—'} no change</span>:<span className={chg<0?'up':'dn'}>{chg<0?'▲':'▼'} {Math.abs(chg).toLocaleString('en-US')} place{Math.abs(chg)===1?'':'s'}</span>}
                 <em>{per==='LIFE'?'since the first day held':`vs ${nDays} days ago`}</em></div>
               <div className="tiles">
