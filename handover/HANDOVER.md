@@ -42,7 +42,11 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-22 night: THE AFFILIATE PROGRAM PAGE'S NEW LOOK — BUILT, written to the Mac, NOT pushed ("make it live").** His ask: "this page is
+**SIGN-OFF 2026-10-22 (night): THE AFFILIATE PROGRAM'S NEW LOOK IS LIVE — his push `ecd5621c7`, LIVE-VERIFIED (built-in browser, real
+data: the hero, the bands 74 / 1,525 / 7.98B, the October podium @ptgcofficialonboard · 88Xcuto4 · DeFiMission, no overflow, no console
+errors), tree clean except these notes. NEXT: (1) the Leaderboard + Payment Receipts windows in the same look, MOCK FIRST; (2) Phase F,
+F4 share link, mock-up first; (3) he posts the Top 100 Telegram announcement (sessions/2026-10-22.md) if not yet.**
+**2026-10-22 night: THE AFFILIATE PROGRAM PAGE'S NEW LOOK — BUILT ("make it live").** His ask: "this page is
 still the old and ugly look. Can you mock up a new look?" → `design/affiliate/` (README has every decision): v1 two looks (A the Calculators
 treatment / B "hall of fame") → "I like affil-v1-b-1380" + "recent activity full width, the Registry under it" → v2 + "use the logo that has
 the glowing light around it like we use on the dashboard" (the h2.css corona coin) → his AI mock (`reference/shaka-ai-mock.png`) → "keep
@@ -57,8 +61,7 @@ kept; the log's rank = a CSS counter; the log's User column 20 %), the footer; h
 72 % veil; absolute over the top 1000 px on phones). The header is no longer sticky. `probes/affil-registry.js` matches the uppercased heads
 case-insensitively (only probe change). Harness `AFFIL_DATA=real` 1400 / 1024 / 390: no overflow, no errors; a54 / card / registry probes
 unchanged in substance. index.html sha256 8fafd7c2. The Leaderboard + Payment Receipts windows still wear the old look — NEXT ROUND, MOCK
-FIRST. **NEXT: his push (`git add -A && git commit -m "Affiliate Program: the new look" && git pull --rebase && git push`) → Claude's live
-check (the hero, the podium on real data, the Registry SHOW, the log sorts, a referrer card, phone) → the two windows' mock-up.**
+FIRST. Pushed `ecd5621c7`, live-verified (above).
 (`_to_delete/harness-stage.tgz` = a 16 MB assets bundle staged for the cloud harness; git-ignored, he can delete it.)
 
 **SIGN-OFF 2026-10-22 (~17:30 UTC): TOP 100 IS LIVE AND DONE — last push `1246ec775`, tree clean except these notes.** The Token
