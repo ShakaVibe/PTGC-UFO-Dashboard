@@ -13,6 +13,7 @@
        loading, null = failed → "Couldn't load — Retry", never a zero. */
     const TOP100_LIVE=false;   // false = the Top 100 button shows only on a device that tapped the faint bottom-right dot (2026-10-22 preview)
     const T1_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
+    const T1_ART_V=1;   // bump when logos/top100/* change under the same names (gotcha 38)
     const T1_TTL=10*60*1000,T1_STALE=48*3600*1000;
     const T1_SEL={balanceOf:'0x70a08231',mapUserInfo:'0x15612933'};
     const _t1={};   // file name → {at, v, p}
@@ -30,7 +31,7 @@
     const t1Short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'';
     const t1Usd=n=>n==null||!isFinite(n)?'—':n>=100?fmtUSD(n):'$'+n.toFixed(2);
     const t1League=(bal,sup)=>{if(!(bal>0))return null;const c=BURN_C.find(c=>bal>=sup*tierFraction(c))||BURN_C[BURN_C.length-1];return c;};
-    const t1Wallets=()=>{try{const w=JSON.parse(localStorage.getItem('ptgc_ufo_portfolio')||'[]');return Array.isArray(w)?w.filter(x=>x&&/^0x[0-9a-fA-F]{40}$/.test(x.address||'')).slice(0,6):[];}catch(e){return[];}};
+    const t1Wallets=()=>{try{const w=JSON.parse(localStorage.getItem('ptgc_ufo_portfolio')||'[]');return Array.isArray(w)?w.filter(x=>x&&/^0x[0-9a-fA-F]{40}$/.test(x.address||'')):[];}catch(e){return[];}};   // every saved wallet (Shaka: "not all the wallets in the portfolio are showing")
     const T1I={
       ticket:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M3 8a2 2 0 0 0 0 4 2 2 0 0 0 0 4v2h18v-2a2 2 0 0 1 0-4 2 2 0 0 1 0-4V6H3z"/><path d="M13 6v12" strokeDasharray="2 2"/></svg>,
       pie:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v9h9a9 9 0 1 1-9-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z" fill="currentColor"/></svg>,
@@ -146,8 +147,8 @@
           <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i></span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
           <span role="cell" className="pc2 hp">{(x.v/SUP*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
       };
-      const Pod=({i,cls})=>{const x=top[i];if(!x)return<div/>;const lg=t1League(stk?(x.b||x.v):x.v,SUP);const isMe=me&&x.a.toLowerCase()===me;return(
-        <div className={`t1pc ${cls}${isMe?' me':''}`}>{lg&&<span className="cr"><SeaIcon e={lg.e} size={34}/></span>}<div className="md">{i+1}</div>
+      const Pod=({i,cls})=>{const x=top[i];if(!x)return<div/>;const isMe=me&&x.a.toLowerCase()===me;return(
+        <div className={`t1pc ${cls}${isMe?' me':''}`}><img className="md" src={`logos/top100/t1-${['1st','2nd','3rd'][i]}.webp?v=${T1_ART_V}`} alt={`#${i+1}`}/>
           <div className="ad"><a href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" title={x.a}>{t1Short(x.a)}</a></div>
           <div className="bl"><T1Amt v={x.v} tok={tok}/></div><div className="uv">{P?t1Usd(x.v*P):'—'}</div><div className="t1sh">{(x.v/tot*100).toFixed(2)}% {stk?'of staked':'of supply'}</div></div>);};
       return(

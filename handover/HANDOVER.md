@@ -42,6 +42,15 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 evening: TOP 100 round 3 — written to the Mac, NOT pushed.** (1) "the leagues logo … half of it look darker": the
+panel title's dark plate (`.p2 h3::before`, reaches 48 px past the title, h3 is positioned so it paints OVER static siblings) covered
+the left half of LEAGUES once the pair sat close → `.t1btns` position:relative + z-index:1, and both buttons get an opaque base
+(#0d0718 under the purple tint) so nothing behind shades one half; (2) Portfolio chips showed only 6 → every saved wallet;
+(3) HIS 1st / 2nd / 3rd UFO medals (PTGC_UFO_Rank_Icons_Transparent.zip → `logos/top100/t1-1st|2nd|3rd.webp`, 200 px, T1_ART_V=1) replace
+the round medals — 96 px (#1 112), phone 58 / 68; (4) the sea creature in the podium corners is gone. The #1 card's laurel art
+mask now transparent to 12 % / solid 26–72 % / gone by 86 % (a frame line still showed); on the phone the art is height-sized
+(auto 128 %) so the narrow card shows no band. index sha256 126f999c.
+
 **2026-10-22 evening: TOP 100 round 2 (his first live look, pushed `6055c0c68`) — written to the Mac, NOT pushed.** (1) the
 TOP HOLDERS / TOP STAKERS switch touched the coin → header 270 px, coin top 70, title 182 (phone 224 / 62 / 146); (2) "the list never
 loaded" — the live holder-ranks.json is still from the OLD builder (no `top`) until the next holder-ranks run (gate 2 h after
