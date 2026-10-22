@@ -40,6 +40,23 @@ Update it at the end of every session.
   the three sibling pages) and the sibling pages' v2 header components are `h2-header.jsx` (root, Babel `src`).** The Socials tab's
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
+## Current state (2026-10-22)
+
+**2026-10-22: the pipeline's first `rank-history` run LANDED** (12:16 UTC, ok; UFO meta 105 → 106 days). **NEW: the TOP 100 window — MOCKED UP, waiting on his picks.**
+His ask: a "Top 100" button right of LEAGUES in the Token Allocation panel (PTGC + UFO) → a window listing the top 100 wallets, a bar to
+check any address (what it holds, tokens + $ to break into the top 100), and on PTGC a toggle to TOP 100 STAKERS (how much to have
+staked). Mock **`design/top100/mock-top100-v1.html`** (+ `mock-top100.js`, `mock-data.js` = REAL data read 2026-10-22,
+render `mock-top100-v1.png`): button B1 (purple twin) / B2 (gold trophy, green on UFO); Look A "the deep" (Leagues sea header +
+whale/shark) vs Look B "hall of fame" (rank plate, #1 in rk-hero laurels); tiles (#100 holds = the line to beat · top-100 share · #1 ·
+count), CHECK A WALLET (holds · rank + league · to break in · cost today with the ⓘ snapshot disclaimer · % of the way), podium
+#2/#1/#3, list #4→#100 with THE TOP 100 LINE, the "you're in" state (cushion above #101), empty state (his Portfolio wallets as chips),
+stakers view (staked + locked stripes, "stake your unstaked + buy the rest"), UFO, phone 390. ASK: B1/B2, Look A/B.
+**Data facts for the build:** holders need ADDRESSES — `holder-ranks.json` stores balances only, so the build needs a top-N-with-addresses
+file (PulseScan holders, same exclusions). Stakers: the staking contract's `Deposit(address user,uint256)` (user NOT indexed, topic
+0xe1fffcc4…109c) since block 18,543,401 → 5,137 addresses ever, 3,428 with `mapUserInfo.amount` > 0 now; #100 staked 271.94M; sum
+187.46B, locked 124.33B. RPC getLogs in 25K-block chunks ×12 parallel = ~4 min; mapUserInfo single eth_calls ×40 = 30 s (JSON-RPC
+batches of 100 failed on rpc.pulsechain.com; 40 worked). Prototype scripts were cloud-only (not in the repo).
+
 ## Current state (2026-10-21)
 
 **2026-10-21 afternoon → evening: THE HOLDER RANK WINDOW + RANK HISTORY — built, written to the Mac, NOT pushed (he had to run:
