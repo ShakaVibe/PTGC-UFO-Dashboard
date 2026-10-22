@@ -42,7 +42,10 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-22 evening: TOP 100 stakers — a STAKED column (staked and not locked) — written to the Mac, NOT pushed.** "we show locked, but
+**2026-10-22 evening: TOP 100 stakers columns — PUSHED `7f7837f` as "staked, not locked", then CORRECTED on his word ("staked will
+be the bigger number because to be locked you also have to be staked … a staked column, and then a locked column") — written to the
+Mac, NOT pushed:** STAKED = the wallet's whole stake (locked included), LOCKED = the locked part; the bar column has no number now
+(legend "■ unlocked ▨ locked"); the phone's third column reads "STAKED" (`.t1po`). index sha256 cc3acf88. The superseded note: "we show locked, but
 not staked": the stakers list is # · Wallet · TOTAL STAKED (bar: gold = staked, pink stripes = locked) · STAKED (total − locked, gold
 `.un2`) · LOCKED · SHARE · VALUE; grid 48 / 1.1fr / 1.55fr / 90 / 90 / 66 / 96; the phone hides the four small columns as before.
 1380 / 1024 / 390 no overflow. index sha256 a7a43d6b.

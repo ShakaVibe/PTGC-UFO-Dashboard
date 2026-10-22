@@ -850,7 +850,7 @@
     .t1lst.stk .t1th,.t1lst.stk .t1r{grid-template-columns:48px minmax(0,1.1fr) minmax(0,1.55fr) 90px 90px 66px 96px}   /* + STAKED = staked and NOT locked (Shaka 2026-10-22) */
     .t1th{height:34px;font:700 9.5px 'Orbitron',monospace;letter-spacing:.12em;color:var(--hi);text-transform:uppercase;border-bottom:1px solid rgba(var(--rgb),.25);background:rgba(var(--rgb),.06)}
     .t1lst:not(.stk) .t1th b:nth-child(n+5),.t1lst.stk .t1th b:nth-child(n+4){text-align:right}
-    .t1th .lkl{color:#F9A8D4}.t1th .unl{color:#F6D77A}
+    .t1th .lkl{color:#F9A8D4}.t1th .t1po{display:none}.t1th .unl{color:#F6D77A}
     .t1r{height:44px;border-bottom:1px solid rgba(255,255,255,.05);font-size:15px;font-weight:600}
     .t1r:nth-child(odd){background:rgba(255,255,255,.015)}
     .t1r .rk{font:900 13px 'Orbitron',monospace;color:var(--a);text-align:center}
@@ -869,7 +869,8 @@
     .t1r .pc2{text-align:right;color:rgba(255,255,255,.62);font-variant-numeric:tabular-nums}
     .t1r .uv{text-align:right;color:#39E15A;font-weight:700;font-variant-numeric:tabular-nums}
     .t1r .lk2{text-align:right;color:#F9A8D4;font-variant-numeric:tabular-nums}
-    .t1r .un2{text-align:right;color:#F6D77A;font-variant-numeric:tabular-nums}
+    .t1r .un2{text-align:right;color:#fff;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums}   /* STAKED = everything in the staking contract, locked included (Shaka: "staked will be the bigger number") */
+    .t1lst.stk .t1r .bal .n{display:none}   /* the total moved to its own STAKED column; the bar stays as the picture (the phone shows the number again below) */
     .t1r.me{background:linear-gradient(90deg,rgba(57,225,90,.16),rgba(57,225,90,.03))!important;box-shadow:inset 3px 0 0 #39E15A}
     .t1r.cut{box-shadow:inset 0 -2px 0 rgba(var(--rgb),.75)}
     .t1line{height:30px;display:flex;align-items:center;gap:10px;padding:0 14px;font:700 10px 'Orbitron',monospace;letter-spacing:.14em;color:var(--hi);background:rgba(var(--rgb),.08)}
@@ -895,6 +896,8 @@
       .t1lst{margin:10px 10px 0}
       .t1th,.t1r{grid-template-columns:34px minmax(0,1fr) 30px 108px;gap:6px;padding:0 8px}
       .t1lst.stk .t1th,.t1lst.stk .t1r{grid-template-columns:34px minmax(0,1fr) 116px}
+      .t1lst.stk .t1r .bal .n{display:block}
+      .t1th .t1po{display:inline}.t1lst.stk .t1th b:nth-child(3){text-align:right}
       .t1th .hp,.t1r .hp{display:none}
       .t1r .rk{font-size:11px}.t1r .ad{font-size:13.5px}.t1cp{display:none}
       .t1r{height:48px}.t1r .bb{display:none}.t1r .bal{flex-direction:column;align-items:flex-end;gap:0}.t1r .n{font-size:15px;min-width:0}.t1r .u2{display:block;font-size:12px;font-weight:700;color:#39E15A;text-align:right}
@@ -12277,7 +12280,7 @@
       const w=Math.max(2,Math.min(100,Math.sqrt(x.v)/mx*100));
       if(stk)return(<div role="row" className={`t1r ${cls||''}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
         <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i>{x.l>0&&<i className="lk" style={{width:w*Math.min(1,x.l/x.v)+'%'}}></i>}</span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
-        <span role="cell" className="un2 hp">{x.v-(x.l||0)>0?fmtAbbr(x.v-(x.l||0)):'—'}</span><span role="cell" className="lk2 hp">{x.l>0?fmtAbbr(x.l):'—'}</span><span role="cell" className="pc2 hp">{(x.v/tot*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
+        <span role="cell" className="un2 hp">{fmtAbbr(x.v)}</span><span role="cell" className="lk2 hp">{x.l>0?fmtAbbr(x.l):'—'}</span><span role="cell" className="pc2 hp">{(x.v/tot*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
       const lg=t1League(x.v,SUP);
       return(<div role="row" className={`t1r ${cls||''}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
         <span role="cell">{lg&&<SeaIcon e={lg.e} size={32}/>}</span>
@@ -12404,7 +12407,7 @@
         return(<>
           <div className="t1pod">{[[1,'s'],[0,'g'],[2,'b']].map(([i,c])=><T1Pod key={i} x={top[i]} i={i} cls={c} isMe={me===(top[i]&&top[i].a)} stk={stk} P={P} tok={tok} tot={tot}/>)}</div>
           <div className={`t1lst${stk?' stk':''}`} role="table" aria-label={`${tok} top 100 ${stk?'stakers':'holders'}`}>
-            {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b>Total staked <span className="unl hp">■ staked</span> <span className="lkl hp">▨ locked</span></b><b className="hp">Staked</b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
+            {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b><span className="unl hp">■ unlocked</span> <span className="lkl hp">▨ locked</span><span className="t1po">Staked</span></b><b className="hp">Staked</b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
                 :<div className="t1th" role="row"><b>#</b><b>Wallet</b><b></b><b>Balance</b><b className="hp">Supply</b><b className="hp">Value</b></div>}
             {top.slice(0,100).map((x,i)=><T1Row key={x.a} x={x} rank={rk[i]} cls={i===99?'cut':''} isMe={me===x.a} {...pp}/>)}
             <div className="t1line" role="row">THE TOP 100 LINE</div>
