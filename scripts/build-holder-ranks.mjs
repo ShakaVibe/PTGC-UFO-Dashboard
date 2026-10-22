@@ -20,12 +20,16 @@
 // PulseScan's own holder count, keeps the PREVIOUS file's entry for that token (`carried: true`, ::warning:: so the run
 // page shows it); both failing → exit 1 and the previous file stays untouched.
 //
+// 2026-10-22: `top` = the first 110 people with their addresses, [addr, key] high → low — the dashboard's TOP 100 window lists
+// them (the rank of any other wallet still comes from `b`).
+//
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
 
 const OUT_PATH = process.env.OUT_PATH || 'data/holder-ranks.json';
 const API = process.env.PULSESCAN_API || 'https://api.scan.pulsechain.com/api/v2';
 const FLOOR = 0;                       // any balance above zero counts (2026-10-21 pm)
+const TOP_N = 110;                     // 2026-10-22: the TOP 100 window's list — the first 110 kept rows WITH their addresses (`top`)
 const ONE = 10n ** 18n;
 const MICRO = 10n ** 12n;              // 1e-6 token in wei
 /* whole tokens from 1 up; 6 decimals below 1, never 0 for a holder (must match pfRankKey on the page) */
@@ -74,7 +78,7 @@ async function readToken(sym, addr) {
   const counters = await getJson(`${API}/tokens/${addr}/counters`);
   const expected = Number(counters.token_holders_count || 0);
   let params = null, rows = 0;
-  const kept = [];
+  const kept = [], top = [];
   let leftKnown = 0, leftContracts = 0, leftDust = 0;
   for (;;) {
     const q = params ? '?' + new URLSearchParams(params).toString() : '';
@@ -87,6 +91,7 @@ async function readToken(sym, addr) {
       const v = BigInt(it.value);
       if (v <= 0n) { leftDust++; continue; }
       kept.push(key(v));
+      if (top.length < TOP_N) top.push([a, key(v)]);   // PulseScan pages arrive sorted by balance, high → low
     }
     params = j.next_page_params;
     if (!params) break;
@@ -95,7 +100,7 @@ async function readToken(sym, addr) {
   if (expected && rows < expected * 0.98) throw new Error(`${sym}: read ${rows} rows but PulseScan counts ${expected} holders`);
   kept.sort((x, y) => y - x);
   console.log(`${sym}: ${rows} rows in ${Math.round((Date.now() - t0) / 1000)} s → ${kept.length} ranked (left out: ${leftKnown} known, ${leftContracts} contracts, ${leftDust} at zero)`);
-  return { holders: kept.length, listed: rows, left: { known: leftKnown, contracts: leftContracts, dust: leftDust }, readAt: new Date().toISOString(), b: kept };
+  return { holders: kept.length, listed: rows, left: { known: leftKnown, contracts: leftContracts, dust: leftDust }, readAt: new Date().toISOString(), top: top.sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)), b: kept };
 }
 
 let prev = null;

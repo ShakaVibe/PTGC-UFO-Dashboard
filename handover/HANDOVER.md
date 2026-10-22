@@ -42,6 +42,28 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 (later): TOP 100 BUILT — his picks B1 + Look B, HIDDEN behind the faint bottom-right dot (`TOP100_LIVE=false`), written to
+the Mac, NOT pushed.** "Button B1, look B … I dont want the button live … until i say … behind a small faint dot". Build =
+`python3 tools/top100.py` (run twice → "0 edit(s)"; splices `tools/top100/t1.css` + `t1.jsx` between `/* T100:CSS|JSX:BEGIN/END */`
+markers — EDIT THE FRAGMENTS, not index.html; plus LS.T100_PREVIEW, the Dashboard state, the button, the mount, the dot). The dot
+(`T1Dot`, same place / look as the old NhDot / VsDot) toggles the Top 100 button on THIS device (remembered in
+`grays_t100_preview_v1`); the button sits right of Leagues in a `.t1btns` pair (both tighten to 8px 9px / .08em so the pair fits
+beside the title at 1280–1440 — 1 px to spare at 1280; narrower it wraps as a pair, right-aligned, like Leagues alone did).
+`Top100Modal` (`.t1m`, container query for the phone): rank-plate header + LgCoin + "PTGC TOP 100", TOP HOLDERS / TOP STAKERS switch
+(PTGC), four tiles, CHECK A WALLET (live balanceOf / mapUserInfo → rank by binary search on the list; out: holds · rank + league · to
+break in · cost today with the ⓘ snapshot card · % of the way; in: you're in · to pass #N-1 · cushion above #101; Portfolio wallets as
+chips), podium (#1 in rk-hero laurels, ::before hue-rotated on UFO), list #4–#100 + THE TOP 100 LINE + the checked wallet's row.
+Gotcha: the page has a GLOBAL `.sh{}` rule (Socials hub) — the podium's share line is `.t1sh`. **Data:** `build-holder-ranks.mjs` now
+also writes `top` = first 110 people [addr, key] per token (the live file gets it on the next holder-ranks run, ≤ 2 h after the push —
+until then the window says "the top-100 list arrives with the next data update"; the checker works off `b` already). NEW step
+`top-stakers` (`scripts/build-top-stakers.mjs` → `data/top-stakers.json` + `data/top-stakers-cache.json` = known stakers + last block;
+holder-ranks lane, gate 2 h, ~30 s; wired by `tools/top100-pipeline.py`, which also keeps the cache off the site in deploy.yml) — both
+files seeded in this push (3,428 stakers, #100 = 271.94M). Harness: `T1_BAL=<tokens>` makes every balanceOf answer that (the "out"
+state); probes `t1-check.js` (types `window.__addr`, reports tiles / result / rows / overflow) and `t1-btn.js` (header geometry).
+Checked: hidden by default, dot → button → remembered across reload → dot again hides it; PTGC holders #118 state = the mock's
+numbers; stakers in/out; UFO; 390 px; no overflow. Index sha256 6517ce57. **NEXT: his push → live check (dot, window, a real wallet,
+the first top-stakers + holder-ranks runs) → his look → TOP100_LIVE=true when he says.**
+
 **2026-10-22: the pipeline's first `rank-history` run LANDED** (12:16 UTC, ok; UFO meta 105 → 106 days). **NEW: the TOP 100 window — MOCKED UP, waiting on his picks.**
 His ask: a "Top 100" button right of LEAGUES in the Token Allocation panel (PTGC + UFO) → a window listing the top 100 wallets, a bar to
 check any address (what it holds, tokens + $ to break into the top 100), and on PTGC a toggle to TOP 100 STAKERS (how much to have
