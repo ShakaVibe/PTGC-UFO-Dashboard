@@ -42,6 +42,14 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 evening: TOP 100 round 2 (his first live look, pushed `6055c0c68`) — written to the Mac, NOT pushed.** (1) the
+TOP HOLDERS / TOP STAKERS switch touched the coin → header 270 px, coin top 70, title 182 (phone 224 / 62 / 146); (2) "the list never
+loaded" — the live holder-ranks.json is still from the OLD builder (no `top`) until the next holder-ranks run (gate 2 h after
+14:13 UTC → ~16:15 UTC, or Actions → Data Pipeline → Run workflow → only=holder-ranks); TOP 100 HOLD now sums the first 100 of `b`
+so it no longer shows "—" meanwhile; (3) the #1 card showed the laurel art's own gold frame lines → the card has its own 1.5 px gold
+border + glow and the art is masked (transparent 0–6 %, solid 20–74 %, gone by 88 %); (4) "why does the stakers start at 4" — the
+list now runs #1–#100 under the podium (both views). index sha256 a5ee12c8.
+
 **2026-10-22 (later): TOP 100 BUILT — his picks B1 + Look B, HIDDEN behind the faint bottom-right dot (`TOP100_LIVE=false`), written to
 the Mac, NOT pushed.** "Button B1, look B … I dont want the button live … until i say … behind a small faint dot". Build =
 `python3 tools/top100.py` (run twice → "0 edit(s)"; splices `tools/top100/t1.css` + `t1.jsx` between `/* T100:CSS|JSX:BEGIN/END */`

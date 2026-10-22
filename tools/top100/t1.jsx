@@ -132,8 +132,8 @@
       })():null;
       const top=view&&view.top,tot=view&&view.tot;
       const me=chk&&chk.a?chk.a.toLowerCase():null;
-      const sum100=top&&top.length>=100?top.slice(0,100).reduce((s,x)=>s+x.v,0):null;
-      const mx=top&&top.length>3?Math.sqrt(top[3].v):1;
+      const sum100=view&&view.all.length>=100?view.all.slice(0,100).reduce((s,x)=>s+x,0):null;   // from the full list, so it shows before `top` exists
+      const mx=top&&top.length?Math.sqrt(top[0].v):1;
       const age=view&&isFinite(view.at)?Date.now()-view.at:null;
       const Row=({x,rank,cls=''})=>{
         const isMe=me&&x.a.toLowerCase()===me,w=Math.max(2,Math.min(100,Math.sqrt(x.v)/mx*100));
@@ -189,7 +189,7 @@
                 <div className={`t1lst${stk?' stk':''}`} role="table" aria-label={`${tok} top 100 ${stk?'stakers':'holders'}`}>
                   {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b>Staked <span className="lkl hp">▨ locked</span></b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
                       :<div className="t1th" role="row"><b>#</b><b>Wallet</b><b></b><b>Balance</b><b className="hp">Supply</b><b className="hp">Value</b></div>}
-                  {top.slice(3,100).map((x,i)=><Row key={x.a} x={x} rank={i+4} cls={i+4===100?'cut':''}/>)}
+                  {top.slice(0,100).map((x,i)=><Row key={x.a} x={x} rank={i+1} cls={i+1===100?'cut':''}/>)}   {/* #1–#3 too, under the podium (Shaka: "why does it start at 4") */}
                   <div className="t1line" role="row">THE TOP 100 LINE</div>
                   {res&&!res.inTop&&res.rank?<Row x={{a:chk.a,v:chk.v,l:chk.l}} rank={res.rank}/>:top[100]?<Row x={top[100]} rank={101}/>:null}
                 </div>
