@@ -11,7 +11,8 @@
        many listed amounts are strictly above (ties share a rank — pfRank's rule). Hidden until TOP100_LIVE: the button shows only on a
        device that tapped the faint bottom-right dot (T1Dot, remembered in LS.T100_PREVIEW). Honest states (gotcha 20): undefined =
        loading, null = failed → "Couldn't load — Retry", never a zero. */
-    const TOP100_LIVE=false;   // false = the Top 100 button shows only on a device that tapped the faint bottom-right dot (2026-10-22 preview)
+    const TOP100_LIVE=true;   // LIVE 2026-10-22 (Shaka: "make it live!"). false = the button shows only on a device that tapped the faint bottom-right dot
+    if(TOP100_LIVE){try{localStorage.removeItem('grays_t100_preview_v1');}catch(e){}}   // the preview dot's device flag means nothing once live
     const T1_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
     const T1_ART_V=2;   // bump when logos/top100/* change under the same names (gotcha 38) — 2: his beam-UFO medals (bigger numbers)
     const T1_TTL=10*60*1000,T1_STALE=48*3600*1000;

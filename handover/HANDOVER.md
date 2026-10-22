@@ -42,6 +42,12 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 evening: TOP 100 GO LIVE ("make it live!") — written to the Mac, NOT pushed at the time of writing.** `TOP100_LIVE=true`
+in tools/top100/t1.jsx (+ a one-line removal of the old `grays_t100_preview_v1` flag on load), `python3 tools/top100.py` → index sha256
+9cfc7d6c. Harness: the Top 100 button shows for a plain visitor on PTGC and UFO, no dot, the window opens with the list and the
+checker. Telegram announcement written in chat (post after the live check). NEXT: his push → Claude's live check (button for a fresh
+visitor, window, a real wallet) → the 16:40 UTC check of the first CI top-stakers run.
+
 **2026-10-22 evening: TOP 100 podium backgrounds — written to the Mac, NOT pushed.** "drop the background behind first place … a
 background in each of the three boxes that fills the boxes … tint that matches the trophy, very faint … darken the area behind the
 text": the rk-hero laurel art is gone from #1; every podium card now has his UFO-beam sky (`logos/holders/nh-sky.webp`, cover) in grey
