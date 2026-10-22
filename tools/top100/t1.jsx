@@ -13,7 +13,7 @@
        loading, null = failed → "Couldn't load — Retry", never a zero. */
     const TOP100_LIVE=false;   // false = the Top 100 button shows only on a device that tapped the faint bottom-right dot (2026-10-22 preview)
     const T1_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
-    const T1_ART_V=1;   // bump when logos/top100/* change under the same names (gotcha 38)
+    const T1_ART_V=2;   // bump when logos/top100/* change under the same names (gotcha 38) — 2: his beam-UFO medals (bigger numbers)
     const T1_TTL=10*60*1000,T1_STALE=48*3600*1000;
     const T1_SEL={balanceOf:'0x70a08231',mapUserInfo:'0x15612933'};
     const _t1={};   // file name → {at, v, p}
@@ -154,6 +154,8 @@
       return(
         <Modal className="z-50 flex items-center justify-center p-2 sm:p-4 modal-overlay bg-black/80" onClose={onClose} label={`${tok} top 100`}>
           <div className={`t1m${tok==='UFO'?' ufo':''}`} onClick={e=>e.stopPropagation()}>
+            <button type="button" className="t1x" onClick={onClose} aria-label="Close">✕</button>
+            <div className="t1sc">{/* the scroller sits INSIDE the frame, so its bar never cuts the rounded corners (Shaka 2026-10-22) */}
             <div className="t1hd">
               <div className="t1sky" aria-hidden="true"></div><div className="t1fade" aria-hidden="true"></div>
               {tok==='PTGC'&&<div className="t1sw" role="group" aria-label="List">
@@ -162,7 +164,6 @@
               <LgCoin token={tok}/>
               <div className="t1ttl"><h2>{tok} <em>TOP 100</em></h2><p>{stk?'The 100 biggest PTGC stakers — staked + locked, read from the staking contract':`The 100 biggest ${tok} wallets — people only`}</p></div>
             </div>
-            <button type="button" className="t1x" onClick={onClose} aria-label="Close">✕</button>
             {view===undefined?<div className="t1wait"><span className="t1spin" aria-hidden="true"></span>Reading the list…</div>
             :view===null?<div className="t1wait">Couldn't load the list — if this is new, it is built by the next data update (every 2 h).<button type="button" onClick={()=>load(true)}>Retry</button></div>
             :<>
@@ -198,6 +199,7 @@
               <div className="t1ft">{stk?'Read from the PTGC staking contract (every wallet that ever staked, its staked amount now; locked included)':`From PulseScan’s holder list · people only — left out: liquidity pools, every contract, the burn addresses, the DAO wallets${tok==='UFO'?', the UFO OA wallet':''}`} · refreshed every 2 h{age!=null&&<> · <span className={age>T1_STALE?'old':''}>read {fmtSnapshotAge(age)}</span></>}. The checked wallet is read live.</div>
             </>}
             <button type="button" className="t1cl" onClick={onClose}>Close</button>
+            </div>
           </div>
         </Modal>
       );

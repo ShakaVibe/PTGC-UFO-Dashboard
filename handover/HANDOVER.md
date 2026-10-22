@@ -42,6 +42,17 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 evening: TOP 100 round 4 — written to the Mac, NOT pushed.** Round 3 checked LIVE first (built-in browser, real data:
+101 rows #1–#101, podium 19.18B / 14.86B / 8.91B; checker on 0xB1c0…9769 = #118 Dolphin, +124.41M ≈ $2,238 to break in; stakers view
+= #95 of 3,428, +2.62M to pass #94). Then his asks: (1) NEW medals — beam-UFO 1st / 2nd / 3rd (his PNG had the transparency
+checkerboard BAKED IN → keyed out by flood-filling the light, unsaturated pixels from the edges + colour-to-alpha against the nearest
+checker colour in a 7 px band; split into three by empty columns; 240 px webp under the same names, T1_ART_V=2), shown at 118 px
+(#1 138; phone 70 / 84); (2) "the scroll bar cuts into the corners" → the frame (`.t1m`) no longer scrolls: an inner `.t1sc` does, with
+a thin token-coloured webkit scrollbar whose track has 20 px margins (Firefox: scrollbar-width thin); the ✕ stays put above it;
+(3) "increase the logo size … no overlapping" → coin 125 px (--u .64, top 66), title top 212, header 300 (phone: 98 px, --u .5,
+top 58, title 170, header 246) — probe `t1-hero.js` reports the switch / coin / title boxes and their gaps (14 / 21 px desktop,
+11 / 14 phone, no overlaps at 1380 · 1024 · 390, PTGC + UFO). index sha256 9a4125a9.
+
 **2026-10-22 evening: TOP 100 round 3 — written to the Mac, NOT pushed.** (1) "the leagues logo … half of it look darker": the
 panel title's dark plate (`.p2 h3::before`, reaches 48 px past the title, h3 is positioned so it paints OVER static siblings) covered
 the left half of LEAGUES once the pair sat close → `.t1btns` position:relative + z-index:1, and both buttons get an opaque base
