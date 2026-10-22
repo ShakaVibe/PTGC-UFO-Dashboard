@@ -42,7 +42,12 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-22 evening: TOP 100 GO LIVE ("make it live!") — written to the Mac, NOT pushed at the time of writing.** `TOP100_LIVE=true`
+**2026-10-22 evening: TOP 100 stakers — a STAKED column (staked and not locked) — written to the Mac, NOT pushed.** "we show locked, but
+not staked": the stakers list is # · Wallet · TOTAL STAKED (bar: gold = staked, pink stripes = locked) · STAKED (total − locked, gold
+`.un2`) · LOCKED · SHARE · VALUE; grid 48 / 1.1fr / 1.55fr / 90 / 90 / 66 / 96; the phone hides the four small columns as before.
+1380 / 1024 / 390 no overflow. index sha256 a7a43d6b.
+
+**2026-10-22 evening: TOP 100 GO LIVE ("make it live!") — PUSHED `6ed7e0d12`, LIVE-VERIFIED 16:20 UTC** (fresh visitor: button, no dot, old flag gone; PTGC window 101 rows + 3 medals, a PulseScan link checked → #118, +124.40M ≈ $2,311 to break in; UFO window 101 rows, no switch; the first CI `top-stakers` run 16:15 UTC = success in 32 s). `TOP100_LIVE=true`
 in tools/top100/t1.jsx (+ a one-line removal of the old `grays_t100_preview_v1` flag on load), `python3 tools/top100.py` → index sha256
 9cfc7d6c. Harness: the Top 100 button shows for a plain visitor on PTGC and UFO, no dot, the window opens with the list and the
 checker. Telegram announcement written in chat (post after the live check). NEXT: his push → Claude's live check (button for a fresh

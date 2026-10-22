@@ -71,7 +71,7 @@
       const w=Math.max(2,Math.min(100,Math.sqrt(x.v)/mx*100));
       if(stk)return(<div role="row" className={`t1r ${cls||''}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
         <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i>{x.l>0&&<i className="lk" style={{width:w*Math.min(1,x.l/x.v)+'%'}}></i>}</span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
-        <span role="cell" className="lk2 hp">{x.l>0?fmtAbbr(x.l):'—'}</span><span role="cell" className="pc2 hp">{(x.v/tot*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
+        <span role="cell" className="un2 hp">{x.v-(x.l||0)>0?fmtAbbr(x.v-(x.l||0)):'—'}</span><span role="cell" className="lk2 hp">{x.l>0?fmtAbbr(x.l):'—'}</span><span role="cell" className="pc2 hp">{(x.v/tot*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
       const lg=t1League(x.v,SUP);
       return(<div role="row" className={`t1r ${cls||''}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
         <span role="cell">{lg&&<SeaIcon e={lg.e} size={32}/>}</span>
@@ -198,7 +198,7 @@
         return(<>
           <div className="t1pod">{[[1,'s'],[0,'g'],[2,'b']].map(([i,c])=><T1Pod key={i} x={top[i]} i={i} cls={c} isMe={me===(top[i]&&top[i].a)} stk={stk} P={P} tok={tok} tot={tot}/>)}</div>
           <div className={`t1lst${stk?' stk':''}`} role="table" aria-label={`${tok} top 100 ${stk?'stakers':'holders'}`}>
-            {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b>Staked <span className="lkl hp">▨ locked</span></b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
+            {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b>Total staked <span className="unl hp">■ staked</span> <span className="lkl hp">▨ locked</span></b><b className="hp">Staked</b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
                 :<div className="t1th" role="row"><b>#</b><b>Wallet</b><b></b><b>Balance</b><b className="hp">Supply</b><b className="hp">Value</b></div>}
             {top.slice(0,100).map((x,i)=><T1Row key={x.a} x={x} rank={rk[i]} cls={i===99?'cut':''} isMe={me===x.a} {...pp}/>)}
             <div className="t1line" role="row">THE TOP 100 LINE</div>
