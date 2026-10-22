@@ -42,6 +42,13 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 evening: TOP 100 podium backgrounds — written to the Mac, NOT pushed.** "drop the background behind first place … a
+background in each of the three boxes that fills the boxes … tint that matches the trophy, very faint … darken the area behind the
+text": the rk-hero laurel art is gone from #1; every podium card now has his UFO-beam sky (`logos/holders/nh-sky.webp`, cover) in grey
+at .32 (::before), tinted to its medal by a mix-blend colour layer (::after; gold 242,190,60 / the 2nd medal's blue beam 80,160,255 /
+copper 235,120,50), and the address · amount · $ · share sit on a dark pad (`.t1pt`, radial rgba(3,4,7,.86 → .35)). Same on UFO and
+the phone. index sha256 05261d98.
+
 **2026-10-22 evening: TOP 100 AUDIT + fixes (his picks 1–5, 8–12; 6 = watch the first CI top-stakers run; 7 = go-live cleanup,
 LATER — "i will let you know when to go live"; 13–17 no) — written to the Mac, NOT pushed.** Verified first: our staker sum 187.4634B =
 the contract's totalStaked() 187.4645B (the list is complete). Fixed in tools/top100/t1.jsx: A1 the checker refuses the builders'

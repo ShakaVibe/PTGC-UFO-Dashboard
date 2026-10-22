@@ -79,8 +79,8 @@
     };
     const T1Pod=({x,i,cls,isMe,stk,P,tok,tot})=>!x?<div/>:(
       <div className={`t1pc ${cls}${isMe?' me':''}`}><img className="md" src={`logos/top100/t1-${['1st','2nd','3rd'][i]}.webp?v=${T1_ART_V}`} alt={`#${i+1}`}/>
-        <div className="ad"><a href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" title={x.a}>{t1Short(x.a)}</a></div>
-        <div className="bl"><T1Amt v={x.v} tok={tok}/></div><div className="uv">{P?t1Usd(x.v*P):'—'}</div><div className="t1sh">{(x.v/tot*100).toFixed(2)}% {stk?'of staked':'of supply'}</div></div>);
+        <div className="t1pt"><div className="ad"><a href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" title={x.a}>{t1Short(x.a)}</a></div>
+        <div className="bl"><T1Amt v={x.v} tok={tok}/></div><div className="uv">{P?t1Usd(x.v*P):'—'}</div><div className="t1sh">{(x.v/tot*100).toFixed(2)}% {stk?'of staked':'of supply'}</div></div></div>);
     /* audit A1: never rank what the lists leave out — the builders' known addresses (burn, DAO wallets + contract, the UFO OA wallet,
        staking, router, the token contracts); any other contract is caught by eth_getCode in the holders view */
     const T1_EXCL=new Set(['0x0000000000000000000000000000000000000369','0x0000000000000000000000000000000000000000','0x000000000000000000000000000000000000dead',
