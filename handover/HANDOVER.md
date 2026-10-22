@@ -42,10 +42,20 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-22 evening: TOP 100 stakers columns — PUSHED `7f7837f` as "staked, not locked", then CORRECTED on his word ("staked will
-be the bigger number because to be locked you also have to be staked … a staked column, and then a locked column") — written to the
-Mac, NOT pushed:** STAKED = the wallet's whole stake (locked included), LOCKED = the locked part; the bar column has no number now
-(legend "■ unlocked ▨ locked"); the phone's third column reads "STAKED" (`.t1po`). index sha256 cc3acf88. The superseded note: "we show locked, but
+**SIGN-OFF 2026-10-22 (~17:30 UTC): TOP 100 IS LIVE AND DONE — last push `1246ec775`, tree clean except these notes.** The Token
+Allocation panel's TOP 100 button (PTGC + UFO) opens `Top100Modal`: top holders (people only) and, on PTGC, top stakers; the wallet
+checker (rank, tokens + $ to break in, cushion, stake-more); his beam-UFO medals on a tinted podium; STAKED (whole stake) / LOCKED
+columns. Build = `python3 tools/top100.py` from `tools/top100/t1.css` + `t1.jsx` (edit the fragments, never index.html). Data =
+`holder-ranks` (`top` addresses) + NEW step `top-stakers` (first CI run 16:15 UTC ok, 32 s). Live-verified after every push today.
+Session file `sessions/2026-10-22.md`. **NEXT: (1) he posts the Telegram announcement (in that file); (2) Phase F, F4 share link
+first, MOCK-UP FIRST.**
+**Deploy lesson (2026-10-22, GitHub Actions incident 15:28 UTC on):** a queued Pages deploy sat 40+ min; an EMPTY commit pushed behind
+it (`git commit --allow-empty -m "Redeploy: …"`) went through in 2.5 min while the queued one was still waiting — the deploy.yml
+concurrency did NOT cancel the waiting run. When a deploy is stuck in "Queued" for a long time, an empty redeploy commit is worth a
+try (Claude told him it would not help — it did).
+The column change itself: PUSHED `7f7837f` as "staked, not locked", then CORRECTED on his word ("staked will
+be the bigger number because to be locked you also have to be staked … a staked column, and then a locked column") — STAKED = the wallet's whole stake (locked included), LOCKED = the locked part; the bar column has no number now
+(legend "■ unlocked ▨ locked"); the phone's third column reads "STAKED" (`.t1po`). index sha256 cc3acf88 — PUSHED `2bd410f` + redeploy `1246ec775`, LIVE-VERIFIED (#1 18.97B staked / 18.21B locked). The superseded note: "we show locked, but
 not staked": the stakers list is # · Wallet · TOTAL STAKED (bar: gold = staked, pink stripes = locked) · STAKED (total − locked, gold
 `.un2`) · LOCKED · SHARE · VALUE; grid 48 / 1.1fr / 1.55fr / 90 / 90 / 66 / 96; the phone hides the four small columns as before.
 1380 / 1024 / 390 no overflow. index sha256 a7a43d6b.
@@ -1739,6 +1749,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    in dry-run would have shown up here too).
 
 ## Session log
+- `sessions/2026-10-22.md` — TOP 100: mock-ups, the build (holders + stakers, the checker), four look rounds, the audit, go-live, the stakers columns, the Telegram post.
 
 - `sessions/2026-10-16.md` — Portfolio v2 GO LIVE + B8 (`bc8e60b8b`): the flip, the live check with two random UFO holders
   (cold = cached), the announcement copy.
