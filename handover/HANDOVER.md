@@ -42,6 +42,25 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 night: THE AFFILIATE PROGRAM PAGE'S NEW LOOK — BUILT, written to the Mac, NOT pushed ("make it live").** His ask: "this page is
+still the old and ugly look. Can you mock up a new look?" → `design/affiliate/` (README has every decision): v1 two looks (A the Calculators
+treatment / B "hall of fame") → "I like affil-v1-b-1380" + "recent activity full width, the Registry under it" → v2 + "use the logo that has
+the glowing light around it like we use on the dashboard" (the h2.css corona coin) → his AI mock (`reference/shaka-ai-mock.png`) → "keep
+ours as is except add some of that background artwork" → v3 (3a the gold mountain hero / 3b the Holders beam-UFO hero) → "make it live"
+(no pick → 3a, the hero he had already approved). **Build = `python3 tools/affiliate-v2.py` from `tools/affiliate/af.css` (run twice →
+"0 edit(s)"; the render blocks sit between `{/* AFFIL2:X */}…{/* /AFFIL2:X */}` markers so the script's fragments can be edited and re-run;
+EDIT THE SCRIPT / af.css, never index.html).** What changed in `AffiliatesPage`: the hero (rank-plate sky + the dashboard's corona coin +
+"PTGC AFFILIATE PROGRAM"), terms as chips, Leaderboard / Payment Receipts as the Calculators icon buttons, ALL-TIME / month as framed bands of
+tiles (sea art via SeaIcon, "PAID OUT" = commissions paid; the month select stays on the green plate), NEW the month's podium (`AfPodium`, top 3
+by PTGC bought on his medals, tap = the referrer card), Recent Activity / Registry fold / Commission Log as framed cards (the lists' own cells
+kept; the log's rank = a CSS counter; the log's User column 20 %), the footer; his Calculators space art under the whole page (`.af-art`,
+72 % veil; absolute over the top 1000 px on phones). The header is no longer sticky. `probes/affil-registry.js` matches the uppercased heads
+case-insensitively (only probe change). Harness `AFFIL_DATA=real` 1400 / 1024 / 390: no overflow, no errors; a54 / card / registry probes
+unchanged in substance. index.html sha256 8fafd7c2. The Leaderboard + Payment Receipts windows still wear the old look — NEXT ROUND, MOCK
+FIRST. **NEXT: his push (`git add -A && git commit -m "Affiliate Program: the new look" && git pull --rebase && git push`) → Claude's live
+check (the hero, the podium on real data, the Registry SHOW, the log sorts, a referrer card, phone) → the two windows' mock-up.**
+(`_to_delete/harness-stage.tgz` = a 16 MB assets bundle staged for the cloud harness; git-ignored, he can delete it.)
+
 **SIGN-OFF 2026-10-22 (~17:30 UTC): TOP 100 IS LIVE AND DONE — last push `1246ec775`, tree clean except these notes.** The Token
 Allocation panel's TOP 100 button (PTGC + UFO) opens `Top100Modal`: top holders (people only) and, on PTGC, top stakers; the wallet
 checker (rank, tokens + $ to break in, cushion, stake-more); his beam-UFO medals on a tinted podium; STAKED (whole stake) / LOCKED

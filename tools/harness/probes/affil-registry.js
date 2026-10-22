@@ -17,7 +17,7 @@
   };
   const opened=click(/Referrers Registry/);
   await sleep(1200);
-  const t=[...document.querySelectorAll('table')].find(x=>/PTGC Bought/.test(x.innerText)&&/Comm\. Paid|Paid \(USD\)/.test(x.innerText));
+  const t=[...document.querySelectorAll('table')].find(x=>/PTGC Bought/i.test(x.innerText)&&/Comm\. Paid|Paid \(USD\)/i.test(x.innerText));
   if(!t)return{opened,error:'registry table not found'};
   const head=[...t.querySelectorAll('thead th,thead td')].map(c=>c.innerText.trim().replace(/[↑↓↕]/g,''));
   const rows=[...t.querySelectorAll('tbody tr')].map(r=>[...r.children].map(c=>c.innerText.trim().replace(/\n/g,' ')));
