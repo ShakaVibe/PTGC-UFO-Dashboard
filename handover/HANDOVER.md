@@ -42,6 +42,22 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-22 evening: TOP 100 AUDIT + fixes (his picks 1–5, 8–12; 6 = watch the first CI top-stakers run; 7 = go-live cleanup,
+LATER — "i will let you know when to go live"; 13–17 no) — written to the Mac, NOT pushed.** Verified first: our staker sum 187.4634B =
+the contract's totalStaked() 187.4645B (the list is complete). Fixed in tools/top100/t1.jsx: A1 the checker refuses the builders'
+known addresses (T1_EXCL) and any contract (eth_getCode, holders view) with a plain message; A2 a checked wallet that is in `top`
+has its OWN old entry taken out of the list before ranking (`t1Without`) — a sold wallet no longer counts its old self above it
+(the line to beat becomes the old #101); A3 rows + podium are module-level `T1Row` / `T1Pod` and the list is one useMemo — typing no
+longer remounts 100 rows (probe: the first row's DOM node survives typing); A4 `t1Copy` (clipboard → execCommand fallback), ✓ only
+on success, ✕ + "Copy failed" otherwise; A5 list age: amber `.t1old` past 12 h, past 48 h a red note + ranks / tiles / list hidden
+("too old to rank against"); A8 Holders ↔ Stakers re-checks the last wallet; A9 the count tile is "PEOPLE HOLDING · pools &
+contracts left out"; A10 the staker cushion says how much of the stake is unlocked (locked PTGC can't drop you out); A11 equal
+amounts share a rank in the list (`t1Ranks`); A12 the box takes a PulseScan link (first 0x + 40 hex not followed by more hex — a tx
+hash is not mistaken for an address). Harness: run.js answers eth_getCode ('0x' unless T1_CONTRACT names the address); probe
+`t1-audit.js` (window.__t1 = {addr, mode:'s', typeTest}). All scenarios green: #118 out; staking contract → left out; a contract
+link → contract; link + switch to stakers re-checks; #50 at 100M → #353 with the line 405.28M; 20 h amber; 60 h hidden; copy ✓;
+390 px clean. index sha256 see the build's print.
+
 **2026-10-22 evening: TOP 100 round 4 — written to the Mac, NOT pushed.** Round 3 checked LIVE first (built-in browser, real data:
 101 rows #1–#101, podium 19.18B / 14.86B / 8.91B; checker on 0xB1c0…9769 = #118 Dolphin, +124.41M ≈ $2,238 to break in; stakers view
 = #95 of 3,428, +2.62M to pass #94). Then his asks: (1) NEW medals — beam-UFO 1st / 2nd / 3rd (his PNG had the transparency

@@ -45,50 +45,96 @@
     const T1Tile=({l,ic,v,f,cls=''})=>(<div className={`t1t ${cls}`}><div className="l">{ic&&T1I[ic]}{l}</div><div className="v">{v}</div>{f!=null&&<div className="f">{f}</div>}</div>);
     const T1Amt=({v,tok})=>(<>{fmtAbbr(v)}<small>{tok}</small></>);
     const T1Cost=()=>(<span className="t1ii" tabIndex={0} aria-label="About the cost">i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></span>);
-    const T1Addr=({a,me})=>{
-      const[ok,setOk]=useState(false);
-      return(<div className="ad"><a href={`https://scan.pulsechain.com/address/${a}`} target="_blank" rel="noopener noreferrer" title={a}>{t1Short(a)}</a>
-        <button type="button" className="t1cp" aria-label={`Copy ${a}`} title={ok?'Copied':'Copy address'} onClick={()=>{try{navigator.clipboard.writeText(a);setOk(true);setTimeout(()=>setOk(false),1200);}catch(e){}}}>{ok?<span style={{fontSize:11}}>✓</span>:T1I.copy}</button>
-        {me&&<span className="t1tag">CHECKED</span>}</div>);
-    };
     const T1Dot=({token,on,onToggle})=>(
       <button type="button" onClick={onToggle} aria-label="Top 100 (preview)" aria-pressed={on} title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
         <span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:(TOKENS[token]||TOKENS.PTGC).colorHex,opacity:on?0.4:0.16}}></span>
       </button>
     );
+    /* audit A4 (2026-10-22): the ✓ only when the copy really happened — the async clipboard can refuse (permissions, an
+       insecure frame); the old execCommand path is the fallback */
+    const t1Copy=a=>{
+      const legacy=()=>{try{const t=document.createElement('textarea');t.value=a;t.setAttribute('readonly','');t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();return ok;}catch(e){return false;}};
+      try{if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(a).then(()=>true,()=>legacy());}catch(e){}
+      return Promise.resolve(legacy());
+    };
+    const T1Addr=({a,me})=>{
+      const[ok,setOk]=useState(null);   // null | true | false (failed)
+      useEffect(()=>{if(ok===null)return;const t=setTimeout(()=>setOk(null),1400);return()=>clearTimeout(t);},[ok]);
+      return(<div className="ad"><a href={`https://scan.pulsechain.com/address/${a}`} target="_blank" rel="noopener noreferrer" title={a}>{t1Short(a)}</a>
+        <button type="button" className="t1cp" aria-label={`Copy ${a}`} title={ok===true?'Copied':ok===false?'Copy failed — select the address on PulseScan':'Copy address'} onClick={()=>{t1Copy(a).then(r=>setOk(!!r));}}>{ok===true?<span style={{fontSize:11}}>✓</span>:ok===false?<span style={{fontSize:11,color:'#FCA5A5'}}>✕</span>:T1I.copy}</button>
+        {me&&<span className="t1tag">CHECKED</span>}</div>);
+    };
+    /* audit A3: rows and podium cards are module-level components, and the list is memoised — they used to be declared inside the
+       window, so React remounted all 100 rows (and their images) on every keystroke in the address box */
+    const T1Row=({x,rank,cls,isMe,stk,P,SUP,tot,mx})=>{
+      const w=Math.max(2,Math.min(100,Math.sqrt(x.v)/mx*100));
+      if(stk)return(<div role="row" className={`t1r ${cls||''}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
+        <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i>{x.l>0&&<i className="lk" style={{width:w*Math.min(1,x.l/x.v)+'%'}}></i>}</span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
+        <span role="cell" className="lk2 hp">{x.l>0?fmtAbbr(x.l):'—'}</span><span role="cell" className="pc2 hp">{(x.v/tot*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
+      const lg=t1League(x.v,SUP);
+      return(<div role="row" className={`t1r ${cls||''}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
+        <span role="cell">{lg&&<SeaIcon e={lg.e} size={32}/>}</span>
+        <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i></span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
+        <span role="cell" className="pc2 hp">{(x.v/SUP*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
+    };
+    const T1Pod=({x,i,cls,isMe,stk,P,tok,tot})=>!x?<div/>:(
+      <div className={`t1pc ${cls}${isMe?' me':''}`}><img className="md" src={`logos/top100/t1-${['1st','2nd','3rd'][i]}.webp?v=${T1_ART_V}`} alt={`#${i+1}`}/>
+        <div className="ad"><a href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" title={x.a}>{t1Short(x.a)}</a></div>
+        <div className="bl"><T1Amt v={x.v} tok={tok}/></div><div className="uv">{P?t1Usd(x.v*P):'—'}</div><div className="t1sh">{(x.v/tot*100).toFixed(2)}% {stk?'of staked':'of supply'}</div></div>);
+    /* audit A1: never rank what the lists leave out — the builders' known addresses (burn, DAO wallets + contract, the UFO OA wallet,
+       staking, router, the token contracts); any other contract is caught by eth_getCode in the holders view */
+    const T1_EXCL=new Set(['0x0000000000000000000000000000000000000369','0x0000000000000000000000000000000000000000','0x000000000000000000000000000000000000dead',
+      '0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1','0x440773b5104a102c00ef26979a5c897155336a34','0x305acfab82103c2b82b19543919d1c93b44e55db',
+      '0x92dd8e86fdb206fa41e451398a9f03fbd36d574d','0xc71f597a2ac39e47f07102e849d18489c96f39ef','0x165c3410fc91ef562c50559f7d2289febed552d9',
+      '0x94534eeee131840b1c0f61847c572228bdfdde93','0x49ed499433bee42dd34c169470fef2c8f9fae6e6','0x456548a9b56efbbd89ca0309edd17a9e20b04018']);
+    const T1_AMBER=12*3600*1000;   // audit A5: past 12 h an amber "may be off" note; past T1_STALE (48 h) the ranks are hidden
+    /* audit A11: equal amounts share a rank, in the list exactly as in the checker */
+    const t1Ranks=list=>{const r=[];for(let i=0;i<list.length;i++)r.push(i>0&&list[i].v===list[i-1].v?r[i-1]:i+1);return r;};
+    /* audit A2: the list is up to 2 h old and still holds the checked wallet's OLD amount — a wallet that sold since would count its own
+       old self above it. For the top 110 we know the addresses, so that one old entry is taken out before ranking. */
+    const t1Without=(all,v)=>{let lo=0,hi=all.length;while(lo<hi){const m=(lo+hi)>>1;if(all[m]>v)lo=m+1;else hi=m;}return lo<all.length&&all[lo]===v?all.slice(0,lo).concat(all.slice(lo+1)):all;};
     const Top100Modal=({token,price,onClose})=>{
       const tok=token==='UFO'?'UFO':'PTGC',cfg=TOKENS[tok],SUP=SUPPLY[tok];
       const[mode,setMode]=useState('h');
       const stk=tok==='PTGC'&&mode==='s';
       const[ranks,setRanks]=useState(undefined),[stakers,setStakers]=useState(undefined);
-      const[q,setQ]=useState(''),[chk,setChk]=useState(null);   // chk: {busy}|{bad}|{err}|{a,v,b?,l?,mode}
-      const seq=useRef(0);
+      const[q,setQ]=useState(''),[chk,setChk]=useState(null);   // chk: {busy}|{bad}|{err}|{nope}|{a,v,b?,l?,mode}
+      const seq=useRef(0),last=useRef(null);
       const load=(force)=>{
         if(force){setRanks(undefined);if(tok==='PTGC')setStakers(undefined);}
         t1Fetch('holder-ranks.json',force).then(setRanks);
         if(tok==='PTGC')t1Fetch('top-stakers.json',force).then(setStakers);
       };
       useEffect(()=>{load(false);},[tok]);
-      useEffect(()=>{setChk(null);},[mode,tok]);
       const P=price>0?price:null;
       /* the view's list: top = [{a,v,l?,b?}], all = every amount high → low */
       const view=useMemo(()=>{
         if(stk){
           if(stakers===undefined)return undefined;if(!stakers||!Array.isArray(stakers.top)||!Array.isArray(stakers.s))return null;
-          return{top:stakers.top.map(r=>({a:r[0],v:r[1],l:r[2],b:r[3]})),all:stakers.s,count:stakers.count,tot:stakers.total,at:Date.parse(stakers.generatedAt)};
+          return{top:stakers.top.map(r=>({a:String(r[0]).toLowerCase(),v:r[1],l:r[2],b:r[3]})),all:stakers.s,count:stakers.count,tot:stakers.total,at:Date.parse(stakers.generatedAt)};
         }
         if(ranks===undefined)return undefined;const t=ranks&&ranks.tokens&&ranks.tokens[tok];
         if(!t||!Array.isArray(t.b))return null;
-        return{top:Array.isArray(t.top)?t.top.map(r=>({a:r[0],v:r[1]})):null,all:t.b,count:t.holders,tot:SUP,at:Date.parse(t.readAt)};
+        return{top:Array.isArray(t.top)?t.top.map(r=>({a:String(r[0]).toLowerCase(),v:r[1]})):null,all:t.b,count:t.holders,tot:SUP,at:Date.parse(t.readAt)};
       },[stk,stakers,ranks,tok,SUP]);
+      const age=view&&isFinite(view.at)?Date.now()-view.at:null;
+      const stale=age!=null&&age>T1_STALE,amber=age!=null&&age>T1_AMBER&&!stale;
       const T=view&&view.all.length>=100?view.all[99]:null;
       const wallets=useMemo(t1Wallets,[]);
       const check=async(addr)=>{
-        const a=String(addr||q).trim();
-        if(!/^0x[0-9a-fA-F]{40}$/.test(a)){setChk({bad:true});return;}
-        setQ(a);const my=++seq.current;setChk({busy:true});
+        const raw=String(addr||q).trim();
+        const m=raw.match(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/);   // audit A12: a bare address or any link that carries one (PulseScan, Otter…)
+        if(!m){setChk({bad:true});return;}
+        const a=m[0];setQ(a);last.current=a;
+        const my=++seq.current;setChk({busy:true});
         try{
-          const p=encodeAddress(a);
+          const p=encodeAddress(a),al=a.toLowerCase();
+          if(!stk&&T1_EXCL.has(al)){if(my===seq.current)setChk({nope:'known'});return;}
+          if(!stk){
+            const code=await rpcFetch({jsonrpc:'2.0',method:'eth_getCode',params:[a,'latest'],id:1});
+            if(!code||typeof code.result!=='string')throw new Error('code');
+            if(code.result.length>2){if(my===seq.current)setChk({nope:'contract'});return;}
+          }
           const bal=await ethCallRead(cfg.address,T1_SEL.balanceOf+p);
           if(bal==null)throw new Error('balance');
           let r={a,mode:stk?'s':'h',b:t1Key(BigInt(bal))};
@@ -101,20 +147,29 @@
           if(my===seq.current)setChk(r);
         }catch(e){if(my===seq.current)setChk({err:true});}
       };
-      const res=chk&&chk.a&&view&&T!=null?(()=>{
-        const k=chk.v,list=view.all,rank=k>0?t1Rank(list,k):null,inTop=rank!=null&&rank<=100;
-        const pct=Math.min(100,k/T*100);
+      /* audit A8: switching Holders ↔ Stakers re-checks the same wallet in the other list */
+      const firstMode=useRef(true);
+      useEffect(()=>{if(firstMode.current){firstMode.current=false;return;}if(last.current)check(last.current);else setChk(null);},[mode]);
+      const res=chk&&chk.a&&view&&T!=null&&!stale?(()=>{
+        const k=chk.v,al=chk.a.toLowerCase();
+        const own=view.top&&view.top.find(x=>x.a===al);
+        const list=own?t1Without(view.all,own.v):view.all;   // A2
+        const T2=list.length>=100?list[99]:T;
+        const rank=k>0?t1Rank(list,k):null,inTop=rank!=null&&rank<=100;
+        const pct=Math.min(100,k/T2*100);
+        const cush=Math.max(0,k-(list[100]||0));
         if(chk.mode==='s'){
-          const need=Math.max(0,T-k+1),free=Math.max(0,(chk.b||0)-k),buy=Math.max(0,need-free);
-          if(inTop){const up=rank>1?list[rank-2]:null;return{rank,inTop,tiles:[
+          const need=Math.max(0,T2-k+1),free=Math.max(0,(chk.b||0)-k),buy=Math.max(0,need-free);
+          if(inTop){const up=rank>1?list[rank-2]:null,unl=Math.max(0,k-(chk.l||0));return{rank,inTop,tiles:[
             <T1Tile key="1" l="Staked" v={<T1Amt v={k} tok="PTGC"/>} f={chk.l>0?`${fmtAbbr(chk.l)} of it locked`:'none of it locked'}/>,
             <T1Tile key="2" l="You're in" ic="trophy" cls="in" v={`#${rank.toLocaleString('en-US')}`} f={`of ${view.count.toLocaleString('en-US')} stakers`}/>,
             up!=null?<T1Tile key="3" l={`To pass #${rank-1}`} ic="bolt" cls="hot" v={<>+<T1Amt v={up-k+1} tok="PTGC"/></>} f={<>stake that much more{P?<> · ≈ <span className="usd">{t1Usd((up-k+1)*P)}</span></>:null}</>}/>:<T1Tile key="3" l="Top staker" ic="crown" cls="hot" v="#1" f="nobody above you"/>,
-            <T1Tile key="4" l="Your cushion" v={<T1Amt v={Math.max(0,k-(list[100]||0))} tok="PTGC"/>} f="above #101 — unstake more and you drop out"/>]};}
+            /* A10: locked PTGC can't be unstaked — say how much of the cushion is free */
+            <T1Tile key="4" l="Your cushion" v={<T1Amt v={cush} tok="PTGC"/>} f={!(chk.l>0)?'above #101 — unstake more than this and you drop out':unl<cush?`above #101 — your ${fmtAbbr(unl)} unlocked can't drop you out (${fmtAbbr(chk.l)} is locked)`:`above #101 — ${fmtAbbr(unl)} of your stake is unlocked; unstake more than this and you drop out`}/>]};}
           return{rank,inTop,pct,tiles:[
             <T1Tile key="1" l="Staked" v={<T1Amt v={k} tok="PTGC"/>} f={k>0?(chk.l>0?`${fmtAbbr(chk.l)} of it locked`:'none of it locked'):'nothing staked'}/>,
             <T1Tile key="2" l="Staker rank" v={rank?`#${rank.toLocaleString('en-US')}`:'—'} f={rank?`of ${view.count.toLocaleString('en-US')} stakers`:'not staking'}/>,
-            <T1Tile key="3" l="Stake more" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok="PTGC"/></>} f={`to pass #100 (${fmtAbbr(T)} staked)`}/>,
+            <T1Tile key="3" l="Stake more" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok="PTGC"/></>} f={`to pass #100 (${fmtAbbr(T2)} staked)`}/>,
             <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{buy===0?'$0':P?t1Usd(buy*P):'—'}</span>} f={free>0?(buy>0?`stake your ${fmtAbbr(free)} unstaked + buy ${fmtAbbr(buy)}`:`stake ${fmtAbbr(need)} of your ${fmtAbbr(free)} unstaked`):`buy ${fmtAbbr(need)} PTGC and stake it`}/>]};
         }
         const lg=t1League(k,SUP);
@@ -123,34 +178,33 @@
           <T1Tile key="1" l="Holds" v={<T1Amt v={k} tok={tok}/>} f={P?<>≈ <span className="usd">{t1Usd(k*P)}</span></>:null}/>,
           <T1Tile key="2" l="You're in" ic="trophy" cls="in" v={`#${rank}`} f={<>{lgEl} · in the top 100</>}/>,
           up!=null?<T1Tile key="3" l={`To pass #${rank-1}`} ic="bolt" cls="hot" v={<>+<T1Amt v={up-k+1} tok={tok}/></>} f={P?<>≈ <span className="usd">{t1Usd((up-k+1)*P)}</span> today</>:null}/>:<T1Tile key="3" l="Top holder" ic="crown" cls="hot" v="#1" f="nobody above you"/>,
-          <T1Tile key="4" l="Your cushion" v={<T1Amt v={Math.max(0,k-(list[100]||0))} tok={tok}/>} f="above #101 — sell more and you drop out"/>]};}
-        const need=Math.max(0,T-k+1);
+          <T1Tile key="4" l="Your cushion" v={<T1Amt v={cush} tok={tok}/>} f="above #101 — sell more than this and you drop out"/>]};}
+        const need=Math.max(0,T2-k+1);
         return{rank,inTop,pct,tiles:[
           <T1Tile key="1" l="Holds" v={<T1Amt v={k} tok={tok}/>} f={P?<>≈ <span className="usd">{t1Usd(k*P)}</span></>:null}/>,
           <T1Tile key="2" l="Rank" v={rank?`#${rank.toLocaleString('en-US')}`:'—'} f={lgEl}/>,
-          <T1Tile key="3" l="To break in" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok={tok}/></>} f={`to pass #100 (${fmtAbbr(T)})`}/>,
+          <T1Tile key="3" l="To break in" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok={tok}/></>} f={`to pass #100 (${fmtAbbr(T2)})`}/>,
           <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{P?t1Usd(need*P):'—'}</span>} f={P?`at $${t1Px(P)} per ${tok}`:'price unavailable'}/>]};
       })():null;
       const top=view&&view.top,tot=view&&view.tot;
       const me=chk&&chk.a?chk.a.toLowerCase():null;
       const sum100=view&&view.all.length>=100?view.all.slice(0,100).reduce((s,x)=>s+x,0):null;   // from the full list, so it shows before `top` exists
-      const mx=top&&top.length?Math.sqrt(top[0].v):1;
-      const age=view&&isFinite(view.at)?Date.now()-view.at:null;
-      const Row=({x,rank,cls=''})=>{
-        const isMe=me&&x.a.toLowerCase()===me,w=Math.max(2,Math.min(100,Math.sqrt(x.v)/mx*100));
-        if(stk)return(<div role="row" className={`t1r ${cls}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
-          <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i>{x.l>0&&<i className="lk" style={{width:w*Math.min(1,x.l/x.v)+'%'}}></i>}</span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
-          <span role="cell" className="lk2 hp">{x.l>0?fmtAbbr(x.l):'—'}</span><span role="cell" className="pc2 hp">{(x.v/tot*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
-        const lg=t1League(x.v,SUP);
-        return(<div role="row" className={`t1r ${cls}${isMe?' me':''}`}><span role="cell" className="rk">{rank}</span><span role="cell"><T1Addr a={x.a} me={isMe}/></span>
-          <span role="cell">{lg&&<SeaIcon e={lg.e} size={32}/>}</span>
-          <span role="cell" className="bal"><span className="bb"><i style={{width:w+'%'}}></i></span><span className="n">{fmtAbbr(x.v)}{P&&<span className="u2">{t1Usd(x.v*P)}</span>}</span></span>
-          <span role="cell" className="pc2 hp">{(x.v/SUP*100).toFixed(2)}%</span><span role="cell" className="uv hp">{P?t1Usd(x.v*P):'—'}</span></div>);
-      };
-      const Pod=({i,cls})=>{const x=top[i];if(!x)return<div/>;const isMe=me&&x.a.toLowerCase()===me;return(
-        <div className={`t1pc ${cls}${isMe?' me':''}`}><img className="md" src={`logos/top100/t1-${['1st','2nd','3rd'][i]}.webp?v=${T1_ART_V}`} alt={`#${i+1}`}/>
-          <div className="ad"><a href={`https://scan.pulsechain.com/address/${x.a}`} target="_blank" rel="noopener noreferrer" title={x.a}>{t1Short(x.a)}</a></div>
-          <div className="bl"><T1Amt v={x.v} tok={tok}/></div><div className="uv">{P?t1Usd(x.v*P):'—'}</div><div className="t1sh">{(x.v/tot*100).toFixed(2)}% {stk?'of staked':'of supply'}</div></div>);};
+      /* A3: the podium + 100 rows only re-render when the data, the view, the price or the checked wallet change — not on typing */
+      const extra=res&&!res.inTop&&res.rank?{x:{a:chk.a.toLowerCase(),v:chk.v,l:chk.l},rank:res.rank}:null;
+      const listEl=useMemo(()=>{
+        if(!top||top.length<100||stale)return null;
+        const mx=Math.sqrt(top[0].v),rk=t1Ranks(top),pp={stk,P,SUP,tot,mx};
+        return(<>
+          <div className="t1pod">{[[1,'s'],[0,'g'],[2,'b']].map(([i,c])=><T1Pod key={i} x={top[i]} i={i} cls={c} isMe={me===(top[i]&&top[i].a)} stk={stk} P={P} tok={tok} tot={tot}/>)}</div>
+          <div className={`t1lst${stk?' stk':''}`} role="table" aria-label={`${tok} top 100 ${stk?'stakers':'holders'}`}>
+            {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b>Staked <span className="lkl hp">▨ locked</span></b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
+                :<div className="t1th" role="row"><b>#</b><b>Wallet</b><b></b><b>Balance</b><b className="hp">Supply</b><b className="hp">Value</b></div>}
+            {top.slice(0,100).map((x,i)=><T1Row key={x.a} x={x} rank={rk[i]} cls={i===99?'cut':''} isMe={me===x.a} {...pp}/>)}
+            <div className="t1line" role="row">THE TOP 100 LINE</div>
+            {extra?<T1Row x={extra.x} rank={extra.rank} isMe={true} {...pp}/>:top[100]?<T1Row x={top[100]} rank={rk[100]} isMe={me===top[100].a} {...pp}/>:null}
+          </div>
+        </>);
+      },[top,stale,stk,P,SUP,tot,tok,me,extra&&extra.rank,extra&&extra.x.v]);
       return(
         <Modal className="z-50 flex items-center justify-center p-2 sm:p-4 modal-overlay bg-black/80" onClose={onClose} label={`${tok} top 100`}>
           <div className={`t1m${tok==='UFO'?' ufo':''}`} onClick={e=>e.stopPropagation()}>
@@ -167,36 +221,32 @@
             {view===undefined?<div className="t1wait"><span className="t1spin" aria-hidden="true"></span>Reading the list…</div>
             :view===null?<div className="t1wait">Couldn't load the list — if this is new, it is built by the next data update (every 2 h).<button type="button" onClick={()=>load(true)}>Retry</button></div>
             :<>
+              {(amber||stale)&&<div className={`t1old${stale?' dead':''}`} role="status">{stale?<>This list was read {fmtSnapshotAge(age)} — too old to rank against, so ranks are hidden until the next data update.</>:<>This list was read {fmtSnapshotAge(age)} (it normally refreshes every 2 h) — ranks may be a little off.</>}</div>}
               <div className="t1st4">
-                <T1Tile cls="lead" ic="ticket" l={stk?'#100 has staked':'#100 holds'} v={T!=null?<T1Amt v={T} tok={tok}/>:'—'} f={T!=null&&P?<>≈ <span className="usd">{t1Usd(T*P)}</span> — the line to beat</>:'the line to beat'}/>
-                <T1Tile ic="pie" l={stk?'Top 100 stake':'Top 100 hold'} v={sum100!=null?(sum100/tot*100).toFixed(1)+'%':'—'} f={stk?`of all ${fmtAbbr(tot)} staked PTGC`:`of the ${fmtAbbr(SUP)} starting supply`}/>
-                <T1Tile ic="crown" l={stk?'#1 has staked':'#1 holds'} v={view.all.length?<T1Amt v={view.all[0]} tok={tok}/>:'—'} f={view.all.length&&P?<>≈ <span className="usd">{t1Usd(view.all[0]*P)}</span></>:null}/>
-                <T1Tile ic="users" l={stk?'Stakers':'Holders'} v={(view.count||view.all.length).toLocaleString('en-US')} f={stk?'wallets with PTGC staked now':`wallets holding any ${tok}`}/>
+                <T1Tile cls="lead" ic="ticket" l={stk?'#100 has staked':'#100 holds'} v={T!=null&&!stale?<T1Amt v={T} tok={tok}/>:'—'} f={T!=null&&P&&!stale?<>≈ <span className="usd">{t1Usd(T*P)}</span> — the line to beat</>:'the line to beat'}/>
+                <T1Tile ic="pie" l={stk?'Top 100 stake':'Top 100 hold'} v={sum100!=null&&!stale?(sum100/tot*100).toFixed(1)+'%':'—'} f={stk?`of all ${fmtAbbr(tot)} staked PTGC`:`of the ${fmtAbbr(SUP)} starting supply`}/>
+                <T1Tile ic="crown" l={stk?'#1 has staked':'#1 holds'} v={view.all.length&&!stale?<T1Amt v={view.all[0]} tok={tok}/>:'—'} f={view.all.length&&P&&!stale?<>≈ <span className="usd">{t1Usd(view.all[0]*P)}</span></>:null}/>
+                {/* A9: people only — the dashboard's Holders tile counts pools and contracts too */}
+                <T1Tile ic="users" l={stk?'Stakers':'People holding'} v={(view.count||view.all.length).toLocaleString('en-US')} f={stk?'wallets with PTGC staked now':'pools & contracts left out'}/>
               </div>
               <div className="t1chk">
                 <div className="hh"><span>{T1I.search}{stk?'Check a wallet — how much to stake':'Check a wallet'}</span><span className="r">rank, tokens to break in, cost today</span></div>
                 <form className="t1bar" onSubmit={e=>{e.preventDefault();check();}}>
-                  <label className="t1inp">{T1I.search}<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Paste any wallet address (0x…)" spellCheck={false} autoComplete="off" aria-label="Wallet address"/></label>
+                  <label className="t1inp">{T1I.search}<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Paste a wallet address or a PulseScan link" spellCheck={false} autoComplete="off" aria-label="Wallet address"/></label>
                   <button type="submit" className="t1go" disabled={chk&&chk.busy}>{chk&&chk.busy?'…':'CHECK'}</button>
                 </form>
                 {!chk&&wallets.length>0&&<div className="t1mine">Your wallets from Portfolio: {wallets.map(w=><button type="button" key={w.address} onClick={()=>check(w.address)} title={w.address}>{w.name||t1Short(w.address)}</button>)}</div>}
-                {chk&&chk.bad&&<div className="t1msg bad">That isn't a wallet address — it starts with 0x and has 42 characters.</div>}
+                {chk&&chk.bad&&<div className="t1msg bad">That isn't a wallet address — paste one that starts with 0x (42 characters), or a PulseScan link to it.</div>}
+                {chk&&chk.nope==='contract'&&<div className="t1msg bad">That's a contract (a pool, a router or another contract) — only people's wallets are ranked.</div>}
+                {chk&&chk.nope==='known'&&<div className="t1msg bad">That address is left out of the ranking (a burn address, a DAO wallet, the staking contract or a token contract).</div>}
                 {chk&&chk.err&&<div className="t1msg bad">Couldn't read that wallet from the chain just now — try again.</div>}
                 {chk&&chk.busy&&<div className="t1msg"><span className="t1spin" aria-hidden="true"></span>Reading the wallet from the chain…</div>}
+                {chk&&chk.a&&stale&&<div className="t1msg">The list is too old to rank against right now — try again after the next data update.</div>}
                 {res&&<><div className="t1res">{res.tiles}</div>
                   {!res.inTop&&<div className="t1prog"><span>{res.pct.toFixed(1)}% of the way</span><span className="tr"><i style={{width:res.pct+'%'}}></i></span><b>#100</b></div>}</>}
               </div>
-              {top&&top.length>=100?<>
-                <div className="t1pod"><Pod i={1} cls="s"/><Pod i={0} cls="g"/><Pod i={2} cls="b"/></div>
-                <div className={`t1lst${stk?' stk':''}`} role="table" aria-label={`${tok} top 100 ${stk?'stakers':'holders'}`}>
-                  {stk?<div className="t1th" role="row"><b>#</b><b>Wallet</b><b>Staked <span className="lkl hp">▨ locked</span></b><b className="hp">Locked</b><b className="hp">Share</b><b className="hp">Value</b></div>
-                      :<div className="t1th" role="row"><b>#</b><b>Wallet</b><b></b><b>Balance</b><b className="hp">Supply</b><b className="hp">Value</b></div>}
-                  {top.slice(0,100).map((x,i)=><Row key={x.a} x={x} rank={i+1} cls={i+1===100?'cut':''}/>)}   {/* #1–#3 too, under the podium (Shaka: "why does it start at 4") */}
-                  <div className="t1line" role="row">THE TOP 100 LINE</div>
-                  {res&&!res.inTop&&res.rank?<Row x={{a:chk.a,v:chk.v,l:chk.l}} rank={res.rank}/>:top[100]?<Row x={top[100]} rank={101}/>:null}
-                </div>
-              </>:<div className="t1wait">The top-100 list arrives with the next data update — the checker above already works.</div>}
-              <div className="t1ft">{stk?'Read from the PTGC staking contract (every wallet that ever staked, its staked amount now; locked included)':`From PulseScan’s holder list · people only — left out: liquidity pools, every contract, the burn addresses, the DAO wallets${tok==='UFO'?', the UFO OA wallet':''}`} · refreshed every 2 h{age!=null&&<> · <span className={age>T1_STALE?'old':''}>read {fmtSnapshotAge(age)}</span></>}. The checked wallet is read live.</div>
+              {stale?null:listEl||<div className="t1wait">The top-100 list arrives with the next data update — the checker above already works.</div>}
+              <div className="t1ft">{stk?'Read from the PTGC staking contract (every wallet that ever staked, its staked amount now; locked included)':`From PulseScan’s holder list · people only — left out: liquidity pools, every contract, the burn addresses, the DAO wallets${tok==='UFO'?', the UFO OA wallet':''}`} · refreshed every 2 h{age!=null&&<> · <span className={stale||amber?'old':''}>read {fmtSnapshotAge(age)}</span></>}. The checked wallet is read live.</div>
             </>}
             <button type="button" className="t1cl" onClick={onClose}>Close</button>
             </div>

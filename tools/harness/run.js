@@ -62,6 +62,7 @@ const rpcAnswer=(body)=>{
     if(m==='eth_blockNumber')result=hex(HEAD);
     else if(m==='eth_chainId')result='0x171';
     else if(m==='eth_getBalance')result=hex(125_000_000n*10n**18n);   // 125M PLS — the DAO panel's eth_getBalance anchor read (a16)
+    else if(m==='eth_getCode')result=(process.env.T1_CONTRACT&&String(q.params[0]).toLowerCase()===process.env.T1_CONTRACT.toLowerCase())?'0x6080604052':'0x';   // TOP 100 audit (2026-10-22): every address is a person unless T1_CONTRACT names it
     else if(m==='eth_getBlockByNumber'){const n=q.params[0]==='latest'?HEAD:parseInt(q.params[0],16);result={number:hex(n),timestamp:hex(Math.floor(Date.now()/1000)-(HEAD-n)*10)};}
     else if(m==='eth_getLogs'&&process.env.LOGS_DOWN){return {jsonrpc:'2.0',id:q.id,error:{code:-32000,message:'query timeout exceeded'}};}   // LOGS_DOWN=1: every eth_getLogs is a JSON-RPC error (calls still work) — portfolio's reflections scan must end "unavailable", never 0 (a12)
     else if(m==='eth_getLogs'){
