@@ -46,8 +46,29 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-23 (late night): AUDIT IV e13 — Token Allocation tier counts PEOPLE ONLY (Shaka chose "People only") — BUILT, on the
-Mac, NOT pushed.** Build = `python3 tools/audit4-e13.py` (idempotent, 11 edits, re-run 0; index.html sha256 a58e6b82,
+**2026-10-23 (late night, 2): AUDIT IV BATCH 4 — e14 (no page hangs on a stalled fetch), e15 (the stale-file UFO scan on
+the three mint pools only), e16 (the a41 RPC pool on portfolio + calculators) — BUILT, on the Mac, NOT pushed.** Build =
+`python3 tools/audit4-batch4.py` (idempotent; a clean run from `693883eaf` = 21 edits, re-run "0 edit(s)"; it re-splices the Top 100
+fragment via tools/top100.py). index.html sha256 21a784a2, portfolio 9f51fa14, calculators d645d568. No formula touched.
+**e14** (a) portfolio: `pfDsTokens` = DexScreener with an 8 s abort for `quoteOf` / `usdOf`; `initialLoad` clears at once so the
+wallet reads start before the prices land (the header's skeleton follows the new `pricesLoading`). (b) index: `dataFetch(url)` =
+`fetch(url,DATA_FETCH)` + a 20 s abort covering the body — all 13 repo data reads (t1.jsx's too); PTGC's first paint no longer
+awaits the six history files (`setBurnPeriods(undefined)` then seeded from `cachesP.then`, the UFO way). (c) calculators: fetchDex /
+lvFetchTokenPairs / Moon Math cores through the page's `dsJson`; the coingecko read has a 15 s abort and is awaited only before the
+volume windows. **e15** `UFO_MINT_POOL_SYMBOLS` = WPLS / PLSX / WETH; the browser's value-generated fallback passes only those pools
+(`?debug=1` keeps all seven for its swap reconciliation). **e16** index's pool block (cooldown, -32005 rotation, `transport`) copied
+verbatim into portfolio + calculators; portfolio's getLogsRange returns null on `r.transport` instead of halving. **Evidence**
+(scratch harness with a request log — `DS_SLOW` / `DATA_SLOW` / `LOGS_503` / `VG_OLD` switches, not committed): portfolio with
+DexScreener stalled 40 s, 12 s after load: 5 RPC posts and no wallet reads → 34 posts, both wallets read + their log scans;
+`#/ptgc` with the data files stalled 30 s, at 9 s: skeleton, no price → "$0.000142 +3.21%" painted; calculators with DexScreener
+stalled 60 s, at 36 s: "Loading Calculators…" → the page up with "—" prices; `#/ufo` with value-generated 5 h old: 991 RPC posts /
+864 eth_getLogs / 546 Mint scans on 7 pools → 671 / 552 / 234 on 3 (data/value-generated.json: every mint is on WPLS / PLSX /
+WETH); portfolio with every eth_getLogs 503: 168 log posts → 16. Normal runs: the body text of #/ptgc, calculators and
+portfolio (one wallet) IDENTICAL before / after; compile + ci-mount 7/7.
+
+**2026-10-23 (late night): AUDIT IV e13 — Token Allocation tier counts PEOPLE ONLY (Shaka chose "People only") — PUSHED, data rebuilt by his manual run
+(only=token-allocation, force), LIVE-VERIFIED: the file says `tiersSource` "holder-ranks (people only)"; the live strips read PTGC
+0 / 12 / 96 / 692 → 16,317 and UFO 0 / 16 / 98 / 500 → 4,373.** Build = `python3 tools/audit4-e13.py` (idempotent, 11 edits, re-run 0; index.html sha256 a58e6b82,
 build-token-allocation.mjs 367a2cad). Same thresholds (% of the starting supply); only WHO is counted changes. **Builder:** the tiers
 are counted over `data/holder-ranks.json` `b` (the Top 100 / Portfolio-rank people list: burn addresses, DAO wallets, every
 contract, the UFO OA wallet out, PulseScan page repeats dropped); Squid & below = people − the four tiers; the file gains
@@ -1741,7 +1762,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--31. **AUDIT IV e13 (2026-10-23 late night) — tier counts people only — BUILT, on the Mac, NOT pushed.** His push → Run workflow
+-32. **AUDIT IV batch 4 (2026-10-23 late night) — e14, e15, e16 — BUILT, on the Mac, NOT pushed.** His push → Claude's live look
+   (portfolio paints wallets with prices arriving after; #/ptgc / calculators / portfolio unchanged on a normal load). Next by
+   tier: e26+ (P1/P2 — see the audit file's list); e5 / e6 (Worker v8) still parked.
+-31. **AUDIT IV e13 (2026-10-23 late night) — tier counts people only — PUSHED, data rebuilt, LIVE-VERIFIED.** His push → Run workflow
    only=`token-allocation` force=true (or wait ≤ 6 h) → Claude's live check (token-allocation.json `tiersSource` "holder-ranks
    (people only)", PTGC strip 0 / 12 / 96 / 692 / ~16.3K). Left: e5 / e6 (Worker v8, parked), then e14+ by tier (e14 stalled
    fetches with no timeout, e15 the stale value-generated RPC burst, e16 the sibling pages' old RPC pool).

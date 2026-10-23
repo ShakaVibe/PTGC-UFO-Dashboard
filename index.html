@@ -1730,6 +1730,10 @@
     // MIGRATION: the old token's pools are dead. These are the new token's three pools,
     // created by the contract constructor. Re-confirmed on-chain at boot by resolveUfoPairs();
     // if the factory ever disagrees, the chain value wins.
+    /* Audit IV e15 (2026-10-23): the pools the UFO contract's auto-liquidity mints into (the constructor pools — resolveUfoPairs'
+       filter). The browser's value-generated fallback scans Mint logs on these only: the other four can never hold a contract
+       mint (every mint in data/value-generated.json is on these three), and scanning them cost ~312 eth_getLogs per visit. */
+    const UFO_MINT_POOL_SYMBOLS=['WPLS','PLSX','WETH'];
     const HARDCODED_UFO_PAIRS = [
       { address: ADDR.PAIR_UFO_WPLS, quoteSymbol: 'WPLS', quoteName: 'Wrapped PLS',   quoteAddress: ADDR.WPLS, isRHCore: true, version: 'v2' },
       { address: ADDR.PAIR_UFO_PLSX, quoteSymbol: 'PLSX', quoteName: 'PulseX',         quoteAddress: ADDR.PLSX, isRHCore: true, version: 'v2' },
@@ -2026,6 +2030,15 @@
        it only stopped the BROWSER from caching (every reload re-downloaded ~264 KB gz of data; an open tab ~1.1 MB gz/hour).
        `no-cache` = always revalidate with If-None-Match: a 304 when the file is unchanged, the new file when it is. */
     const DATA_FETCH={cache:'no-cache'};
+    /* Audit IV e14 (2026-10-23): every repo data read gets a 20 s limit (headers AND body) — a stalled raw.githubusercontent
+       connection used to hold PTGC's first paint (and the history readouts) for as long as it stalled. An abort is a failed
+       read: every caller already treats a rejection as "unknown". */
+    const DATA_TIMEOUT_MS=20000;
+    const dataFetch=(url,ms=DATA_TIMEOUT_MS)=>{
+      if(typeof AbortController==='undefined')return fetch(url,DATA_FETCH);
+      const c=new AbortController();setTimeout(()=>c.abort(),ms);   // never cleared: the limit covers the body read too; an abort after it finished is a no-op
+      return fetch(url,{...DATA_FETCH,signal:c.signal});
+    };
     /* ONE head block per moment. Every scanner used to call eth_blockNumber itself; when a
        block landed between two calls their `toBlock` differed, the shared log-scan cache key
        differed, and the "shared" scan ran twice. Concurrent callers now get the same promise
@@ -4171,8 +4184,8 @@
       if(burnHistoryCache&&(Date.now()-burnHistoryCacheTime)<BURN_CACHE_TTL)return burnHistoryCache;
       try{
         const [r,r2]=await Promise.all([
-          fetch(BURN_HISTORY_URL,DATA_FETCH),
-          fetch(UFO_PTGC_BURNS_URL,DATA_FETCH)
+          dataFetch(BURN_HISTORY_URL),
+          dataFetch(UFO_PTGC_BURNS_URL)
         ]);
         burnHistoryCache=await r.json();
         /* a39: burn-summary's own `PTGCbyUFO` is "PTGC burns sent from the PTGC/WPLS pair" —
@@ -4454,7 +4467,7 @@
     const fetchCoingeckoData = async () => {
       if (coingeckoDataCache && Date.now()-coingeckoFetchedAt < CG_TTL_MS) return coingeckoDataCache;
       try {
-        const r = await fetch(COINGECKO_DATA_URL, DATA_FETCH);
+        const r = await dataFetch(COINGECKO_DATA_URL);
         if (!r.ok) throw new Error('HTTP '+r.status);
         const j = await r.json();
         coingeckoDataCache = j; coingeckoFetchedAt = Date.now();
@@ -4494,7 +4507,7 @@
     const fetchLiquidityHistory = async () => {
       if (liquidityHistoryCache) return liquidityHistoryCache;
       try {
-        const r = await fetch(LIQUIDITY_HISTORY_URL, DATA_FETCH);
+        const r = await dataFetch(LIQUIDITY_HISTORY_URL);
         liquidityHistoryCache = await r.json();
         console.log('Liquidity history loaded:', liquidityHistoryCache.snapshots?.length, 'snapshots');
         return liquidityHistoryCache;
@@ -4507,7 +4520,7 @@
     const fetchTransactionHistory = async () => {
       if (transactionHistoryCache) return transactionHistoryCache;
       try {
-        const r = await fetch(TRANSACTION_HISTORY_URL, DATA_FETCH);
+        const r = await dataFetch(TRANSACTION_HISTORY_URL);
         transactionHistoryCache = await r.json();
         console.log('Transaction history loaded:', transactionHistoryCache.snapshots?.length, 'snapshots');
         return transactionHistoryCache;
@@ -4520,7 +4533,7 @@
     const fetchHolderHistoryNew = async () => {
       if (holderHistoryCacheNew) return holderHistoryCacheNew;
       try {
-        const r = await fetch(HOLDER_HISTORY_URL_NEW, DATA_FETCH);
+        const r = await dataFetch(HOLDER_HISTORY_URL_NEW);
         holderHistoryCacheNew = await r.json();
         console.log('Holder history loaded:', holderHistoryCacheNew.snapshots?.length, 'snapshots');
         return holderHistoryCacheNew;
@@ -4533,7 +4546,7 @@
     const fetchTokensInLPHistory = async () => {
       if (tokensInLPHistoryCache) return tokensInLPHistoryCache;
       try {
-        const r = await fetch(TOKENSINLP_HISTORY_URL, DATA_FETCH);
+        const r = await dataFetch(TOKENSINLP_HISTORY_URL);
         tokensInLPHistoryCache = await r.json();
         console.log('TokensInLP history loaded:', tokensInLPHistoryCache.snapshots?.length, 'snapshots');
         return tokensInLPHistoryCache;
@@ -9880,7 +9893,7 @@
     const fetchH2Lv=()=>{
       if(_h2Lv&&Date.now()-_h2LvAt<H2_TTL)return Promise.resolve(_h2Lv);
       if(_h2LvP)return _h2LvP;
-      _h2LvP=fetch(LV_SNAPSHOTS_URL,DATA_FETCH).then(r=>r.ok?r.json():null).then(j=>{_h2LvP=null;if(Array.isArray(j)&&j.length){_h2Lv=j;_h2LvAt=Date.now();return j;}return null;}).catch(()=>{_h2LvP=null;return null;});
+      _h2LvP=dataFetch(LV_SNAPSHOTS_URL).then(r=>r.ok?r.json():null).then(j=>{_h2LvP=null;if(Array.isArray(j)&&j.length){_h2Lv=j;_h2LvAt=Date.now();return j;}return null;}).catch(()=>{_h2LvP=null;return null;});
       return _h2LvP;
     };
     const h2FromSnaps=(snaps,get,since)=>{
@@ -10450,7 +10463,7 @@
     const fetchPairVolFile=()=>{
       if(_pvAt&&Date.now()-_pvAt<PAIR_VOL_TTL)return Promise.resolve(_pvFile);
       if(_pvP)return _pvP;
-      _pvP=fetch(PAIR_VOL_URL,DATA_FETCH).then(r=>r.ok?r.json():null).then(j=>{
+      _pvP=dataFetch(PAIR_VOL_URL).then(r=>r.ok?r.json():null).then(j=>{
         _pvP=null;_pvAt=Date.now();
         const t=j&&Date.parse(j.generatedAt);
         _pvFile=(j&&j.schema===1&&j.pools&&typeof j.pools==='object'&&isFinite(t)&&Date.now()-t<PAIR_VOL_MAX_AGE&&isFinite(Number(j.binStart)))?j:null;
@@ -10705,7 +10718,7 @@
     const fetchNewHolders=(force=false)=>{   // → the file, or null (failed / malformed / too old). Cached NH_TTL; module-level so the tile and the window share one read.
       if(!force&&_nhAt&&Date.now()-_nhAt<NH_TTL)return Promise.resolve(_nhFile);
       if(_nhP)return _nhP;
-      _nhP=fetch(NEW_HOLDERS_URL,DATA_FETCH).then(r=>r.ok?r.json():null).then(j=>{
+      _nhP=dataFetch(NEW_HOLDERS_URL).then(r=>r.ok?r.json():null).then(j=>{
         _nhP=null;_nhAt=Date.now();
         _nhFile=(nhFileOk(j)&&Date.now()-Date.parse(j.generatedAt)<NH_MAX_AGE)?j:null;
         return _nhFile;
@@ -10781,7 +10794,7 @@
     const fetchSwapVolume=(force=false)=>{
       if(!force&&_vsAt&&Date.now()-_vsAt<VS_TTL)return Promise.resolve(_vsFile);
       if(_vsP)return _vsP;
-      _vsP=fetch(SWAP_VOL_URL,DATA_FETCH).then(r=>r.ok?r.json():null).then(j=>{
+      _vsP=dataFetch(SWAP_VOL_URL).then(r=>r.ok?r.json():null).then(j=>{
         _vsP=null;_vsAt=Date.now();
         _vsFile=(j&&j.schema>=1&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO&&Date.now()-Date.parse(j.generatedAt)<VS_MAX_AGE)?j:null;
         return _vsFile;
@@ -12479,7 +12492,7 @@
       const c=_t1[f]||(_t1[f]={at:0,v:undefined,p:null});
       if(!force&&c.at&&Date.now()-c.at<T1_TTL)return Promise.resolve(c.v);
       if(c.p)return c.p;
-      c.p=fetch(T1_RAW+f,DATA_FETCH).then(r=>r.ok?r.json():null).catch(()=>null).then(j=>{c.p=null;c.at=Date.now();c.v=j&&j.schema>=1?j:null;return c.v;});
+      c.p=dataFetch(T1_RAW+f).then(r=>r.ok?r.json():null).catch(()=>null).then(j=>{c.p=null;c.at=Date.now();c.v=j&&j.schema>=1?j:null;return c.v;});
       return c.p;
     };
     /* whole tokens from 1 up, 6 decimals below 1 — the builders' key() (holder-ranks / top-stakers), so equal balances compare equal */
@@ -13147,7 +13160,7 @@
             }
             if(cancelled)return;
             let d;
-            try{ d=await fetchDeliveredValue(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs,HARDCODED_UFO_PAIRS); }
+            try{ d=await fetchDeliveredValue(TOKENS.UFO.address,TOKENS.PTGC.address,firstPoolMs,DIAG?HARDCODED_UFO_PAIRS:HARDCODED_UFO_PAIRS.filter(p=>UFO_MINT_POOL_SYMBOLS.includes(p.quoteSymbol))); }   // e15: ?debug=1 keeps all seven (its swap reconciliation)
             catch(e){ d={ok:false,error:e.message||'error'}; }
             if(cancelled)return;
             if(d&&d.ok){
@@ -13281,7 +13294,7 @@
         };
         // the charts daily file backs up 7d/30d/90d for anything the prebuilt cache is missing (PRVX, the new UFO)
         let chartsP=null;
-        const charts=()=>chartsP||(chartsP=fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json',DATA_FETCH).then(r=>r.json()).catch(()=>null));
+        const charts=()=>chartsP||(chartsP=dataFetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-data.json').then(r=>r.json()).catch(()=>null));
 
         // RH cores: DexScreener for price + 24h, cached coingecko file for 7d/30d/90d. The pair comes from dsPricePair
         // (base side, traded pools only) — by liquidity alone, WPLS and eHEX landed on fake pools (NananaX, MULE: ~$1-2M
@@ -13514,9 +13527,10 @@
           if(token==='UFO'){
             setBurnPeriods(undefined);   // undefined = still loading (the on-chain scan below fills it); null = failed
           }else{
-            await cachesP;
-            if(loadCancelled)return;
-            setBurnPeriods(getBurnPeriods(token));
+            /* Audit IV e14: first paint no longer waits for the six history files (a stalled CDN left PTGC a skeleton with no
+               error and no Retry). The burn periods are seeded the moment they land — undefined (= loading) until then. */
+            setBurnPeriods(undefined);
+            cachesP.then(()=>{if(!loadCancelled)setBurnPeriods(getBurnPeriods(token));});
           }
 
           const[d,h,b,p]=await Promise.all([fetchDex(cfg.address,cfg.mainPair),fetchHolders(cfg.address),fetchBurn(cfg.address,cfg.decimals),fetchPLS()]);

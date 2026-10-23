@@ -1102,8 +1102,18 @@
     ];
     const RPC=RPC_ENDPOINTS[0];
     const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    /* Audit IV e16 (2026-10-23): index.html's a41 pool, verbatim — cooldown, -32005 rotation, `transport` flag. */
     let _rpcIdx=0,_rpcSince=0;
     const RPC_STICKY_MS=120000;
+    /* a41 (2026-09-20): when an endpoint HANGS (the Aug-2026 pattern — 15 s of nothing, not a
+       fast refusal) every concurrent call used to pay its full timeout before rotating: a log
+       scan runs CONC=3 chunks plus a boundary search, and the sticky drift-back below points
+       them all at the same dead primary every 120 s. 8 s per eth_call, 20 s per eth_getLogs,
+       each, every two minutes, with the spinner up. Remember when an endpoint last failed and
+       skip it while it cools down; if every endpoint is cooling down we still try, because a
+       stale cooldown must never turn into "no RPC at all". */
+    const RPC_COOLDOWN_MS=30000;
+    const _rpcFailedAt=RPC_ENDPOINTS.map(()=>0);
     const _rpcOnce=async(url,body,timeout)=>{
       const controller=new AbortController();
       const timeoutId=setTimeout(()=>controller.abort(),timeout);
@@ -1114,23 +1124,45 @@
         let j;
         try{j=JSON.parse(txt);}catch{throw new Error('non-JSON response');}
         if(!j||typeof j!=='object')throw new Error('bad payload');
-        return j;
+        return j;                       // may legitimately carry {error:{...}}
       }finally{clearTimeout(timeoutId);}
     };
     const rpcFetch=async(body,timeout=8000)=>{
+      // Drift back to the primary once the sticky window on a fallback has expired.
       if(_rpcIdx!==0&&Date.now()-_rpcSince>RPC_STICKY_MS){_rpcIdx=0;}
       const n=RPC_ENDPOINTS.length;
       let lastErr=null;
-      for(let i=0;i<n;i++){
-        const idx=(_rpcIdx+i)%n;
+      const order=[];for(let i=0;i<n;i++)order.push((_rpcIdx+i)%n);
+      const now=Date.now();
+      const fresh=order.filter(idx=>now-_rpcFailedAt[idx]>=RPC_COOLDOWN_MS);
+      const tryList=fresh.length?fresh:order;   // all cooling down: ask anyway rather than fail unasked
+      for(const idx of tryList){
         try{
           const j=await _rpcOnce(RPC_ENDPOINTS[idx],body,timeout);
-          if(idx!==_rpcIdx){_rpcIdx=idx;_rpcSince=Date.now();console.warn('RPC failover → '+RPC_ENDPOINTS[idx]);}
+          /* a41: a JSON-RPC rate limit (HTTP 200 + error -32005, which some public nodes send
+             instead of a 429) is this endpoint's answer, not the chain's — rotate off it rather
+             than handing it back as a result. Splitting a log range on one of these only
+             multiplies requests against a node that is already throttling. */
+          const em=j&&j.error&&(j.error.message||'');
+          if(j&&j.error&&(j.error.code===-32005||/rate limit|too many requests|429/i.test(em)))throw new Error('rate limited: '+(em||j.error.code));
+          _rpcFailedAt[idx]=0;
+          if(idx!==_rpcIdx){
+            _rpcIdx=idx;_rpcSince=Date.now();
+            console.warn('RPC failover → '+RPC_ENDPOINTS[idx]);
+          }
           return j;
-        }catch(e){lastErr=e;console.warn('RPC '+RPC_ENDPOINTS[idx]+' failed: '+e.message);}
+        }catch(e){
+          lastErr=e;
+          _rpcFailedAt[idx]=Date.now();
+          console.warn('RPC '+RPC_ENDPOINTS[idx]+' failed: '+e.message);
+        }
       }
       console.error('RPC error (all '+n+' endpoints failed):',lastErr&&lastErr.message);
-      return{result:null};
+      /* a41: say WHY there is no result. `{result:null}` alone is indistinguishable from a
+         chain answer with no `result` field, and getLogsRange read it as a range-cap error and
+         halved the range six times — up to ~7 minutes of retries per scan, three scans deep,
+         while nothing was reachable. `transport` means the pool never got an answer at all. */
+      return{result:null,transport:true,message:(lastErr&&lastErr.message)||'all endpoints failed'};
     };
 
     const fmtUSD=n=>n==null||isNaN(n)?'\u2014':'$'+Math.floor(Number(n)).toLocaleString('en-US');
@@ -1184,10 +1216,16 @@
       else if(page==='feed'||page==='swap'){window.location.href='./index.html?token='+token+'&open='+page;}
     };
     // price + 24h change for the v2 header's quotes; null/null on failure (never a fake 0). usdOf below stays for everything else.
+    /* Audit IV e14: an 8 s limit on the DexScreener quote — a stalled connection used to hold the page (and every wallet read)
+       for as long as it stalled. */
+    const pfDsTokens=async(addr)=>{
+      const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
+      try{const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`,{signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
+      finally{clearTimeout(t);}
+    };
     const quoteOf=async(addr)=>{
       try{
-        const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
-        const d=await r.json();
+        const d=await pfDsTokens(addr);
         const pp=pricePair(d.pairs,addr);
         const c=pp&&pp.priceChange&&pp.priceChange.h24!=null?parseFloat(pp.priceChange.h24):null;
         return{price:pp?(parseFloat(pp.priceUsd)||null):null,change:(c==null||isNaN(c))?null:c};
@@ -1252,8 +1290,7 @@
     };
     const usdOf=async(addr)=>{
       try{
-        const r=await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
-        const d=await r.json();
+        const d=await pfDsTokens(addr);   // e14
         const pp=pricePair(d.pairs,addr);
         return pp?(parseFloat(pp.priceUsd)||null):null;
       }catch{return null;}
@@ -1433,7 +1470,10 @@
         }
         return r.result;
       }
-      const msg=(r&&r.error&&r.error.message)||'no result field';
+      const msg=(r&&r.transport&&('transport: '+r.message))||(r&&r.error&&r.error.message)||'no result field';
+      /* Audit IV e16 (a41, ported): only a real RPC answer can mean "range too big". When the pool never got through, halving
+         is 7× the calls against a dead or hanging node — fail now; the scan queue's Retry handles it. */
+      if(r&&r.transport){lastLogError=`eth_getLogs failed (blocks ${a}-${b}): ${msg}`;console.warn(lastLogError);return null;}
       if(depth<6&&(b-a)>250){
         const mid=Math.floor((a+b)/2);
         const left=await getLogsRange(address,topics,a,mid,depth+1,headBlock);
@@ -3661,6 +3701,7 @@
       const[editGroup,setEditGroup]=useState(null);
       const[newGroupName,setNewGroupName]=useState('');
       const[initialLoad,setInitialLoad]=useState(true);
+      const[pricesLoading,setPricesLoading]=useState(true);   // e14: the header's quote skeleton — the wallet reads no longer wait for it
       const[checkedWallets,setCheckedWallets]=useState({});
       const[editingWallet,setEditingWallet]=useState(null);
       const[editWalletName,setEditWalletName]=useState('');
@@ -3687,6 +3728,9 @@
       // On mount: fetch prices and LP staking address
       useEffect(()=>{
         const init=async()=>{
+          /* Audit IV e14: the wallet reads start NOW — balances, staking and locks come from the chain; USD is only a multiplier
+             the tiles already print as "—" until a price lands. */
+          setInitialLoad(false);
           // Prices via the robust /tokens/{addr} path; each is null on failure (renders "—", never a fake 0).
           const[pq,uq,wq]=await Promise.all([
             quoteOf(PTGC_TOKEN_ADDR),
@@ -3697,7 +3741,7 @@
           setPrices({ptgc:ptgcPrice,ufo:ufoPrice,pls:plsPrice});
           setChanges({ptgc:pq.change,ufo:uq.change,pls:wq.change});
           // The new UFO contract has no LP-staking module, so there's nothing to discover here.
-          setInitialLoad(false);
+          setPricesLoading(false);
         };
         init();
       },[]);
@@ -3894,7 +3938,7 @@
       return(
         <div className="min-h-screen bg-[#0a0a0a]">
           {/* Header */}
-          {hdrV2?<PortfolioHeaderV2 prices={prices} changes={changes} loading={initialLoad} onBack={onBack} onGetCode={handleGetCode} onLoadCode={()=>{setShowLoadModal(true);setCodeError('');setCodeInput('');setLoadArmed(0)}} onRefresh={refreshAll} hasWallets={wallets.length>0} navTo={pfNavTo}/>:(
+          {hdrV2?<PortfolioHeaderV2 prices={prices} changes={changes} loading={pricesLoading} onBack={onBack} onGetCode={handleGetCode} onLoadCode={()=>{setShowLoadModal(true);setCodeError('');setCodeInput('');setLoadArmed(0)}} onRefresh={refreshAll} hasWallets={wallets.length>0} navTo={pfNavTo}/>:(
           <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
               <div className="flex items-center justify-between">

@@ -22,7 +22,7 @@
       const c=_t1[f]||(_t1[f]={at:0,v:undefined,p:null});
       if(!force&&c.at&&Date.now()-c.at<T1_TTL)return Promise.resolve(c.v);
       if(c.p)return c.p;
-      c.p=fetch(T1_RAW+f,DATA_FETCH).then(r=>r.ok?r.json():null).catch(()=>null).then(j=>{c.p=null;c.at=Date.now();c.v=j&&j.schema>=1?j:null;return c.v;});
+      c.p=dataFetch(T1_RAW+f).then(r=>r.ok?r.json():null).catch(()=>null).then(j=>{c.p=null;c.at=Date.now();c.v=j&&j.schema>=1?j:null;return c.v;});
       return c.p;
     };
     /* whole tokens from 1 up, 6 decimals below 1 — the builders' key() (holder-ranks / top-stakers), so equal balances compare equal */
