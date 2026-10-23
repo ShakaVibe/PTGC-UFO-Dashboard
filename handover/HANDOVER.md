@@ -46,7 +46,34 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-23 (afternoon): AUDIT IV BATCH P0b — e7 + e8 + e3 + e4 + e19 BUILT ("go"), written to the Mac, NOT pushed.** Build =
+**2026-10-23 (evening): HOLDER RANK TRIO e9 + e10 + e11 BUILT ("fix the holder rank"), written to the Mac, NOT pushed.** Build =
+`python3 tools/audit4-rank.py` (idempotent, 17 edits, re-run "0 edit(s)"; it edits the two builders + the pf-v2 / top100 fragments and
+re-splices with tools/pf-v2.py + tools/top100.py). **e10 — the real cause, found today:** PulseScan's holder paging REPEATS the last
+row of some pages as the first row of the next (its next_page_params balance is a rounded float): a fresh full read had 18,328 PTGC
+rows for 18,202 unique addresses (= PulseScan's own count) — 126 repeats, UFO 44 — and `build-holder-ranks.mjs` ranked every repeat as
+a person, spread evenly down the list. So every live rank below ~#150 was too low (#2,000 shown as #2,019; #8,000 as #8,065; the
+1-token block +95), "PEOPLE HOLDING" was 17,255 instead of 17,117, and the rank window's live point sat that far below its own
+history (chain-built, no repeats) — Audit IV's "+64 at 5k–10k" was this, not a population rule (the address diff found only 40 dust
+EOAs and 0 contracts of difference). Now: de-duplicated by address (log line "N page repeats dropped", `repeats` in the file), the
+98 % check counts unique addresses; and `build-rank-history.mjs` index() ranks ties the badge's way (1 + how many hold strictly
+more, on the same rounded key) instead of by address. **e9:** the builder writes `t` (first 6 hex chars of every listed address, 6 per
+entry, aligned with `b`; tags shared by only 6 PTGC entries, resolved by the nearest balance — 99.988 % right in a simulation of real
+sellers); `pfRank(ranks,tok,bal,addr)` and the Top 100 checker leave the wallet's OWN entry out. File: 69 KB → 146 KB gz. Old file
+without `t` → ranks exactly as before. **e11:** BEST EVER / LOWEST = the whole life (the chart keeps the period). **Evidence:** the new
+builder against a local replay of this morning's real PulseScan pages (repeats included): 126 / 44 dropped, 17,117 / 4,987 ranked,
+all 110 `top` wallets found by tag at their own balance. Real wallets, `pfRank` old file+code → new: the #50 wallet after selling 1
+token #51 "pass 2" → #50 "pass 619,501"; #2,000: #2,020 "pass 2" → #2,000 "pass 22,539"; #8,000: #8,066 "pass 2" → #8,000 "pass
+119". Rank-window step (history's last day → today, same balance): #2,000 +19 → 0, #8,000 +64 → −1, 1-token block +30 → +10 (real
+overnight churn + 40 dust wallets). New index on the real archive: 3,709 of 17,077 last-day ranks change, all inside tie blocks.
+Harness: Top 100 checker for the real #2,000 wallet at −1 token: "RANK #2,022 · PEOPLE HOLDING 17,255" → "#2,000 · 17,117"; the
+Portfolio rank window LOWEST (1Y) #2,623 → life #2,909 (Mar 26, 2025) = the index's own life low. index.html sha256 08305dd1,
+portfolio.html aa88ca9d. **The DATA changes only when the pipeline runs the two builders** (holder-ranks gate 2 h, rank-history
+gate 20 h) — after his push: Actions → Data Pipeline (hourly) → Run workflow → only = `holder-ranks,rank-history`, force = true; or
+wait. Until then the pages rank exactly as before. **Same PulseScan repeat bug, NOT fixed here (follow-up, his call — changes the
+tier counts people see):** `build-token-allocation.mjs` and index.html's live `fetchHolderTiers` page the same endpoint, so the Token
+Allocation tier counts (Shark / Dolphin …) include repeats too (folds into e13). Scratch: the real PulseScan pull is in the git-ignored
+`Claude outputs/rank-check/` (two JSON files, safe to delete).
+**2026-10-23 (afternoon): AUDIT IV BATCH P0b — e7 + e8 + e3 + e4 + e19 — PUSHED `b071ba060`, LIVE-VERIFIED** (deployed files carry every fix; live `tw.css?v=3` = the 79,763 B build with `text-purple-500/40`; the DAO panel on real data reads $100,200 total, no note, no "≥" — identical to before; a browser holding the old HTML for Pages' 10 min still asks for `?v=2`, harmless). Build =
 `python3 tools/audit4-p0b.py` (idempotent; a clean run from `d6a7b13c6` = 49 edits, re-run "0 edit(s)") then `cd tools/harness && npm run
 css` (committed `tw.css`, `?v=3` on the five pages). **e7** portfolio GET / LOAD CODE: UTF-8-safe base64 (`pfB64Enc` / `pfB64Dec`) — an
 ASCII-only list gives the byte-identical code as before, old Latin-1 codes still load, emoji / en-dash / "✦" labels round-trip (harness:
@@ -1662,8 +1689,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--28. **AUDIT IV batch P0b (2026-10-23) — e7, e8, e3, e4, e19 BUILT by `tools/audit4-p0b.py` + `npm run css`, on the Mac, NOT
-   pushed.** His push → Claude's live check → Worker v8 (e5 + e6) → e20–e23 → e9–e11. Open P0: e5, e6 (the Worker).
+-29. **AUDIT IV rank trio e9 + e10 + e11 (2026-10-23) — BUILT by `tools/audit4-rank.py`, on the Mac, NOT pushed.** His push → Run workflow
+   only=`holder-ranks,rank-history` force=true (or wait ≤ 20 h) → Claude's live check (holder-ranks.json has `t` + `repeats`, PEOPLE
+   HOLDING ≈ 17.1K, a real wallet's badge = its rank-window history's last day). Follow-up: the same de-dupe for the tier counts (e13).
+-28. **AUDIT IV batch P0b (2026-10-23) — e7, e8, e3, e4, e19 — PUSHED `b071ba060`, LIVE-VERIFIED.**
+   **Worker v8 (e5 + e6) PARKED by Shaka 2026-10-23 ("I dont want to mess with new keys right now").** When picked up: ask first whether
+   ToolBox reads / saves anything outside `data/` (v8 whitelists `data/*.json`); no third "public read" token — GitHub's 5,000/h is per
+   user, the 60 s Worker cache is the fix. Still worth one look without changing anything: the DISPATCH_TOKEN expiry date (30-day
+   default → ~Nov 5). His push → Claude's live check → Worker v8 (e5 + e6) → e20–e23 → e9–e11. Open P0: e5, e6 (the Worker).
 -27. **AUDIT IV e1 + e2 (2026-10-23) — BUILT by `tools/audit4-e1e2.py`, PUSHED `d6a7b13c6`, LIVE-VERIFIED.** His push → Claude's live check
    (above) → the next P0 picks (e3–e8).
 -26. **AUDIT IV (2026-10-22 night) — `sessions/2026-10-22-audit4.md`, written to the Mac, NOT pushed; nothing built.** e1–e47

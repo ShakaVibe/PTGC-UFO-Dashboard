@@ -116,7 +116,7 @@
         }
         if(ranks===undefined)return undefined;const t=ranks&&ranks.tokens&&ranks.tokens[tok];
         if(!t||!Array.isArray(t.b))return null;
-        return{top:Array.isArray(t.top)?t.top.map(r=>({a:String(r[0]).toLowerCase(),v:r[1]})):null,all:t.b,count:t.holders,tot:SUP,at:Date.parse(t.readAt)};
+        return{top:Array.isArray(t.top)?t.top.map(r=>({a:String(r[0]).toLowerCase(),v:r[1]})):null,all:t.b,tg:typeof t.t==='string'&&t.t.length===t.b.length*6?t.t:null,count:t.holders,tot:SUP,at:Date.parse(t.readAt)};
       },[stk,stakers,ranks,tok,SUP]);
       const age=view&&isFinite(view.at)?Date.now()-view.at:null;
       const stale=age!=null&&age>T1_STALE,amber=age!=null&&age>T1_AMBER&&!stale;
@@ -153,7 +153,12 @@
       useEffect(()=>{if(firstMode.current){firstMode.current=false;return;}if(last.current)check(last.current);else setChk(null);},[mode]);
       const res=chk&&chk.a&&view&&T!=null&&!stale?(()=>{
         const k=chk.v,al=chk.a.toLowerCase();
-        const own=view.top&&view.top.find(x=>x.a===al);
+        /* Audit IV e9: `top` has addresses for the first 110 only; holder-ranks.json's `t` tags every entry (first 6 hex chars,
+           aligned with the list), so a checked wallet below #110 also has its own old entry left out (the nearest balance on a
+           shared tag). */
+        const own=(view.top&&view.top.find(x=>x.a===al))||(()=>{if(!view.tg)return null;const tag=al.slice(2,8),js=[];let i=view.tg.indexOf(tag);
+          while(i>=0){if(i%6===0)js.push(i/6);i=view.tg.indexOf(tag,i+1);}if(!js.length)return null;
+          const j=js.reduce((p,q)=>Math.abs(view.all[q]-k)<Math.abs(view.all[p]-k)?q:p);return{a:al,v:view.all[j]};})();
         const list=own?t1Without(view.all,own.v):view.all;   // A2
         const T2=list.length>=100?list[99]:T;
         const rank=k>0?t1Rank(list,k):null,inTop=rank!=null&&rank<=100;

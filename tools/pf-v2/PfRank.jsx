@@ -78,7 +78,7 @@
       const w=wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0];
       const d=w&&data[w.address.toLowerCase()];
       const bal=d&&!d.error?(isU?(d.ufo.balance||0):(d.ptgc.totalHolding||0)):0;
-      const live=pfRank(ranks,tok,bal);
+      const live=pfRank(ranks,tok,bal,w&&w.address);   // e9: without the wallet's own (possibly stale) entry
       const h=usePfRankHist(tok,w?w.address:'0x');
       const nowT=usePfTick();
       /* the series + today's live point */
@@ -88,8 +88,11 @@
       const i0=full?Math.max(0,full.length-Math.min(full.length,nDays)):0;
       const pts=full?full.slice(i0):[];
       const held=pts.filter(r=>r>0);
-      const first=pts.find(r=>r>0)||null,best=held.length?Math.min(...held):null,worst=held.length?Math.max(...held):null;
-      const bestI=best!=null?pts.indexOf(best):-1,worstI=worst!=null?pts.lastIndexOf(worst):-1;
+      /* Audit IV e11 (2026-10-23): BEST EVER / LOWEST are the wallet's whole life (they were the selected period's — "best ever #9,786"
+         for a wallet that was #307). The chart keeps the period's own best for its gridline and marker. Indexes are into `full`. */
+      const life=full?full.filter(r=>r>0):[];
+      const first=pts.find(r=>r>0)||null,best=life.length?Math.min(...life):null,worst=life.length?Math.max(...life):null;
+      const bestI=best!=null?full.indexOf(best):-1,worstI=worst!=null?full.lastIndexOf(worst):-1;
       const chg=live&&first?live.r-first:null;
       const tracked=full?full.filter(r=>r>0).length:0;
       /* DAYS IN TOP N (Shaka, 2026-10-21 pm): the first of 100 / 500 / 1,000 / 2,500 / 5,000 / 10,000 the wallet has ever been inside */
@@ -133,8 +136,8 @@
                 {chg==null?<span className="flat">{live?'—':'not holding '+tok}</span>:chg===0?<span className="flat">{'—'} no change</span>:<span className={chg<0?'up':'dn'}>{chg<0?'▲':'▼'} {Math.abs(chg).toLocaleString('en-US')} place{Math.abs(chg)===1?'':'s'}</span>}
                 <em>{per==='LIFE'?'since the first day held':`vs ${nDays} days ago`}</em></div>
               <div className="tiles">
-                <div className="tl"><div className="l"><PfIco k="trophy"/>BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,i0+bestI),true):''}</div></div>
-                <div className="tl"><div className="l"><PfIco k="down"/>LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,i0+worstI),true):''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="trophy"/>BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,bestI),true):''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="down"/>LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,worstI),true):''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="bars"/>{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="cal"/>DAYS IN TOP {topN[0].toLocaleString('en-US')}</div><div className="v">{full?topN[1].toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
               </div>

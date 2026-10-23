@@ -115,9 +115,15 @@ function index(sym, st) {
     const rec = st.days[d], f = rec.f || 1;
     if (f !== 1) for (const [a, k] of cur) cur.set(a, k * f);
     for (const [a, k] of Object.entries(rec.m || {})) { if (k > 0) cur.set(a, k); else cur.delete(a); }
-    const order = [...cur.entries()].sort((x, y) => (y[1] - x[1]) || (x[0] < y[0] ? -1 : 1));   // ties: by address, so a rank is reproducible
+    const order = [...cur.entries()].sort((x, y) => (y[1] - x[1]) || (x[0] < y[0] ? -1 : 1));   // order: by balance, then address (reproducible)
     counts.push(order.length);
-    order.forEach(([a], i) => { let t = tracks.get(a); if (!t) tracks.set(a, t = new Map()); t.set(di, i + 1); });
+    /* Audit IV e10 (2026-10-23): ties SHARE a rank, compared on the rounded key the badge uses (whole tokens from 1 up, 6 decimals
+       below) — rank = 1 + how many hold strictly more, exactly pfRank / t1Rank. Ties used to be broken by address, so a wallet in a
+       tie block sat up to the block's size below the rank the badge shows for the same balance. */
+    const rk = k => k >= 1 ? Math.floor(k + 1e-9) : Math.floor(k * 1e6 + 1e-6) / 1e6;
+    let prevK = null, prevR = 0;
+    order.forEach(([a, k], i) => { const kk = rk(k); const r = kk === prevK ? prevR : i + 1; prevK = kk; prevR = r;
+      let t = tracks.get(a); if (!t) tracks.set(a, t = new Map()); t.set(di, r); });
   });
   // per wallet: [firstDayIndex, [delta per day]] — the day-to-day CHANGE of the rank (0 = unchanged; a rank of 0 = not holding
   // is stored as the delta to 0). Ranks shift by a place or two most days, so deltas are tiny numbers and the shard is ~3× smaller

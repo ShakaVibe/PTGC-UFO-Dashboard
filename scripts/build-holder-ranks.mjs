@@ -23,6 +23,12 @@
 // 2026-10-22: `top` = the first 110 people with their addresses, [addr, key] high → low — the dashboard's TOP 100 window lists
 // them (the rank of any other wallet still comes from `b`).
 //
+// 2026-10-23 (Audit IV e10 + e9): PulseScan's paging repeats the last row of some pages as the first row of the next (the
+// next_page_params balance is a rounded float) — ~126 PTGC / ~44 UFO repeats per read, unique addresses = PulseScan's own count.
+// Rows are now de-duplicated by address (they were ranked as extra people, every rank below ~#150 too low). And `t` = the first
+// 6 hex characters of every listed address, 6 chars per entry, aligned with `b`, so the page can leave a wallet's OWN (possibly
+// stale) entry out before ranking it (tools/pf-v2/PfLeagues.jsx pfRank, tools/top100/t1.jsx).
+//
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
 
@@ -78,29 +84,31 @@ async function readToken(sym, addr) {
   const counters = await getJson(`${API}/tokens/${addr}/counters`);
   const expected = Number(counters.token_holders_count || 0);
   let params = null, rows = 0;
-  const kept = [], top = [];
-  let leftKnown = 0, leftContracts = 0, leftDust = 0;
+  const kept = [], top = [], seen = new Set();
+  let leftKnown = 0, leftContracts = 0, leftDust = 0, repeats = 0;
   for (;;) {
     const q = params ? '?' + new URLSearchParams(params).toString() : '';
     const j = await getJson(`${API}/tokens/${addr}/holders${q}`);
     for (const it of j.items || []) {
       rows++;
       const a = String(it.address && it.address.hash || '').toLowerCase();
+      if (seen.has(a)) { repeats++; continue; }   // e10: a page-boundary repeat, never a second holder
+      seen.add(a);
       if (EXCLUDE.has(a)) { leftKnown++; continue; }
       if (it.address && it.address.is_contract) { leftContracts++; continue; }
       const v = BigInt(it.value);
       if (v <= 0n) { leftDust++; continue; }
-      kept.push(key(v));
+      kept.push([key(v), a.slice(2, 8)]);   // e9: [balance key, address tag]
       if (top.length < TOP_N) top.push([a, key(v)]);   // PulseScan pages arrive sorted by balance, high → low
     }
     params = j.next_page_params;
     if (!params) break;
     if (rows % 2500 === 0) console.log(`${sym}: ${rows} rows read (${Math.round((Date.now() - t0) / 1000)} s)`);
   }
-  if (expected && rows < expected * 0.98) throw new Error(`${sym}: read ${rows} rows but PulseScan counts ${expected} holders`);
-  kept.sort((x, y) => y - x);
-  console.log(`${sym}: ${rows} rows in ${Math.round((Date.now() - t0) / 1000)} s → ${kept.length} ranked (left out: ${leftKnown} known, ${leftContracts} contracts, ${leftDust} at zero)`);
-  return { holders: kept.length, listed: rows, left: { known: leftKnown, contracts: leftContracts, dust: leftDust }, readAt: new Date().toISOString(), top: top.sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)), b: kept };
+  if (expected && seen.size < expected * 0.98) throw new Error(`${sym}: read ${seen.size} addresses but PulseScan counts ${expected} holders`);
+  kept.sort((x, y) => (y[0] - x[0]) || (x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0));
+  console.log(`${sym}: ${rows} rows (${repeats} page repeats dropped) in ${Math.round((Date.now() - t0) / 1000)} s → ${kept.length} ranked (left out: ${leftKnown} known, ${leftContracts} contracts, ${leftDust} at zero)`);
+  return { holders: kept.length, listed: seen.size, repeats, left: { known: leftKnown, contracts: leftContracts, dust: leftDust }, readAt: new Date().toISOString(), top: top.sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)), b: kept.map(x => x[0]), t: kept.map(x => x[1]).join('') };
 }
 
 let prev = null;

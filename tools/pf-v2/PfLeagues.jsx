@@ -156,9 +156,21 @@
        what it takes to pass the next one (Shaka). pfRankKey rounds like build-holder-ranks.mjs's key(): whole tokens from 1 up,
        6 decimals below 1, never 0 for a holder. */
     const pfRankKey=bal=>bal>=1?Math.floor(bal):Math.max(1e-6,Math.floor(bal*1e6)/1e6);
+    /* Audit IV e9 (2026-10-23): the list is up to 2 h old, so a wallet that SOLD since it was read still had its old, higher entry in
+       it — ranked one place low and told to "pass" itself. holder-ranks.json now carries `t`, the first 6 hex characters of every
+       listed address aligned with `b` (6 chars per entry): find the wallet's own entry by its tag (the closest balance if two share
+       one — about 1 in 1,000) and rank against the list WITHOUT it. A file without `t` ranks as before. Lists cached per address. */
+    const PF_RK_OWN=new WeakMap();
+    const pfRankList=(t,addr)=>{const b=t.b,T=t.t;if(!addr||typeof T!=='string'||T.length!==b.length*6)return b;
+      let c=PF_RK_OWN.get(b);if(!c){c=new Map();PF_RK_OWN.set(b,c);}const a=String(addr).toLowerCase();if(c.has(a))return c.get(a);
+      const tag=a.slice(2,8);let j=-1,i=T.indexOf(tag),js=[];while(i>=0){if(i%6===0)js.push(i/6);i=T.indexOf(tag,i+1);}
+      if(js.length===1)j=js[0];else if(js.length>1)j=js[0];   // a shared tag: the first (highest) — the caller re-picks by balance below
+      const out=j<0?b:b.slice(0,j).concat(b.slice(j+1));out.js=js;c.set(a,out);return out;};
     /* → null when the list is missing / stale or the balance is 0; else {r, pass} */
-    const pfRank=(ranks,tok,bal)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>0))return null;
-      const b=t.b,x=pfRankKey(bal);let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
+    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>0))return null;
+      const x=pfRankKey(bal);let b=pfRankList(t,addr);
+      if(b.js&&b.js.length>1){const j=b.js.reduce((p,q)=>Math.abs(t.b[q]-x)<Math.abs(t.b[p]-x)?q:p);b=t.b.slice(0,j).concat(t.b.slice(j+1));}   // e9: tag collision → the entry nearest this balance
+      let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
       const d=lo>0?b[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&b[lo-1]>=1?d+1:d+1e-6)};};
     const pfPassAmt=v=>v>=1?pfAbbr(v):String(+v.toFixed(6));   // a dust holder's gap can be 0.000123
     const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;

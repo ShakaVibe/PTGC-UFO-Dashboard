@@ -366,7 +366,7 @@
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
                   <div className="pf2-lg2">{parts.map(x=><div className="r" key={x[0]}><i style={{background:x[2]}}></i><span>{x[0]}</span><b>{pfAbbr(x[1])}</b><span className="usd">{fmtDollar(usd(x[1],dp.ptgc))}</span><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
-              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={rkOne&&<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding)} open={()=>setRkWin('PTGC')}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={rkOne&&<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding,counted[0]&&counted[0].address)} open={()=>setRkWin('PTGC')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('PTGC')} aria-label="PTGC rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 <div className="pf2-src3">
@@ -429,7 +429,7 @@
                     <div className="r"><i style={{background:'#22D3EE'}}></i><span>From reflections</span><b>{pfAbbr(ufoReflNow)}</b><span className="usd">{fmtDollar(usd(ufoReflNow,dp.ufo))}</span><em>{pfPct(ufoReflNow,uf.balance)}</em></div>
                   </div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
-              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={rkOne&&<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance)} open={()=>setRkWin('UFO')}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={rkOne&&<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance,counted[0]&&counted[0].address)} open={()=>setRkWin('UFO')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
@@ -480,7 +480,7 @@
                 <span className="ic" aria-hidden="true"><img src="logos/portfolio/pf-wallet.webp" alt=""/></span>
                 <span className="tt"><b className="oh">PER-WALLET BREAKDOWN</b><span className="mt">{counted.length} wallet{counted.length===1?'':'s'} {'\u00B7'} {ranks&&!ranks.stale?'holder rank, ':''}PTGC, pending, UFO and the total for each</span></span>
                 {(()=>{let p=0,u=0;counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(!d||d.error)return;p+=usd(d.ptgc.totalHolding||0,dp.ptgc)||0;u+=usd(d.ufo.balance||0,dp.ufo)||0;});const t=p+u;if(!(t>0))return null;const pp=Math.round(p/t*100);
-                  const best=tok=>{let m=null;counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(!d||d.error)return;const x=pfRank(ranks,tok,tok==='PTGC'?d.ptgc.totalHolding:d.ufo.balance);if(x&&(m==null||x.r<m))m=x.r;});return m;},bP=best('PTGC'),bU=best('UFO');   // 2026-10-21
+                  const best=tok=>{let m=null;counted.forEach(w=>{const d=portfolioData[w.address.toLowerCase()];if(!d||d.error)return;const x=pfRank(ranks,tok,tok==='PTGC'?d.ptgc.totalHolding:d.ufo.balance,w.address);if(x&&(m==null||x.r<m))m=x.r;});return m;},bP=best('PTGC'),bU=best('UFO');   // 2026-10-21
                   return <span className="chips" aria-hidden="true"><span className="chip">Total<b>{fmtDollar(t)}</b></span>{bP!=null&&<span className="chip rk"><i style={{background:'#F2D35B'}}></i>Best PTGC rank<b>#{bP.toLocaleString('en-US')}</b></span>}{bU!=null&&<span className="chip rk"><i style={{background:'#7CFC00'}}></i>Best UFO rank<b>#{bU.toLocaleString('en-US')}</b></span>}<span className="chip sp"><i style={{background:'#F2D35B'}}></i>PTGC<b>{pp}%</b><span className="sb"><b style={{width:pp+'%',background:'#F2D35B'}}></b><b style={{width:(100-pp)+'%',background:'#7CFC00'}}></b></span><i style={{background:'#7CFC00'}}></i>UFO<b>{100-pp}%</b></span></span>;})()}
                 <span className="chev" aria-hidden="true"></span></button>
               {/* round 19 (option A of mock-r18-v1, cards on a phone): tokens with $ under each, Pending to claim in PTGC yellow, UFO as one
@@ -488,7 +488,7 @@
               {bdOpen&&(()=>{const COL=['#B26BFF','#F2D35B','#22D3EE','#FF8A3D','#EC4899','#7CFC00','#6FA8FF','#FF6B73'];
                 const rows=counted.map((w,i)=>{const a=w.address.toLowerCase(),d=portfolioData[a];if(!d||d.error)return null;
                   const pT=d.ptgc.totalHolding||0,pc=d.ptgc.totalPending||0,uT=d.ufo.balance||0,p$=usd(pT,dp.ptgc)||0,u$=usd(uT,dp.ufo)||0;
-                  return{w,a,i,c:COL[i%COL.length],pT,pc,uT,p$,c$:usd(pc,dp.ptgc)||0,u$,t$:p$+u$,g:w.group||'Default',rp:pfRank(ranks,'PTGC',pT),ru:pfRank(ranks,'UFO',uT)};}).filter(Boolean);
+                  return{w,a,i,c:COL[i%COL.length],pT,pc,uT,p$,c$:usd(pc,dp.ptgc)||0,u$,t$:p$+u$,g:w.group||'Default',rp:pfRank(ranks,'PTGC',pT,a),ru:pfRank(ranks,'UFO',uT,a)};}).filter(Boolean);
                 const hasR=!!ranks&&!ranks.stale;   // 2026-10-21: the HOLDER RANK column only with a usable list
                 if(bdSort==='value')rows.sort((x,y)=>y.t$-x.t$);else if(bdSort==='name')rows.sort((x,y)=>(x.w.name||x.a).localeCompare(y.w.name||y.a));else if(bdSort==='rp'||bdSort==='ru')rows.sort((x,y)=>(x[bdSort]?x[bdSort].r:1e12)-(y[bdSort]?y[bdSort].r:1e12));
                 const S=(k,rs=rows)=>rs.reduce((t,r)=>t+r[k],0),all=S('t$');
