@@ -873,6 +873,7 @@ async function main(){
   /* Burn periods are optional: a failed scan keeps the previous run's numbers (marked stale by
      their own headBlock) rather than dropping the field, so the browser can decide. */
   const burnPeriodsOut = burnPeriods || (prev && prev.burnPeriods && prev.burnPeriods.UFO ? { ...prev.burnPeriods.UFO, carriedForward: true } : null);
+  if (!burnPeriods && burnPeriodsOut) console.warn('::warning::value-generated UFO burn periods carried forward (the chain scan failed)');   // Audit IV e23
 
   const out = {
     meta: {

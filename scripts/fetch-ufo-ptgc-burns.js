@@ -310,7 +310,8 @@ async function main() {
       console.log('No existing cache — full fetch from each contract\'s launch');
     }
   } catch (e) {
-    console.log('Cache load failed, starting fresh:', e.message);
+    console.error('Cache exists but cannot be read — refusing a full rescan from launch (it outlasts the job timeout):', e.message);   // Audit IV e23
+    process.exit(1);
   }
 
   const head = await readHead();

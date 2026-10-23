@@ -46,7 +46,44 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-23 (evening): HOLDER RANK TRIO e9 + e10 + e11 BUILT ("fix the holder rank"), written to the Mac, NOT pushed.** Build =
+**2026-10-23 (night): AUDIT IV BATCH 3 — phone first screen (e17, e24, e25), calculators UFO share (e12), deferred CDN scripts
+(e18), deploy safety net (e20–e23) — BUILT, written to the Mac, NOT pushed.** Build = `python3 tools/audit4-batch3.py` (idempotent;
+a clean run from `db1bd3aca` = 57 edits, re-run "0 edit(s)"; it re-splices portfolio via tools/pf-v2.py) + `python3 tools/audit4-ci.py`
+ON the Mac (the workflow files; 3 edits, re-run 0) + `cd tools/harness && npm run css` (tw.css 79,795 B — the calculators' `sm:` utilities —
+so `?v=4` on the five pages). index.html sha256 ab0a51da, portfolio e3f4dc7b, calculators aa71e0b7, ledger cb21fa09, charts 86ce54cc.
+**e17** the disclaimer window: text scrolls inside the panel, the Accept / Decline footer is pinned (max 90dvh) — Accept on screen at
+390×844 (681–733), 320×647 (458–510), 768, 1380; wording unchanged, no DISCLAIMER_VERSION bump. **e24** calculators at phone width: the
+two token cards stack, the amount row stacks (input full width), the Moon Math bag row wraps — before, the fee box overprinted "PTGC" and
+the Split button ran 2 px past the clip at 390; after, cards 366 px, nothing past the edge at 390 / 320. (The 320-only title overflow
+`span.cp-t.w` 326/320 is e37, not done.) **e25** the Leagues People / Circulating toggle is absolutely centred on the header (each label
+133 px, fits at 390), and the Socials column headers at 901–1199 shrink the logos + name (`.sh-hd` media block) so "Combined" is whole at
+901 and the chevron never overruns. **e12** (formula — worked example shown to him): calculators' UFO reward share used circulating − the
+DexScreener LP estimate; it now uses the Portfolio's eligible supply — totalSupply − burn − the UFO contract − the excluded wallet − the 13
+excluded pools (`CALC_UFO_EXCL` = portfolio's `PF_UFO_EXCL`), one batched RPC call, 10-min memory cache, its own localStorage key
+`grays_calc_ufo_elig_v1`, falls back to portfolio's `grays_pf_ufo_elig` (≤ 24 h) and then to the old estimate. Live numbers: 807.23B →
+728.78B eligible; a 1B bag 0.1239 % → 0.1372 % of the UFO rewards (+11 %). **e18** `defer` on the React / ReactDOM / Babel / Chart.js tags
+of index, portfolio, calculators, ledger (charts.html left alone — its inline script runs at parse time). First paint on `#/ptgc` at 390
+over a 1.6 Mbps throttle: 27.5 s → 3.5 s (the boot shell paints while the 3 MB of scripts download; the app itself is no faster). **e21**
+every React page has a static boot shell (`data-boot`, "LOADING…") and an inline watchdog: a Babel SyntaxError, or the shell still up 20 s
+after `load`, swaps the text for "This is taking longer than it should. Please reload the page — if it keeps happening, try again in a few
+minutes." (amber) — instead of a black page. **e20** `tools/harness/compile.js` compiles EVERY page's inline babel + syntax-checks plain
+inline scripts (exit 1); `deploy.yml` gains a `check` job (compile only, ~15 s) and `deploy` `needs: check` — a page that does not compile
+is never deployed, the site stays on the last good version; `.github/workflows/site-check.yml` (push to main touching pages/harness/fragments
++ manual): compile, tw.css drift check, `ci-mount.js` mounts 7 routes in the Playwright 1.47 container (`probes/ci-mounted.js`: no
+`[data-boot]`, >40 nodes, >200 chars; errors outside an ALLOW list fail). Proven: a broken portfolio copy → compile exit 1 "Unexpected
+token" and the boot-fail text in the browser; the real tree → "all pages compile", ci-mount 7/7 ok. **e22**
+`.github/workflows/pipeline-watchdog.yml` every 3 h (`23 */3 * * *`) runs `scripts/pipeline-watchdog.mjs` on the PUBLISHED status file:
+red (→ GitHub's failure e-mail) if the last pipeline run is > 3 h old or any step has not succeeded within 2 × its gate + 3 h; a carried
+step is a `::warning::`. Tested on real data (pass) and a doctored file (fail). **e23** the pipeline's silent fallbacks now print
+`::warning::` (charts-data ×4, charts-intraday, pair-volume, coingecko ×3, value-generated without burn periods), and an EXISTING but
+unreadable state file is fatal instead of "start from empty" (lv-snapshot, burn-history periods + holder-history, ufo-ptgc-burns) — a
+corrupt file can no longer silently reset a history; the 365-row holder-history trim is gone (it threw away the oldest days). run.js:
+CDN regexes accept `defer`, the mount wait needs no `[data-boot]`, and it prints an `ERRORS_JSON` line.
+**After his push:** Actions shows "Site check" green on the push, the Deploy run has a `check` job before `deploy`, Pipeline watchdog →
+Run workflow once → green; live: the disclaimer on a phone (clear site data or a private tab), calculators at 390, the Rewards tab's UFO
+share. The first Site check run may need one look (container image pull, ~1 min).
+
+**2026-10-23 (evening): HOLDER RANK TRIO e9 + e10 + e11 — PUSHED `db1bd3aca`, data rebuilt by his manual run (only=holder-ranks,rank-history, force; 14:43 UTC, both ok), LIVE-VERIFIED:** holder-ranks.json now `repeats` 126 / 44, 17,117 / 4,987 people, tags present; Top 100 "PEOPLE HOLDING 17,117"; real wallets, live balance ranked by the deployed pfRank vs the new index's last day: #20 / #150 / #700 / #2,000 step 0, #5,000 −6, #8,000 −1, #11,000 −4 (real overnight moves; before: +19 at #2,000, +64 at #8,000). Build =
 `python3 tools/audit4-rank.py` (idempotent, 17 edits, re-run "0 edit(s)"; it edits the two builders + the pf-v2 / top100 fragments and
 re-splices with tools/pf-v2.py + tools/top100.py). **e10 — the real cause, found today:** PulseScan's holder paging REPEATS the last
 row of some pages as the first row of the next (its next_page_params balance is a rounded float): a fresh full read had 18,328 PTGC
@@ -1689,7 +1726,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--29. **AUDIT IV rank trio e9 + e10 + e11 (2026-10-23) — BUILT by `tools/audit4-rank.py`, on the Mac, NOT pushed.** His push → Run workflow
+-30. **AUDIT IV batch 3 (2026-10-23 night) — e17, e24, e25, e12, e18, e20, e21, e22, e23 — BUILT, on the Mac, NOT pushed.** His
+   push → the checks in Current state (Site check green, deploy's `check` job, run Pipeline watchdog once) → Claude's live look. Left
+   from the P0/P1 list: e13 (tier counts — his call: people only vs every address), e5 / e6 (Worker v8, parked), then e14+ by tier.
+   The DISPATCH_TOKEN expiry (~Nov 5) is now caught within 3 h by the watchdog — but renew it before then anyway.
+-29. **AUDIT IV rank trio e9 + e10 + e11 (2026-10-23) — PUSHED `db1bd3aca`, data rebuilt, LIVE-VERIFIED.** His push → Run workflow
    only=`holder-ranks,rank-history` force=true (or wait ≤ 20 h) → Claude's live check (holder-ranks.json has `t` + `repeats`, PEOPLE
    HOLDING ≈ 17.1K, a real wallet's badge = its rank-window history's last day). Follow-up: the same de-dupe for the tier counts (e13).
 -28. **AUDIT IV batch P0b (2026-10-23) — e7, e8, e3, e4, e19 — PUSHED `b071ba060`, LIVE-VERIFIED.**
@@ -1882,7 +1923,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    in dry-run would have shown up here too).
 
 ## Session log
-- `sessions/2026-10-23.md` — Audit IV fixes: e1 + e2 (pushed, live-verified), batch P0b e7 / e8 / e3 / e4 / e19 (built, harness evidence).
+- `sessions/2026-10-23.md` — Audit IV fixes: e1 + e2, batch P0b e7 / e8 / e3 / e4 / e19, the rank trio e9–e11 (all pushed, live-verified); batch 3 e17 / e24 / e25 / e12 / e18 / e20–e23 (built).
 - `sessions/2026-10-22-audit4.md` — Audit IV: the merged e1–e47 list (P0–P3, TOP 10, security / mobile / performance / data sections, quick wins, ideas, do-not-change) and the eight raw sweeps (S, N, M, D, R, P, U, V) with evidence. No code changed.
 - `sessions/2026-10-22.md` — TOP 100: mock-ups, the build (holders + stakers, the checker), four look rounds, the audit, go-live, the stakers columns, the Telegram post.
 

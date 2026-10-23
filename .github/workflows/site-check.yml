@@ -1,0 +1,53 @@
+name: Site check
+
+# Audit IV e20 (2026-10-23). On a push that touches a page: compile every page, check the committed tw.css matches the pages'
+# classes (a class with no rule in tw.css does nothing live — the 2026-10-22 Affiliates receipts icon), and mount every page in
+# headless Chromium with the data APIs stubbed (tools/harness). A red run = GitHub's failure e-mail to the owner. It does NOT block
+# the deploy — deploy.yml's own compile check does that. Locally: cd tools/harness && node compile.js && CHROME=… node ci-mount.js
+
+on:
+  push:
+    branches: [main]
+    paths: ['*.html', '*.css', '*.jsx', 'tools/harness/**', 'tools/pf-v2/**', 'tools/top100/**', 'tools/affiliate/**', '.github/workflows/site-check.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # the image ships the Chromium build that playwright-core 1.47.0 (tools/harness/package.json) drives
+    container: mcr.microsoft.com/playwright:v1.47.0-jammy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install the harness
+        working-directory: tools/harness
+        run: npm install --no-audit --no-fund
+
+      - name: Compile every page
+        working-directory: tools/harness
+        run: node compile.js
+
+      - name: tw.css is current
+        working-directory: tools/harness
+        run: |
+          cp ../../tw.css /tmp/tw.committed.css
+          npm run css
+          if ! cmp -s /tmp/tw.committed.css ../../tw.css; then
+            echo "::error::tw.css is stale — run 'cd tools/harness && npm run css', commit tw.css and bump tw.css?v= on the five pages"
+            exit 1
+          fi
+
+      - name: Mount every page
+        working-directory: tools/harness
+        run: |
+          export CHROME="$(ls -d /ms-playwright/chromium-*/chrome-linux/chrome | head -1)"
+          node ci-mount.js

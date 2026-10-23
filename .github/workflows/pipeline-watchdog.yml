@@ -1,0 +1,26 @@
+name: Pipeline watchdog
+
+# Audit IV e22 (2026-10-23). Every 3 h: fails (→ GitHub's failure e-mail to the owner) when the hourly data pipeline has stopped —
+# not run for 3 h (the Cloudflare Worker's hourly dispatch or its DISPATCH_TOKEN died; GitHub's own schedule fires only a few
+# times a day), or a step has not succeeded within twice its gate + 3 h. Reads the published files only; needs no secret.
+
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Is the data pipeline running?
+        run: |
+          B="https://raw.githubusercontent.com/${{ github.repository }}/main"
+          curl -fsSL "$B/scripts/pipeline-watchdog.mjs" -o pipeline-watchdog.mjs
+          curl -fsSL "$B/scripts/pipeline-run.mjs"      -o pipeline-run.mjs
+          curl -fsSL "$B/data/pipeline-status.json"     -o pipeline-status.json
+          node pipeline-watchdog.mjs pipeline-status.json pipeline-run.mjs

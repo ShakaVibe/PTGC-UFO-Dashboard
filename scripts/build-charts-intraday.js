@@ -157,7 +157,7 @@ const spanH = (s) => (s && s.length >= 2 ? ((s[s.length - 1][0] - s[0][0]) / 360
         console.log(`  ✓ ${tier}: ${s.length} points, ${spanH(s)} h (… → ${new Date(s[s.length - 1][0]).toISOString().slice(0, 16)}Z) via ${built.pool}`);
       } else if (prev[job.sym] && prev[job.sym][tier]) {
         tokens[job.sym][tier] = { ...prev[job.sym][tier], carriedForward: true };
-        console.warn(`  → kept previous ${job.sym} [${tier}] series`);
+        console.warn(`::warning::charts-intraday ${job.sym} [${tier}] carried forward — kept the previous series`);
       } else {
         console.warn(`  ✗ no ${tier} series for ${job.sym}`);
       }

@@ -241,6 +241,7 @@ function loadExistingBurns(dataDir, token) {
       } catch (e) {
         console.log(`    ERROR loading ${filePath}: ${e.message}`);
         console.log(`    Stack: ${e.stack}`);
+        throw new Error(`cannot read ${filePath} — refusing to build totals from a partial burn archive`);   // Audit IV e23 (it was skipped silently)
       }
     }
   } else {
@@ -904,7 +905,8 @@ async function main() {
       console.log(`  Loaded existing history with ${holderHistory.snapshots?.length || 0} snapshots`);
     }
   } catch (e) {
-    console.log('Creating new holder history file...');
+    console.error(`holder-history.json exists but cannot be read (${e.message}) — refusing to replace the only copy`);   // Audit IV e23
+    process.exit(1);
   }
   
   // Ensure snapshots array exists
@@ -958,13 +960,7 @@ async function main() {
     // Sort snapshots by timestamp (oldest first)
     holderHistory.snapshots.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    // Keep last 365 days of data (1 year)
-    const maxSnapshots = 365;
-    if (holderHistory.snapshots.length > maxSnapshots) {
-      const removed = holderHistory.snapshots.length - maxSnapshots;
-      holderHistory.snapshots = holderHistory.snapshots.slice(-maxSnapshots);
-      console.log(`  Trimmed ${removed} old snapshots, keeping last ${maxSnapshots}`);
-    }
+    // Audit IV e23 (2026-10-23): NO trim — this daily holder count is the one record the chain cannot give back (~37 KB a year).
 
     holderHistory.lastUpdated = now.toISOString();
     holderHistory.source = 'PulseScan';

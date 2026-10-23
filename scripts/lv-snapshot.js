@@ -135,7 +135,7 @@ async function main() {
   let snapshots = [];
   if (fs.existsSync(snapshotsPath)) {
     try { snapshots = JSON.parse(fs.readFileSync(snapshotsPath, 'utf8')); }
-    catch (e) { console.warn('Could not parse existing snapshots, starting fresh'); snapshots = []; }
+    catch (e) { console.error(`lv-snapshots.json exists but cannot be read (${e.message}) — refusing to replace the only copy with a one-row file`); process.exit(1); }   // Audit IV e23
   }
   snapshots.push(snapshot);
   fs.writeFileSync(snapshotsPath, JSON.stringify(snapshots, null, 2));

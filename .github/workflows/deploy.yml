@@ -32,7 +32,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Audit IV e20 (2026-10-23): a page that does not compile is a BLANK site. This compiles every page (~15 s) and the deploy below
+  # waits for it — a broken edit never reaches ptgc-ufo.com; the site stays on the last good version and GitHub e-mails the failure.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Compile every page
+        run: |
+          mkdir -p /tmp/babel && cd /tmp/babel && npm init -y > /dev/null && npm install --no-audit --no-fund @babel/standalone@7.26.4 > /dev/null
+          cd "$GITHUB_WORKSPACE" && NODE_PATH=/tmp/babel/node_modules node tools/harness/compile.js
+
   deploy:
+    needs: check
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -104,7 +104,7 @@ async function main() {
     const shift = Math.round((binStart - Number(prev.binStart)) / BIN_MS);
     if (shift < 0 || shift >= BINS) return false;
     const v = old.v.slice(shift); while (v.length < BINS) v.push(0);
-    out[p.addr] = { n: p.name, v, carried: prev.generatedAt }; carried++; return true;
+    out[p.addr] = { n: p.name, v, carried: prev.generatedAt }; carried++; console.warn(`::warning::pair-volume ${p.name} carried forward from ${prev.generatedAt}`); return true;
   };
   for (const p of pools) {
     if (down) { refused++; carry(p); continue; }   // GeckoTerminal is down this run: don't spend 30 × 3 retries on it

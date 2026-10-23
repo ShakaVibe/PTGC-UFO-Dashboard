@@ -458,10 +458,10 @@ async function main() {
   }
 
   if (!ptgcValid) {
-    console.warn('\n⚠ WARNING: PTGC returned 0 pools / $0 liquidity — skipping PTGC data, keeping previous.');
+    console.warn('\n::warning::coingecko PTGC returned 0 pools / $0 liquidity — skipping PTGC data, keeping previous.');
   }
   if (!ufoValid) {
-    console.warn('\n⚠ WARNING: UFO returned 0 pools / $0 liquidity — skipping UFO data, keeping previous.');
+    console.warn('\n::warning::coingecko UFO returned 0 pools / $0 liquidity — skipping UFO data, keeping previous.');
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -553,7 +553,7 @@ async function main() {
       out[key] = p[key];
       carriedFrom[figure] = (p.carriedFrom && p.carriedFrom[figure]) || (previous && previous.lastUpdated) || null;
       out.complete[figure] = false;
-      console.warn(`\u26a0 ${name} ${figure}: kept the previous value (measured ${carriedFrom[figure] || 'unknown'}).`);
+      console.warn(`::warning::coingecko ${name} ${figure}: kept the previous value (measured ${carriedFrom[figure] || 'unknown'}).`);
     };
     carry('volume', 'volume');
     carry('transactions', 'transactions');

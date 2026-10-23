@@ -97,8 +97,15 @@ The disclaimer is pre-accepted via localStorage (`grays_disclaimer_v1` = the cur
 on the DexScreener-down run is the fake reserves, not a bug) — the harness checks that the page
 mounts, walks its tabs and degrades without throwing, not that the figures are right.
 
-Not wired to CI (roadmap b7/b8). To turn a run into a test, assert on `errors` being empty
-and on `evalfile` probes, e.g. that every `button[aria-label^="What is"]` measures ≥32×32.
+**CI (Audit IV e20, 2026-10-23).** `node compile.js` now compiles EVERY inline `text/babel` block of index, portfolio,
+calculators, charts and ledger (+ h2-header.jsx) and syntax-checks every plain inline script; it exits 1 on any error.
+`node ci-mount.js` mounts home / #/ptgc / #/ufo / portfolio / calculators / charts / ledger at 1280×900 and fails unless
+`probes/ci-mounted.js` says the page really rendered (no `[data-boot]` shell left, >40 nodes, >200 chars) and the run's
+`ERRORS_JSON` line is empty apart from its ALLOW list. Both run in `.github/workflows/site-check.yml` (with a tw.css drift
+check) on every push that touches a page; `deploy.yml`'s `check` job runs compile.js and the deploy `needs` it.
+run.js waits for `#root` to have children AND no `[data-boot]` element — every React page now ships a static
+"LOADING…" shell marked `data-boot` (and a boot-fail message after 20 s or a Babel SyntaxError), so "has children"
+alone was satisfied before React mounted. The CDN `<script>` tags are `defer` since e18; run.js's rewrite accepts both.
 
 ### Reproducing the a51 skeleton loop
 

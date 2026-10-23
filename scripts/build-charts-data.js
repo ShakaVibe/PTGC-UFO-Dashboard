@@ -246,10 +246,10 @@ async function buildMajor(m) {
     try {
       const built = await buildToken(t);
       if (built) tokens[t.sym] = built;
-      else if (prev[t.sym]) { tokens[t.sym] = { ...prev[t.sym], carriedForward: true }; console.warn(`  → kept previous ${t.sym} series`); }
+      else if (prev[t.sym]) { tokens[t.sym] = { ...prev[t.sym], carriedForward: true }; console.warn(`::warning::charts ${t.sym} carried forward — kept the previous series`); }
     } catch (e) {
       console.warn(`  unexpected error for ${t.sym}: ${e.message}`);
-      if (prev[t.sym]) { tokens[t.sym] = { ...prev[t.sym], carriedForward: true }; }
+      if (prev[t.sym]) { tokens[t.sym] = { ...prev[t.sym], carriedForward: true }; console.warn(`::warning::charts ${t.sym} carried forward after an error`); }
     }
   }
 
@@ -257,10 +257,10 @@ async function buildMajor(m) {
     try {
       const built = await buildMajor(m);
       if (built) tokens[m.sym] = built;
-      else if (prev[m.sym]) { tokens[m.sym] = { ...prev[m.sym], carriedForward: true }; console.warn(`  → kept previous ${m.sym} series`); }
+      else if (prev[m.sym]) { tokens[m.sym] = { ...prev[m.sym], carriedForward: true }; console.warn(`::warning::charts ${m.sym} carried forward — kept the previous series`); }
     } catch (e) {
       console.warn(`  unexpected error for ${m.sym}: ${e.message}`);
-      if (prev[m.sym]) { tokens[m.sym] = { ...prev[m.sym], carriedForward: true }; }
+      if (prev[m.sym]) { tokens[m.sym] = { ...prev[m.sym], carriedForward: true }; console.warn(`::warning::charts ${m.sym} carried forward after an error`); }
     }
   }
 

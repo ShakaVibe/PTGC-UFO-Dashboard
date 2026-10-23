@@ -14,10 +14,10 @@ const html0=fs.readFileSync(path.join(REPO,process.env.HTML||'index.html'),'utf8
 const html=html0
   .replace(/<script src="https:\/\/cdn\.tailwindcss\.com\/3\.4\.16"><\/script>/,'<link rel="stylesheet" href="/__tw.css">')
   .replace(/<link rel="stylesheet" href="tw\.css\?v=\d+">/,'<link rel="stylesheet" href="/__tw.css">')   // c13: the pages link the committed tw.css; the harness renders with its fresh build
-  .replace(/<script src="https:\/\/unpkg\.com\/react@18\.3\.1\/umd\/react\.production\.min\.js"[^>]*><\/script>/,'<script src="/__react.js"></script>')
-  .replace(/<script src="https:\/\/unpkg\.com\/react-dom@18\.3\.1\/umd\/react-dom\.production\.min\.js"[^>]*><\/script>/,'<script src="/__react-dom.js"></script>')
-  .replace(/<script src="https:\/\/unpkg\.com\/@babel\/standalone@7\.26\.4\/babel\.min\.js"[^>]*><\/script>/,'<script src="/__babel.js"></script>')
-  .replace(/<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/chart\.js@4\.4\.1\/dist\/chart\.umd\.js"[^>]*><\/script>/,'<script src="/__chart.js"></script>')
+  .replace(/<script (defer )?src="https:\/\/unpkg\.com\/react@18\.3\.1\/umd\/react\.production\.min\.js"[^>]*><\/script>/,'<script $1src="/__react.js"></script>')
+  .replace(/<script (defer )?src="https:\/\/unpkg\.com\/react-dom@18\.3\.1\/umd\/react-dom\.production\.min\.js"[^>]*><\/script>/,'<script $1src="/__react-dom.js"></script>')
+  .replace(/<script (defer )?src="https:\/\/unpkg\.com\/@babel\/standalone@7\.26\.4\/babel\.min\.js"[^>]*><\/script>/,'<script $1src="/__babel.js"></script>')
+  .replace(/<script (defer )?src="https:\/\/cdn\.jsdelivr\.net\/npm\/chart\.js@4\.4\.1\/dist\/chart\.umd\.js"[^>]*><\/script>/,'<script $1src="/__chart.js"></script>')   // Audit IV e18: the pages defer the CDN scripts; keep it
   /* charts.html pins the date-fns adapter too; without it Chart.js throws "Check that a complete
      date adapter is provided" and every time-axis chart on that page stays blank, which is how the
      harness ran from a37 until 2026-09-21 (a59). */
@@ -345,13 +345,13 @@ const dsAnswer=(url)=>{
   const t0=Date.now();
   await page.goto(`http://localhost:${port}/${route}`,{waitUntil:'load'});
   // wait for React to mount + dashboard to leave the spinner
-  await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?r.children.length>0:true;},{timeout:30000});   // charts.html has no #root (plain JS page) — don't wait for one
+  await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?(r.children.length>0&&!r.querySelector('[data-boot]')):true;},{timeout:30000});   // charts.html has no #root (plain JS page) — don't wait for one
   await page.waitForTimeout(2500);
   for(const a of actions.split(';').filter(Boolean)){
     const i=a.indexOf('=');const kind=a.slice(0,i),arg=a.slice(i+1);
     if(kind==='click'){const loc=page.locator(arg).first();await loc.scrollIntoViewIfNeeded().catch(()=>{});await loc.click({timeout:5000}).catch(e=>errors.push('CLICKFAIL '+arg+' '+e.message.split('\n')[0]));await page.waitForTimeout(600);}
     if(kind==='wait')await page.waitForTimeout(+arg);
-    if(kind==='reload'){await page.reload({waitUntil:'load'});await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?r.children.length>0:true;},{timeout:30000});await page.waitForTimeout(+arg||2500);}   // reload=<ms>: reload in place (localStorage survives) and wait. Same #root rule as the first load — charts.html has none, and `reload` used to time out there (a59)
+    if(kind==='reload'){await page.reload({waitUntil:'load'});await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?(r.children.length>0&&!r.querySelector('[data-boot]')):true;},{timeout:30000});await page.waitForTimeout(+arg||2500);}   // reload=<ms>: reload in place (localStorage survives) and wait. Same #root rule as the first load — charts.html has none, and `reload` used to time out there (a59)
     if(kind==='key'){await page.keyboard.press(arg);await page.waitForTimeout(300);}
     if(kind==='scroll'){await page.evaluate(y=>window.scrollTo(0,y),+arg);await page.waitForTimeout(400);}
     if(kind==='scrollnav'){await page.evaluate(()=>{const el=document.querySelector('.no-scrollbar');if(el)el.scrollLeft=9999;});await page.waitForTimeout(400);}
@@ -365,5 +365,6 @@ const dsAnswer=(url)=>{
   console.log('route',route,'size',W+'x'+H,'load',Date.now()-t0,'ms','rpc',rpcCount.n);
   console.log('text:',txt);
   console.log('errors:',errors.length?errors.slice(0,8):'none');
+  console.log('ERRORS_JSON',JSON.stringify(errors));   // Audit IV e20: one parseable line for ci-mount.js
   await browser.close();server.close();
 })().catch(e=>{console.error('HARNESS FAIL',e);process.exit(1);});
