@@ -362,7 +362,7 @@ edit(IX, "      const t0=Date.now()-86400000;\n      const gid=`hcg-${token}`;",
 edit(IX, """      return(
         <div className={`hc-plot${ticks.length?' hc-has-ax':''}`}>""", """      return(<>
         <div className="hc-chart-hd">{HC_CLOCK}7D{chg7!=null&&isFinite(chg7)&&<span className={`hc-c7 ${chg7>=0?'up':'dn'}`}>{chg7>=0?'▲':'▼'} {Math.abs(chg7).toFixed(2)}%</span>}</div>
-        <div className={`hc-plot${ticks.length?' hc-has-ax':''}`}>""")
+        <div className={`hc-plot${ticks.length?' hc-has-ax':''}`}>""", done='round 4: no 7D %')
 edit(IX, """          {ticks.length>0&&<div className="hc-yax" aria-hidden="true">{ticks.map(v=><span key={v} style={{top:`${(Y(v)/160*100).toFixed(2)}%`}}><HcTick p={v}/></span>)}</div>}
         </div>
       );""", """          {ticks.length>0&&<div className="hc-yax" aria-hidden="true">{ticks.map(v=><span key={v} style={{top:`${(Y(v)/160*100).toFixed(2)}%`}}><HcTick p={v}/></span>)}</div>}
@@ -396,3 +396,11 @@ R3_CSS = r"""    /* 2026-10-24 round 3: both backgrounds a step darker (Shaka); 
 edit(IX, "    .hc-green .hc-art{filter:saturate(.85) brightness(.78)}\n", "    .hc-green .hc-art{filter:saturate(.85) brightness(.78)}\n" + R3_CSS + "\n")
 
 print(f'{n} edit(s)')
+
+# ---- round 4 (Shaka, 2026-10-24: "dont show the up down percentage for the 7D" + "make the ufo background a little darker") ----
+edit(IX, """        <div className="hc-chart-hd">{HC_CLOCK}7D{chg7!=null&&isFinite(chg7)&&<span className={`hc-c7 ${chg7>=0?'up':'dn'}`}>{chg7>=0?'▲':'▼'} {Math.abs(chg7).toFixed(2)}%</span>}</div>""",
+         """        <div className="hc-chart-hd">{HC_CLOCK}7D{/* round 4: no 7D % (Shaka) - chg7 only feeds the aria-label's up / down */}</div>""")
+R4_CSS = """    .hc-green .hc-art{filter:saturate(.85) brightness(.66)}   /* 2026-10-24 round 4: the UFO art a step darker again (Shaka; was .78) */"""
+edit(IX, "    @media(max-width:639.98px){.hc-yax span:nth-child(2):last-child{display:inline}}   /* two axis labels: keep both (round 2 hid every other one) */\n",
+         "    @media(max-width:639.98px){.hc-yax span:nth-child(2):last-child{display:inline}}   /* two axis labels: keep both (round 2 hid every other one) */\n" + R4_CSS + "\n")
+print(f'{n} edit(s) (round 4)')

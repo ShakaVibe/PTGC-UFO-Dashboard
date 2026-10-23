@@ -46,8 +46,13 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24: HOME CARDS ROUND 4 (Shaka: "dont show the up down percentage for the 7D" + "make the ufo background a little darker";
+"i dont need a mock up") — READY TO PUSH.** Appended to `tools/home-cards-atlantis.py` (the round-3 header edit has a `done=` marker;
+from `9e1aa6f8` and from `f6f3cc7e` index.html sha256 f38e0d01; re-runs "0 edit(s)"). The chart label is "7D" alone (chg7 still feeds
+the aria-label up/down only); UFO art brightness .78 → .66. Heights unchanged.
+
 **2026-10-24: HOME CARDS ROUND 3 (Shaka: "make both backgrounds a little darker... and maybe we shold do the graph at 7 days not
-24 hrs?"; worked example shown first, then "make it live") — READY TO PUSH.** Appended to `tools/home-cards-atlantis.py` (round-1
+24 hrs?"; worked example shown first, then "make it live") — PUSHED `9e1aa6f8`.** Appended to `tools/home-cards-atlantis.py` (round-1
 edits that round 3 moves on carry `done=` markers; from `743dd044` index.html sha256 d6a2acbc; from `f6f3cc7e` the same file; re-runs
 "0 edit(s)"). Chart = GeckoTerminal HOURLY candles, last 7 days (`/ohlcv/hour?aggregate=1&limit=170&token=`, `HOME_SPARK_WIN`),
 one line per day, volume bars on a square-root scale. Fallback = `homeSparkRepo` (data/charts-intraday.json hourly, only if its
