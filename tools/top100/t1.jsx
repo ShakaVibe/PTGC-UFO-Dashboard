@@ -158,7 +158,9 @@
         const T2=list.length>=100?list[99]:T;
         const rank=k>0?t1Rank(list,k):null,inTop=rank!=null&&rank<=100;
         const pct=Math.min(100,k/T2*100);
-        const cush=Math.max(0,k-(list[100]||0));
+        /* Audit IV e1 (2026-10-23): `list` has the checked wallet removed, so list[99] IS the overall #101 — the line the wallet
+           drops under. list[100] was #102 and made every cushion too generous by list[99]−list[100]. */
+        const cush=Math.max(0,k-(list[99]||0));
         if(chk.mode==='s'){
           const need=Math.max(0,T2-k+1),free=Math.max(0,(chk.b||0)-k),buy=Math.max(0,need-free);
           if(inTop){const up=rank>1?list[rank-2]:null,unl=Math.max(0,k-(chk.l||0));return{rank,inTop,tiles:[

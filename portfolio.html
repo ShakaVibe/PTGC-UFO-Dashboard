@@ -1438,16 +1438,20 @@
       return null;
     };
     const logsInflight={};
-    const getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+    /* exactTo (Audit IV e2, 2026-10-23 — index.html's gotcha-4 flag, ported): getLogsRange sends the final slice as
+       toBlock:'latest' when it reaches the scan's end block. For a scan that is CACHED as "read to block N" that is wrong:
+       'latest' silently extends the last slice past N, and the next incremental scan (N+1 → head') reads those blocks
+       again — a transfer mined in the gap was double-counted into the UFO reflections for ever. exactTo=true pins it. */
+    const getLogsChunked=async(address,topics,fromBlock,toBlock,exactTo=false)=>{
       if(toBlock<fromBlock)return[];
-      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${cacheBucket()}`;
+      const key=`${address}|${JSON.stringify(topics)}|${fromBlock}|${toBlock}|${exactTo?1:0}|${cacheBucket()}`;
       if(logsInflight[key])return logsInflight[key];
-      const p=_getLogsChunked(address,topics,fromBlock,toBlock);
+      const p=_getLogsChunked(address,topics,fromBlock,toBlock,exactTo);
       logsInflight[key]=p;
       p.then(r=>{if(r===null)delete logsInflight[key];},()=>{delete logsInflight[key];});
       return p;
     };
-    const _getLogsChunked=async(address,topics,fromBlock,toBlock)=>{
+    const _getLogsChunked=async(address,topics,fromBlock,toBlock,exactTo=false)=>{
       if(toBlock<fromBlock)return[];
       // Derive the chunk size from the span instead of failing when a fixed size needs too many ranges.
       // This is the guard that previously hard-failed and blanked the reflections display.
@@ -1457,7 +1461,7 @@
       for(let s=fromBlock;s<=toBlock;s+=chunk)ranges.push([s,Math.min(s+chunk-1,toBlock)]);
       const out=[];const CONC=3;
       for(let i=0;i<ranges.length;i+=CONC){
-        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,toBlock)));
+        const res=await Promise.all(ranges.slice(i,i+CONC).map(([a,b])=>getLogsRange(address,topics,a,b,0,exactTo?Infinity:toBlock)));
         for(const r of res){ if(r===null)return null; out.push(...r); }
       }
       return out;
@@ -1477,6 +1481,14 @@
       if(balanceWei<=0n)return 0;              // nothing held -> nothing earned
       const head=await getHeadBlock();
       if(head==null)return null;
+      /* Audit IV e2: balance and the two transfer sums must be from ONE block, or a transfer that lands while the scan runs
+         skews the result by its whole size. Read balanceOf AT `head` (the block the scan ends on); if the node will not
+         answer for that block, keep the mount-time balance (the pre-e2 behaviour, never a fake 0). */
+      try{
+        const r=await rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:UFO_TOKEN_ADDR,data:SEL.balanceOf+padAddr(address)},'0x'+head.toString(16)],id:1});
+        const h=r&&r.result;if(h&&h!=='0x'&&h.length>=66)balanceWei=parseWord(h);
+      }catch(e){}
+      if(balanceWei<=0n)return 0;
       // Scan the token's ENTIRE history, from its deploy block to head. No estimate, no sliding window:
       // no transfer involving this token can predate the block its bytecode first appeared in.
       /* B8 (Portfolio roadmap, 2026-10-16): the three sums (received, sent, fee legs) only ever grow, so they are SAVED per
@@ -1489,8 +1501,8 @@
       let c=null;try{const s=localStorage.getItem(ck);if(s){const o=JSON.parse(s);if(o&&o.v===1&&Number.isInteger(o.to)&&o.to>=UFO_LAUNCH_BLOCK&&o.to<=head)c={to:o.to,inW:BigInt(o.inW),outW:BigInt(o.outW),feeW:BigInt(o.feeW)};}}catch(e){c=null;}
       const scan=async(fromBlock)=>{
         const [recv,sent]=await Promise.all([
-          getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head),   // to = wallet
-          getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,wtopic,null],fromBlock,head),   // from = wallet
+          getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head,true),   // to = wallet   (exactTo: never 'latest')
+          getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,wtopic,null],fromBlock,head,true),   // from = wallet
         ]);
         if(recv===null||sent===null)return null; // hard chain-read failure -> unavailable, never a fake 0
         const sumWei=(logs)=>logs.reduce((s,l)=>s+parseWord(l.data),0n);

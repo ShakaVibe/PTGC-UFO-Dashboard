@@ -23,6 +23,10 @@ Update it at the end of every session.
 - **Audit III (2026-10-07):** `sessions/2026-10-07-audit.md` — 65 merged items (c1–c65) with evidence; top of that file = the list.
   On the roadmap artifact as the "AUDIT III" phase. **The P1 batch (c1–c8 + c11 + c25) is built by `tools/audit3-p1.py`** (idempotent,
   on the repo root; "0 edit(s)" = already applied) — c1 `data-presets="react"` = the compile 15 s → 3 s.
+- **Audit IV (2026-10-22 night, Claude, NO code changed):** `sessions/2026-10-22-audit4.md` — the whole repo re-read at
+  `223de3f58` by eight sweeps (security, index numbers, sibling-page numbers, pipeline, client RPC, perf/SEO/compat, a11y/UX/tests,
+  responsive) with ~200 harness runs + a live check from the Mac. **47 merged items e1–e47 (8 × P0, 23 × P1), TOP 10, the
+  four finding sections, quick wins, ideas, "do not change".** NOT yet on the roadmap artifact (add an "AUDIT IV" phase with e1–e47).
 - **Charts page (2026-10-05 / 10-06):** the Calculators treatment (same plate, "Grays Charts") — `tools/charts-v2.py`, `cp-*` CSS in charts.html; then
   `charts-gt.py` (GeckoTerminal back-off), `charts-v3.py` (no sub-tab box, the Share badge at the right, UFO-green titles) and **`charts-fast.py` +
   `scripts/build-charts-intraday.js` → `data/charts-intraday.json` (hourly pipeline step `charts-intraday`): 24H / 7D / 14D paint from the prebuilt
@@ -42,6 +46,45 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-23: AUDIT IV e1 + e2 BUILT ("fix 1 and 2") — written to the Mac, NOT pushed.** `python3 tools/audit4-e1e2.py` (idempotent;
+run twice → "0 edit(s)"; it edits `tools/top100/t1.jsx` and re-splices index.html via `tools/top100.py`, then edits portfolio.html's data
+layer directly — that layer is NOT in the pf-v2 fragments, `tools/pf-v2.py` leaves it alone). **e1** `cush = k − list[99]` (was
+`list[100]`): harness `T1_BAL=412485544` (= the real #100's balance, a wallet not in `top`) → "YOU'RE IN #100 · YOUR CUSHION 0",
+412485545 → cushion 1, 708163209 → #50 cushion 295.68M; no overflow, no errors. **e2** portfolio.html: `getLogsChunked` /
+`_getLogsChunked` take `exactTo` (index's gotcha-4 flag) and `computeUfoReflectionsWei` passes `true`, so the last slice is
+`toBlock:<head>`, never `'latest'` — what the B8 cache stores as `{to:head}` is exactly what was read; and the wallet's `balanceOf`
+is re-read AT block `head` (one `eth_call` with a block tag; a failed at-head read keeps the mount-time balance) so balance and the
+two sums come from one block. Harness (request log): 8 `eth_getLogs`, every `toBlock` = 0x19d8360 = HEAD_BLOCK, zero `latest`; two
+`balanceOf … @0x19d8360`; the cache row `{v:1,to:27100000,…}`; `#root` before vs after identical on the 2-wallet recipe (rpc 32 → 34);
+`LOGS_DOWN=1` → "Reflections unavailable — the chain read failed", no cache row (a12 holds). index.html sha256 b5e78e24,
+portfolio.html e80bfb78. Live check after his push: a real UFO wallet's Lifetime earned equals its pre-push value (first visit =
+full scan; a reload = incremental), and in DevTools → Network the last `eth_getLogs` of the scan carries a hex `toBlock`.
+**2026-10-23 (small hours): AUDIT IV DONE — `sessions/2026-10-22-audit4.md`, written to the Mac, NOT pushed; no code touched.**
+His ask: "a COMPLETE audit of this entire website/application … do NOT start changing code yet … create a prioritized TODO / handoff
+document". Eight parallel sweeps on a clean clone of `223de3f58` (code identical to the Mac), every number re-run against the real
+`data/*.json`, ~200 harness runs (six widths, every route + window, RPC / DexScreener / PulseScan down or slow), live checks from the
+built-in browser (site 200, stale `tw.css` live, `/apple-touch-icon.png` + `/ptgc` 404, Worker `no-store`, pipeline dispatched 00:15
+UTC, 0 console errors) and one RPC read (`totalStaked()` 187.48B / `totalLocked()` 124.36B — the donut reads the right thing).
+**SEVERE: e1 the Top 100 "Your cushion" subtracts `list[100]` where `list[99]` is the overall #101 — overstated for every top-100
+wallet (the #100 wallet: prints 20.52M, truth 7.15M; one-token fix in `tools/top100/t1.jsx:161`); e2 portfolio's UFO reflections scan
+sends the last slice to `latest` but caches `to:head` (no `exactTo` — gotcha 4 never reached portfolio.html) → a transfer in the gap is
+double-counted for ever; e6 the Worker's `/read`/`/write` `path` walks out of ToolBox (`../../PTGC-UFO-Dashboard/contents/index.html`)
+and the public read is an uncached two-GitHub-calls-per-GET fan-out on the owner's PAT; e3 DAO Treasury prints a quiet $0 / short
+total when one of ~15 reads fails; e4/e5 the referrer window ignores the month's threshold verdict and the Worker compares
+`thresholdType` case-sensitively + `||2` on a 0 % month; e7 GET CODE is EMPTY for an emoji label (`btoa`, third time); e8 a failed
+UFO `balanceOf` is a silent 0 with a green dot.** P1 headliners: e9 holder rank ranks a seller against its own stale entry ("to pass
+#50" = itself), e10 the rank window's "today" is ranked on a different population than its history (median +64 places at
+5k–10k), e11 BEST EVER is period-scoped, e12 calculators' UFO share 9 % below the Portfolio's, e13 the tier counts call the burn
+address PTGC's only Poseidon, e14 three pages hang on a stalled fetch with no timeout, e15 a stale value-generated.json = ~950 RPC
+calls per UFO visit, e16 the sibling pages' RPC pool pre-dates a41, e17 the disclaimer's Accept button is below the fold on every
+phone, e18 `defer` on the CDN tags = FCP 9.0 s → 0.8 s at 1.6 Mbps, e19 **the committed `tw.css` is stale (live-verified: the new
+Affiliates receipts' `text-purple-500/40` has no rule) — `npm run css` was not committed after the Affiliates redo**, e20
+`compile.js` compiles 0 bytes of portfolio/calculators (first babel tag is the `src=` one) + no CI, e22 nothing alerts when the
+pipeline is never started and the `DISPATCH_TOKEN` expiry is unrecorded (30-day default → ~Nov 5), e23 five builders carry forward
+without `::warning::` (status says `carried: 0`). Full list, evidence, fixes, TOP 10, quick wins, ideas and "do not change" in the
+file. **NEXT: (1) show him the SEVERE list + TOP 10; (2) his picks → one idempotent `tools/audit4-p0.py` batch for the P0 tier
+(e1–e8; the Worker items are a v8 by hand), harness, push, live check; (3) add the "AUDIT IV" phase (e1–e47) to the roadmap
+artifact; (4) then the queue as before (Leaderboard + Receipts windows mock, F4 share link mock, the Top 100 Telegram post).**
 **SIGN-OFF 2026-10-22 (night): THE AFFILIATE PROGRAM'S NEW LOOK IS LIVE — his push `ecd5621c7`, LIVE-VERIFIED (built-in browser, real
 data: the hero, the bands 74 / 1,525 / 7.98B, the October podium @ptgcofficialonboard · 88Xcuto4 · DeFiMission, no overflow, no console
 errors), tree clean except these notes. NEXT: (1) the Leaderboard + Payment Receipts windows in the same look, MOCK FIRST; (2) Phase F,
@@ -1594,6 +1637,14 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-27. **AUDIT IV e1 + e2 (2026-10-23) — BUILT by `tools/audit4-e1e2.py`, on the Mac, NOT pushed.** His push → Claude's live check
+   (above) → the next P0 picks (e3–e8).
+-26. **AUDIT IV (2026-10-22 night) — `sessions/2026-10-22-audit4.md`, written to the Mac, NOT pushed; nothing built.** e1–e47
+   (8 × P0: Top 100 cushion, UFO reflections `exactTo`, DAO Treasury silent $0, referrer-window verdict, Worker rate/threshold
+   edges, Worker path traversal + uncached public read, GET CODE empty on emoji, silent 0 UFO balance). Order of work: the P0 batch
+   (`tools/audit4-p0.py`, idempotent) → the deploy gate (e19 `npm run css`, e20 compile.js + CI, e21, e22 watchdog + token expiry)
+   → the rank trio (e9–e11) → the rest by tier. Each item names its raw finding; formula changes (e1, e2, e9–e13) carry an old → new
+   worked example — show him before building.
 -25. **AUDIT III batch 6 (2026-10-07) — PUSHED `7cfa416d8`, live-verified (the Leagues window scrolls at 375).** c30 (M-4, M-8, M-9,
    M-10, M-11, M-12 colours, M-13, M-16) + the Liquidity tile's "chain · core pools only" line when DexScreener is out + the
    calculators Market Cap "—". **M-11 is urgent: the Leagues window stopped scrolling on phones when c13 put tw.css ahead of the
@@ -1771,6 +1822,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    in dry-run would have shown up here too).
 
 ## Session log
+- `sessions/2026-10-22-audit4.md` — Audit IV: the merged e1–e47 list (P0–P3, TOP 10, security / mobile / performance / data sections, quick wins, ideas, do-not-change) and the eight raw sweeps (S, N, M, D, R, P, U, V) with evidence. No code changed.
 - `sessions/2026-10-22.md` — TOP 100: mock-ups, the build (holders + stakers, the checker), four look rounds, the audit, go-live, the stakers columns, the Telegram post.
 
 - `sessions/2026-10-16.md` — Portfolio v2 GO LIVE + B8 (`bc8e60b8b`): the flip, the live check with two random UFO holders
