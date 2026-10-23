@@ -221,6 +221,17 @@ const dsAnswer=(url)=>{
        for a token with thousands of holders (a53). */
     if(/api\.scan\.pulsechain\.com.*counters/.test(u)&&process.env.PS_COUNTERS_DOWN)return r.fulfill({status:500,body:'counters down'});
     if(/api\.scan\.pulsechain\.com.*counters/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token_holders_count:'4321',transfers_count:'100000'})});
+    /* TIER_HOLDERS=1 (Audit IV e13): two holder pages for the live tier scan — the burn address, the DAO treasury, a contract
+       (a pool of another DEX), three people, and PulseScan's page-boundary repeat (page 1's last row is page 2's first).
+       People only → PTGC tiers 0 / 1 / 1 / 1 (before e13: 1 / 3 / 1 / 1 with the repeat counted twice). */
+    if(/api\.scan\.pulsechain\.com.*holders/.test(u)&&process.env.TIER_HOLDERS){
+      const E=n=>(BigInt(Math.round(n*1e6))*10n**12n).toString();
+      const h=(a,v,c)=>({address:{hash:a,is_contract:!!c},value:E(v)});
+      const P1=[h('0x0000000000000000000000000000000000000369',40e9),h('0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',5e9),h('0x1111111111111111111111111111111111110001',4.2e9,1),h('0x2222222222222222222222222222222222220001',4e9),h('0x2222222222222222222222222222222222220002',0.5e9)];
+      const P2=[P1[4],h('0x2222222222222222222222222222222222220003',0.04e9),h('0x2222222222222222222222222222222222220004',1e6)];
+      const two=/address_hash=/.test(u);
+      return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:two?P2:P1,next_page_params:two?null:{address_hash:P1[4].address.hash,items_count:50,value:Number(P1[4].value)}})});
+    }
     if(/api\.scan\.pulsechain\.com.*holders/.test(u))return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({items:[],next_page_params:null})});
     /* PAIRVOL=1 (2026-09-30 night): serve a synthetic data/pair-volume-7d.json — the pipeline file the LP Pairs curves
        read first — built from the DS_PAIRS=burn pair list with the same seeded bins the GT stub uses (every third

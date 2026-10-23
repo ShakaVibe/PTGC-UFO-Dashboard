@@ -46,8 +46,23 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-23 (late night): AUDIT IV e13 — Token Allocation tier counts PEOPLE ONLY (Shaka chose "People only") — BUILT, on the
+Mac, NOT pushed.** Build = `python3 tools/audit4-e13.py` (idempotent, 11 edits, re-run 0; index.html sha256 a58e6b82,
+build-token-allocation.mjs 367a2cad). Same thresholds (% of the starting supply); only WHO is counted changes. **Builder:** the tiers
+are counted over `data/holder-ranks.json` `b` (the Top 100 / Portfolio-rank people list: burn addresses, DAO wallets, every
+contract, the UFO OA wallet out, PulseScan page repeats dropped); Squid & below = people − the four tiers; the file gains
+`tiersSource` + `tiersAsOf`; holder-ranks missing / carried / > 12 h → the previous tiers are kept with a `::warning::`. This step
+no longer pages PulseScan. **Real data (old → new):** PTGC 1 / 13 / 104 / 714 / 17,361 → 0 / 12 / 96 / 692 / 16,317; UFO
+0 / 18 / 104 / 510 / 4,684 → 0 / 16 / 98 / 500 / 4,373 (the builder run against the real file wrote exactly these; a 3-day-old
+holder-ranks entry → warning + kept). **Page:** the live fallback `fetchHolderTiers` (only when token-allocation.json is missing or
+> 24 h old) de-dupes, skips `TIER_NOT_PEOPLE` + every `is_contract`, and takes Squid & below from holder-ranks.json's people count
+(≤ 48 h; else "—", never PulseScan's address total); tier cache key `grays_tiers_v3_` (v2 retired). The tier block's hover title
+says "People only…". Harness `TIER_HOLDERS=1` (burn, DAO wallet, a contract, three people, a page repeat) → "0 1 1 1 → 17,114"
+(= 17,117 − 3); compile + ci-mount 7/7. **The numbers on the site change at the token-allocation step's next run (gate 6 h)** —
+or Actions → Data Pipeline → Run workflow, only = `token-allocation`, force = true.
+
 **2026-10-23 (night): AUDIT IV BATCH 3 — phone first screen (e17, e24, e25), calculators UFO share (e12), deferred CDN scripts
-(e18), deploy safety net (e20–e23) — BUILT, written to the Mac, NOT pushed.** Build = `python3 tools/audit4-batch3.py` (idempotent;
+(e18), deploy safety net (e20–e23) — PUSHED `be68af66b`, LIVE-VERIFIED** (Site check #1 green 1m 49s; Deploy #7580 = `check` 24 s → `deploy` 32 s; Pipeline watchdog #1 run by hand, green 11 s; live: all five pages `tw.css?v=4`, boot shell + boot-fail text + `defer` on the four React pages, charts untouched; calculators on UFO at 390 read eligible 728.78B from the chain, no page-wide overflow). Build = `python3 tools/audit4-batch3.py` (idempotent;
 a clean run from `db1bd3aca` = 57 edits, re-run "0 edit(s)"; it re-splices portfolio via tools/pf-v2.py) + `python3 tools/audit4-ci.py`
 ON the Mac (the workflow files; 3 edits, re-run 0) + `cd tools/harness && npm run css` (tw.css 79,795 B — the calculators' `sm:` utilities —
 so `?v=4` on the five pages). index.html sha256 ab0a51da, portfolio e3f4dc7b, calculators aa71e0b7, ledger cb21fa09, charts 86ce54cc.
@@ -1726,7 +1741,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--30. **AUDIT IV batch 3 (2026-10-23 night) — e17, e24, e25, e12, e18, e20, e21, e22, e23 — BUILT, on the Mac, NOT pushed.** His
+-31. **AUDIT IV e13 (2026-10-23 late night) — tier counts people only — BUILT, on the Mac, NOT pushed.** His push → Run workflow
+   only=`token-allocation` force=true (or wait ≤ 6 h) → Claude's live check (token-allocation.json `tiersSource` "holder-ranks
+   (people only)", PTGC strip 0 / 12 / 96 / 692 / ~16.3K). Left: e5 / e6 (Worker v8, parked), then e14+ by tier (e14 stalled
+   fetches with no timeout, e15 the stale value-generated RPC burst, e16 the sibling pages' old RPC pool).
+-30. **AUDIT IV batch 3 (2026-10-23 night) — e17, e24, e25, e12, e18, e20, e21, e22, e23 — PUSHED `be68af66b`, LIVE-VERIFIED.** His
    push → the checks in Current state (Site check green, deploy's `check` job, run Pipeline watchdog once) → Claude's live look. Left
    from the P0/P1 list: e13 (tier counts — his call: people only vs every address), e5 / e6 (Worker v8, parked), then e14+ by tier.
    The DISPATCH_TOKEN expiry (~Nov 5) is now caught within 3 h by the watchdog — but renew it before then anyway.

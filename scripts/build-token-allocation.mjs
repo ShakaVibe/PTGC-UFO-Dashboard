@@ -16,6 +16,12 @@
 // staking contract (0xC71f…) is PTGC's — it was listed under UFO, which counted it as a Shark
 // for UFO and reported PTGC staked 0%.
 //
+// Audit IV e13 (2026-10-23, Shaka: "people only"): the TIERS are counted over data/holder-ranks.json — the people-only list
+// the Top 100 window and the Portfolio HOLDER RANK use (burn addresses, DAO wallets, every contract, the UFO OA wallet left out,
+// PulseScan's page repeats dropped). Same thresholds as before (% of the starting supply). Squid & below = people − the four
+// tiers. That file is built by the holder-ranks step (gate 2 h); older than 12 h or carried → the previous tiers are kept
+// (::warning::). This step no longer pages PulseScan itself; the note below is kept for anyone who brings the scan back.
+//
 // ⚠ THE ONE THING THAT WILL BREAK IF YOU TOUCH IT: PulseScan returns each holder's `value`
 // (balance in wei) as a STRING, but the pagination cursor `next_page_params.value` as a raw
 // JSON NUMBER larger than 2^53. JSON.parse silently rounds it to a float and corrupts the
@@ -93,39 +99,30 @@ async function getJson(url, tries = 6) {
   return null;
 }
 
-async function holderCount(address) {
-  const j = await getJson(`${SCAN}/tokens/${address}/counters`);
-  const n = j && parseInt(j.token_holders_count);
-  return Number.isFinite(n) && n > 0 ? n : null;   // a33: null = unknown, never 0
-}
-
-// Page all holders, classify by % of supply, stop once we drop below Dolphin (list is desc).
-async function scanTiers(address, supply, exclude) {
+// Audit IV e13: the tiers over the PEOPLE in data/holder-ranks.json (`b` = every person's balance, whole tokens from 1 up,
+// high → low). null = not usable (missing, carried, older than RANKS_MAX_AGE_H) → the caller keeps the previous tiers.
+const RANKS = 'data/holder-ranks.json';
+const RANKS_MAX_AGE_H = 12;
+let _ranks;
+function tiersFromRanks(sym, supply) {
+  if (_ranks === undefined) { try { _ranks = JSON.parse(fs.readFileSync(RANKS, 'utf8')); } catch { _ranks = null; } }
+  const t = _ranks && _ranks.tokens && _ranks.tokens[sym];
+  const at = t && Date.parse(t.readAt);
+  if (!t || t.carried || !Array.isArray(t.b) || !Number.isFinite(t.holders) || !Number.isFinite(at)) return null;
+  if (Date.now() - at > RANKS_MAX_AGE_H * 3600e3) return null;
   const counts = { Poseidon: 0, Whale: 0, Shark: 0, Dolphin: 0 };
-  const supplyWei = supply * DIV;
-  let counted = 0, cursor = null, complete = false;
-  for (let page = 0; page < 40; page++) {
-    const qs = cursor ? new URLSearchParams(cursor).toString() : 'limit=50';
-    const d = await getJson(`${SCAN}/tokens/${address}/holders?${qs}`);
-    if (!d || !Array.isArray(d.items) || d.items.length === 0) break;
-    let below = false;
-    for (const h of d.items) {
-      const addr = (h.address?.hash || '').toLowerCase();
-      if (exclude.has(addr)) continue;
-      const pct = Number(BigInt(h.value)) / Number(supplyWei) * 100;
-      if (pct < 0.01) { below = true; break; }
-      if (pct >= 10) counts.Poseidon++;
-      else if (pct >= 1) counts.Whale++;
-      else if (pct >= 0.1) counts.Shark++;
-      else counts.Dolphin++;
-      counted++;
-    }
-    if (below) { complete = true; break; }
-    if (!d.next_page_params) { complete = true; break; }
-    // *** cursor from the last holder's STRING value — never next_page_params.value ***
-    cursor = { ...d.next_page_params, value: String(d.items[d.items.length - 1].value) };
+  const sup = Number(supply);
+  let counted = 0;
+  for (const k of t.b) {                       // high → low: stop at the first balance under the Dolphin line
+    const pct = k / sup * 100;
+    if (pct < 0.01) break;
+    if (pct >= 10) counts.Poseidon++;
+    else if (pct >= 1) counts.Whale++;
+    else if (pct >= 0.1) counts.Shark++;
+    else counts.Dolphin++;
+    counted++;
   }
-  return { counts, counted, complete };
+  return { tiers: { ...counts, SquidAndBelow: Math.max(0, t.holders - counted) }, asOf: t.readAt };
 }
 
 async function buildToken(sym, cfg) {
@@ -146,19 +143,13 @@ async function buildToken(sym, cfg) {
   let held = supplyWei - burned - inLP - staked;
   if (held < 0n) held = 0n;
 
-  // Tiers. Exclude LP pools + staking; do NOT exclude the burn address (matches the app).
-  const exclude = new Set(pools);
-  if (cfg.staking) exclude.add(cfg.staking.toLowerCase());
-  const total = await holderCount(cfg.address);
-  const { counts, counted, complete } = await scanTiers(cfg.address, cfg.supply, exclude);
-  const excludedCount = pools.size + (cfg.staking ? 1 : 0);
-  // a33: no holder count → SquidAndBelow is unknown (null; the dashboard prints "—"), and the
-  // caller keeps the previous file's tiers instead when it has them.
-  const squid = total == null ? null : Math.max(0, total - counted - excludedCount);
+  // Tiers — people only (Audit IV e13): from the holder-ranks list; null → the caller keeps the previous file's tiers.
+  const tr = tiersFromRanks(sym, cfg.supply);
 
   return {
-    complete: complete && total != null,
-    tiers: complete ? { ...counts, SquidAndBelow: squid } : null,
+    complete: !!tr,
+    tiers: tr ? tr.tiers : null,
+    tiersAsOf: tr ? tr.asOf : null,
     allocation: {
       burned: { amount: toTok(burned), pct: pct(burned) },
       inLP:   { amount: toTok(inLP),   pct: pct(inLP) },
@@ -189,11 +180,14 @@ async function main() {
     }
     const tiersOk = r.complete && r.tiers;
     out.tokens[sym] = {
-      tiers: tiersOk ? r.tiers : (old.tiers ?? (r.tiers || null)),   // an incomplete scan keeps the previous exact tiers; a squid-less scan only if there is nothing older
+      tiers: tiersOk ? r.tiers : (old.tiers ?? null),   // no usable people list → the previous tiers
       allocation: r.allocation,
       updatedAt: now,
       tiersUpdatedAt: tiersOk ? now : (old.tiersUpdatedAt ?? old.updatedAt ?? null),
+      tiersSource: tiersOk ? 'holder-ranks (people only)' : (old.tiersSource ?? null),   // Audit IV e13
+      tiersAsOf: tiersOk ? r.tiersAsOf : (old.tiersAsOf ?? null),                         // when holder-ranks read PulseScan
     };
+    if (!tiersOk) console.warn(`::warning::token-allocation ${sym}: ${RANKS} missing, carried or older than ${RANKS_MAX_AGE_H} h — tiers kept from ${out.tokens[sym].tiersUpdatedAt || 'nothing'}`);
     refreshed++;
     console.log(`${sym}: tiers ${tiersOk ? 'exact' : 'incomplete (kept previous)'}`, out.tokens[sym].tiers,
                 '| alloc', Object.fromEntries(Object.entries(out.tokens[sym].allocation).map(([k, v]) => [k, v.pct + '%'])));
