@@ -46,8 +46,33 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24: BURN ARCHIVE v2 — the PTGC burn windows fixed (Shaka: "lets fix it.. we need it to be right") + HOME CARDS ROUND 5
+— READY TO PUSH (one commit: the script AND the rebuild files together — old code would read the rebuild files as period files).**
+*Cause:* fetch-burn-history.js guessed each burn's time (head time − blocks × 10 s; PulseChain is ~3 % slower) and dropped re-read
+burns by "same sender, amount ±1, time ±10 min"; once two runs' guesses drifted > 10 min apart the burn was saved again. Exact match
+to the burn-address balance through 2025-09; from 2025-10 the archive over-counted (Aug 2026 570.7 M vs 366.5 M real; Aug 20 12–16 UTC
+1,670 rows / 108.16 M vs 712 logs / 36.26 M on chain). Total +762 M; windows 7D +12 %, 30D +6 %, 90D +21 %. UFO v1 (retired contract,
+ufo-burns.json, not shown on the site) 268.4 B logged vs 149.6 B real.
+*Fix (scripts/fetch-burn-history.js, block "BURN ARCHIVE v2"):* a burn = (block `b`, log index `i`); real block times (batched
+eth_getBlockByNumber); each run re-reads from `burn-summary.json` `<token>.archive.scannedTo` − 1800 to head − 96 (past finality) and
+merges by key; every run reconciles the archive sum with balanceOf(0x369) at that block (`archive.reconcile`, ::warning:: on a
+miss) and a miss makes the next run re-read from the last matching block with the fresh read replacing stored rows (doubling, ≤ 7 days);
+files are written via .tmp + rename; a UFO load error is fatal now; windows end at the archive's last block (`periodsAsOf`).
+*Rebuild:* `node tools/rebuild-burn-archive.js PTGC 2025-07-01` (798,769 burns, blocks 23866673–27873398) and `… UFO 2024-05-01`
+(4,687) → data/ptgc-burns-rebuild-{ptgc,ufo}-*.json (8 files, 87 MB). Both checks passed to < 0.001 token: rebuilt sum = balance
+change over the same blocks; kept pre-2025-07 rows + rebuilt = balance (46,332,002,587.47). The first pipeline run swaps them in
+(rewrites 2025-h2 / 2026-h1 / 2026-h2 with b/i, ufo-burns.json), continues from block 27873398 and deletes them. Simulated here:
+first run ✓ reconcile, later runs ✓, a planted phantom + missing row healed in 2 runs, leftover rebuild file removed. Independent
+review: nothing serious; its 6 robustness points applied. Expected windows after (2026-10-23 ~20:00 UTC): 24H 4.18 M, 7D 190.7 M
+(was 213.9), 30D 560.1 M (595.2), 90D 1,428.1 M (1,729.9); total 46.33 B = the balance. Nothing on the site reads the period files;
+index.html reads burn-summary.json only (same fields). CHECK after the push: the Data Pipeline run's burn-history step log says
+"Rebuild applied" and "= burn address balance … ✓"; burn-summary.json `PTGC.archive.reconcile.ok: true`.
+*Home cards round 5* (Shaka: "make the two backgrounds … darker" + "get rid of the numbers to the right of the graph"): veil
+.64/.70/.80/.78/.68 (radial .86/.6), PTGC art brightness .85, UFO .58; `.hc-yax` hidden. index.html sha256 4d5470a5 (from `18433ac2`
+and from `f6f3cc7e`; re-runs "0 edit(s)").
+
 **2026-10-24: HOME CARDS ROUND 4 (Shaka: "dont show the up down percentage for the 7D" + "make the ufo background a little darker";
-"i dont need a mock up") — READY TO PUSH.** Appended to `tools/home-cards-atlantis.py` (the round-3 header edit has a `done=` marker;
+"i dont need a mock up") — PUSHED `18433ac2`.** Appended to `tools/home-cards-atlantis.py` (the round-3 header edit has a `done=` marker;
 from `9e1aa6f8` and from `f6f3cc7e` index.html sha256 f38e0d01; re-runs "0 edit(s)"). The chart label is "7D" alone (chg7 still feeds
 the aria-label up/down only); UFO art brightness .78 → .66. Heights unchanged.
 
@@ -1878,6 +1903,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-35. **Burn archive v2 + home cards round 5 (2026-10-24) — BUILT, on the Mac, NOT pushed.** His push (promptly — the first run
+   re-reads from the rebuild's last block) → check the pipeline's burn-history log + `PTGC.archive.reconcile.ok` → live look at the
+   #/ptgc burn windows (7D ≈ 190 M) and the cards. e39 burn: DONE by this. Then: P-4 thumbnails, D-4 pool with a head check, D-6 / c21,
+   and the Worker DISPATCH_TOKEN before ~Nov 5. fetch-ufo-ptgc-burns.js still guesses times (dedupes by tx hash, so no double count).
 -34. **AUDIT IV batch 6 + Leagues Atlantis art (2026-10-24) — BUILT, on the Mac, NOT pushed.** His push → Claude's live look (the
    Leagues window + Socials card, 320 px pages, the favicon on iOS). **Decision for him (e39 burn):** the archive overcounts PTGC burns
    in 2026 (see Current state) — options: (a) find and drop the extra rows (needs tx hashes in the archive — a rebuild of 2026 with

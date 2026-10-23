@@ -13,7 +13,9 @@
  * - ptgc-burns-2024-h2.json (Jul-Dec 2024)
  * - ptgc-burns-2025-h1.json (Jan-Jun 2025)
  * - ptgc-burns-2025-h2.json (Jul-Dec 2025)
- * - ptgc-burns-2026.json (2026+, current file for updates)
+ * - ptgc-burns-2026-h1.json, ptgc-burns-2026-h2.json, … (one file per half-year, from the burn's real block time)
+ * Since 2026-10-24 (archive v2) every row from 2025-07 on is {b, i, t, a, f}: block, log index, real block time (ms),
+ * amount, sender — see BURN ARCHIVE v2 below.
  * - ufo-burns.json (all UFO burns - small file)
  * - holder-history.json (daily holder snapshots - THIS SCRIPT IS THE ONLY SOURCE)
  */
@@ -57,7 +59,6 @@ const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4d
 // Burn address 0x...0369 padded to 32 bytes as a log topic
 const BURN_ADDR_TOPIC = '0x0000000000000000000000000000000000000000000000000000000000000369';
 const LOG_CHUNK = 2000;     // blocks per eth_getLogs request (conservative)
-const MS_PER_BLOCK = 10000; // ~10 seconds per block on PulseChain
 
 async function rpcCall(method, params, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -86,6 +87,283 @@ async function rpcCall(method, params, retries = 3) {
   return null;
 }
 
+/* ============================================================================================
+   BURN ARCHIVE v2 (2026-10-24, Shaka: "lets fix it.. we need it to be right").
+
+   What was wrong (v1): every hourly run re-read the last ~3 h of burn logs and dropped the ones it
+   thought it already had by matching "same sender, amount within 1 token, time within 10 minutes".
+   The times were GUESSED (head time − blocks × 10 s), and PulseChain runs ~3 % slower than 10 s a
+   block, so the same burn got a different guessed time in the next run. Once two runs' guesses were
+   more than 10 minutes apart the match failed and the burn was saved again. From Oct 2025 on that
+   happened more and more: by Oct 2026 the PTGC archive held 762 M more than the burn address ever
+   received, and the 7D / 30D / 90D windows read +12 / +6 / +21 % (UFO v1's archive: 268 B logged vs
+   149.6 B real).
+
+   v2 rules:
+   1. A burn is identified by WHERE it is on chain: block number `b` + log index `i`. Two rows with the
+      same (b, i) are the same burn — no guessing, no tolerance.
+   2. Times are the blocks' REAL timestamps (eth_getBlockByNumber, batched), not an estimate.
+   3. Each run scans from the last block it finished (`archive.scannedTo` in burn-summary.json) minus
+      RESCAN_BLOCKS, to the head minus CONFIRM_BLOCKS. Re-read rows replace themselves by key.
+   4. After every run the archive's sum is checked against balanceOf(0x…369) at the same block. A
+      mismatch is a ::warning:: in the run, `archive.reconcile.ok:false` in the summary, and the next
+      run re-reads everything since the last block where the two agreed (up to ~7 days) with the
+      fresh read replacing what is stored — the archive heals itself.
+   5. A one-time rebuild (tools/rebuild-burn-archive.js) writes data/ptgc-burns-rebuild-<token>-*.json;
+      the next pipeline run swaps those rows in for every stored row from `replaceFromTs` on, carries
+      on from the rebuild's last block, and deletes the rebuild files.
+   ============================================================================================ */
+const CONFIRM_BLOCKS = 96;          // scan to head − 96 blocks (~16 min): past PoS finality (~64 blocks), so a re-org cannot move a stored burn
+const RESCAN_BLOCKS = 1800;         // every run re-reads ~5 h before where the last one stopped (one getLogs chunk)
+const RECOVERY_MAX_BLOCKS = 60480;  // ~7 days: the furthest back a failed reconciliation widens the next re-read
+const RECONCILE_TOLERANCE = 100;    // tokens: float sums over millions of rows vs an exact wei balance
+const REBUILD_PREFIX = 'ptgc-burns-rebuild-';   // matches the pipeline's 'data/ptgc-burns-*.json' pathspec, so deleting them is committed
+const BATCH_SIZE = 100;             // eth_getBlockByNumber calls per JSON-RPC batch
+
+/* Write via <file>.tmp + rename, so a runner killed mid-write never leaves (and commits) a cut-off archive file.
+   The .tmp name matches neither the period-file pattern nor the pipeline's pathspec. */
+function writeFileAtomic(file, text) {
+  fs.writeFileSync(file + '.tmp', text);
+  fs.renameSync(file + '.tmp', file);
+}
+
+const hex = n => '0x' + n.toString(16);
+const burnKey = r => r.b + ':' + r.i;
+
+async function pool(items, n, fn) {
+  let k = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(n, items.length)) }, async () => {
+    while (k < items.length) { const it = items[k++]; await fn(it); }
+  });
+  await Promise.all(workers);
+}
+
+/* One JSON-RPC batch. Resolves an array aligned with `reqs` (null where an entry failed); never throws. */
+async function rpcBatch(reqs) {
+  const body = reqs.map((r, k) => ({ jsonrpc: '2.0', id: k, method: r.method, params: r.params }));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(RPC_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+      clearTimeout(tid);
+      const json = await res.json();
+      if (!Array.isArray(json)) throw new Error('the node did not answer the batch with a list: ' + JSON.stringify(json).slice(0, 160));
+      const out = new Array(reqs.length).fill(null);
+      for (const r of json) if (r && r.result != null && Number.isInteger(r.id) && r.id >= 0 && r.id < reqs.length) out[r.id] = r.result;
+      return out;
+    } catch (e) {
+      console.log(`  RPC batch failed: ${e.message}`);
+      if (attempt < 2) await delay(2000 * (attempt + 1));
+    }
+  }
+  return new Array(reqs.length).fill(null);
+}
+
+/* Real block timestamps (ms) for a list of block numbers. Batched; what a batch misses is asked again,
+   then one by one. A block whose time cannot be read is FATAL (nothing is written). */
+async function blockTimes(blocks, { concurrency = 1 } = {}) {
+  const out = new Map();
+  let todo = [...new Set(blocks)];
+  for (let round = 0; round < 4 && todo.length; round++) {
+    const miss = [];
+    const parts = [];
+    for (let k = 0; k < todo.length; k += BATCH_SIZE) parts.push(todo.slice(k, k + BATCH_SIZE));
+    await pool(parts, concurrency, async part => {
+      const res = await rpcBatch(part.map(b => ({ method: 'eth_getBlockByNumber', params: [hex(b), false] })));
+      part.forEach((b, j) => {
+        const r = res[j];
+        const ts = r && r.timestamp ? parseInt(r.timestamp, 16) : NaN;
+        if (Number.isFinite(ts) && ts > 0 && r.number && parseInt(r.number, 16) === b) out.set(b, ts * 1000);
+        else miss.push(b);
+      });
+    });
+    todo = miss;
+    if (todo.length) { console.log(`  ${todo.length} block time(s) missing after round ${round + 1} — asking again`); await delay(2000 * (round + 1)); }
+  }
+  for (const b of todo) {   // last resort: one at a time (a node that refuses batches)
+    const r = await rpcCall('eth_getBlockByNumber', [hex(b), false]);
+    const ts = r && r.timestamp ? parseInt(r.timestamp, 16) : NaN;
+    if (!(Number.isFinite(ts) && ts > 0)) throw new Error(`block ${b}: its timestamp could not be read — files left untouched`);
+    out.set(b, ts * 1000);
+  }
+  return out;
+}
+
+async function headBlock(label) {
+  const blockHex = await rpcCall('eth_blockNumber', []);
+  const head = blockHex ? parseInt(blockHex, 16) : NaN;
+  if (!Number.isInteger(head) || head <= 0) throw new Error(`${label}: could not read the head block — files left untouched`);
+  return head;
+}
+
+/* Every Transfer(*, 0x…369) log of `address` in [from, to] → rows {b, i, t, a, f}, t = the block's real time. */
+async function scanBurns(address, decimals, from, to, { chunk = LOG_CHUNK, concurrency = 1, label = '', retries = 3 } = {}) {
+  const ranges = [];
+  for (let s = from; s <= to; s += chunk) ranges.push([s, Math.min(s + chunk - 1, to)]);
+  console.log(`  ${label} scanning blocks ${from}–${to} (${(to - from + 1).toLocaleString()} blocks, ${ranges.length} getLogs call(s))`);
+  const logs = [];
+  let done = 0;
+  await pool(ranges, concurrency, async ([s, e]) => {
+    const params = [{ address, fromBlock: hex(s), toBlock: hex(e), topics: [TRANSFER_SIG, null, BURN_ADDR_TOPIC] }];
+    let result = await rpcCall('eth_getLogs', params, retries);
+    if (result === null) { await delay(5000); result = await rpcCall('eth_getLogs', params, retries); }
+    /* a31: a range that could not be read is FATAL, not "no burns in it" — throwing leaves every file untouched. */
+    if (!Array.isArray(result)) throw new Error(`${label}: eth_getLogs failed for blocks ${s}–${e} after retries — aborting so the files are not written with a hole`);
+    for (const l of result) logs.push(l);
+    done++;
+    if (done % 50 === 0 || done === ranges.length) console.log(`    ${done}/${ranges.length} ranges | ${logs.length} logs`);
+  });
+  const want = address.toLowerCase();
+  const seen = new Set();
+  const rows = [];
+  const divisor = 10n ** BigInt(decimals);
+  for (const log of logs) {
+    if (log.removed) continue;
+    const b = parseInt(log.blockNumber, 16), i = parseInt(log.logIndex, 16);
+    if (!(Number.isInteger(b) && Number.isInteger(i) && b >= from && b <= to)) continue;   // never trust an answer outside the asked range
+    if ((log.address || '').toLowerCase() !== want) continue;
+    if (!log.topics || log.topics[0] !== TRANSFER_SIG || (log.topics[2] || '').toLowerCase() !== BURN_ADDR_TOPIC) continue;
+    const k = b + ':' + i;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const v = BigInt(log.data);   // exact wei → whole + fraction (no Number precision loss on large values)
+    rows.push({ b, i, t: 0, a: Number(v / divisor) + Number(v % divisor) / Number(divisor), f: ('0x' + log.topics[1].slice(26)).toLowerCase() });
+  }
+  if (rows.length) {
+    const times = await blockTimes(rows.map(r => r.b), { concurrency });
+    for (const r of rows) r.t = times.get(r.b);
+  }
+  return rows;
+}
+
+/* balanceOf(0x…369) of `address` at `block`, in tokens (exact wei → float). null if it could not be read. */
+async function burnAddressBalance(address, decimals, block) {
+  const r = await rpcCall('eth_call', [{ to: address, data: '0x70a08231' + BURN_ADDR_TOPIC.slice(2) }, hex(block)]);
+  if (!r || r === '0x') return null;
+  const v = BigInt(r), divisor = 10n ** BigInt(decimals);
+  return Number(v / divisor) + Number(v % divisor) / Number(divisor);
+}
+
+/* The one-time rebuild files for a token (tools/rebuild-burn-archive.js). Every part must agree on the
+   range and be present — a partial rebuild is refused (thrown), never half-applied. */
+function loadRebuild(dataDir, token, address, prev) {
+  const prefix = REBUILD_PREFIX + token.toLowerCase() + '-';
+  let files = fs.readdirSync(dataDir).filter(f => f.startsWith(prefix) && f.endsWith('.json')).sort();
+  /* Leftovers of a rebuild an earlier run already applied (it got past them: its summary's scannedTo is at or beyond their
+     last block) — e.g. a run that died while deleting them. They are removed, not applied again. */
+  if (files.length && prev && prev.schema === 2 && Number.isInteger(prev.scannedTo)) {
+    files = files.filter(f => {
+      const j = JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8'));
+      if (Number.isInteger(j.toBlock) && j.toBlock <= prev.scannedTo) { fs.unlinkSync(path.join(dataDir, f)); console.log(`  Removed ${f} — an earlier run already applied that rebuild`); return false; }
+      return true;
+    });
+  }
+  if (!files.length) return null;
+  const parts = files.map(f => ({ f, j: JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8')) }));
+  const h = parts[0].j;
+  const same = ['schema', 'token', 'address', 'replaceFromTs', 'fromBlock', 'toBlock', 'toTs', 'parts'];
+  for (const { f, j } of parts) {
+    for (const k of same) if (j[k] !== h[k]) throw new Error(`rebuild file ${f}: ${k} = ${j[k]} differs from ${files[0]} (${h[k]}) — refusing a mixed rebuild`);
+  }
+  if (h.schema !== 2 || (h.address || '').toLowerCase() !== address.toLowerCase()) throw new Error(`rebuild files for ${token} are not schema 2 for ${address}`);
+  const idx = parts.map(p => p.j.part).sort((a, b) => a - b);
+  if (idx.length !== h.parts || idx.some((p, k) => p !== k + 1)) throw new Error(`rebuild files for ${token}: parts ${idx.join(',')} of ${h.parts} — refusing a partial rebuild`);
+  let burns = [];
+  for (const { j } of parts) burns = burns.concat(j.burns);
+  for (const r of burns) {
+    if (!(Number.isInteger(r.b) && Number.isInteger(r.i) && r.b >= h.fromBlock && r.b <= h.toBlock && r.t >= h.replaceFromTs && r.a > 0)) {
+      throw new Error(`rebuild files for ${token}: a row outside its declared range (${JSON.stringify(r)})`);
+    }
+  }
+  console.log(`  Rebuild for ${token}: ${files.length} file(s), ${burns.length} burns, blocks ${h.fromBlock}–${h.toBlock}, replaces every stored row from ${new Date(h.replaceFromTs).toISOString()}`);
+  return { files, replaceFromTs: h.replaceFromTs, fromBlock: h.fromBlock, toBlock: h.toBlock, toTs: h.toTs, burns };
+}
+
+/* Bring a token's archive up to the head. `existing` = the stored rows (rebuild already swapped in),
+   `prev` = last run's burn-summary `archive` block for this token. Returns { burns, meta }. */
+async function updateArchive(token, address, decimals, existing, rebuild, prev) {
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`Updating the ${token} burn archive (v2: block + log index, real block times)`);
+  console.log(`${'='.repeat(50)}`);
+  const head = await headBlock(token);
+  const to = head - CONFIRM_BLOCKS;
+
+  let known = rebuild ? rebuild.toBlock : (prev && Number.isInteger(prev.scannedTo) ? prev.scannedTo : null);
+  if (known == null) {
+    for (const r of existing) if (Number.isInteger(r.b) && (known == null || r.b > known)) known = r.b;
+  }
+  if (known == null) {
+    throw new Error(`${token}: the stored burns carry no block positions and there are no rebuild files — refusing the old time-guessing merge that saved burns twice. Run tools/rebuild-burn-archive.js first.`);
+  }
+  /* Recovery: last run's reconciliation failed → re-read from the last block where archive and balance
+     agreed, and let the fresh read REPLACE what is stored in that range (removes anything that should
+     not be there, adds anything missing). */
+  const recovery = !rebuild && !!(prev && prev.reconcile && prev.reconcile.ok === false);
+  let from = known - RESCAN_BLOCKS;
+  let capped = false;
+  if (recovery) {
+    const good = Number.isInteger(prev.lastReconciledBlock) ? prev.lastReconciledBlock : known;
+    let start = good - RESCAN_BLOCKS;
+    // the last re-read did not fix it either → go back twice as far as that one did (up to ~7 days)
+    if (prev.recovery && Number.isInteger(prev.rescannedFrom)) start = Math.min(start, known - 2 * (known - prev.rescannedFrom));
+    capped = start <= known - RECOVERY_MAX_BLOCKS;
+    from = Math.max(known - RECOVERY_MAX_BLOCKS, Math.min(from, start));
+    console.log(`  RECOVERY: last run's archive did not match the burn address balance — re-reading blocks ${from}–${to}; this read replaces what is stored there`);
+  }
+  from = Math.max(0, from);
+
+  if (to < from) {
+    console.log(`  The node's head (${head}) is behind where the archive already is (${known}) — nothing to scan this run`);
+    const knownTs = (await blockTimes([known])).get(known);   // the windows end where the archive does
+    return { burns: existing, meta: { scannedTo: known, scannedToTs: knownTs, rescannedFrom: null, recovery, newBurns: 0, head } };
+  }
+
+  const fresh = await scanBurns(address, decimals, from, to, { label: token });
+  /* Merge. Rows before `from` cannot meet a fresh row (every fresh row has b ≥ from), so only the re-read range is keyed. */
+  const kept = [];
+  const overlap = new Map();
+  for (const r of existing) {
+    if (!Number.isInteger(r.b) || r.b < from) kept.push(r);
+    else overlap.set(burnKey(r), r);
+  }
+  const freshKeys = new Set(fresh.map(burnKey));
+  let notReseen = 0;
+  for (const [k, r] of overlap) {
+    if (r.b > to || freshKeys.has(k)) continue;
+    notReseen++;
+    if (recovery) overlap.delete(k);   // recovery: the fresh read is the truth for this range — a stored row it does not have goes
+  }
+  let newBurns = 0;
+  for (const r of fresh) { if (!overlap.has(burnKey(r))) newBurns++; overlap.set(burnKey(r), r); }   // same (b, i) = the same burn: the fresh read replaces it
+  if (notReseen && recovery) console.log(`  RECOVERY: ${notReseen} stored row(s) in blocks ${from}–${to} are not on chain — removed`);
+  else if (notReseen) console.log(`::warning::${token}: ${notReseen} stored burn(s) in blocks ${from}–${to} were not in this run's re-read (kept — a lagging RPC node answers short; the balance check below decides)`);
+  if (capped) console.log(`  RECOVERY reached its ~7-day limit — if the balance check still fails, rebuild with tools/rebuild-burn-archive.js`);
+
+  const burns = kept.concat([...overlap.values()]);
+  burns.sort((x, y) => (y.t - x.t) || ((y.b || 0) - (x.b || 0)) || ((y.i || 0) - (x.i || 0)));
+  const toTs = (await blockTimes([to])).get(to);
+  console.log(`  ${token}: ${fresh.length} burns in the re-read, ${newBurns} new; archive now ${burns.length} burns up to block ${to} (${new Date(toTs).toISOString()})`);
+  return { burns, meta: { scannedTo: to, scannedToTs: toTs, rescannedFrom: from, recovery, newBurns, head } };
+}
+
+/* Archive sum vs balanceOf(0x…369) at the archive's last block. */
+async function reconcileArchive(token, address, decimals, burns, meta, prev) {
+  const balance = await burnAddressBalance(address, decimals, meta.scannedTo);
+  let sum = 0;
+  for (const r of burns) if (!Number.isInteger(r.b) || r.b <= meta.scannedTo) sum += r.a;
+  const prevGood = prev && Number.isInteger(prev.lastReconciledBlock) ? prev.lastReconciledBlock : null;
+  if (balance == null) {
+    console.log(`  ${token}: the burn address balance at block ${meta.scannedTo} could not be read — not checked this run`);
+    return { reconcile: { atBlock: meta.scannedTo, archive: sum, balance: null, diff: null, ok: null }, lastReconciledBlock: prevGood };
+  }
+  const diff = sum - balance;
+  const ok = Math.abs(diff) <= RECONCILE_TOLERANCE;
+  if (ok) console.log(`  ${token}: archive ${sum.toLocaleString()} = burn address balance ${balance.toLocaleString()} at block ${meta.scannedTo} (diff ${diff.toFixed(4)}) ✓`);
+  else console.log(`::warning::${token} burn archive is ${diff.toLocaleString()} tokens off the burn address balance at block ${meta.scannedTo} (archive ${sum.toLocaleString()}, balance ${balance.toLocaleString()}) — the next run re-reads from the last matching block`);
+  return { reconcile: { atBlock: meta.scannedTo, archive: sum, balance, diff, ok }, lastReconciledBlock: ok ? meta.scannedTo : prevGood };
+}
+
 /* a30 (2026-09-17): the PTGC burn archive is split by HALF-YEAR, derived from the date — no
    hard-coded list to extend. The old map ended in '2026' = 2026-01-01 → 2030-01-01, which at
    ~5 MB/month would have crossed GitHub's 100 MB file limit around mid-2027 and turned every
@@ -102,7 +380,7 @@ function getPeriodKey(timestamp) {
 /* Every period file present in data/ (any key, legacy included), for loading and listing. */
 function listPeriodFiles(dataDir) {
   return fs.readdirSync(dataDir)
-    .filter(f => /^ptgc-burns-.+\.json$/.test(f))
+    .filter(f => /^ptgc-burns-.+\.json$/.test(f) && !f.startsWith(REBUILD_PREFIX))   // v2: rebuild inputs are not period files
     .sort();
 }
 /* {burnCount,totalBurned} per period file as written last time — a period whose burns did not
@@ -210,7 +488,7 @@ async function fetchTransactionCount(tokenAddress, tokenSymbol) {
 /**
  * Load existing burn files for a token
  */
-function loadExistingBurns(dataDir, token) {
+function loadExistingBurns(dataDir, token, rebuild = null) {
   let allBurns = [];
   console.log(`\nLoading existing ${token} burns...`);
   console.log(`  Data directory: ${dataDir}`);
@@ -267,10 +545,16 @@ function loadExistingBurns(dataDir, token) {
     } catch (e) {
       console.log(`    ERROR loading ${filePath}: ${e.message}`);
       console.log(`    Stack: ${e.stack}`);
+      throw new Error(`cannot read ${filePath} — refusing to rebuild the UFO archive from a few hours of re-read (v2; it was skipped silently)`);
     }
   }
   
   console.log(`  Total ${token} burns loaded from files: ${allBurns.length}`);
+  if (rebuild) {   // v2: every stored row from the rebuild's start is dropped; the rebuild's rows take their place
+    const before = allBurns.length;
+    allBurns = allBurns.filter(b => b.t < rebuild.replaceFromTs).concat(rebuild.burns);
+    console.log(`  Rebuild applied: ${before - (allBurns.length - rebuild.burns.length)} stored rows from ${new Date(rebuild.replaceFromTs).toISOString()} on dropped, ${rebuild.burns.length} rebuilt rows in`);
+  }
   
   // Sort by timestamp descending
   allBurns.sort((a, b) => b.t - a.t);
@@ -302,129 +586,6 @@ function loadExistingSummary(dataDir) {
 }
 
 /**
- * Fetch ALL token transfers to burn address using direct RPC (eth_getLogs).
- * Replaces Moralis which has severe and unpredictable indexing lag on PulseChain.
- * Same function signature — all call sites unchanged.
- */
-async function fetchAllBurns(tokenAddress, tokenSymbol, decimals, existingBurns = []) {
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`Fetching ${tokenSymbol} burns via RPC (eth_getLogs)...`);
-  console.log(`${'='.repeat(50)}`);
-
-  /* a31 (2026-09-17): a head read that fails is FATAL. This used to `return existingBurns`
-     and let main() recompute the 24H/7D/30D/90D windows against Date.now() and write the
-     summary as fresh — the windows slid forward with no new burns in them, under a green
-     "just updated" label. Throwing leaves every file on disk untouched (main().catch → exit 1). */
-  const blockHex = await rpcCall('eth_blockNumber', []);
-  if (!blockHex) throw new Error(`${tokenSymbol}: could not read the head block (eth_blockNumber failed on every endpoint) — files left untouched`);
-  const currentBlock = parseInt(blockHex, 16);
-
-  // Get latest block for timestamp calibration (one RPC call, used to estimate all timestamps)
-  const latestBlockData = await rpcCall('eth_getBlockByNumber', ['latest', false]);
-  if (!latestBlockData) throw new Error(`${tokenSymbol}: could not read the latest block (eth_getBlockByNumber failed) — files left untouched`);
-  const latestTs = parseInt(latestBlockData.timestamp, 16) * 1000;
-
-  // Estimate timestamp for any block number (~10 sec/block, accurate to within seconds)
-  const tsFromBlock = (blockNum) => latestTs - (currentBlock - blockNum) * MS_PER_BLOCK;
-
-  // Determine which blocks to scan
-  let fromBlock;
-  if (existingBurns.length > 0) {
-    // Incremental: start just before the newest stored burn, with a 1000-block safety buffer
-    const lastTs = existingBurns[0].t;
-    const blocksAgo = Math.ceil((latestTs - lastTs) / MS_PER_BLOCK);
-    fromBlock = Math.max(0, currentBlock - blocksAgo - 1000); // ~2.7 hr buffer
-    console.log(`Incremental mode: last stored burn ${new Date(lastTs).toISOString()}`);
-    console.log(`  Scanning from block ~${fromBlock} (+1000 block safety buffer)`);
-  } else {
-    // Full history fetch (only happens on very first run — data files not yet created)
-    fromBlock = 17000000; // approximates PulseChain genesis / token deployment era
-    console.log(`Full fetch mode from block ${fromBlock}`);
-  }
-
-  const totalBlocks = currentBlock - fromBlock;
-  const totalChunks = Math.ceil(totalBlocks / LOG_CHUNK);
-  console.log(`Current block: ${currentBlock} | Scanning ${totalBlocks.toLocaleString()} blocks in ~${totalChunks} chunks`);
-
-  // Fetch Transfer logs in chunks
-  const allLogs = [];
-  let chunksDone = 0;
-
-  for (let start = fromBlock; start <= currentBlock; start += LOG_CHUNK) {
-    const end = Math.min(start + LOG_CHUNK - 1, currentBlock);
-
-    const params = [{
-      address: tokenAddress,
-      fromBlock: '0x' + start.toString(16),
-      toBlock:   '0x' + end.toString(16),
-      topics: [TRANSFER_SIG, null, BURN_ADDR_TOPIC]
-    }];
-    let result = await rpcCall('eth_getLogs', params);
-    if (result === null) { await delay(5000); result = await rpcCall('eth_getLogs', params); }   // one more round after a pause
-    /* a31: a chunk that could not be read is FATAL, not "no burns in it". rpcCall returns null
-       after its retries; dropping that chunk wrote burn-summary.json as fresh with a 2,000-block
-       hole in the 24H window. Throw → main().catch → exit 1, every file untouched, next run rescans. */
-    if (result === null) throw new Error(`${tokenSymbol}: eth_getLogs failed for blocks ${start}–${end} after retries — aborting so the files are not written with a hole`);
-    if (result.length > 0) allLogs.push(...result);
-
-    chunksDone++;
-    if (chunksDone % 50 === 0 || chunksDone === totalChunks) {
-      console.log(`  ${chunksDone}/${totalChunks} chunks | ${allLogs.length} logs found so far`);
-    }
-
-    await delay(50); // gentle rate limiting
-  }
-
-  console.log(`Total logs fetched: ${allLogs.length}`);
-
-  // Convert logs to burn records
-  // Transfer(from indexed, to indexed, value) → topics[1]=from, data=value
-  const newBurns = allLogs.map(log => {
-    const blockNum = parseInt(log.blockNumber, 16);
-    // Safe BigInt division to avoid JS Number precision loss on large wei values
-    const bigVal  = BigInt(log.data);
-    const divisor = BigInt(10) ** BigInt(decimals);
-    const whole   = Number(bigVal / divisor);
-    const frac    = Number(bigVal % divisor) / Math.pow(10, decimals);
-    return {
-      t: tsFromBlock(blockNum),
-      a: whole + frac,
-      f: ('0x' + log.topics[1].slice(26)).toLowerCase()
-    };
-  });
-
-  // Deduplicate against existing burns in the overlap/safety-buffer window.
-  // Match on: same from-address, same amount (within 1 token), within 10-minute window.
-  const overlapWindow = 3 * 60 * 60 * 1000; // look back 3 hours into existing burns
-  const overlapBurns  = existingBurns.length > 0
-    ? existingBurns.filter(b => b.t >= existingBurns[0].t - overlapWindow)
-    : [];
-
-  const dedupedNew = newBurns.filter(nb =>
-    !overlapBurns.some(eb =>
-      eb.f === nb.f &&
-      Math.abs(eb.a - nb.a) < 1 &&
-      Math.abs(eb.t - nb.t) < 10 * 60 * 1000
-    )
-  );
-
-  console.log(`New burns after deduplication: ${dedupedNew.length}`);
-  console.log(`Existing ${tokenSymbol} burns: ${existingBurns.length}`);
-
-  // Merge and sort descending
-  const allBurns = [...dedupedNew, ...existingBurns];
-  allBurns.sort((a, b) => b.t - a.t);
-
-  console.log(`Total ${tokenSymbol} burns after merge: ${allBurns.length}`);
-  if (allBurns.length > 0) {
-    console.log(`  Oldest: ${new Date(allBurns[allBurns.length - 1].t).toISOString()}`);
-    console.log(`  Newest: ${new Date(allBurns[0].t).toISOString()}`);
-  }
-
-  return allBurns;
-}
-
-/**
  * Split burns into period files
  */
 function splitBurnsByPeriod(burns) {
@@ -447,22 +608,15 @@ function filterBuybackBurns(burns, lpPairAddress) {
 /**
  * Calculate period totals (12H, 24H, 7D, 30D)
  */
-function calculatePeriods(burns) {
-  // Use Date.now() as the reference point. This is correct now that burns are fetched
-  // via eth_getLogs which gives accurate block-based timestamps with no indexing lag.
-  // (Previously used burns[0].t to work around Moralis's PulseChain indexing lag.)
-  const now = Date.now();
+function calculatePeriods(burns, asOf) {
+  // v2: the windows end at the archive's last block (its real time) — the moment the rows are complete to —
+  // so a window never counts a stretch the scan has not reached. (Date.now() before.)
+  const now = Number.isFinite(asOf) ? asOf : Date.now();
   const h12 = 12 * 60 * 60 * 1000;
   const h24 = 24 * 60 * 60 * 1000;
   const d7 = 7 * 24 * 60 * 60 * 1000;
   const d30 = 30 * 24 * 60 * 60 * 1000;
   const d90 = 90 * 24 * 60 * 60 * 1000;
-  
-  if (burns.length > 0) {
-    const lag = Date.now() - burns[0].t;
-    const lagHours = (lag / (1000 * 60 * 60)).toFixed(1);
-    console.log(`  Moralis indexing lag: ~${lagHours} hours (newest burn: ${new Date(burns[0].t).toISOString()})`);
-  }
   
   const result = {
     h12: { count: 0, amount: 0 },
@@ -474,6 +628,7 @@ function calculatePeriods(burns) {
   
   for (const burn of burns) {
     const age = now - burn.t;
+    if (age < 0) continue;
     if (age <= h12) { result.h12.count++; result.h12.amount += burn.a; }
     if (age <= h24) { result.h24.count++; result.h24.amount += burn.a; }
     if (age <= d7) { result.d7.count++; result.d7.amount += burn.a; }
@@ -592,18 +747,28 @@ async function main() {
   
   // Load existing data
   const existingSummary = loadExistingSummary(dataDir);
-  const existingPTGCBurns = loadExistingBurns(dataDir, 'PTGC');
-  const existingUFOBurns = loadExistingBurns(dataDir, 'UFO');
+  const ptgcRebuild = loadRebuild(dataDir, 'ptgc', PTGC_ADDRESS, existingSummary?.PTGC?.archive);
+  const ufoRebuild = loadRebuild(dataDir, 'ufo', UFO_ADDRESS, existingSummary?.UFO?.archive);
+  const existingPTGCBurns = loadExistingBurns(dataDir, 'PTGC', ptgcRebuild);
+  const existingUFOBurns = loadExistingBurns(dataDir, 'UFO', ufoRebuild);
   
   // ============================================
-  // FETCH ALL BURNS
+  // FETCH NEW BURNS (archive v2) + CHECK AGAINST THE BURN ADDRESS BALANCE
   // ============================================
   
-  const ptgcBurns = await fetchAllBurns(PTGC_ADDRESS, 'PTGC', PTGC_DECIMALS, existingPTGCBurns);
+  const ptgcPrev = existingSummary?.PTGC?.archive || null;
+  const ptgcRun = await updateArchive('PTGC', PTGC_ADDRESS, PTGC_DECIMALS, existingPTGCBurns, ptgcRebuild, ptgcPrev);
+  const ptgcBurns = ptgcRun.burns;
+  Object.assign(ptgcRun.meta, await reconcileArchive('PTGC', PTGC_ADDRESS, PTGC_DECIMALS, ptgcBurns, ptgcRun.meta, ptgcPrev));
   await delay(500);
   
-  const ufoBurns = await fetchAllBurns(UFO_ADDRESS, 'UFO', UFO_DECIMALS, existingUFOBurns);
+  const ufoPrev = existingSummary?.UFO?.archive || null;
+  const ufoRun = await updateArchive('UFO', UFO_ADDRESS, UFO_DECIMALS, existingUFOBurns, ufoRebuild, ufoPrev);
+  const ufoBurns = ufoRun.burns;
+  Object.assign(ufoRun.meta, await reconcileArchive('UFO', UFO_ADDRESS, UFO_DECIMALS, ufoBurns, ufoRun.meta, ufoPrev));
   await delay(500);
+  const ptgcAsOf = ptgcRun.meta.scannedToTs ?? Date.now();
+  const ufoAsOf = ufoRun.meta.scannedToTs ?? Date.now();
   
   // ============================================
   // IDENTIFY BUYBACK BURNS (from LP pairs)
@@ -637,10 +802,10 @@ async function main() {
   console.log(`PTGC total tokens: ${ptgcTotal.toLocaleString()}`);
   console.log(`UFO total tokens: ${ufoTotal.toLocaleString()}`);
   
-  const ptgcPeriods = calculatePeriods(ptgcBurns);
-  const ufoPeriods = calculatePeriods(ufoBurns);
-  const ptgcBuybackPeriods = calculatePeriods(ptgcBuybackBurns);
-  const ufoBuybackPeriods = calculatePeriods(ufoBuybackBurns);
+  const ptgcPeriods = calculatePeriods(ptgcBurns, ptgcAsOf);
+  const ufoPeriods = calculatePeriods(ufoBurns, ufoAsOf);
+  const ptgcBuybackPeriods = calculatePeriods(ptgcBuybackBurns, ptgcAsOf);
+  const ufoBuybackPeriods = calculatePeriods(ufoBuybackBurns, ufoAsOf);
   
   // ============================================
   // FETCH ADDITIONAL DATA
@@ -752,13 +917,18 @@ async function main() {
   console.log('Writing PTGC burn files...');
   console.log(`${'='.repeat(50)}`);
   
+  const rowOut = b => Number.isInteger(b.b) ? { b: b.b, i: b.i, t: b.t, a: b.a, f: b.f } : { t: b.t, a: b.a, f: b.f };   // v2 rows carry their chain position
+  const rebuiltFromPeriod = ptgcRebuild ? getPeriodKey(ptgcRebuild.replaceFromTs) : null;
   for (const [period, burns] of Object.entries(ptgcBurnsByPeriod)) {
     if (burns.length === 0) continue;
     
     const filePath = path.join(dataDir, `ptgc-burns-${period}.json`);
     const periodTotal = burns.reduce((s, b) => s + b.a, 0);
     const prev = _periodFileStats[period];
-    if (prev && prev.burnCount === burns.length && prev.totalBurned === periodTotal && fs.existsSync(filePath)) {
+    // v2: a rebuilt period is always rewritten (its rows gain b/i), and so is any half-year this run re-read — a keyed replace can
+    // change rows without changing the count or the total, which the skip below would miss
+    const forced = (rebuiltFromPeriod != null && period >= rebuiltFromPeriod) || (Number.isInteger(ptgcRun.meta.rescannedFrom) && burns.some(b => Number.isInteger(b.b) && b.b >= ptgcRun.meta.rescannedFrom));
+    if (!forced && prev && prev.burnCount === burns.length && prev.totalBurned === periodTotal && fs.existsSync(filePath)) {
       console.log(`  Unchanged: ptgc-burns-${period}.json (${burns.length} burns) — not rewritten`);
       continue;
     }
@@ -767,10 +937,10 @@ async function main() {
       period,
       burnCount: burns.length,
       totalBurned: periodTotal,
-      burns: burns.map(b => ({ t: b.t, a: b.a, f: b.f }))
+      burns: burns.map(rowOut)
     };
     
-    fs.writeFileSync(filePath, JSON.stringify(fileData));
+    writeFileAtomic(filePath, JSON.stringify(fileData));
     const fileSizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(2);
     console.log(`  Written: ${filePath} (${fileSizeMB} MB, ${burns.length} burns)`);
     if (fileSizeMB > 80) console.warn(`  WARNING: ptgc-burns-${period}.json is ${fileSizeMB} MB — GitHub rejects files over 100 MB; shorten the period in getPeriodKey before it gets there.`);
@@ -778,6 +948,11 @@ async function main() {
   // a30: a legacy file whose burns were just re-split into half-years is retired (its burns are
   // all in the new files, so the merge above already carried them; the pipeline's `git add`
   // pathspec stages the deletion).
+  // v2: a period file none of whose rows survived (the rebuild moved them) would be loaded again next run — remove it.
+  for (const f of listPeriodFiles(dataDir)) {
+    const period = f.slice('ptgc-burns-'.length, -'.json'.length);
+    if (!LEGACY_PERIOD_FILES.includes(f) && !ptgcBurnsByPeriod[period]) { fs.unlinkSync(path.join(dataDir, f)); console.log(`  Removed ${f} — no burns belong to ${period} any more`); }
+  }
   for (const legacy of LEGACY_PERIOD_FILES) {
     const legacyPath = path.join(dataDir, legacy);
     const legacyKey = legacy.slice('ptgc-burns-'.length, -'.json'.length);
@@ -799,10 +974,10 @@ async function main() {
   const ufoFileData = {
     burnCount: ufoBurns.length,
     totalBurned: ufoTotal,
-    burns: ufoBurns.map(b => ({ t: b.t, a: b.a, f: b.f }))
+    burns: ufoBurns.map(rowOut)
   };
   
-  fs.writeFileSync(ufoFilePath, JSON.stringify(ufoFileData));
+  writeFileAtomic(ufoFilePath, JSON.stringify(ufoFileData));
   const ufoFileSizeMB = (fs.statSync(ufoFilePath).size / (1024 * 1024)).toFixed(2);
   console.log(`  Written: ${ufoFilePath} (${ufoFileSizeMB} MB, ${ufoBurns.length} burns)`);
   
@@ -814,6 +989,16 @@ async function main() {
   console.log('Writing summary file...');
   console.log(`${'='.repeat(50)}`);
   
+  const archiveOut = (m) => ({
+    schema: 2,
+    rows: 'block + log index identify a burn; t = the block\'s real time (ms)',
+    scannedTo: m.scannedTo,
+    scannedToTime: m.scannedToTs ? new Date(m.scannedToTs).toISOString() : null,
+    rescannedFrom: m.rescannedFrom,
+    recovery: m.recovery,
+    reconcile: m.reconcile,
+    lastReconciledBlock: m.lastReconciledBlock
+  });
   const summaryData = {
     lastUpdated: new Date().toISOString(),
     dataSource: 'RPC/eth_getLogs (burns), DexScreener (price/volume/liquidity), PulseScan (holders)',
@@ -827,6 +1012,8 @@ async function main() {
       totalBurned: ptgcTotal,
       burnCount: ptgcBurns.length,
       periods: ptgcPeriods,
+      periodsAsOf: new Date(ptgcAsOf).toISOString(),   // v2: the windows end here (the archive's last block)
+      archive: archiveOut(ptgcRun.meta),
       price: ptgcPrice,
       volume: {
         usd24h: ptgcVolume.volume24h,
@@ -847,6 +1034,8 @@ async function main() {
       totalBurned: ufoTotal,
       burnCount: ufoBurns.length,
       periods: ufoPeriods,
+      periodsAsOf: new Date(ufoAsOf).toISOString(),
+      archive: archiveOut(ufoRun.meta),
       price: ufoPrice,
       volume: {
         usd24h: ufoVolume.volume24h,
@@ -881,9 +1070,11 @@ async function main() {
   };
   
   const summaryPath = path.join(dataDir, 'burn-summary.json');
-  fs.writeFileSync(summaryPath, JSON.stringify(summaryData, null, 2));
+  writeFileAtomic(summaryPath, JSON.stringify(summaryData, null, 2));
   const summarySizeMB = (fs.statSync(summaryPath).size / (1024 * 1024)).toFixed(2);
   console.log(`  Written: ${summaryPath} (${summarySizeMB} MB)`);
+  // v2: the rebuild is now inside the archive files — its inputs go (the pipeline's 'data/ptgc-burns-*.json' pathspec stages the deletions)
+  for (const rb of [ptgcRebuild, ufoRebuild]) if (rb) for (const f of rb.files) { fs.unlinkSync(path.join(dataDir, f)); console.log(`  Removed rebuild input ${f}`); }
   
   // ============================================
   // UPDATE HOLDER HISTORY FILE
@@ -1043,7 +1234,13 @@ async function main() {
   console.log('='.repeat(60));
 }
 
-main().catch(err => {
-  console.error('FATAL ERROR:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('FATAL ERROR:', err);
+    process.exit(1);
+  });
+}
+
+// For tools/rebuild-burn-archive.js — the rebuild uses exactly this code to read the chain.
+module.exports = { scanBurns, blockTimes, headBlock, burnAddressBalance, rpcCall, getPeriodKey, listPeriodFiles, loadExistingBurns,
+  PTGC_ADDRESS, UFO_ADDRESS, PTGC_DECIMALS, UFO_DECIMALS, CONFIRM_BLOCKS, RECONCILE_TOLERANCE, REBUILD_PREFIX };

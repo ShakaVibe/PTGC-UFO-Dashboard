@@ -403,4 +403,12 @@ edit(IX, """        <div className="hc-chart-hd">{HC_CLOCK}7D{chg7!=null&&isFini
 R4_CSS = """    .hc-green .hc-art{filter:saturate(.85) brightness(.66)}   /* 2026-10-24 round 4: the UFO art a step darker again (Shaka; was .78) */"""
 edit(IX, "    @media(max-width:639.98px){.hc-yax span:nth-child(2):last-child{display:inline}}   /* two axis labels: keep both (round 2 hid every other one) */\n",
          "    @media(max-width:639.98px){.hc-yax span:nth-child(2):last-child{display:inline}}   /* two axis labels: keep both (round 2 hid every other one) */\n" + R4_CSS + "\n")
-print(f'{n} edit(s) (round 4)')
+
+# ---- round 5 (Shaka, 2026-10-24: "make the two backgrounds inside the ptgc and ufo box on the landing page darker" + "get rid of
+#      the numbers to the right of the graph") ----
+R5_CSS = """    /* 2026-10-24 round 5: both card backgrounds a step darker again (Shaka) — veil .54/.62/.76/.74/.60 → .64/.70/.80/.78/.68, art dimmed */
+    .hc-veil{background:radial-gradient(ellipse 62% 40% at 30% 22%,rgba(2,4,8,.86) 0%,rgba(2,4,8,.6) 55%,transparent 80%),linear-gradient(180deg,rgba(2,4,8,.64) 0%,rgba(2,4,8,.70) 32%,rgba(2,4,8,.80) 52%,rgba(2,4,8,.78) 78%,rgba(2,4,8,.68) 100%)}
+    .hc-gold .hc-art{filter:saturate(.9) brightness(.85)}.hc-green .hc-art{filter:saturate(.85) brightness(.58)}
+    .hc-yax{display:none}.hc-plot.hc-has-ax{padding-right:12px}   /* round 5: no price labels right of the chart (Shaka: "we dont need them there") — the faint price gridlines stay */"""
+edit(IX, R4_CSS + "\n", R4_CSS + "\n" + R5_CSS + "\n")
+print(f'{n} edit(s) (round 5)')
