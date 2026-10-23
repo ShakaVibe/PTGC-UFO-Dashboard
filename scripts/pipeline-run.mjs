@@ -39,7 +39,7 @@ const STEPS = {
   'swap-volume':     { run: 'scripts/build-swap-volume.mjs' },   // 2026-10-06: human vs arb-bot volume (reads charts-intraday for prices — last in the rpc lane)
   'holder-ranks':    { run: 'scripts/build-holder-ranks.mjs',       gate: ['data/holder-ranks.json', 2] },   // 2026-10-21: Portfolio HOLDER RANK — every real holder's balance, sorted (~9 min of PulseScan paging)
   'top-stakers':     { run: 'scripts/build-top-stakers.mjs',        gate: ['data/top-stakers.json', 2] },   // 2026-10-22: the TOP 100 window's stakers — Deposit logs + mapUserInfo (~30 s)
-  'rank-history':    { run: 'scripts/build-rank-history.mjs',       gate: ['data/rank-index/PTGC/meta.json', 20] },   // 2026-10-21: the rank window's history — extends the day archive, rebuilds the per-wallet index (once a day)
+  'rank-history':    { run: 'scripts/build-rank-history.mjs',       gate: ['data/rank-index/PTGC/meta.json', 24.5] },   // Audit IV e33: meta.generatedAt = the close of the last archived day → runs once a day after 00:15 UTC   // 2026-10-21: the rank window's history — extends the day archive, rebuilds the per-wallet index (once a day)
 };
 const LANES = [
   { name: 'coingecko-key', steps: ['charts', 'charts-intraday', 'coingecko'] },

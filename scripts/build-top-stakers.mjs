@@ -91,12 +91,18 @@ await pool(40, addrs, async a => {
     const w = n => BigInt('0x' + ui.slice(2 + 64 * n, 2 + 64 * (n + 1)));
     const amt = w(0);
     if (amt <= 0n) return;
-    const bal = BigInt(await rpc('eth_call', [{ to: PTGC, data: SEL_BALANCE + pad(a) }, 'latest']));
-    rows.push([a, amt, w(5), bal]);
+    rows.push([a, amt, w(5), null]);   // Audit IV e33: the wallet balance is read below for the published TOP_N only
   } catch (e) { miss++; }
 });
 if (miss > addrs.length * 0.01) { console.error(`top-stakers: ${miss} of ${addrs.length} wallets unread — previous file kept`); process.exit(1); }
 rows.sort((x, y) => (y[1] > x[1] ? 1 : y[1] < x[1] ? -1 : (x[0] < y[0] ? -1 : 1)));
+/* Audit IV e33 (2026-10-23): `top` is the only place a wallet balance is published — read it for those TOP_N rows (110 calls,
+   not one per staker). Same rule as before: an unread balance fails the step (the previous file stays). */
+let balMiss = 0;
+await pool(20, rows.slice(0, TOP_N), async r => {
+  try { r[3] = BigInt(await rpc('eth_call', [{ to: PTGC, data: SEL_BALANCE + pad(r[0]) }, 'latest'])); } catch (e) { balMiss++; }
+});
+if (balMiss) { console.error(`top-stakers: ${balMiss} of the top ${TOP_N} wallet balances unread — previous file kept`); process.exit(1); }
 
 const total = rows.reduce((s, r) => s + r[1], 0n), locked = rows.reduce((s, r) => s + r[2], 0n);
 const out = {

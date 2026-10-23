@@ -107,7 +107,7 @@
         <PfModal className="z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80" onClose={close} label={`${token} leagues`}>
           <div className={`lg-m max-w-[560px] w-full max-h-[92vh] overflow-y-auto overscroll-contain${isPTGC?'':' ufo'}`} onClick={e=>e.stopPropagation()}>
             <div className="lg-hd">
-              <div className="sky" aria-hidden="true"></div><img className="whale" src={`logos/leagues/lg-whale.webp?v=${PF_LG_ART_V}`} alt="" aria-hidden="true"/><img className="shark" src={`logos/leagues/lg-shark.webp?v=${PF_LG_ART_V}`} alt="" aria-hidden="true"/>
+              <div className="sky" aria-hidden="true"></div><div className="fade" aria-hidden="true"></div>{/* 2026-10-23: = index.html — the Atlantis art, no whale / shark */}
               <div className="tg"><PfSupplyToggle mode={mode} setMode={m=>setMode(m==='circ'&&!burnKnown?'start':m)} color={isPTGC?'#FFE27A':'#B4FF86'} color2={isPTGC?'#E3B52A':'#5BE632'}/></div>
               <PfLgCoin token={token}/>
               <div className="lg-pl"><div className="d">Price {date}</div><div className="p">{fmtPriceNode(price)}</div></div>
@@ -147,14 +147,15 @@
     let pfRanksP=null,pfRanksAt=0;
     const pfRanksLoad=()=>{if(pfRanksP&&Date.now()-pfRanksAt<30*60e3)return pfRanksP;pfRanksAt=Date.now();
       pfRanksP=fetch(PF_RANKS_URL,{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(j=>j&&j.schema===1&&j.tokens&&j.tokens.PTGC&&j.tokens.UFO?j:null).catch(()=>null)
-        .then(j=>{if(!j)pfRanksP=null;return j;});return pfRanksP;};
+        .then(j=>{if(!j){pfRanksP=null;return{failed:true};}return j;});return pfRanksP;};   // Audit IV e40: a failed read says so (it used to look like "still loading" for ever)
     const usePfRanks=()=>{const[d,setD]=useState(null);
-      useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
+      useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(prev=>j.failed&&prev&&!prev.failed?prev:j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
       /* Audit IV e27: per token — the builder stamps generatedAt fresh even when it CARRIED one token's old list (its readAt
          stays old). A stale token ranks nothing; the column hides only when both are stale. */
       const rdAt=tok=>Date.parse((d&&d.tokens[tok]&&d.tokens[tok].readAt)||(d&&d.generatedAt));
       const staleTok=d?{PTGC:!(Date.now()-rdAt('PTGC')<PF_RANKS_STALE),UFO:!(Date.now()-rdAt('UFO')<PF_RANKS_STALE)}:null;
       const stale=!!d&&staleTok.PTGC&&staleTok.UFO;
+      if(d&&d.failed)return{failed:true,stale:true,staleTok:{PTGC:true,UFO:true},tokens:{}};   // e40
       return d?{...d,stale,staleTok,readAt:{PTGC:rdAt('PTGC'),UFO:rdAt('UFO')}}:null;};
     /* 2026-10-21 pm: every balance above zero counts (no 1-token floor) and no "of N" / "top x%" / TOP badges — just the rank and
        what it takes to pass the next one (Shaka). pfRankKey rounds like build-holder-ranks.mjs's key(): whole tokens from 1 up,
@@ -188,4 +189,5 @@
     /* H3: the row under the league bar — shown only when ONE wallet is counted (2026-10-21 pm: "all N wallets as one" dropped) */
     /* H3 in the P2 look (Shaka, 2026-10-21 pm, mock-rank-badge-v2 P2): no pill — "HOLDER / RANK" stacked in tiny caps beside a big
        gold / green number; with several wallets the line's own label "ALL N WALLETS AS ONE" sits in front */
-    const PfRankRow=({tok,x,label,open})=>!x?null:<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    /* Audit IV e40: with no usable list the League box says why instead of the rank line vanishing (the Top 100 window's wording) */
+    const PfRankRow=({tok,x,label,open,note})=>!x?(note?<div className="pf2-rk3 na" style={{fontSize:12,color:'rgba(255,255,255,.5)',padding:'6px 2px'}}>HOLDER RANK {'\u2014'} {note}</div>:null):<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;

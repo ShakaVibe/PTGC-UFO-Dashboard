@@ -257,6 +257,14 @@ async function main() {
   const seen = new Set();
   const rows = [...(cache.swaps || []), ...fresh].filter(r => { if (r[0] < keepFrom) return false; const k = r[2] + '|' + r[1] + '|' + r[3] + '|' + r[6] + '|' + r[8]; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((x, y) => x[0] - y[0]);
+  /* Audit IV e33 (2026-10-23): re-price the rows of the last 6 h with this run's price file — the newest hours were priced from
+     the PREVIOUS run's charts-intraday.json (it is rebuilt later in the other lane) and never revisited. Amounts are untouched. */
+  { const cut = Date.now() - 6 * HOUR; let rp = 0;
+    for (const r of rows) { if (r[0] < cut) continue;
+      const pp = prices.PTGC ? prices.PTGC(r[0]) : null, pu = prices.UFO ? prices.UFO(r[0]) : null;
+      if (r[6] != null && pp > 0) { const v = Number((r[6] * pp).toPrecision(6)); if (v !== r[7]) { r[7] = v; rp++; } }
+      if (r[8] != null && pu > 0) { const v = Number((r[8] * pu).toPrecision(6)); if (v !== r[9]) { r[9] = v; rp++; } } }
+    if (rp) console.log(`re-priced ${rp} value(s) from the last 6 h with this run's prices`); }
   // round trips: a tx that buys a token in one pool and sells it in another (the arbitrage itself)
   const byTx = new Map();
   for (const r of rows) { const k = r[2] + '|' + r[1]; (byTx.get(k) || byTx.set(k, []).get(k)).push(r); }

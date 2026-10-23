@@ -74,8 +74,8 @@ const KNOWN_TOKENS = {
 
 // Known DEX routers
 const KNOWN_ROUTERS = {
-  '0x165c3410fc91b0e65d87e89d8bcadd85c9e6dbf1': 'PulseX V1 Router',
-  '0x98bf93ebf5c380c0e6ae8e192a7e2ae08edacc3a': 'PulseX V2 Router',
+  '0x165c3410fc91ef562c50559f7d2289febed552d9': 'PulseX V1 Router',   // Audit IV e36: the real address (= ADDR.PULSEX_ROUTER)
+  '0x98bf93ebf5c380c0e6ae8e192a7e2ae08edacc02': 'PulseX V2 Router',   // Audit IV e36: the real address
   '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
 };
 

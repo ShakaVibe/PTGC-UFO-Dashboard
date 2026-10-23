@@ -101,8 +101,12 @@ async function extend(sym) {
     console.log(`${sym}: ${day} — ${cur.size} holders, ${logs.length} transfers, ${todo.length} moved, factor ${fac}`);
     lastB = last; day = nextDay(day); n++;
   }
+  /* Audit IV e33 (2026-10-23): a run that extended nothing writes nothing (it used to re-stamp and rewrite the 19 MB archive and
+     ~4,000 index files), and the stamp is the CLOSE of the last archived day, not the run time — with the 24.5 h gate the step
+     runs on the first hourly run after 00:15 UTC and extends exactly one day (the run-time stamp drifted 4 h earlier per cycle). */
+  if (n === 0) { console.log(`${sym}: archive already current → ${lastDone} — nothing written`); return { unchanged: true }; }
   st.cur = Object.fromEntries([...cur.entries()].map(([a, v]) => [a, v.toString()]));
-  st.contracts = [...contracts]; st.eoa = [...eoa]; st.cursorDay = Object.keys(st.days).sort().pop(); st.generatedAt = new Date().toISOString();
+  st.contracts = [...contracts]; st.eoa = [...eoa]; st.cursorDay = Object.keys(st.days).sort().pop(); st.generatedAt = new Date((utc0(st.cursorDay) + 86400) * 1000).toISOString();
   fs.writeFileSync(f + '.tmp', JSON.stringify(st)); fs.renameSync(f + '.tmp', f);
   console.log(`${sym}: archive ${n ? 'extended by ' + n + ' day(s)' : 'already current'} → ${st.cursorDay}, ${Object.keys(st.days).length} days`);
   return st;
@@ -142,7 +146,7 @@ function index(sym, st) {
 
 let ok = 0;
 for (const sym of Object.keys(TOKENS)) {
-  try { const st = await extend(sym); if (st) { index(sym, st); ok++; } }
+  try { const st = await extend(sym); if (st) { if (!st.unchanged) index(sym, st); ok++; } }   // e33: no index rebuild on a no-op
   catch (e) { console.log(`::warning::rank-history ${sym} failed: ${e.message} — archive and index left as they were`); }
 }
 if (!ok) { console.error('rank-history: nothing updated'); process.exit(1); }

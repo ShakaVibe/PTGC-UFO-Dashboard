@@ -14,7 +14,7 @@
     const PFH_LS='grays_pf_hist_v1';
     const PFH_TOK=PF_TOKEN_ADDR;   // round 27 (audit E2): one source (PfLeagues.jsx)
     const PFH_RAW='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/';
-    const PFH_H=3600e3,PFH_D=86400e3,PFH_BLOCK_MS=10300,PFH_RPC_TIMEOUT=20000,PFH_BATCH=80;   // PulseChain ~10.3 s blocks; batched eth_call size
+    const PFH_H=3600e3,PFH_D=86400e3,PFH_BLOCK_MS=10300,PFH_RPC_TIMEOUT=20000,PFH_BATCH=40;   // Audit IV e34: 40 (the owner measured: batches of 100 failed, 40 worked; 80 sat between)   // PulseChain ~10.3 s blocks; batched eth_call size
     const PFH_PERIODS={'7D':{step:6*PFH_H,n:28,unit:6*PFH_H},'30D':{step:PFH_D,n:30,unit:PFH_D},'90D':{step:PFH_D,n:90,unit:PFH_D},'1Y':{step:4*PFH_D,n:92,unit:4*PFH_D}};   // round 24 (audit B5): 1Y points on 4-day boundaries so they repeat day to day
     let pfhCache=null;   // {v:{'addr|TOK':{ts:bal}}}
     const pfhLoad=()=>{if(pfhCache)return pfhCache;try{const s=localStorage.getItem(PFH_LS);pfhCache=s?JSON.parse(s):{v:{}};if(!pfhCache.v)pfhCache={v:{}};}catch(e){pfhCache={v:{}};}

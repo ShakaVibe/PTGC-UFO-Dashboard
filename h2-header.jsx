@@ -9,7 +9,7 @@
    (h2PreviewOn, the same localStorage flag index.html's HeaderPreviewGate sets). */
 const h2PreviewOn=()=>{try{return JSON.parse(localStorage.getItem('grays_hdr_preview_v1'))===1;}catch(e){return false;}};
 /* --u is one reference pixel (gotcha 36): desktop = width/2166 (floor .47), phone = width/390 (.9–1.3). */
-const h2Scale=(w)=>({hsd:Math.max(.47,Math.min(1,w/2166)),hsp:Math.max(.9,Math.min(1.3,w/390))});
+const h2Scale=(w)=>({hsd:Math.max(.47,Math.min(1,w/2166)),hsp:Math.max(.78,Math.min(1.3,w/390))});
 const h2DocW=()=>(document.documentElement&&document.documentElement.clientWidth)||window.innerWidth||1440;
 const useH2Scale=()=>{
   const[sc,setSc]=React.useState(()=>h2Scale(h2DocW()));

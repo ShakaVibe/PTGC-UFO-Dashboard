@@ -83,7 +83,7 @@
       const nowT=usePfTick();
       /* the series + today's live point */
       const full=h.state==='ok'?[...h.series]:null;
-      if(full){const today=Math.floor((Date.now()-Date.parse(h.day0+'T00:00:00Z'))/86400e3);while(full.length<=today)full.push(0);full[today]=live?live.r:0;}
+      if(full){const today=Math.floor((Date.now()-Date.parse(h.day0+'T00:00:00Z'))/86400e3);while(full.length<=today)full.push(-1);full[today]=live?live.r:0;}   // Audit IV e40: -1 = a day the history has not reached yet (a gap in the line, never "not holding")
       const nDays=PFR_PERIODS.find(p=>p[0]===per)[1];
       const i0=full?Math.max(0,full.length-Math.min(full.length,nDays)):0;
       const pts=full?full.slice(i0):[];
@@ -166,7 +166,7 @@
                   <div className="tl"><div className="l">YOU’D BE A</div><div className="v">{L&&L.cur?<><img src={pfSea(L.cur.emoji)} alt=""/>{L.cur.name}</>:'—'}</div><div className="s">{L&&L.cur?(L.next?`${L.pct.toFixed(1)}% of the way to ${L.next.name}`:'the top league'):L0&&L0.cur?`you’re a ${L0.cur.name} now`:''}</div></div>
                 </div>;})()}
             </div>}
-            <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</>:null}</div>
+            <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} <span style={h.days<Math.floor((Date.now()-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-1?{color:'#E8C044'}:undefined}>history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</span></>:null}</div>
           </div>
         </PfModal>
       );

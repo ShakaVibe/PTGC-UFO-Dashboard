@@ -153,7 +153,7 @@ async function buildToken(sym, cfg) {
     allocation: {
       burned: { amount: toTok(burned), pct: pct(burned) },
       inLP:   { amount: toTok(inLP),   pct: pct(inLP) },
-      staked: { amount: toTok(staked), pct: pct(staked) },
+      rewardPool: { amount: toTok(staked), pct: pct(staked) },   // Audit IV e39: balanceOf(staking contract) = the REWARD POOL; staked PTGC stays in the stakers' wallets (totalStaked() ≈ 187 B) — it was published as `staked`
       held:   { amount: toTok(held),   pct: pct(held) },
     },
   };

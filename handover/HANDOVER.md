@@ -46,8 +46,53 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-23 (late night, 3): AUDIT IV BATCH 5 — the last six P1s: e26, e27, e28, e29, e30, e31 — BUILT, on the Mac, NOT
-pushed.** Build = `python3 tools/audit4-batch5.py` (idempotent; a clean run from `fd1d5391b` = 49 edits, re-run "0 edit(s)"; it
+**2026-10-24 (overnight): AUDIT IV BATCH 6 — the medium items e32–e41 (Shaka: "do them all") + the LEAGUES ATLANTIS ART — BUILT,
+on the Mac, NOT pushed.** Build = `python3 tools/audit4-batch6.py` then `python3 tools/leagues-atlantis.py` (both idempotent; from
+`3925eac36` the two give index.html 8db28c1c, portfolio f432811e, calculators 98b90af6, charts ee41c4e0, ledger bd5ad150; re-runs
+"0 edit(s)") + `cd tools/harness && npm run css` (tw.css loses two dead utilities → `?v=6`; h2.css / h2-header.jsx `?v=4`).
+**Leagues art (his kit, `design/leagues/atlantis/CLAUDE_INSTRUCTIONS.md`):** `logos/leagues/lg-atl-split.webp` (the Socials combined
+card, 1560 px wide at the top, gold left → blue → green right, no tints), `lg-atl-ptgc.webp` / `lg-atl-ufo.webp` (the Leagues window
+header + foot, index TierInfoModal AND portfolio PfTierInfoModal; phones crop to the token's coloured side). The whale / shark hero
+images are gone from both (the creatures stay in the rows; lg-whale/lg-shark.webp left in the repo, unused). ~35 % navy over the art,
+much darker behind each coin + price (his ask). Before / after PNGs were sent to him in chat. No number touched.
+**e32** a Load Code / the add box keep at most 50 wallets (`PF_MAX_WALLETS`), labels 40 chars (input `maxLength`), groups 24; a code
+with more says "holds N … press Load again to load the first 50" (amber) — the SAVED list is never cut. **e35** `PageBoundary` (Reload +
+"Back to the dashboard") around calculators + ledger. **e36** `fmtAbbr` = index's a67 bands on calculators / ledger / portfolio (+
+negatives, Infinity "—"); calculators `creatureCount` (a42); charts' header "—" (not "+0.00 %") for a missing 24 h change, calculators
+`change` null; the UFO tile says "PulseScan unreachable — see Recent transactions" when every read failed; the ledger / treasury
+script router strings corrected and the live UFO contract in the ledger's KNOWN_TOKENS; calculators' chain-read WETH pool
+isRHCore false; the 1 + 7 calls to the RETIRED UFO LP-staking contract on every calculators UFO load deleted. **e40** usePfRanks
+says `failed` (and keeps a good list over a failed 30-min re-read); the League box prints "HOLDER RANK — couldn't load … / out of
+date …" instead of vanishing; the rank window's COST TODAY uses live prices (not Moon Math); days the rank index has not reached are
+-1 (a gap), not "not holding", and "history to …" turns amber when the daily rebuild is behind; HOW IT WORKS says the feed is
+"valued at that hour's price (not the exact fill price)". Not done (owner's call): the Ledger "PTGC Buys" vs DAO Buys chart
+(M-13). **e41** the dead header-preview gate + its SHA-256 hashes deleted (treat the word as burned). The iframe sandbox and the
+Worker items stay parked. **e37** 320 px: the LP sort row wraps, h2Scale floor .78, the panel titles' tracking tightens under 360
+(the 📷 buttons stay inside), charts' range / preset rows wrap, "Calculators" 25 px, Home's BUY / SELL = the ⇄ icon alone under
+360, Socials headers shrink; 640–900 px Affiliates Commission Log gets a right-edge fade; 32-px hit boxes on the tile badges, Edit /
+Remove, the windows' ×, Top 100 copy; charts range / preset `aria-pressed`; ledger month pills `aria-pressed`, the six category
+tiles keyboard toggles. **e38** favicon.png + apple-touch-icon.png (180 px from 07_Two_Color_Alien) replace the inline data: icons
+on all five pages (ledger's odd icon too); ledger.html in the sitemap; preconnect on the four sibling pages; `<noscript>`;
+charts.html loads html2canvas on demand (same SRI); `@supports not (container-type…)` copies of the KPI card + Top 100 phone rules;
+`-webkit-backdrop-filter` everywhere; a 100vh fallback for `h-[100dvh]`; `HvbSide` / `VsFold` at module scope. Not done: the Logos
+windows' thumbnails (P-4 — needs 30-odd new image files; next), lazy Chart.js (P-5 — defer already covers first paint), the Home
+BUY glow animation (P-11 — design). **e34** the Live Feed does not poll while its tab is hidden (wakes on return); the UFO fees are
+not re-read right after the boot read them; portfolio loads saved wallets 3 at a time; history batches 40. **e33** top-stakers reads
+balanceOf only for the 110 it publishes; swap-volume re-prices the last 6 h each run; rank-history stamps the close of its last day
++ gate 24.5 h (once a day after 00:15 UTC) and writes nothing on a no-op; the watchdog parses decimal gates. Not done: one shared
+RPC pool for the pipeline (D-4 — a fallback node that lags the head would make an incremental getLogs step skip blocks for good;
+needs a per-script head check first) and the rank-index shard count / data branch (D-6 — c21). **e39** settled with live chain reads:
+(1) `totalStaked()` = 187.46 B — the donut is right; token-allocation.json's `staked` (3.33 B, the staking contract's own balance =
+the REWARD POOL) is renamed `rewardPool`. (2) burn: the archive matches `balanceOf(0x369)` exactly per day for 2023-h2 … 2025-h1 and
+for Oct 13–16 2026, but OVERCOUNTS in 2026: Apr–Jun +343 M, Jul +94 M, Aug +204 M (570.7 M logged vs 366.5 M real), Sep +68 M,
+Oct 1–13 +4 M — the 762 M total gap. The 7D / 30D / 90D burn windows use those rows (today 7D +12 %, 30D +6 %, 90D +21 % vs the
+balance change); exact-duplicate rows explain only ~5 %. NOT changed — a formula / source decision for him (see Next up -34).
+Evidence: harness — a 60-wallet code → the amber note, then 50 saved; overflow probe 320 px = no sideways scroll on Home, #/ufo,
+calculators, charts, portfolio, ledger (#/ptgc's only overflow is the stub's quadrillion-dollar DAO figure); compile + ci-mount 7/7;
+the Leagues renders as sent; a clean run of both scripts from HEAD = the same files.
+
+**2026-10-23 (late night, 3): AUDIT IV BATCH 5 — the last six P1s: e26, e27, e28, e29, e30, e31 — PUSHED, LIVE-VERIFIED**
+(Site check #4 + Deploy #7583 green; live: five pages `tw.css?v=5`; #/ptgc TXNS "803 B203 / S600 ↑31.2 %" = 803 vs burn-summary's Oct 22 reading 612; charts 1Y "UFO −35.33 % SINCE JUL 10"; Portfolio LOAD CODE opens as a dialog with focus in the code box, Escape closes it). Build = `python3 tools/audit4-batch5.py` (idempotent; a clean run from `fd1d5391b` = 49 edits, re-run "0 edit(s)"; it
 re-splices tools/pf-v2.py + tools/top100.py) then `cd tools/harness && npm run css` (tw.css gains min-w-[40px] / min-h-[40px]
 → `?v=5` on the five pages). index.html sha256 47d1825e, portfolio c2b36baf, calculators 42db1db3, charts 290ecf08.
 **e29** (his pick "Yes, DexScreener"): the TXNS 24H arrow = the live DexScreener count vs the pipeline's last DexScreener reading of
@@ -1792,7 +1837,12 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--33. **AUDIT IV batch 5 (2026-10-23 late night) — e26–e31 — BUILT, on the Mac, NOT pushed.** His push → Claude's live look (TXNS
+-34. **AUDIT IV batch 6 + Leagues Atlantis art (2026-10-24) — BUILT, on the Mac, NOT pushed.** His push → Claude's live look (the
+   Leagues window + Socials card, 320 px pages, the favicon on iOS). **Decision for him (e39 burn):** the archive overcounts PTGC burns
+   in 2026 (see Current state) — options: (a) find and drop the extra rows (needs tx hashes in the archive — a rebuild of 2026 with
+   `h`), or (b) compute the 24H / 7D / 30D / 90D windows as balanceOf(0x369) now − at the window start (archive eth_call, 4 calls an
+   hour in the pipeline). Show him the numbers first. Then: P-4 thumbnails, D-4 pool with a head check, D-6 / c21.
+-33. **AUDIT IV batch 5 (2026-10-23 late night) — e26–e31 — PUSHED, LIVE-VERIFIED.** His push → Claude's live look (TXNS
    arrow vs burn-summary, charts 1Y "since Jul 10", Portfolio Load Code Escape, the B / S letters). That closes every P1. Left:
    e5 / e6 (Worker v8, parked), then the P2s (e32–e41) and P3s (e42–e47).
 -32. **AUDIT IV batch 4 (2026-10-23 late night) — e14, e15, e16 — PUSHED, LIVE-VERIFIED.** His push → Claude's live look

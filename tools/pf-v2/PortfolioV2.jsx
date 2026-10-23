@@ -179,7 +179,8 @@
         return{a,st,v,pv,uv};
       };
       const counted=wallets.filter(w=>isWalletChecked(w.address));
-      const rkOne=counted.length===1;   // 2026-10-21 pm (Shaka: "all 5 wallets as one is useless"): the League-box rank line only with ONE counted wallet — several → the breakdown has each wallet's
+      const rkOne=counted.length===1;
+      const rkNote=(tok,bal)=>!ranks||!(bal>0)?null:ranks.failed?'couldn\u2019t load the holder list right now':(ranks.stale||(ranks.staleTok&&ranks.staleTok[tok]))?'the holder list is out of date, so ranks are hidden until the next refresh':null;   // Audit IV e40   // 2026-10-21 pm (Shaka: "all 5 wallets as one is useless"): the League-box rank line only with ONE counted wallet — several → the breakdown has each wallet's
       const anyData=counted.some(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&!d.error;});
       const ptgcUSD=anyData?usd(agg.ptgc.totalHolding,dp.ptgc):null;
       const ufoUSD=anyData?usd(agg.ufo.balance,dp.ufo):null;
@@ -210,6 +211,7 @@
         const a=p.inputAddr.trim();
         if(!/^0x[0-9a-fA-F]{40}$/.test(a)){setAddMsg('That is not a wallet address — it should start with 0x and be 42 characters.');return;}
         if(wallets.find(w=>w.address.toLowerCase()===a.toLowerCase())){setAddMsg('That wallet is already in your portfolio.');return;}
+        if(wallets.length>=PF_MAX_WALLETS){setAddMsg(`A portfolio keeps up to ${PF_MAX_WALLETS} wallets — remove one first.`);return;}   // Audit IV e32
         if(p.inputGroup==='__new'){setAddMsg(p.newGroupName.trim()?'Press Create next to the new group name first (or pick a group).':'Name the new group and press Create first (or pick a group).');return;}   // round 23 (audit A10): used to save the group as "__new"
         setAddMsg('');p.addWallet();
       };
@@ -265,7 +267,7 @@
           <div className="pf2-ttl"><h1><span className="pf2-tt g">Grays</span><span className="pf2-tt w">Portfolio</span></h1><p>Track PTGC and UFO across all your wallets</p></div>
           <div className="pf2-add">
             <div className="f a1"><img src="logos/portfolio/pf-wallet.webp" alt=""/><input className="ad" value={p.inputAddr} onChange={e=>{p.setInputAddr(e.target.value);setAddMsg('');}} placeholder="Paste a wallet address (0x…)" aria-label="Wallet address" spellCheck="false" autoComplete="off" onKeyDown={e=>e.key==='Enter'&&add()}/></div>
-            <div className="f l"><small>LABEL</small><input value={p.inputName} onChange={e=>p.setInputName(e.target.value)} placeholder="My Wallet" aria-label="Label (optional)" onKeyDown={e=>e.key==='Enter'&&add()}/></div>
+            <div className="f l"><small>LABEL</small><input value={p.inputName} onChange={e=>p.setInputName(e.target.value)} maxLength={PF_NAME_MAX} placeholder="My Wallet" aria-label="Label (optional)" onKeyDown={e=>e.key==='Enter'&&add()}/></div>
             <div className="f g"><small>GROUP</small><select value={p.inputGroup} onChange={e=>p.setInputGroup(e.target.value)} aria-label="Group">
               <option value="Default">Default</option>
               {gNames.filter(g=>g!=='Default').map(g=><option key={g} value={g}>{g}</option>)}
@@ -366,7 +368,7 @@
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
                   <div className="pf2-lg2">{parts.map(x=><div className="r" key={x[0]}><i style={{background:x[2]}}></i><span>{x[0]}</span><b>{pfAbbr(x[1])}</b><span className="usd">{fmtDollar(usd(x[1],dp.ptgc))}</span><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
-              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={rkOne&&<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding,counted[0]&&counted[0].address)} open={()=>setRkWin('PTGC')}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={rkOne&&<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding,counted[0]&&counted[0].address)} note={rkNote('PTGC',pt.totalHolding)} open={()=>setRkWin('PTGC')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('PTGC')} aria-label="PTGC rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 <div className="pf2-src3">
@@ -429,7 +431,7 @@
                     <div className="r"><i style={{background:'#22D3EE'}}></i><span>From reflections</span><b>{pfAbbr(ufoReflNow)}</b><span className="usd">{fmtDollar(usd(ufoReflNow,dp.ufo))}</span><em>{pfPct(ufoReflNow,uf.balance)}</em></div>
                   </div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
-              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={rkOne&&<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance,counted[0]&&counted[0].address)} open={()=>setRkWin('UFO')}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={rkOne&&<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance,counted[0]&&counted[0].address)} note={rkNote('UFO',uf.balance)} open={()=>setRkWin('UFO')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
@@ -457,7 +459,7 @@
                 const lbl=d=>d.last?'Today':new Date(d.a).toLocaleDateString('en-US',{month:'short',day:'numeric'});
                 return(
                 <div className={`pf2-lkd x${xOpen?' open':''}`}>
-                  <button className="pf2-lkh" aria-expanded={xOpen} onClick={()=>setXOpen(!xOpen)}><span className="t">{'\u{1F6F8}'} Reflections today</span><span className="n">{todayD&&todayD.ok?<><b>+{pfAbbr(todayD.uf)} UFO</b>{todayD.usd!=null&&<> {'\u00B7'} {fmtDollar(todayD.usd)}</>}{avg!=null&&<> {'\u00B7'} 7-day avg +{pfAbbr(avg)}</>}</>:r7.state==='failed'?'couldn\u2019t read the chain':r7.state==='ok'?'waiting for your transactions\u2026':'reading\u2026'}</span><span className="chev">{'\u25BE'}</span></button>
+                  <button className="pf2-lkh" aria-expanded={xOpen} onClick={()=>setXOpen(!xOpen)}><span className="t">{'\u{1F6F8}'} Reflections today</span><span className="n">{todayD&&todayD.ok?<><b>+{pfAbbr(todayD.uf)} UFO</b>{todayD.usd!=null&&<> {'\u00B7'} {fmtDollar(todayD.usd)}</>}{avg!=null&&<> {'\u00B7'} 7-day avg +{pfAbbr(avg)}</>}</>:r7.state==='failed'?'couldn\u2019t read the chain':r7.state==='ok'?(txs&&txs.failed>0&&!(txs.flows&&txs.flows.length)?'PulseScan unreachable \u2014 see Recent transactions':'waiting for your transactions\u2026'):'reading\u2026'}</span><span className="chev">{'\u25BE'}</span></button>
                   {xOpen&&<div className="pf2-lkb">
                     {days?<div className="pf2-r7">{days.map(d=><div key={d.a} className={`r${d.ok?'':' na'}`}><span className="d">{lbl(d)}</span><span className="g" aria-hidden="true">{d.ok&&<i style={{width:Math.max(2,d.uf/mx*100)+'%'}}></i>}</span><b>{d.ok?'+'+pfAbbr(d.uf):'\u2014'}</b><span className="u">{d.ok?(d.usd!=null?fmtDollar(d.usd,0):''):d.why}</span></div>)}</div>
                     :<div className="pf2-xn">{r7.state==='failed'?'Couldn\u2019t read the midnight balances from the chain right now.':'Reading the last 7 days from the chain\u2026'}</div>}
@@ -516,7 +518,7 @@
                     {rows.length>1&&<div className="wsum"><span className="l">ALL WALLETS</span><b>{fmtDollar(all)}</b></div>}
 </div>
                   {ranks&&(hasR?<div className="pf2-rkfoot">Ranks count every wallet holding PTGC or UFO, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO and UFO OA wallets. Your balance is read live; the holder list is refreshed every 2 hours {'\u00B7'} PTGC list read {pfAgo(ranks.readAt?ranks.readAt.PTGC:Date.parse(ranks.generatedAt))}, UFO {pfAgo(ranks.readAt?ranks.readAt.UFO:Date.parse(ranks.generatedAt))}{ranks.staleTok&&(ranks.staleTok.PTGC||ranks.staleTok.UFO)?<> {'\u00B7'} <span style={{color:'#E8C044'}}>{ranks.staleTok.PTGC?'PTGC':'UFO'} ranks hidden — its list is out of date</span></>:null}</div>
-                    :<div className="pf2-rkfoot">Holder ranks are hidden: the holder list is out of date (read {pfAgo(ranks.readAt?Math.max(ranks.readAt.PTGC||0,ranks.readAt.UFO||0):Date.parse(ranks.generatedAt))}). They come back with the next refresh.</div>)}
+                    :ranks.failed?<div className="pf2-rkfoot">Holder ranks are hidden: the holder list could not be loaded right now. They come back on the next try.</div>:<div className="pf2-rkfoot">Holder ranks are hidden: the holder list is out of date (read {pfAgo(ranks.readAt?Math.max(ranks.readAt.PTGC||0,ranks.readAt.UFO||0):Date.parse(ranks.generatedAt))}). They come back with the next refresh.</div>)}
                 </div>);})()}
             </section>
           </div>
@@ -524,7 +526,7 @@
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
         {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
-        {rkWin&&<PfRankModal tok={typeof rkWin==='string'?rkWin:rkWin.tok} wallets={typeof rkWin==='string'?counted:[...counted].sort((x,y)=>(x.address.toLowerCase()===rkWin.a?-1:0)-(y.address.toLowerCase()===rkWin.a?-1:0))} data={portfolioData} ranks={ranks} txs={txs} prices={dp} close={()=>setRkWin(null)}/>}
+        {rkWin&&<PfRankModal tok={typeof rkWin==='string'?rkWin:rkWin.tok} wallets={typeof rkWin==='string'?counted:[...counted].sort((x,y)=>(x.address.toLowerCase()===rkWin.a?-1:0)-(y.address.toLowerCase()===rkWin.a?-1:0))} data={portfolioData} ranks={ranks} txs={txs} prices={prices} close={()=>setRkWin(null)}/>}
         {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} wallets={counted} hasUfo={uf.balance>0||(ufoEarned||0)>0} close={()=>setEdTok(null)}/>}
         {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
@@ -535,7 +537,7 @@
             <p><b>Switch a wallet off</b> to leave it out of the totals without removing it. Groups let you keep wallets together (LP, cold storage, friends) and filter the cards.</p>
             <p><b>PTGC</b> holdings are the wallet's full balance; the staking contract tells us what is staked or locked and what is <b>ready to claim</b> (staking and lock rewards {'—'} claim them on the staking dapp). <b>Reflections</b> (PTGC and UFO) are worked out from the chain: what the wallet holds now, plus everything it ever sent, minus everything it ever received.</p>
             <p><b>Lifetime earned</b> is every reward: PTGC staking + locking + reflections; UFO pays reflections only, straight into your wallet, nothing to claim. UFO reflections cover UFO{'\u2019'}s whole life, including the time before the Jul 2026 contract migration. <b>Your share of every UFO holder reward</b> is your UFO divided by the UFO that actually earns {'—'} the supply minus burned tokens, the liquidity pools and the excluded wallets. <b>Reflections today</b> and the <b>DAY BY DAY</b> button show it day by day.</p>
-            <p><b>Portfolio value history</b> is your real balances at every point, read from the chain and priced at the time; the bars under it are your trades, one bar per day {'—'} click a bar for that day{'\u2019'}s moves. <b>Recent transactions</b> lists every buy, sell, claim, unstake, liquidity move and transfer, with the price each trade got. Both open and close with their Show / Hide buttons.</p>
+            <p><b>Portfolio value history</b> is your real balances at every point, read from the chain and priced at the time; the bars under it are your trades, one bar per day {'—'} click a bar for that day{'\u2019'}s moves. <b>Recent transactions</b> lists every buy, sell, claim, unstake, liquidity move and transfer, each valued at that hour{'\u2019'}s price (not the exact fill price). Both open and close with their Show / Hide buttons.</p>
             <p><b>Leagues</b> show your bag in sea creatures {'—'} a whale is 1 % of the supply, a shark 0.1 %, and so on down. <b>Moon Math</b> re-values your holdings at the all-time highs or at prices you type; the history and the transactions stay at real prices.</p>
             <p><b>Your list is saved in this browser only.</b> Use <b>Get Code</b> in the header to back it up, and <b>Load Code</b> to restore it on another device.</p>
           </div></PfModal>
