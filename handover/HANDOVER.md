@@ -46,8 +46,16 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24: HOME CARDS ROUND 2 (Shaka: "the boxes are taller than than used to be. Can you shorter up the boxes" + "make the
+backgrounds in the ufo box a little darker") — READY TO PUSH.** Appended to `tools/home-cards-atlantis.py` (one R2_CSS block after
+`.hc-status>div`, i.e. after every round-1 rule, never inside a round-1 insert; index.html sha256 5d266a60, re-runs "0 edit(s)").
+Card heights (harness, GT_CANDLES=1): 1440×900 613 → 453 px (before the redesign 457), 1280×800 555 → 419 (430), 1920×1080
+707 → 537 (511), 390 450 → 365 (357). Smaller logo / name / price, tighter gaps, slimmer tiles, a one-line 24H label, chart 62 px on
+phones / clamp(78, max(5.4vw, 8vh), 120) desktop (every other axis label hidden under 640 px), button 48 / clamp(52, 4.2vw, 66).
+UFO art `filter:saturate(.85) brightness(.78)` (PTGC unchanged).
+
 **2026-10-24: HOME CARDS → THE ATLANTIS LOOK (Shaka sent a mockup + two background artworks: "make it look as close to the mock up as
-you can"; after the mockup: "can you darken the backgrounds more", then "make it live") — READY TO PUSH.** `python3 tools/home-cards-atlantis.py`
+you can"; after the mockup: "can you darken the backgrounds more", then "make it live") — PUSHED `5cf4491a`.** `python3 tools/home-cards-atlantis.py`
 (idempotent; from `f6f3cc7e` it gives index.html sha256 9a8266f0, a re-run prints "0 edit(s)"). New art: `logos/home/hc-art-ptgc.webp`
 (gold ruins) and `hc-art-ufo.webp` (green ruins + saucer), 1200×873. CosmicCard: art + a navy veil INSIDE the frame (`.hc-art` /
 `.hc-veil`, darkest behind logo/name/price), "NATIVE TOKEN" line, price + chip on one row, address + DAY on one row, icon stat tiles,

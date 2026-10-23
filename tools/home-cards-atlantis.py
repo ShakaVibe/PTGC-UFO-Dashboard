@@ -279,3 +279,31 @@ edit(IX, """          {[0,1,2].map(i=><div key={i}><span className="hc-lbl"><HcS
         <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>""")
 
 print(f'{n} edit(s)')
+
+# ---- round 2 (Shaka, 2026-10-24: "the boxes are taller than than used to be. Can you shorter up the boxes" + "make the backgrounds in
+#      the ufo box a little darker") — overrides placed AFTER every round-1 rule (anchored past the round-1 phone block, never inside it):
+#      smaller logo / name / price and tighter gaps, compact stat tiles, a one-line 24H label, a shorter chart and button. 1440×900:
+#      613 → ~455 px (the cards before the redesign: 457). The UFO art gets brightness .78 under the same veil.
+R2_CSS = r"""    /* 2026-10-24 round 2: shorter cards (back to the old height) + a darker UFO background (Shaka) */
+    .hc-card{gap:10px}
+    @media(min-width:1024px){.hc-card{padding:clamp(16px,1.45vw,24px) clamp(18px,1.6vw,26px) clamp(16px,1.35vw,22px);gap:clamp(10px,.85vw,14px)}}
+    @media(min-width:640px){.hc-logo{width:92px;height:92px}}
+    @media(min-width:1024px){.hc-logo{width:clamp(92px,7.6vw,124px);height:clamp(92px,7.6vw,124px)}.hc-name{font-size:clamp(1.9rem,2.6vw,2.9rem)}.hc-sub{margin-top:5px}.hc-pricerow{margin-top:clamp(6px,.6vw,10px)}.hc-price{font-size:clamp(1.8rem,2.5vw,2.7rem)}.hc-chip{font-size:clamp(.95rem,1.2vw,1.25rem);padding:5px 10px}.hc-meta{margin-top:clamp(4px,.4vw,8px)}}
+    .hc-stats>div{padding:8px 10px}
+    @media(min-width:1024px){.hc-stats>div{padding:clamp(9px,.75vw,13px) clamp(10px,1vw,16px)}}
+    .hc-chart{padding:7px 0 6px 10px}
+    @media(min-width:1024px){.hc-chart{padding:clamp(7px,.6vw,11px) 0 clamp(6px,.5vw,9px) clamp(10px,1vw,16px)}}
+    .hc-chart-hd{font-size:.74rem;line-height:1;gap:6px}.hc-chart-hd svg{width:14px;height:14px}
+    @media(min-width:1024px){.hc-chart-hd{font-size:clamp(.74rem,.8vw,.9rem)}}
+    .hc-plot{margin-top:2px}
+    .hc-spark{height:62px}
+    @media(min-width:1024px){.hc-spark{height:clamp(78px,max(5.4vw,8vh),120px)}}
+    .hc-buy{height:48px}
+    @media(min-width:1024px){.hc-buy{height:clamp(52px,4.2vw,66px)}.hc-buy img{width:clamp(36px,3vw,46px);height:clamp(36px,3vw,46px)}}
+    @media(max-width:639.98px){.hc-logo{width:68px;height:68px}.hc-sub{margin-top:4px}.hc-pricerow{margin-top:6px}.hc-meta{margin-top:4px}.hc-buy img{width:32px;height:32px}.hc-card{gap:9px}}
+    @media(max-width:399.98px){.hc-meta{font-size:.84rem;gap:2px 6px}.hc-day{margin-left:4px}}
+    @media(max-width:639.98px){.hc-yax span:nth-child(2n){display:none}}   /* a 62 px phone chart: every other price label */
+    .hc-green .hc-art{filter:saturate(.85) brightness(.78)}"""
+edit(IX, "    .hc-status>div{font-size:.8rem}\n", "    .hc-status>div{font-size:.8rem}\n" + R2_CSS + "\n")
+
+print(f'{n} edit(s) (round 2)')
