@@ -46,8 +46,38 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-23 (late night, 3): AUDIT IV BATCH 5 — the last six P1s: e26, e27, e28, e29, e30, e31 — BUILT, on the Mac, NOT
+pushed.** Build = `python3 tools/audit4-batch5.py` (idempotent; a clean run from `fd1d5391b` = 49 edits, re-run "0 edit(s)"; it
+re-splices tools/pf-v2.py + tools/top100.py) then `cd tools/harness && npm run css` (tw.css gains min-w-[40px] / min-h-[40px]
+→ `?v=5` on the five pages). index.html sha256 47d1825e, portfolio c2b36baf, calculators 42db1db3, charts 290ecf08.
+**e29** (his pick "Yes, DexScreener"): the TXNS 24H arrow = the live DexScreener count vs the pipeline's last DexScreener reading of
+yesterday (burn-summary.json `snapshots`, UTC date) — CoinGecko's transaction-history only when that snapshot is missing. Real
+data today: PTGC ↑96.6 % (CoinGecko 820 vs 417) → ↑43.6 % (DexScreener 879 vs 612); UFO ↑19.8 % → ↓12.0 %. fetchDex's price
+fallback + the two hard-coded-pair price seeds use `dsPricePair` (base side only, gotcha 35). `HOLDER_SNAP_MAX_AGE_MS` = 36 h: an
+older holder-history point is not "now" (fetchHolders goes live; the 7D / 30D / 90D go "—"); `nhView` gains `endOk` (the file
+reaches within 3 h / a tenth of the window of now) and the Holders tile's 24 h new-holders line needs both ends. **e28** (his
+pick "Flag UFO"): `seriesSinceLabel` — a token whose series starts more than max(3 h, 5 % of the range) after the range start is
+labelled "since Jul 10": summary card badge, Leaderboard + Scorecard cards, the full-report card, the bars (`UFO*` + a footnote)
+and the status line. 3M unaffected (UFO's data covers it); 6M / 1Y: "UFO −35.33 % SINCE JUL 10", "Live · 5/5 tokens · UFO since
+Jul 10". No number changed. **e27** the Portfolio 24H pills say "24H PRICE" when the 24 h-ago holdings read is missing (the
+fallback is the price change applied to today's balance); holder ranks: staleness per token from `tokens[tok].readAt` (a
+carried token keeps its old readAt) — a stale token ranks nothing, the column hides only when both are; the footer prints
+"PTGC list read …, UFO …". **e26** Affiliates: 25 controls keyboard-reachable — 13 sort headers (`tabIndex`, Enter / Space,
+`aria-sort`), referrer rows / names / phone cards, the "▶ n" expanders (`aria-expanded`), receipt day headers, the show-more
+rows (`afKey` helper); Portfolio GET CODE / LOAD CODE are `PfModal` dialogs (Escape, Tab trap, scroll lock, focus back; the
+Load input autofocuses; × has a label and a 40 px target); the dead Edit Wallet window and the unused DisclaimerModal copy are
+deleted. **e30** inputs ≥ 16 px under 640 px (portfolio add / search / new group / Moon Math, the Top 100 search) — iOS focus
+zoom. **e31** `BsN`: a visible B / S letter + "buys" / "sells" for screen readers on the TXNS tiles (v2 + classic) and the deck
+pool cards; the LP v2 rows get the words for screen readers and the Txns header "buys | sells"; `DashWhy` = the dash + an ⓘ that
+opens the reason on tap (TXNS unavailable ×2, a failed burn window, an unread allocation row). **Evidence (harness):** TXNS tile
+"200 B120 / S80 ↓67.3 %" (stub 200 vs the file's 612) and UFO ↑19.8 % (200 vs 167); charts 1Y cards / bars / status as above, 3M
+unflagged; Portfolio Load Code → role=dialog "Load a portfolio code", focus in the input, Escape closes and focus returns to the
+button; inputs 16 px at 390, 14 / 15.5 px at 1280; Top 100 search 16 px at 390; Affiliates: a name span + Enter → "Referrer
+details", a sort header Enter → none → ascending → descending, an expander Enter → aria-expanded true; #/ptgc and #/ufo body text
+before / after differ only by the B / S letters, the screen-reader words, the Txns header and the TXNS arrow; compile + ci-mount 7/7.
+
 **2026-10-23 (late night, 2): AUDIT IV BATCH 4 — e14 (no page hangs on a stalled fetch), e15 (the stale-file UFO scan on
-the three mint pools only), e16 (the a41 RPC pool on portfolio + calculators) — BUILT, on the Mac, NOT pushed.** Build =
+the three mint pools only), e16 (the a41 RPC pool on portfolio + calculators) — PUSHED, LIVE-VERIFIED** (Site check #3 + Deploy #7582 green; live: index 13 `dataFetch` reads + `UFO_MINT_POOL_SYMBOLS`, portfolio / calculators carry `RPC_COOLDOWN_MS`, portfolio `pfDsTokens` + `pricesLoading`; #/ptgc paints with the burn periods filled from the files (24H / 7D / 30D / 90D), calculators and a saved portfolio wallet load normally, no console errors). Build =
 `python3 tools/audit4-batch4.py` (idempotent; a clean run from `693883eaf` = 21 edits, re-run "0 edit(s)"; it re-splices the Top 100
 fragment via tools/top100.py). index.html sha256 21a784a2, portfolio 9f51fa14, calculators d645d568. No formula touched.
 **e14** (a) portfolio: `pfDsTokens` = DexScreener with an 8 s abort for `quoteOf` / `usdOf`; `initialLoad` clears at once so the
@@ -1762,7 +1792,10 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--32. **AUDIT IV batch 4 (2026-10-23 late night) — e14, e15, e16 — BUILT, on the Mac, NOT pushed.** His push → Claude's live look
+-33. **AUDIT IV batch 5 (2026-10-23 late night) — e26–e31 — BUILT, on the Mac, NOT pushed.** His push → Claude's live look (TXNS
+   arrow vs burn-summary, charts 1Y "since Jul 10", Portfolio Load Code Escape, the B / S letters). That closes every P1. Left:
+   e5 / e6 (Worker v8, parked), then the P2s (e32–e41) and P3s (e42–e47).
+-32. **AUDIT IV batch 4 (2026-10-23 late night) — e14, e15, e16 — PUSHED, LIVE-VERIFIED.** His push → Claude's live look
    (portfolio paints wallets with prices arriving after; #/ptgc / calculators / portfolio unchanged on a normal load). Next by
    tier: e26+ (P1/P2 — see the audit file's list); e5 / e6 (Worker v8) still parked.
 -31. **AUDIT IV e13 (2026-10-23 late night) — tier counts people only — PUSHED, data rebuilt, LIVE-VERIFIED.** His push → Run workflow

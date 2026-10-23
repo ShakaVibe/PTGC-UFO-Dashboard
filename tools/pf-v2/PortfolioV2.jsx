@@ -334,17 +334,17 @@
               return(<>
             <section className="pf2-pn pf2-st v3 t">
               <div className="hd"><div className="ic w"><img src="logos/portfolio/pf-wallet.webp" alt=""/></div><div className="tx"><div className="lb">Total portfolio value</div><div className="v">{fmtDollar(total)}</div></div><PfSpark vals={spk('v')} col={tChg!=null&&tChg<0?'#FF4B55':'#7CFC00'}/></div>
-              <div className="f">{simulated?<span className="na">Moon Math prices</span>:<>{pfPill(tChg,'24H')}{hChg&&pfPill(hChg.chg,hChg.period)}</>}<span className="sp">{counted.length} wallet{counted.length===1?'':'s'}</span></div>
+              <div className="f">{simulated?<span className="na">Moon Math prices</span>:<>{pfPill(tChg,h24?'24H':'24H PRICE')}{hChg&&pfPill(hChg.chg,hChg.period)}</>}<span className="sp">{counted.length} wallet{counted.length===1?'':'s'}</span></div>
               <div className="bar" aria-hidden="true"><b style={{width:pS+'%',background:'#F2D35B'}}></b><b style={{width:uS+'%',background:'#7CFC00'}}></b></div>
               <div className="f2"><span className="gold">PTGC {pS.toFixed(1)}%</span><span className="grn">UFO {uS.toFixed(1)}%</span></div></section>
             <section className="pf2-pn pf2-st v3 p">
               <div className="hd"><div className="ic"><img src={TOKENS.PTGC.logo} alt=""/></div><div className="tx"><div className="lb">PTGC value</div><div className="v">{fmtDollar(ptgcUSD)}</div></div><PfSpark vals={spk('p')} col="#F2D35B"/></div>
-              <div className="f"><b>{pfAbbr(pt.totalHolding)} PTGC</b>{dp.ptgc>0&&<><span className="dot">{'·'}</span><span className="pr">{fmtPriceNode(dp.ptgc)}</span></>}{!simulated&&<span className="sp">{pfPill(pChg,'24H')}</span>}</div>
+              <div className="f"><b>{pfAbbr(pt.totalHolding)} PTGC</b>{dp.ptgc>0&&<><span className="dot">{'·'}</span><span className="pr">{fmtPriceNode(dp.ptgc)}</span></>}{!simulated&&<span className="sp">{pfPill(pChg,h24?'24H':'24H PRICE')}</span>}</div>
               <div className="bar" aria-hidden="true"><b style={{width:pS+'%',background:'#F2D35B'}}></b></div>
               <div className="f2"><span className="gold">{pS.toFixed(1)}% of portfolio</span><span>{staked>0?<>{pfAbbr(staked)} staking</>:pt.totalHolding>0?'nothing staked':''}</span></div></section>
             <section className="pf2-pn pf2-st v3 u">
               <div className="hd"><div className="ic"><img src={TOKENS.UFO.logo} alt=""/></div><div className="tx"><div className="lb">UFO value</div><div className="v">{fmtDollar(ufoUSD)}</div></div><PfSpark vals={spk('u')} col="#7CFC00"/></div>
-              <div className="f"><b>{pfAbbr(uf.balance)} UFO</b>{dp.ufo>0&&<><span className="dot">{'·'}</span><span className="pr">{fmtPriceNode(dp.ufo)}</span></>}{!simulated&&<span className="sp">{pfPill(uChg,'24H')}</span>}</div>
+              <div className="f"><b>{pfAbbr(uf.balance)} UFO</b>{dp.ufo>0&&<><span className="dot">{'·'}</span><span className="pr">{fmtPriceNode(dp.ufo)}</span></>}{!simulated&&<span className="sp">{pfPill(uChg,h24?'24H':'24H PRICE')}</span>}</div>
               <div className="bar" aria-hidden="true"><b style={{width:uS+'%',background:'#7CFC00'}}></b></div>
               <div className="f2"><span className="grn">{uS.toFixed(1)}% of portfolio</span><span>{td&&td.ok?<>+{pfAbbr(td.uf)} today</>:uf.balance>0?'reflections…':''}</span></div></section>
               </>);})()}
@@ -515,8 +515,8 @@
                       <div className="cols"><div className="cl"><div className="l">PTGC</div>{cell(r.pT,r.p$,'p')}</div><div className="cl"><div className="l">Pending to claim</div>{cell(r.pc,r.c$,'p')}</div><div className="cl"><div className="l">UFO</div>{cell(r.uT,r.u$,'u')}</div></div></div>)}
                     {rows.length>1&&<div className="wsum"><span className="l">ALL WALLETS</span><b>{fmtDollar(all)}</b></div>}
 </div>
-                  {ranks&&(hasR?<div className="pf2-rkfoot">Ranks count every wallet holding PTGC or UFO, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO and UFO OA wallets. Your balance is read live; the holder list is refreshed every 2 hours {'\u00B7'} list read {pfAgo(Date.parse(ranks.generatedAt))}</div>
-                    :<div className="pf2-rkfoot">Holder ranks are hidden: the holder list is out of date (read {pfAgo(Date.parse(ranks.generatedAt))}). They come back with the next refresh.</div>)}
+                  {ranks&&(hasR?<div className="pf2-rkfoot">Ranks count every wallet holding PTGC or UFO, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO and UFO OA wallets. Your balance is read live; the holder list is refreshed every 2 hours {'\u00B7'} PTGC list read {pfAgo(ranks.readAt?ranks.readAt.PTGC:Date.parse(ranks.generatedAt))}, UFO {pfAgo(ranks.readAt?ranks.readAt.UFO:Date.parse(ranks.generatedAt))}{ranks.staleTok&&(ranks.staleTok.PTGC||ranks.staleTok.UFO)?<> {'\u00B7'} <span style={{color:'#E8C044'}}>{ranks.staleTok.PTGC?'PTGC':'UFO'} ranks hidden — its list is out of date</span></>:null}</div>
+                    :<div className="pf2-rkfoot">Holder ranks are hidden: the holder list is out of date (read {pfAgo(ranks.readAt?Math.max(ranks.readAt.PTGC||0,ranks.readAt.UFO||0):Date.parse(ranks.generatedAt))}). They come back with the next refresh.</div>)}
                 </div>);})()}
             </section>
           </div>

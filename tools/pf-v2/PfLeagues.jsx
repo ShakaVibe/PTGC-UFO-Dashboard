@@ -150,8 +150,12 @@
         .then(j=>{if(!j)pfRanksP=null;return j;});return pfRanksP;};
     const usePfRanks=()=>{const[d,setD]=useState(null);
       useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
-      const stale=!!d&&!(Date.now()-Date.parse(d.generatedAt)<PF_RANKS_STALE);
-      return d?{...d,stale}:null;};
+      /* Audit IV e27: per token — the builder stamps generatedAt fresh even when it CARRIED one token's old list (its readAt
+         stays old). A stale token ranks nothing; the column hides only when both are stale. */
+      const rdAt=tok=>Date.parse((d&&d.tokens[tok]&&d.tokens[tok].readAt)||(d&&d.generatedAt));
+      const staleTok=d?{PTGC:!(Date.now()-rdAt('PTGC')<PF_RANKS_STALE),UFO:!(Date.now()-rdAt('UFO')<PF_RANKS_STALE)}:null;
+      const stale=!!d&&staleTok.PTGC&&staleTok.UFO;
+      return d?{...d,stale,staleTok,readAt:{PTGC:rdAt('PTGC'),UFO:rdAt('UFO')}}:null;};
     /* 2026-10-21 pm: every balance above zero counts (no 1-token floor) and no "of N" / "top x%" / TOP badges — just the rank and
        what it takes to pass the next one (Shaka). pfRankKey rounds like build-holder-ranks.mjs's key(): whole tokens from 1 up,
        6 decimals below 1, never 0 for a holder. */
@@ -167,7 +171,7 @@
       if(js.length===1)j=js[0];else if(js.length>1)j=js[0];   // a shared tag: the first (highest) — the caller re-picks by balance below
       const out=j<0?b:b.slice(0,j).concat(b.slice(j+1));out.js=js;c.set(a,out);return out;};
     /* → null when the list is missing / stale or the balance is 0; else {r, pass} */
-    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&ranks.tokens&&ranks.tokens[tok];if(!t||!Array.isArray(t.b)||!(bal>0))return null;
+    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];   // e27: per-token stalenessif(!t||!Array.isArray(t.b)||!(bal>0))return null;
       const x=pfRankKey(bal);let b=pfRankList(t,addr);
       if(b.js&&b.js.length>1){const j=b.js.reduce((p,q)=>Math.abs(t.b[q]-x)<Math.abs(t.b[p]-x)?q:p);b=t.b.slice(0,j).concat(t.b.slice(j+1));}   // e9: tag collision → the entry nearest this balance
       let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}

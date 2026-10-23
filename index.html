@@ -68,7 +68,7 @@
        version here and you MUST regenerate its hash (openssl dgst -sha384 -binary f | openssl base64 -A).
        Tailwind's play CDN generates its script and does not allow cross-origin reads, so it
        cannot carry a hash; it is scheduled to be replaced by a build step. -->
-  <link rel="stylesheet" href="tw.css?v=4">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
+  <link rel="stylesheet" href="tw.css?v=5">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
   <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
@@ -1091,7 +1091,7 @@
       .t1st4{grid-template-columns:1fr 1fr;gap:8px;padding:0 10px}
       .t1t{padding:8px 10px}.t1t .v{font-size:19px}.t1t .l{font-size:8.5px;letter-spacing:.08em}.t1t .f{font-size:12px}
       .t1chk{margin:12px 10px 0;padding:10px}.t1chk .hh{font-size:11px}.t1chk .hh .r{display:none}
-      .t1go{padding:0 12px;font-size:10.5px!important}.t1inp input{font-size:15px}
+      .t1go{padding:0 12px;font-size:10.5px!important}.t1inp input{font-size:16px}   /* Audit IV e30: was 15 px → iOS focus zoom */
       .t1res{grid-template-columns:1fr 1fr;gap:8px}
       .t1ii .tip{right:auto;left:-120px;width:250px}
       .t1pod{gap:6px;padding:12px 10px 2px}
@@ -3832,7 +3832,7 @@
           let ptgcPrice = 0;
           const existingPairs = Array.from(allPairsMap.values());
           if(existingPairs.length > 0) {
-            const mainPairData = existingPairs.find(p => parseFloat(p.priceUsd) > 0) || existingPairs[0];
+            const mainPairData = dsPricePair(existingPairs, addr) || existingPairs[0];   // e29: base-side pair only
             ptgcPrice = parseFloat(mainPairData.priceUsd) || 0;
           }
           const missingPtgcPairs = HARDCODED_PTGC_PAIRS.filter(hcPair => !allPairsMap.has(hcPair.address.toLowerCase()));
@@ -3879,7 +3879,7 @@
           let ufoPrice = 0;
           const existingPairs = Array.from(allPairsMap.values());
           if(existingPairs.length > 0) {
-            const mainPairData = existingPairs.find(p => parseFloat(p.priceUsd) > 0) || existingPairs[0];
+            const mainPairData = dsPricePair(existingPairs, addr) || existingPairs[0];   // e29: base-side pair only
             ufoPrice = parseFloat(mainPairData.priceUsd) || 0;
           }
           
@@ -3928,7 +3928,7 @@
             vol: p.volume?.h24 || 0
           })).sort((a, b) => b.liq - a.liq);
           
-          const pp = mp || pairs.find(p=>parseFloat(p.priceUsd)>0) || pairs[0];
+          const pp = mp || dsPricePair(pairs, addr) || pairs[0];   // Audit IV e29: base-side pair only (gotcha 35) — a quote-side listing's priceUsd is the OTHER token's
           let totalTokensInLP = 0;
           
           pairs.forEach(p => {
@@ -4025,11 +4025,14 @@
       const useCache=(token!=='UFO');
       // Return cached data immediately if available (for fast initial load)
       // Then fetch live data in background
+      /* Audit IV e29: a cached count is used only while it is recent (HOLDER_SNAP_MAX_AGE_MS) — a stalled pipeline used to
+         keep printing a days-old holder count as today's. Older → the live PulseScan counter below. */
       if(useCache&&holderHistoryCacheNew&&holderHistoryCacheNew.snapshots?.length>0){
         const lastSnap=holderHistoryCacheNew.snapshots[holderHistoryCacheNew.snapshots.length-1];
-        if(lastSnap[token]>0)return lastSnap[token];
+        const age=Date.now()-Date.parse(lastSnap.timestamp);
+        if(lastSnap[token]>0&&age<HOLDER_SNAP_MAX_AGE_MS)return lastSnap[token];
       }
-      if(useCache&&burnHistoryCache&&burnHistoryCache[token]?.holders>0){
+      if(useCache&&burnHistoryCache&&burnHistoryCache[token]?.holders>0&&(burnHistoryAgeMs()??Infinity)<HOLDER_SNAP_MAX_AGE_MS){
         return burnHistoryCache[token].holders;
       }
       
@@ -4176,6 +4179,7 @@
     const ALLOC_STALE_MS=8*60*60*1000;    // c17: the step is gated at 6 h and the pipeline is hourly, so a healthy file is ≤ ~7.3 h (was 14 h)
     const ALLOC_DEAD_MS=24*60*60*1000;    // c17: three missed rebuilds (was 36 h)
     const allocStampedAt=j=>{const t=j&&j.lastUpdated?Date.parse(j.lastUpdated):NaN;return isFinite(t)?t:null;};
+    const HOLDER_SNAP_MAX_AGE_MS=36*60*60*1000;   // Audit IV e29: a holder count / holder-history point older than this is not "now"
     const BURN_HISTORY_STALE_MS=2.5*60*60*1000;   // c17: hourly file — amber past two missed runs (was 8 h for the old ~5-runs-a-day beat)
     const HOURLY_AMBER_MS=2.5*60*60*1000;         // c17: the one amber threshold for the hourly files (DAO Buys, Holders Details, Humans vs Bots)
     const BURN_HISTORY_MAX_AGE_MS=7*24*60*60*1000; // a week-old window is not "the last 24 hours"
@@ -6035,13 +6039,13 @@
             <div className="col-span-2 text-right"><div className="text-white text-xs">Volume</div><div className="text-white font-semibold">{fmtUSD(vol)}</div></div>
             <div className="col-span-2 text-right"><div className="text-white text-xs">Liquidity</div><div className="text-white">{fmtUSD(liq)}</div></div>
             <div className="col-span-1 text-center"><div className="text-white text-xs">24h</div><div className={up?'text-green-400':'text-red-400'}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
-            <div className="col-span-1 text-center"><div className="text-white text-xs">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div>
+            <div className="col-span-1 text-center"><div className="text-white text-xs">Txns</div><div><span className="text-green-400"><BsN k="b" n={buys}/></span>/<span className="text-red-400"><BsN k="s" n={sells}/></span></div></div>
             <div className="col-span-1 text-right"><div className="text-white text-xs">Vol/Liq</div><div className="text-white">{ratio}</div></div>
             <div className="col-span-2 flex justify-end gap-2"><button onClick={()=>setDet(!det)} aria-label="Pool details" aria-expanded={det} className="text-lg hover:scale-110">{'\u2139\uFE0F'}</button><a href={`https://dexscreener.com/pulsechain/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DexScreener" className="text-lg hover:scale-110">{'\u{1F4C8}'}</a><a href={`https://www.dextools.io/app/en/pulse/pair-explorer/${pair.pairAddress}`} target="_blank" rel="noopener noreferrer" aria-label="View pair on DEXTools" className="text-lg hover:scale-110">{'\u{1F4CA}'}</a></div>
           </div>
           <div className="sm:hidden">
             <div className="flex items-center gap-3 mb-2">{other?.address?.toLowerCase()===WETH_ADDRESS?<img src={ETH_LOGO} alt="" className="w-8 h-8 rounded-full"/>:(!logoErr&&logo?<img src={logo} alt="" className="w-8 h-8 rounded-full bg-black/50" onError={()=>setLogoErr(true)}/>:<div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{other?.symbol?.[0]}</div>)}<div className="flex-1"><div className={`font-semibold ${theme.text} text-sm`}>{pair.baseToken?.symbol}/{pair.quoteToken?.symbol}</div></div><div className={`text-sm font-semibold ${up?'text-green-400':'text-red-400'}`}>{up?'\u25B2':'\u25BC'} {Math.abs(chg).toFixed(1)}%</div></div>
-            <div className="grid grid-cols-4 gap-2 text-center text-xs"><div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div><div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div><div><div className="text-gray-400">Txns</div><div><span className="text-green-400">{buys}</span>/<span className="text-red-400">{sells}</span></div></div><div><div className="text-gray-400">V/L</div><div className="text-white">{ratio}</div></div></div>
+            <div className="grid grid-cols-4 gap-2 text-center text-xs"><div><div className="text-gray-400">Vol</div><div className="text-white">{fmtUSD(vol)}</div></div><div><div className="text-gray-400">Liq</div><div className="text-white">{fmtUSD(liq)}</div></div><div><div className="text-gray-400">Txns</div><div><span className="text-green-400"><BsN k="b" n={buys}/></span>/<span className="text-red-400"><BsN k="s" n={sells}/></span></div></div><div><div className="text-gray-400">V/L</div><div className="text-white">{ratio}</div></div></div>
           </div>
           {det&&(
             <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
@@ -6762,6 +6766,12 @@
       );
     };
 
+    /* Audit IV e31 (2026-10-23): buys / sells were told apart by green / red alone — a screen reader heard two numbers, a
+       red-green colour-blind visitor saw two numbers. A visible B / S letter + the word for screen readers. */
+    const BsN=({k,n})=><><span className="sr-only">{k==='b'?'buys ':'sells '}</span><span aria-hidden="true" style={{fontSize:'.78em',opacity:.8,marginRight:'.12em'}}>{k==='b'?'B':'S'}</span>{n}</>;
+    /* Audit IV e31: the "unknown, not zero" reason lived only in title= (hover — invisible on phones). The dash + an ⓘ that
+       opens it on tap; the title stays for mouse users. */
+    const DashWhy=({why})=><span className="inline-flex items-center gap-1">{'\u2014'}<InfoTip label="Why a dash" glyphClass="text-[10px]"><p>{why}</p><p>A dash means the number could not be read — it is unknown, never zero.</p></InfoTip></span>;
     /* Explainer copy, in one place. Each is a function of the token so the wording can name
        it and quote live figures (fee rate, ATH). Keep these to two or three sentences. */
     const EXPLAINERS={
@@ -10228,7 +10238,7 @@
           {T('hold','HOLDERS',fmt(holdersNow),holderChange!==null?(holderChange===0?{cls:'na',node:'— 0'}:{cls:holderChange>=0?'':'dn',node:`${holderChange>=0?'↑':'↓'} ${holderChange>=0?'+':''}${fmt(holderChange)}`}):null,
             {badge:<><button type="button" onClick={openHolders} aria-label="Holders by period" className="tap-h"><H2Info/></button>{openNewHolders&&<button type="button" onClick={openNewHolders} aria-label="Holders details — who joined and who left" title="Holders Details" className="tap-h"><span className="h2-hd" style={{"--ic":`url(logos/holders/nh-ic-new.webp?v=${NH_ART_V})`}} aria-hidden="true"></span></button>}</>})}
           {T('lp',`${token} IN LP`,tokensInLPKnown?fmtAbbr(tokensInLP):'—',null,{badge:<span className="h2-pct">{tokensInLPKnown?tokensInLPPct+'%':'—'}</span>})}
-          {T('tx','TXNS 24H',txnsKnown?<>{(data?.buys||0)+(data?.sells||0)}<small><span className="b">{data?.buys||0}</span><span className="sl"> / </span><span className="s">{data?.sells||0}</span></small></>:<span title="24h transaction counts unavailable — DexScreener did not answer.">{'—'}</span>,
+          {T('tx','TXNS 24H',txnsKnown?<>{(data?.buys||0)+(data?.sells||0)}<small><span className="b"><BsN k="b" n={data?.buys||0}/></span><span className="sl"> / </span><span className="s"><BsN k="s" n={data?.sells||0}/></span></small></>:<span title="24h transaction counts unavailable — DexScreener did not answer."><DashWhy why="The 24h transaction counts are unavailable — DexScreener did not answer."/></span>,
             txc!==null?{cls:txc>=0?'':'dn',node:`${txc>=0?'↑':'↓'} ${Math.abs(txc).toFixed(1)}%`}:null,{full:true})}
         </div>);
     };
@@ -10583,7 +10593,7 @@
             <div className="p2-lpv m vg tabular-nums c-vg" title={feeRate>0?`${(feeRate*100).toFixed(0)}% of this pair's 24h volume`:undefined}>{(vol!=null&&isFinite(vol)&&feeRate>0)?fmtUSD(vol*feeRate):'\u2014'}</div>
             <div className="p2-lpv m tabular-nums">{fmtUSD(liq)}</div>
             <div className="tabular-nums c-mid">{chgKnown?<span className={`p2-lpch ${chg>=0?'up':'dn'}`}><i aria-hidden="true">{chg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(chg).toFixed(1)}%</span>:<span className="p2-lpch na">{'\u2014'}</span>}</div>
-            <div className="p2-lptx tabular-nums c-tx c-mid"><div className="t">{txTotal??'\u2014'}</div><div className="bs"><b>{buys??'\u2014'}</b><s aria-hidden="true"></s><i>{sells??'\u2014'}</i></div></div>
+            <div className="p2-lptx tabular-nums c-tx c-mid"><div className="t">{txTotal??'\u2014'}</div><div className="bs"><b><span className="sr-only">buys </span>{buys??'\u2014'}</b><s aria-hidden="true"></s><i><span className="sr-only">sells </span>{sells??'\u2014'}</i></div></div>
             <div className="p2-lpv m tabular-nums c-vl c-mid">{ratio}</div>
             <div className="p2-lpac">
               {/* option C (Shaka, 2026-09-30 night): 28 px dark glass squares, one soft tint per glyph — blue ⓘ, gold bars for DexScreener, a teal line graph for DEXTools (a wrench read as "settings") */}
@@ -10618,7 +10628,7 @@
           <LpTh k="valuegen" name="value generated" className="c-vg" {...th}>Value Gen</LpTh>
           <LpTh k="liquidity" name="liquidity" {...th}>Liquidity</LpTh>
           <LpTh k="change" name="24h price change" className="c-mid" {...th}>Price <span className="c-24">24h</span></LpTh>{/* "Price 24h", not "24h %": Shaka read the badge as the liquidity's move (2026-10-01 evening) */}
-          <LpTh k="txns" name="transactions" className="c-tx c-mid" {...th}>Txns</LpTh>
+          <LpTh k="txns" name="transactions" className="c-tx c-mid" {...th}>Txns<span style={{display:'block',fontSize:'.8em',opacity:.6,letterSpacing:'.08em'}} aria-hidden="true">buys | sells</span></LpTh>
           <LpTh k="ratio" name="volume to liquidity ratio" className="c-vl c-mid" {...th}>Vol/Liq</LpTh>
           <div>Actions</div>
         </div>
@@ -10763,9 +10773,10 @@
       ins.sort((x,y)=>y.t-x.t);outs.sort((x,y)=>y.t-x.t);bounced.sort((x,y)=>y.t-x.t);
       const coveredFrom=file.coveredFrom&&Number(file.coveredFrom.ts);
       const covered=!(coveredFrom>since+2*3600);   // 2 h tolerance — the first backfill's block arithmetic
-      return{ins,outs,bounced,net:ins.length-outs.length,covered,coveredFrom,asOf:Date.parse(file.generatedAt),balAt:Number(T.balAt)*1000||null,headTs:Number(file.head.ts)*1000};
+      const endOk=(now/1000-Number(file.head&&file.head.ts))<=Math.max(3*3600,hours*360);   // Audit IV e29: the file reaches (close to) NOW — 3 h, or a tenth of a long window
+      return{ins,outs,bounced,net:ins.length-outs.length,covered,endOk,coveredFrom,asOf:Date.parse(file.generatedAt),balAt:Number(T.balAt)*1000||null,headTs:Number(file.head.ts)*1000};
     };
-    const nhNet=(file,token,hours)=>{const v=nhView(file,token,hours);return v&&v.covered?v.net:null;};   // the Holders box's line: null = "—"
+    const nhNet=(file,token,hours)=>{const v=nhView(file,token,hours);return v&&v.covered&&v.endOk?v.net:null;};   // e29: both ends covered, or "—"   // the Holders box's line: null = "—"
     /* One wallet's league creature: the top BURN_C tier its balance reaches (Shell is the floor, 0 — a67). null = holds nothing. */
     const holdingTier=(bal,token)=>{
       if(!(bal>0))return null;
@@ -13616,8 +13627,21 @@
           
           // Calculate liquidity and transaction changes from history
           
-          const txnChange = getTransactionChange(token, 24);
-          if (txnChange) setTxnChange24h(txnChange.changePercent);
+          /* Audit IV e29 (Shaka: "Yes, DexScreener"): the TXNS tile's count is DexScreener's (every pair's h24 buys + sells), so
+             its arrow is too — the live count vs the pipeline's last DexScreener reading of yesterday (UTC; burn-summary.json
+             snapshots, written hourly). CoinGecko's transaction-history (20 pools, its own direction labels) is only the fallback
+             when that snapshot is missing. Before: 879 · ↑96.6 % (CoinGecko 820 vs 417); now ↑43.6 % (DexScreener 879 vs 612). */
+          const dsTxnChange=(()=>{
+            const live=(d&&isFinite(d.buys)&&isFinite(d.sells)&&d.buys!=null&&d.sells!=null)?d.buys+d.sells:null;
+            const snaps=burnHistoryCache&&burnHistoryCache[token]&&burnHistoryCache[token].snapshots;
+            if(live==null||!Array.isArray(snaps))return null;
+            const today=new Date().toISOString().slice(0,10),yesterday=new Date(Date.now()-864e5).toISOString().slice(0,10);
+            const y=snaps.find(s=>s&&s.date===yesterday);   // newest first; the file's own "today" entry is skipped
+            return (y&&y.txns>0)?((live-y.txns)/y.txns)*100:null;
+          })();
+          const txnChange = dsTxnChange==null?getTransactionChange(token, 24):null;
+          if (dsTxnChange!=null) setTxnChange24h(dsTxnChange);
+          else if (txnChange) setTxnChange24h(txnChange.changePercent);
           
           
           // Start these in parallel after initial load
@@ -13745,6 +13769,11 @@
             const now = Date.now();
             const newest = snapshots[snapshots.length - 1];
             const newestTime = new Date(newest.timestamp).getTime();
+            /* Audit IV e29: past HOLDER_SNAP_MAX_AGE_MS the file's newest point is not "now" — its 7D / 30D / 90D would be
+               measured back from a stale day under a "now" label. The live count alone, no period changes ("—"). */
+            if (!(now - newestTime < HOLDER_SNAP_MAX_AGE_MS)) {
+              setHoldersByPeriod({ current: h, d1Ago: null, d7Ago: null, d30Ago: null, d90Ago: null, avg7d: null, avg30d: null, avg90d: null });
+            } else {
             
             // Find snapshots closest to 7d, 30d, 90d ago
             const findClosestSnapshot = (daysAgo) => {
@@ -13789,6 +13818,7 @@
               avg30d: calcAverage(30),
               avg90d: calcAverage(90)
             });
+            }   // e29 age gate
           } else {
             setHoldersByPeriod({ current: h, d1Ago: null, d7Ago: null, d30Ago: null, d90Ago: null, avg7d: null, avg30d: null, avg90d: null });
           }
@@ -14351,8 +14381,8 @@
                 <div className="bg-white/[0.04] border border-white/20 rounded-xl px-3 py-3.5 hover:bg-white/[0.06] hover:border-white/30 transition-colors min-w-0 col-span-2 sm:col-span-3 lg:col-span-1 flex items-center justify-between gap-3 flex-wrap lg:block">
                   <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white font-medium lg:mb-2">Txns 24H</div>
                   <div className="flex items-baseline gap-2 leading-none flex-wrap">
-                    <span className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums`} title={txnsKnown?undefined:'24h transaction counts unavailable — DexScreener did not answer.'}>{txnsKnown?(data?.buys||0)+(data?.sells||0):'\u2014'}</span>
-                    {txnsKnown&&<span className="text-xs sm:text-sm tabular-nums"><span className="text-emerald-400">{data?.buys||0}</span><span className="text-white/30 mx-0.5">/</span><span className="text-rose-400">{data?.sells||0}</span></span>}
+                    <span className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums`} title={txnsKnown?undefined:'24h transaction counts unavailable — DexScreener did not answer.'}>{txnsKnown?(data?.buys||0)+(data?.sells||0):<DashWhy why="The 24h transaction counts are unavailable — DexScreener did not answer."/>}</span>
+                    {txnsKnown&&<span className="text-xs sm:text-sm tabular-nums"><span className="text-emerald-400"><BsN k="b" n={data?.buys||0}/></span><span className="text-white/30 mx-0.5">/</span><span className="text-rose-400"><BsN k="s" n={data?.sells||0}/></span></span>}
                   </div>
                   {txnChange24h!==null?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${txnChange24h>=0?'text-emerald-400':'text-rose-400'} truncate`}>{txnChange24h>=0?'\u2191':'\u2193'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${tc>=0?'text-emerald-400':'text-rose-400'} truncate`}>{tc>=0?'\u2191':'\u2193'} {Math.abs(tc).toFixed(1)}%</div>:<div className="hidden lg:block h-4 mt-2"></div>})()}
                 </div>
@@ -14447,7 +14477,7 @@
                           ):unknown?(
                             <>
                               <div className="text-lg sm:text-xl opacity-25">{'\u{1F41A}'}</div>
-                              <div className="text-base sm:text-xl font-medium text-white/30 leading-none" title="The chain read for this window failed. This is not zero — it is unknown.">{'\u2014'}</div>
+                              <div className="text-base sm:text-xl font-medium text-white/30 leading-none" title="The chain read for this window failed. This is not zero — it is unknown."><DashWhy why="The chain read for this window failed."/></div>
                             </>
                           ):(
                             <>
@@ -14794,7 +14824,7 @@
                           <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${hdrV2?'p2-dot':''}`} style={{background:chartColors[i],color:chartColors[i]}}></div>
                           <span className="text-white/55">{d.label}:</span>
                           <span className="text-zinc-300 tabular-nums">{fmtAbbr(d.tokens)}</span>
-                          <span className={`font-semibold tabular-nums ${theme.text}`} title={d.value==null?'Not read yet (or the read failed). Unknown, not zero.':undefined}>{d.value==null?'\u2014':d.value.toFixed(2)+'%'}</span>
+                          <span className={`font-semibold tabular-nums ${theme.text}`} title={d.value==null?'Not read yet (or the read failed). Unknown, not zero.':undefined}>{d.value==null?<DashWhy why="Not read yet, or the read failed."/>:d.value.toFixed(2)+'%'}</span>
                         </div>
                       ))}
                       {hdrV2&&allocSupplyBlock}
@@ -16110,6 +16140,9 @@
           {Object.entries(labels).map(([k,l])=><option key={k} value={k} className="bg-gray-900">{l}{k===value?(dir==='asc'?' ↑':' ↓'):''}</option>)}
         </select>
       </label>);
+    /* Audit IV e26 (2026-10-23): Enter / Space on a focusable non-button (a referrer row, name, "▶ n" expander, sort header) =
+       a click. AfPodium already did this; the rest of the page was mouse-only. */
+    const afKey=fn=>e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fn(e);}};
     const SortGlyph=({active,dir})=>!active?<span className="text-gray-600 ml-1">↕</span>:<span className="text-[#D4AF37] ml-1">{dir==='asc'?'↑':'↓'}</span>;
 
     /* u4: hoisted out of AffiliatesPage — was re-declared on every render, so React remounted it each time. */
@@ -16941,7 +16974,13 @@
                                     setExpandedTxMonths(newSet);
                                   }}
                                   className={`flex items-center justify-between p-3 flex-wrap gap-x-3 gap-y-1.5 ${isCurrentMonth?'bg-green-500/10 border-b border-white/10':'bg-black/40 cursor-pointer hover:bg-white/5'}`}
-                                >
+                                 role="button" tabIndex={0} onKeyDown={afKey(()=>{
+                                    if(isCurrentMonth)return;
+                                    const newSet=new Set(expandedTxMonths);
+                                    if(newSet.has(month))newSet.delete(month);
+                                    else newSet.add(month);
+                                    setExpandedTxMonths(newSet);
+                                  })}>
                                   <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                                     {!isCurrentMonth&&<span className="text-gray-400">{isExpanded?'▼':'▶'}</span>}
                                     {isCurrentMonth&&<span className="text-green-400 text-xs px-2 py-0.5 bg-green-500/20 rounded">CURRENT</span>}
@@ -17000,12 +17039,12 @@
                                       </tbody>
                                     </table>
                                     {isCurrentMonth&&hasMoreCurrentMonth&&!showAllCurrentMonthTx&&(
-                                      <div onClick={()=>setShowAllCurrentMonthTx(true)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300 border-t border-white/5">
+                                      <div onClick={()=>setShowAllCurrentMonthTx(true)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300 border-t border-white/5" role="button" tabIndex={0} onKeyDown={afKey(()=>setShowAllCurrentMonthTx(true))}>
                                         Show All {monthTxs.length} Transactions ↓
                                       </div>
                                     )}
                                     {isCurrentMonth&&hasMoreCurrentMonth&&showAllCurrentMonthTx&&(
-                                      <div onClick={()=>setShowAllCurrentMonthTx(false)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300 border-t border-white/5">
+                                      <div onClick={()=>setShowAllCurrentMonthTx(false)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300 border-t border-white/5" role="button" tabIndex={0} onKeyDown={afKey(()=>setShowAllCurrentMonthTx(false))}>
                                         Show Less ↑
                                       </div>
                                     )}
@@ -17045,12 +17084,12 @@
                           </tbody>
                         </table>
                         {details.receipts.length>3&&!showAllReceipts&&(
-                          <div onClick={()=>setShowAllReceipts(true)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300">
+                          <div onClick={()=>setShowAllReceipts(true)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300" role="button" tabIndex={0} onKeyDown={afKey(()=>setShowAllReceipts(true))}>
                             Show All {details.receipts.length} Receipts ↓
                           </div>
                         )}
                         {showAllReceipts&&details.receipts.length>3&&(
-                          <div onClick={()=>setShowAllReceipts(false)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300">
+                          <div onClick={()=>setShowAllReceipts(false)} className="text-center py-2 text-purple-400 text-sm cursor-pointer hover:text-purple-300" role="button" tabIndex={0} onKeyDown={afKey(()=>setShowAllReceipts(false))}>
                             Show Less ↑
                           </div>
                         )}
@@ -17246,7 +17285,7 @@
                       
                       return(
                         <div key={dateKey} className="border border-purple-500/20 rounded-xl overflow-hidden">
-                          <div onClick={()=>{const newSet=new Set(expandedReceipts);if(newSet.has(dateKey))newSet.delete(dateKey);else newSet.add(dateKey);setExpandedReceipts(newSet);}} className="flex items-center justify-between p-3 bg-purple-500/10 cursor-pointer hover:bg-purple-500/20 transition-colors">
+                          <div onClick={()=>{const newSet=new Set(expandedReceipts);if(newSet.has(dateKey))newSet.delete(dateKey);else newSet.add(dateKey);setExpandedReceipts(newSet);}} className="flex items-center justify-between p-3 bg-purple-500/10 cursor-pointer hover:bg-purple-500/20 transition-colors" role="button" tabIndex={0} onKeyDown={afKey(()=>{const newSet=new Set(expandedReceipts);if(newSet.has(dateKey))newSet.delete(dateKey);else newSet.add(dateKey);setExpandedReceipts(newSet);})} aria-expanded={expandedReceipts.has(dateKey)}>
                             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                               <span className="text-lg shrink-0">{isExpanded?'▼':'▶'}</span>
                               <span className="text-purple-400 font-semibold whitespace-nowrap">{formattedDate}</span>
@@ -17261,7 +17300,7 @@
                                 <div key={receipt.id||idx} className="bg-black/40 border border-purple-500/10 rounded-lg p-3">
                                   <div className="flex items-center justify-between flex-wrap gap-2">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-purple-400 font-bold cursor-pointer hover:underline" onClick={()=>{setShowPayments(false);setSelectedReferrer(receipt.username);}}>{receipt.username}</span>
+                                      <span className="text-purple-400 font-bold cursor-pointer hover:underline" onClick={()=>{setShowPayments(false);setSelectedReferrer(receipt.username);}} role="button" tabIndex={0} onKeyDown={afKey(()=>{setShowPayments(false);setSelectedReferrer(receipt.username);})}>{receipt.username}</span>
                                       <span className="text-gray-600 text-xs">{new Date(receipt.date).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'})}</span>
                                     </div>
                                     <div className="flex items-center gap-4">
@@ -17389,7 +17428,7 @@
               {showRegistry&&(
                 <div className="sm:hidden divide-y divide-white/5">
                   {sortedRegistry.filter(s=>!registrySearch||s.name.toLowerCase().includes(registrySearch.toLowerCase())).map(s=>(
-                    <div key={s.name} className="px-4 py-3 cursor-pointer active:bg-white/5" onClick={()=>setSelectedReferrer(s.name)}>
+                    <div key={s.name} className="px-4 py-3 cursor-pointer active:bg-white/5" onClick={()=>setSelectedReferrer(s.name)} role="button" tabIndex={0} onKeyDown={afKey(()=>setSelectedReferrer(s.name))}>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-[#D4AF37] font-medium truncate">{s.name}</span>
                         <span className="inline-flex items-center gap-1 shrink-0" onClick={e=>e.stopPropagation()}><code className="text-gray-400 text-xs">{truncateWallet(s.wallet)}</code><CopyBtn text={s.wallet} className="text-gray-500 hover:text-white"/></span>
@@ -17412,19 +17451,19 @@
                   <table className="af-tbl w-full text-sm min-w-[880px]">
                     <thead>
                       <tr className="text-gray-400 border-b border-white/10 bg-black/20">
-                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('name')}>Name<SortGlyph active={sortCol==='name'} dir={sortDir}/></th>
+                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('name')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('name'))} aria-sort={sortCol==='name'?(sortDir==='asc'?'ascending':'descending'):'none'}>Name<SortGlyph active={sortCol==='name'} dir={sortDir}/></th>
                         <th className="text-left py-3 px-4">Wallet</th>
-                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('buys')}>Buys<SortGlyph active={sortCol==='buys'} dir={sortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('ptgc')}>PTGC Bought<SortGlyph active={sortCol==='ptgc'} dir={sortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('usd')}>Value (USD)<SortGlyph active={sortCol==='usd'} dir={sortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaid')}>Comm. Paid<SortGlyph active={sortCol==='commPaid'} dir={sortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaidUsd')}>Paid (USD)<SortGlyph active={sortCol==='commPaidUsd'} dir={sortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('pending')}>Pending<SortGlyph active={sortCol==='pending'} dir={sortDir}/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('buys')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('buys'))} aria-sort={sortCol==='buys'?(sortDir==='asc'?'ascending':'descending'):'none'}>Buys<SortGlyph active={sortCol==='buys'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('ptgc')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('ptgc'))} aria-sort={sortCol==='ptgc'?(sortDir==='asc'?'ascending':'descending'):'none'}>PTGC Bought<SortGlyph active={sortCol==='ptgc'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('usd')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('usd'))} aria-sort={sortCol==='usd'?(sortDir==='asc'?'ascending':'descending'):'none'}>Value (USD)<SortGlyph active={sortCol==='usd'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaid')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('commPaid'))} aria-sort={sortCol==='commPaid'?(sortDir==='asc'?'ascending':'descending'):'none'}>Comm. Paid<SortGlyph active={sortCol==='commPaid'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('commPaidUsd')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('commPaidUsd'))} aria-sort={sortCol==='commPaidUsd'?(sortDir==='asc'?'ascending':'descending'):'none'}>Paid (USD)<SortGlyph active={sortCol==='commPaidUsd'} dir={sortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" onClick={()=>toggleSort('pending')} tabIndex={0} onKeyDown={afKey(()=>toggleSort('pending'))} aria-sort={sortCol==='pending'?(sortDir==='asc'?'ascending':'descending'):'none'}>Pending<SortGlyph active={sortCol==='pending'} dir={sortDir}/></th>
                       </tr>
                     </thead>
                     <tbody>
                       {sortedRegistry.filter(s=>!registrySearch||s.name.toLowerCase().includes(registrySearch.toLowerCase())).map(s=>(
-                        <tr key={s.name} className="border-b border-white/5 hover:bg-white/5 cursor-pointer" onClick={()=>setSelectedReferrer(s.name)}>
+                        <tr key={s.name} className="border-b border-white/5 hover:bg-white/5 cursor-pointer" onClick={()=>setSelectedReferrer(s.name)} tabIndex={0} onKeyDown={afKey(()=>setSelectedReferrer(s.name))}>
                           <td className="py-3 px-4 text-[#D4AF37] font-medium hover:underline">{s.name}</td>
                           <td className="py-3 px-4"><span className="inline-flex items-center gap-1"><code className="text-gray-400 text-xs">{truncateWallet(s.wallet)}</code><CopyBtn text={s.wallet} className="text-gray-500 hover:text-white"/></span></td>
                           <td className="py-3 px-4 text-center">{s.buys>0?<span className="text-blue-400 font-semibold">{s.buys}</span>:<span className="text-gray-600">0</span>}</td>
@@ -17467,7 +17506,7 @@
                     return(
                       <div key={e.id} className={`px-4 py-3 ${st==='below'?'opacity-60':''}`}>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-[#D4AF37] font-medium truncate cursor-pointer hover:underline" onClick={()=>setSelectedReferrer(e.username)}>{e.username}</span>
+                          <span className="text-[#D4AF37] font-medium truncate cursor-pointer hover:underline" onClick={()=>setSelectedReferrer(e.username)} role="button" tabIndex={0} onKeyDown={afKey(()=>setSelectedReferrer(e.username))}>{e.username}</span>
                           <span className={`shrink-0 af-st ${st==='paid'?'pd':st==='partial'?'pa':st==='below'?'bm':'un'}`}>{st==='below'?'BELOW MIN':st.toUpperCase()}</span>
                         </div>
                         <div className="mt-1 inline-flex items-center gap-1"><code className="text-gray-400 text-xs">{truncateWallet(e.wallet)}</code><CopyBtn text={e.wallet} className="text-gray-500 hover:text-white"/></div>
@@ -17509,13 +17548,13 @@
                   <table className="af-tbl w-full text-sm table-fixed min-w-[820px]">
                     <thead>
                       <tr className="text-gray-400 border-b border-white/10 bg-black/20">
-                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('username')}>User<SortGlyph active={commSortCol==='username'} dir={commSortDir}/></th>
+                        <th className="text-left py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('username')} tabIndex={0} onKeyDown={afKey(()=>toggleCommSort('username'))} aria-sort={commSortCol==='username'?(commSortDir==='asc'?'ascending':'descending'):'none'}>User<SortGlyph active={commSortCol==='username'} dir={commSortDir}/></th>
                         <th className="text-left py-3 px-4" style={{width:'14%'}}>Wallet</th>
-                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'8%'}} onClick={()=>toggleCommSort('buys')}>Buys<SortGlyph active={commSortCol==='buys'} dir={commSortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'18%'}} onClick={()=>toggleCommSort('ptgc')}>PTGC Bought<SortGlyph active={commSortCol==='ptgc'} dir={commSortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('usd')}>USD Value<SortGlyph active={commSortCol==='usd'} dir={commSortDir}/></th>
-                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('commission')}>Commission<SortGlyph active={commSortCol==='commission'} dir={commSortDir}/></th>
-                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'12%'}} onClick={()=>toggleCommSort('status')}>Status<SortGlyph active={commSortCol==='status'} dir={commSortDir}/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'8%'}} onClick={()=>toggleCommSort('buys')} tabIndex={0} onKeyDown={afKey(()=>toggleCommSort('buys'))} aria-sort={commSortCol==='buys'?(commSortDir==='asc'?'ascending':'descending'):'none'}>Buys<SortGlyph active={commSortCol==='buys'} dir={commSortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'18%'}} onClick={()=>toggleCommSort('ptgc')} tabIndex={0} onKeyDown={afKey(()=>toggleCommSort('ptgc'))} aria-sort={commSortCol==='ptgc'?(commSortDir==='asc'?'ascending':'descending'):'none'}>PTGC Bought<SortGlyph active={commSortCol==='ptgc'} dir={commSortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('usd')} tabIndex={0} onKeyDown={afKey(()=>toggleCommSort('usd'))} aria-sort={commSortCol==='usd'?(commSortDir==='asc'?'ascending':'descending'):'none'}>USD Value<SortGlyph active={commSortCol==='usd'} dir={commSortDir}/></th>
+                        <th className="text-right py-3 px-4 cursor-pointer hover:text-white" style={{width:'14%'}} onClick={()=>toggleCommSort('commission')} tabIndex={0} onKeyDown={afKey(()=>toggleCommSort('commission'))} aria-sort={commSortCol==='commission'?(commSortDir==='asc'?'ascending':'descending'):'none'}>Commission<SortGlyph active={commSortCol==='commission'} dir={commSortDir}/></th>
+                        <th className="text-center py-3 px-4 cursor-pointer hover:text-white" style={{width:'12%'}} onClick={()=>toggleCommSort('status')} tabIndex={0} onKeyDown={afKey(()=>toggleCommSort('status'))} aria-sort={commSortCol==='status'?(commSortDir==='asc'?'ascending':'descending'):'none'}>Status<SortGlyph active={commSortCol==='status'} dir={commSortDir}/></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -17526,9 +17565,9 @@
                         return(
                           <React.Fragment key={e.id}>
                             <tr className={`border-b border-white/5 hover:bg-white/5 ${st==='below'?'opacity-50':''}`}>
-                              <td className="py-3 px-4 min-w-0" style={{width:'14%'}} title={e.username}><span className="block truncate text-[#D4AF37] font-medium cursor-pointer hover:underline" onClick={()=>setSelectedReferrer(e.username)}><span className="af-rk" aria-hidden="true"></span>{e.username}</span></td>
+                              <td className="py-3 px-4 min-w-0" style={{width:'14%'}} title={e.username}><span className="block truncate text-[#D4AF37] font-medium cursor-pointer hover:underline" onClick={()=>setSelectedReferrer(e.username)} role="button" tabIndex={0} onKeyDown={afKey(()=>setSelectedReferrer(e.username))}><span className="af-rk" aria-hidden="true"></span>{e.username}</span></td>
                               <td className="py-3 px-4" style={{width:'14%'}}><span className="inline-flex items-center gap-1"><code className="text-gray-400 text-xs">{truncateWallet(e.wallet)}</code><CopyBtn text={e.wallet} className="text-gray-500 hover:text-white"/></span></td>
-                              <td className="py-3 px-4 text-center cursor-pointer" style={{width:'8%'}} onClick={()=>{const ns=new Set(expandedEntries);if(ns.has(e.id))ns.delete(e.id);else ns.add(e.id);setExpandedEntries(ns);}}><span className="af-bp"><span className="tri">{expanded?'▼':'▶'}</span>{e.buysCount||0}</span></td>
+                              <td className="py-3 px-4 text-center cursor-pointer" style={{width:'8%'}} onClick={()=>{const ns=new Set(expandedEntries);if(ns.has(e.id))ns.delete(e.id);else ns.add(e.id);setExpandedEntries(ns);}} tabIndex={0} onKeyDown={afKey(()=>{const ns=new Set(expandedEntries);if(ns.has(e.id))ns.delete(e.id);else ns.add(e.id);setExpandedEntries(ns);})} aria-expanded={expanded}><span className="af-bp"><span className="tri">{expanded?'▼':'▶'}</span>{e.buysCount||0}</span></td>
                               <td className="py-3 px-4 text-right" style={{width:'18%'}}><div className="flex items-center justify-end gap-2"><span className="text-[#D4AF37] font-semibold">{fmtAbbr(e.ptgcAmount)}</span>{(()=>{const c=getCreatureForPtgc(e.ptgcAmount);return c?<span title={c.name} className="inline-flex items-center gap-0.5"><SeaIcon e={c.emoji} size={24}/><span className="text-xs font-bold text-white/50">x{c.count}</span></span>:null;})()}</div></td>
                               <td className="py-3 px-4 text-right" style={{width:'14%'}}><span className="text-white">{fmtDollar(e.usdAmount||0)}</span></td>
                               <td className="py-3 px-4 text-right" style={{width:'14%'}}><span className="text-purple-400 font-semibold">{fmtAbbr(e.commissionPtgc)}</span></td>
