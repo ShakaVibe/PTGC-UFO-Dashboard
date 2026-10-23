@@ -21,8 +21,17 @@
  * treat v1 as a frozen historical base and v2 as the live token. Rows in an older
  * cache file that carry no `c` are v1 rows and are upgraded in place.
  *
+ * v4 (2026-10-24, with the burn archive v2 fix — Shaka: "we need it to be right"):
+ *  - a burn is identified by its chain position (block `b` + log index `i`), never by its tx alone;
+ *  - each transaction's receipt is read ONCE. v3 read it once per UFO-burn log in that tx, so a tx with two UFO
+ *    burns stored its pTGC burns twice (three → nine rows …): 126 txs, +221 M pTGC on the v1 lifetime, +20 M on v2;
+ *  - times are the blocks' real timestamps (shared code from fetch-burn-history.js), not head − blocks × 10 s;
+ *  - each run re-reads from the last block it finished (`scannedTo`) − 1800 to the head − 96.
+ *  The first v4 run rebuilds every row from the receipts of the transactions already known (all-or-nothing: one
+ *  unreadable receipt and nothing is written; the next run tries again).
+ *
  * OUTPUT:
- * Writes ONLY to data/ufo-ptgc-burns.json — does NOT touch any existing files.
+ * Writes ONLY to data/ufo-ptgc-burns.json + data/ufo-ptgc-burns-cache.json — does NOT touch any other file.
  */
 
 const fs   = require('fs');
@@ -44,202 +53,54 @@ const LIVE_KEY = 'v2';   // the contract the dashboard shows as "UFO"
 const UFO_DECIMALS  = 18;
 const PTGC_DECIMALS = 18;
 
-const RPC_URL         = 'https://rpc.pulsechain.com';
 const TRANSFER_SIG    = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const BURN_ADDR_TOPIC = '0x0000000000000000000000000000000000000000000000000000000000000369';
-const LOG_CHUNK       = 2000;
-const MS_PER_BLOCK    = 10000;
+const MS_PER_BLOCK    = 10000;   // only to place a first-ever scan near a contract's launch date
 const RECEIPT_CONCURRENCY = 20;
+const RESCAN_BLOCKS   = 1800;    // each run re-reads ~5 h before where the last one stopped
+const SCHEMA = 4;
+
+// The chain reads are shared with the burn archive (scripts/fetch-burn-history.js, archive v2): real block times,
+// getLogs with a fatal-on-hole policy, the finality margin.
+const B = require('./fetch-burn-history.js');
+const rpcCall = B.rpcCall;
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const key = r => r.b + ':' + r.i;
+const isBurnLog = (l, token) => (l.address || '').toLowerCase() === token.toLowerCase() && l.topics && l.topics[0] === TRANSFER_SIG &&
+  l.topics.length >= 3 && (l.topics[2] || '').toLowerCase() === BURN_ADDR_TOPIC;
+const amountOf = (data, dec) => { const v = BigInt(data && data !== '0x' ? data : '0x0'), d = 10n ** BigInt(dec); return Number(v / d) + Number(v % d) / Number(d); };
 
-// ============================================
-// RPC
-// ============================================
-async function rpcCall(method, params, retries = 3) {
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch(RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
-        signal: controller.signal
-      });
-      clearTimeout(tid);
-      const json = await res.json();
-      if (json.error) {
-        if (attempt < retries - 1) await delay(2000 * (attempt + 1));
-        continue;
-      }
-      return json.result;
-    } catch (e) {
-      if (attempt < retries - 1) await delay(2000 * (attempt + 1));
-    }
-  }
-  return null;
-}
-
-// ============================================
-// CHAIN HEAD (read once per run, shared by every contract)
-// ============================================
-async function readHead() {
-  const blockHex = await rpcCall('eth_blockNumber', []);
-  if (!blockHex) throw new Error('Could not get block number');
-  const currentBlock = parseInt(blockHex, 16);
-  const latestBlockData = await rpcCall('eth_getBlockByNumber', ['latest', false]);
-  if (!latestBlockData) throw new Error('Could not get latest block');
-  const latestTs = parseInt(latestBlockData.timestamp, 16) * 1000;
-  return { currentBlock, latestTs, tsFromBlock: (blockNum) => latestTs - (currentBlock - blockNum) * MS_PER_BLOCK };
-}
-
-// ============================================
-// FETCH UFO BURNS for one contract (incremental)
-// ============================================
-async function fetchUFOBurns(contract, head, existingBurns = []) {
-  console.log('\n' + '='.repeat(50));
-  console.log(`Fetching ${contract.key} burns via eth_getLogs (${contract.address})...`);
-  console.log('='.repeat(50));
-
-  const { currentBlock, latestTs, tsFromBlock } = head;
-
-  // Incremental: start from just before the newest stored burn
-  let fromBlock;
-  if (existingBurns.length > 0) {
-    const lastTs = existingBurns[0].t;
-    const blocksAgo = Math.ceil((latestTs - lastTs) / MS_PER_BLOCK);
-    fromBlock = Math.max(0, currentBlock - blocksAgo - 1000);
-    console.log(`Incremental mode: last burn ${new Date(lastTs).toISOString()}`);
-  } else {
-    const launchMs = new Date(contract.launch).getTime();
-    const msAgo = latestTs - launchMs;
-    const blocksAgo = Math.ceil(msAgo / MS_PER_BLOCK);
-    fromBlock = Math.max(0, currentBlock - blocksAgo - 5000);   // small pad: MS_PER_BLOCK is nominal
-    console.log(`First run for ${contract.key}: scanning from launch ${new Date(launchMs).toISOString()}`);
-  }
-
-  const totalBlocks = currentBlock - fromBlock;
-  const totalChunks = Math.ceil(totalBlocks / LOG_CHUNK);
-  console.log(`Scanning ${totalBlocks.toLocaleString()} blocks in ~${totalChunks} chunks...`);
-
-  const allLogs = [];
-  let chunksDone = 0;
-
-  for (let start = fromBlock; start <= currentBlock; start += LOG_CHUNK) {
-    const end = Math.min(start + LOG_CHUNK - 1, currentBlock);
-    const params = [{
-      address: contract.address,
-      fromBlock: '0x' + start.toString(16),
-      toBlock:   '0x' + end.toString(16),
-      topics: [TRANSFER_SIG, null, BURN_ADDR_TOPIC]
-    }];
-    let result = await rpcCall('eth_getLogs', params);
-    if (result === null) { await delay(5000); result = await rpcCall('eth_getLogs', params); }   // one more round after a pause
-    /* a31: a chunk that could not be read is FATAL. The next run starts ~1000 blocks before the
-       newest STORED burn, so a dropped chunk older than that was never rescanned and permanently
-       lowered byContract.v1 and the dated rows behind the "PTGC burned by UFO" windows. */
-    if (result === null) throw new Error(`${contract.key}: eth_getLogs failed for blocks ${start}–${end} after retries — aborting so the file is not written with a hole`);
-    if (result.length > 0) allLogs.push(...result);
-    chunksDone++;
-    if (chunksDone % 100 === 0 || chunksDone === totalChunks) {
-      console.log(`  ${chunksDone}/${totalChunks} chunks | ${allLogs.length} new ${contract.key} burn logs`);
-    }
+/* One receipt per tx (never one per log). Resolves Map tx → receipt; a tx whose receipt could not be read is absent. */
+async function readReceipts(txs) {
+  const out = new Map();
+  for (let k = 0; k < txs.length; k += RECEIPT_CONCURRENCY) {
+    const batch = txs.slice(k, k + RECEIPT_CONCURRENCY);
+    const rs = await Promise.all(batch.map(tx => rpcCall('eth_getTransactionReceipt', [tx], 4)));
+    batch.forEach((tx, j) => { const r = rs[j]; if (r && Array.isArray(r.logs) && r.blockNumber) out.set(tx, r); });
+    if ((k / RECEIPT_CONCURRENCY) % 25 === 24 || k + RECEIPT_CONCURRENCY >= txs.length) console.log(`  ${Math.min(k + RECEIPT_CONCURRENCY, txs.length)}/${txs.length} receipts read`);
     await delay(50);
   }
-
-  console.log(`New ${contract.key} burn logs: ${allLogs.length}`);
-
-  const newBurns = allLogs.map(log => {
-    const blockNum = parseInt(log.blockNumber, 16);
-    const bigVal   = BigInt(log.data);
-    const divisor  = BigInt(10) ** BigInt(UFO_DECIMALS);
-    const whole    = Number(bigVal / divisor);
-    const frac     = Number(bigVal % divisor) / Math.pow(10, UFO_DECIMALS);
-    return { t: tsFromBlock(blockNum), a: whole + frac, tx: log.transactionHash, c: contract.key };
-  });
-
-  // Deduplicate against existing
-  const existingTxSet = new Set(existingBurns.map(b => b.tx));
-  const dedupedNew = newBurns.filter(b => !existingTxSet.has(b.tx));
-  console.log(`New unique ${contract.key} burns: ${dedupedNew.length}`);
-
-  const allBurns = [...dedupedNew, ...existingBurns];
-  allBurns.sort((a, b) => b.t - a.t);
-  console.log(`Total ${contract.key} burns: ${allBurns.length}`);
-  return allBurns;
+  return out;
 }
 
-// ============================================
-// LOOK UP PTGC BURNS VIA RECEIPTS (incremental)
-// ============================================
-async function findPTGCBurnsInReceipts(ufoBurns, existingPTGCByUFO = [], existingNoPtgc = []) {
-  console.log('\n' + '='.repeat(50));
-  console.log('Looking up PTGC burns in UFO burn transaction receipts...');
-  console.log('='.repeat(50));
-
-  /* Only process tx hashes we haven't already looked up. A UFO burn tx with NO pTGC burn
-     in its receipt used to be re-fetched on every run (it never entered the PTGC cache),
-     ~160 wasted receipt lookups per run; `_noPtgcTxCache` remembers those now. */
-  const existingTxSet = new Set([...existingPTGCByUFO.map(b => b.tx), ...existingNoPtgc]);
-  const newUFOBurns   = ufoBurns.filter(b => !existingTxSet.has(b.tx));
-  console.log(`New UFO burn txs to look up: ${newUFOBurns.length}`);
-  console.log(`Already cached: ${existingPTGCByUFO.length} PTGC burns, ${existingNoPtgc.length} txs known to have none`);
-
-  if (newUFOBurns.length === 0) {
-    console.log('Nothing new to look up — using cached data');
-    return { rows: existingPTGCByUFO, noPtgc: existingNoPtgc };
+/* Everything a receipt says: the UFO burns (of any known contract) and the pTGC burns in that tx. Times filled later. */
+function rowsFromReceipt(tx, r) {
+  const b = parseInt(r.blockNumber, 16);
+  const ufo = [], ptgc = [];
+  let c = null;
+  for (const l of r.logs) {
+    if (l.removed) continue;
+    const i = parseInt(l.logIndex, 16);
+    const ct = CONTRACTS.find(x => isBurnLog(l, x.address));
+    if (ct) { ufo.push({ b, i, t: 0, a: amountOf(l.data, UFO_DECIMALS), tx, c: ct.key }); if (!c) c = ct.key; }
   }
-
-  const burnAddrPadded = '0x000000000000000000000000' + BURN_ADDRESS.slice(2).toLowerCase();
-  const newPTGCBurns   = [];
-  const newNoPtgc      = [];
-
-  for (let i = 0; i < newUFOBurns.length; i += RECEIPT_CONCURRENCY) {
-    const batch    = newUFOBurns.slice(i, i + RECEIPT_CONCURRENCY);
-    const receipts = await Promise.all(
-      batch.map(b => rpcCall('eth_getTransactionReceipt', [b.tx]))
-    );
-
-    for (let j = 0; j < batch.length; j++) {
-      const receipt = receipts[j];
-      if (!receipt || !receipt.logs) continue;   // unreadable receipt: not cached, retried next run
-      let found = 0;
-
-      for (const log of receipt.logs) {
-        if (
-          log.address.toLowerCase() === PTGC_ADDRESS.toLowerCase() &&
-          log.topics[0]             === TRANSFER_SIG &&
-          log.topics.length         >= 3 &&
-          log.topics[2].toLowerCase() === burnAddrPadded
-        ) {
-          const bigVal  = BigInt(log.data);
-          const divisor = BigInt(10) ** BigInt(PTGC_DECIMALS);
-          const whole   = Number(bigVal / divisor);
-          const frac    = Number(bigVal % divisor) / Math.pow(10, PTGC_DECIMALS);
-          newPTGCBurns.push({
-            t:  batch[j].t,
-            a:  whole + frac,
-            f:  ('0x' + log.topics[1].slice(26)).toLowerCase(),
-            tx: batch[j].tx,
-            c:  batch[j].c
-          });
-          found++;
-        }
-      }
-      if (!found) newNoPtgc.push(batch[j].tx);
-    }
-
-    if ((i + RECEIPT_CONCURRENCY) % 200 === 0 || i + RECEIPT_CONCURRENCY >= newUFOBurns.length) {
-      console.log(`  ${Math.min(i + RECEIPT_CONCURRENCY, newUFOBurns.length)}/${newUFOBurns.length} receipts | ${newPTGCBurns.length} PTGC burns found`);
-    }
-    await delay(50);
+  if (!c) return { ufo, ptgc };
+  for (const l of r.logs) {
+    if (l.removed || !isBurnLog(l, PTGC_ADDRESS)) continue;
+    ptgc.push({ b, i: parseInt(l.logIndex, 16), t: 0, a: amountOf(l.data, PTGC_DECIMALS), f: ('0x' + l.topics[1].slice(26)).toLowerCase(), tx, c });
   }
-
-  const allPTGCByUFO = [...newPTGCBurns, ...existingPTGCByUFO];
-  allPTGCByUFO.sort((a, b) => b.t - a.t);
-  console.log(`Total PTGC burns by UFO: ${allPTGCByUFO.length} (+${newNoPtgc.length} txs with no pTGC burn remembered)`);
-  return { rows: allPTGCByUFO, noPtgc: [...newNoPtgc, ...existingNoPtgc] };
+  return { ufo, ptgc };
 }
 
 // ============================================
@@ -278,7 +139,7 @@ function summarize(rows) {
 // ============================================
 async function main() {
   console.log('\n' + '='.repeat(60));
-  console.log('UFO → PTGC BURN FETCHER v3 (fast, incremental, multi-contract)');
+  console.log('UFO → PTGC BURN FETCHER v4 (block + log index, one receipt per tx, real block times)');
   console.log('Does NOT modify any existing burn files.');
   console.log('Started:', new Date().toISOString());
   console.log('='.repeat(60));
@@ -297,6 +158,7 @@ async function main() {
   let existingUFOBurns  = [];
   let existingPTGCByUFO = [];
   let existingNoPtgc    = [];
+  let cacheSchema = 0, cacheScannedTo = null;
   try {
     const src = fs.existsSync(cachePath) ? cachePath : (fs.existsSync(outputPath) ? outputPath : null);
     if (src) {
@@ -305,6 +167,8 @@ async function main() {
       existingUFOBurns  = tag(existing._ufoBurnsCache);
       existingPTGCByUFO = tag(existing._ptgcByUFOCache);
       existingNoPtgc    = Array.isArray(existing._noPtgcTxCache) ? existing._noPtgcTxCache : [];
+      cacheSchema       = existing.schema || 0;
+      cacheScannedTo    = existing.scannedTo || null;
       console.log(`Loaded cache: ${existingUFOBurns.length} UFO burns, ${existingPTGCByUFO.length} PTGC burns`);
     } else {
       console.log('No existing cache — full fetch from each contract\'s launch');
@@ -314,19 +178,80 @@ async function main() {
     process.exit(1);
   }
 
-  const head = await readHead();
+  const migrate = cacheSchema < SCHEMA;
+  const ufoByKey = new Map(), ptgcByKey = new Map();
+  let noPtgc = new Set(existingNoPtgc);
+  const scannedTo = Object.assign({}, cacheScannedTo || {});
 
-  // Step 1: Fetch UFO burns per contract (fast — incremental per contract)
-  let ufoBurns = [];
-  for (const contract of CONTRACTS) {
-    const mine = existingUFOBurns.filter(b => b.c === contract.key);
-    const rows = await fetchUFOBurns(contract, head, mine);
-    ufoBurns = ufoBurns.concat(rows);
+  if (migrate) {
+    /* v3 → v4: rebuild every row from the receipts of the txs already known. All-or-nothing. */
+    const txs = [...new Set(existingUFOBurns.map(r => r.tx).concat(existingPTGCByUFO.map(r => r.tx)))];
+    console.log(`\nMIGRATION v3 → v4: re-reading ${txs.length} receipts (one per transaction) …`);
+    const rec = await readReceipts(txs);
+    const missing = txs.filter(tx => !rec.has(tx));
+    if (missing.length) throw new Error(`${missing.length} receipt(s) could not be read (e.g. ${missing[0]}) — nothing written; the next run tries again`);
+    noPtgc = new Set();
+    for (const tx of txs) {
+      const { ufo, ptgc } = rowsFromReceipt(tx, rec.get(tx));
+      for (const r of ufo) ufoByKey.set(key(r), r);
+      for (const r of ptgc) ptgcByKey.set(key(r), r);
+      if (ufo.length && !ptgc.length) noPtgc.add(tx);
+    }
+    for (const ct of CONTRACTS) {
+      let mx = null;
+      for (const r of ufoByKey.values()) if (r.c === ct.key && (mx == null || r.b > mx)) mx = r.b;
+      if (mx != null) scannedTo[ct.key] = mx;   // known complete up to its newest burn; the scan below re-reads 1800 blocks before it
+    }
+    const was = existingPTGCByUFO.reduce((s, r) => s + r.a, 0), now = [...ptgcByKey.values()].reduce((s, r) => s + r.a, 0);
+    console.log(`  rebuilt: ${ufoByKey.size} UFO burns (was ${existingUFOBurns.length} rows), ${ptgcByKey.size} pTGC burns = ${now.toLocaleString()} (was ${existingPTGCByUFO.length} rows = ${was.toLocaleString()})`);
+  } else {
+    for (const r of existingUFOBurns) ufoByKey.set(key(r), r);
+    for (const r of existingPTGCByUFO) ptgcByKey.set(key(r), r);
   }
-  ufoBurns.sort((a, b) => b.t - a.t);
 
-  // Step 2: Look up PTGC burns via receipts (only new txs)
-  const { rows: ptgcByUFOBurns, noPtgc } = await findPTGCBurnsInReceipts(ufoBurns, existingPTGCByUFO, existingNoPtgc);
+  // Step 1: new UFO burns per contract, from the last finished block (minus a re-read margin) to the head minus the finality margin
+  const head = await B.headBlock('ufo-ptgc-burns');
+  const to = head - B.CONFIRM_BLOCKS;
+  for (const ct of CONTRACTS) {
+    let from;
+    if (Number.isInteger(scannedTo[ct.key])) from = Math.max(0, scannedTo[ct.key] - RESCAN_BLOCKS);
+    else {   // first ever scan of this contract: from a little before its launch date
+      const headTs = (await B.blockTimes([head])).get(head);
+      from = Math.max(0, head - Math.ceil((headTs - Date.parse(ct.launch)) / MS_PER_BLOCK) - 50000);
+    }
+    if (from > to) { console.log(`  ${ct.key}: nothing to scan (head behind)`); continue; }
+    const rows = await B.scanBurns(ct.address, UFO_DECIMALS, from, to, { label: ct.key });
+    let fresh = 0;
+    for (const r of rows) { const row = { b: r.b, i: r.i, t: r.t, a: r.a, tx: r.tx, c: ct.key }; if (!ufoByKey.has(key(row))) fresh++; ufoByKey.set(key(row), row); }
+    scannedTo[ct.key] = to;
+    console.log(`  ${ct.key}: ${rows.length} UFO burns in blocks ${from}–${to}, ${fresh} new`);
+  }
+
+  // Step 2: pTGC burns in the receipts of txs not read yet (one receipt per tx)
+  const doneTx = new Set([...ptgcByKey.values()].map(r => r.tx).concat([...noPtgc]));
+  const newTx = [...new Set([...ufoByKey.values()].map(r => r.tx))].filter(tx => !doneTx.has(tx));
+  console.log(`\nNew UFO burn txs to look up: ${newTx.length}`);
+  if (newTx.length) {
+    const rec = await readReceipts(newTx);
+    for (const tx of newTx) {
+      const r = rec.get(tx);
+      if (!r) continue;   // unreadable: not marked done, read again next run
+      const { ptgc } = rowsFromReceipt(tx, r);
+      for (const row of ptgc) ptgcByKey.set(key(row), row);
+      if (!ptgc.length) noPtgc.add(tx);
+    }
+  }
+
+  // Real block times for every row that has none yet (all of them on the migration run)
+  const need = [...ufoByKey.values(), ...ptgcByKey.values()].filter(r => !(r.t > 0)).map(r => r.b);
+  if (need.length) {
+    const times = await B.blockTimes(need);
+    for (const r of [...ufoByKey.values(), ...ptgcByKey.values()]) if (!(r.t > 0)) r.t = times.get(r.b);
+  }
+  const byNewest = (x, y) => (y.t - x.t) || (y.b - x.b) || (y.i - x.i);
+  const ufoBurns = [...ufoByKey.values()].sort(byNewest);
+  const ptgcByUFOBurns = [...ptgcByKey.values()].sort(byNewest);
+  console.log(`Total: ${ufoBurns.length} UFO burns, ${ptgcByUFOBurns.length} pTGC burns by UFO`);
 
   // Step 3: Totals — combined and per contract
   const byContract = {};
@@ -345,7 +270,7 @@ async function main() {
   // Step 4: Write output — includes internal caches for next incremental run
   const output = {
     lastUpdated: new Date().toISOString(),
-    schema: 2,
+    schema: 2,   // the shape the dashboard reads (unchanged); the generator's own format is the cache's `schema`
     note: 'PTGCbyUFO identified by fetching UFO burn tx receipts and finding PTGC burns within the same transaction. Combined totals cover every UFO contract; byContract splits them. liveContract is the token the dashboard currently shows.',
     liveContract: LIVE_KEY,
     liveAddress:  CONTRACTS.find(c => c.key === LIVE_KEY).address,
@@ -364,14 +289,17 @@ async function main() {
   };
   const cache = {
     lastUpdated: output.lastUpdated,
+    schema: SCHEMA,
+    scannedTo,
     note: 'Generator-only caches for fetch-ufo-ptgc-burns.js (incremental runs). Nothing on the site reads this file.',
     _ufoBurnsCache:  ufoBurns,
     _ptgcByUFOCache: ptgcByUFOBurns,
-    _noPtgcTxCache:  noPtgc
+    _noPtgcTxCache:  [...noPtgc]
   };
 
-  fs.writeFileSync(outputPath, JSON.stringify(output));
-  fs.writeFileSync(cachePath,  JSON.stringify(cache));
+  const writeAtomic = (f, text) => { fs.writeFileSync(f + '.tmp', text); fs.renameSync(f + '.tmp', f); };
+  writeAtomic(cachePath,  JSON.stringify(cache));
+  writeAtomic(outputPath, JSON.stringify(output));
   const kb = p => (fs.statSync(p).size / 1024).toFixed(0);
   console.log(`\nWritten: ${outputPath} (${kb(outputPath)} KB, ${output.rows.length} dated v1 rows) + ${cachePath} (${kb(cachePath)} KB, generator only)`);
 

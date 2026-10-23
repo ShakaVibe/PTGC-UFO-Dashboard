@@ -228,7 +228,7 @@ async function scanBurns(address, decimals, from, to, { chunk = LOG_CHUNK, concu
     if (seen.has(k)) continue;
     seen.add(k);
     const v = BigInt(log.data);   // exact wei → whole + fraction (no Number precision loss on large values)
-    rows.push({ b, i, t: 0, a: Number(v / divisor) + Number(v % divisor) / Number(divisor), f: ('0x' + log.topics[1].slice(26)).toLowerCase() });
+    rows.push({ b, i, t: 0, a: Number(v / divisor) + Number(v % divisor) / Number(divisor), f: ('0x' + log.topics[1].slice(26)).toLowerCase(), tx: log.transactionHash });   // tx: for fetch-ufo-ptgc-burns.js (the archive files do not store it — rowOut)
   }
   if (rows.length) {
     const times = await blockTimes(rows.map(r => r.b), { concurrency });

@@ -46,8 +46,27 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (late): LOGOS THUMBNAILS (P-4) + "PTGC BURNED BY UFO" v4 — READY TO PUSH.** (Shaka: "1 yes … 3. yes"; the token:
+"ptgcapi pipeline dispatch" has NO expiration — checked by him; "saucer-claude" (expires Nov 4) is not used by this site.)
+*Logos:* `python3 tools/logos-thumbs.py` (idempotent; run on the Mac) → logos/{ptgc,ufo,combined}/thumbs/*.webp (18 files, 480 px
+longest side, 300 KB total vs 5.8 MB of originals), the three windows' <img> use them with loading="lazy" decoding="async";
+links/download still the originals. index.html sha256 7fa5823e.
+*fetch-ufo-ptgc-burns.js v4:* found a real over-count — v3 read a tx's receipt once PER UFO-burn log in it, so a tx with 2 UFO
+burns stored its pTGC burns twice (3 → 9 rows): 126 txs, v1 lifetime 4,588.37 M → 4,366.92 M (−221.45 M), v2 file total
+334.98 M → 316.79 M (the site's v2 figure comes from value-generated.json, 316.47 M, unaffected). Now: rows keyed by block + log
+index, one receipt per tx, real block times (shared code from fetch-burn-history.js, whose scanBurns rows now also carry `tx` —
+not written to the archive), re-read from cache `scannedTo` − 1800 to head − 96. First v4 run migrates: re-reads all 4,721
+receipts (all-or-nothing, ~75 s here) and rebuilds every row. Simulated: migration ✓, second run no-op ✓; UFO burned
+(reference) v1 149,591,279,767.087 = its burn-address balance, v2 96,059,530,539 = its balance. Site headline "PTGC burned by
+UFO" ≈ 4,904.8 M → 4,683.4 M; 7D 34.73 → 34.46 M, 30D 150.15 → 149.36 M, 90D 246.67 → 244.63 M. Optional, NOT done (his call):
+v1 still counts pTGC's own 0.5 % fee-burn legs, which the v2 chain scan drops (~ −23 M if aligned). The step is gated 6 h, so
+the migration lands on the first ufo-ptgc-burns run ≤ 6 h after the push (or Run workflow → only=ufo-ptgc-burns).
+
 **2026-10-24: BURN ARCHIVE v2 — the PTGC burn windows fixed (Shaka: "lets fix it.. we need it to be right") + HOME CARDS ROUND 5
-— READY TO PUSH (one commit: the script AND the rebuild files together — old code would read the rebuild files as period files).**
+— PUSHED `f2d25262`, VERIFIED: the 21:16 UTC pipeline run applied the rebuild (deleted the 8 rebuild files), burn-history step 20 s,
+`PTGC.archive.reconcile.ok: true` (diff −0.0009 token at block 27873830), UFO v1 ok; raw burn-summary 7D 190.84 M / 30D 559.9 M / 90D
+1,428.5 M; landing cards live (round 5 CSS, no axis labels). Shaka checked UFO: the UFO total (new contract, 96.06 B) already carries
+the old contract's history — the 93.06 B burn of 2026-07-09 = old UFO burned to 2026-07-07; leave it.**
 *Cause:* fetch-burn-history.js guessed each burn's time (head time − blocks × 10 s; PulseChain is ~3 % slower) and dropped re-read
 burns by "same sender, amount ±1, time ±10 min"; once two runs' guesses drifted > 10 min apart the burn was saved again. Exact match
 to the burn-address balance through 2025-09; from 2025-10 the archive over-counted (Aug 2026 570.7 M vs 366.5 M real; Aug 20 12–16 UTC
@@ -1903,7 +1922,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--35. **Burn archive v2 + home cards round 5 (2026-10-24) — BUILT, on the Mac, NOT pushed.** His push (promptly — the first run
+-35. **Burn archive v2 + home cards round 5 (2026-10-24) — PUSHED `f2d25262`, VERIFIED (see Current state).** His push (promptly — the first run
    re-reads from the rebuild's last block) → check the pipeline's burn-history log + `PTGC.archive.reconcile.ok` → live look at the
    #/ptgc burn windows (7D ≈ 190 M) and the cards. e39 burn: DONE by this. Then: P-4 thumbnails, D-4 pool with a head check, D-6 / c21,
    and the Worker DISPATCH_TOKEN before ~Nov 5. fetch-ufo-ptgc-burns.js still guesses times (dedupes by tx hash, so no double count).
