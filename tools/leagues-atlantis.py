@@ -13,10 +13,11 @@ art, phone crops keep the token's coloured side. No number, tier or calculation 
 """
 import hashlib, subprocess, sys
 n = 0
-def edit(path, old, new, count=1):
+def edit(path, old, new, count=1, done=None):
     global n
     s = open(path, encoding='utf-8').read()
     if new and new in s: return
+    if done and done in s: return   # a later round already moved this on
     if not new and old not in s: return
     assert s.count(old) == count, f'{path}: anchor x{s.count(old)} (want {count}): {old[:90]!r}'
     open(path, 'w', encoding='utf-8').write(s.replace(old, new)); n += 1
@@ -39,15 +40,33 @@ edit('tools/pf-v2/PfLeagues.jsx', """<div className="sky" aria-hidden="true"></d
 
 # ---- the Socials combined card (.lgc, 1080×1350) ----
 edit(IX, "    .lgc{--g:242,201,76;--u:124,252,0;position:relative;overflow:hidden;width:1080px;height:1350px;background:#04070e url(logos/leagues/lg-sea.webp) center top/100% auto no-repeat;",
-     "    .lgc{--g:242,201,76;--u:124,252,0;position:relative;overflow:hidden;width:1080px;height:1350px;background:#04070e url(logos/leagues/lg-atl-split.webp) center top/1560px auto no-repeat;")   # 2026-10-23: PTGC gold left → deep blue → UFO green right
+     "    .lgc{--g:242,201,76;--u:124,252,0;position:relative;overflow:hidden;width:1080px;height:1350px;background:#04070e url(logos/leagues/lg-atl-split.webp) center top/1560px auto no-repeat;", done="height:1350px;background:#04070e;")   # 2026-10-23: PTGC gold left → deep blue → UFO green right
 edit(IX, """          <div className="tint tl" aria-hidden="true"></div><div className="tint tl2" aria-hidden="true"></div><div className="tint tr" aria-hidden="true"></div><div className="tint tr2" aria-hidden="true"></div>
           <div className="clipin" aria-hidden="true"><img className="cre whale" src={`logos/leagues/lg-whale.webp?v=${LG_ART_V}`} alt=""/><img className="cre shark" src={`logos/leagues/lg-shark.webp?v=${LG_ART_V}`} alt=""/></div>
           <div className="veil" aria-hidden="true"></div>""", """          {/* 2026-10-23 (the Atlantis kit): the split art carries the gold / green itself — no colour tints, no whale / shark hero */}
-          <div className="veil" aria-hidden="true"></div>""")
+          <div className="veil" aria-hidden="true"></div>""", done='<div className="art"></div><div className="veil"></div>')
 edit(IX, "    .lgc .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,5,12,.28) 0%,rgba(2,5,12,0) 10%,rgba(2,5,12,0) 36%,rgba(2,5,12,.55) 46%,rgba(2,5,12,.8) 56%,rgba(2,5,12,.84) 92%,rgba(2,5,12,.72) 100%);pointer-events:none}",
      "    .lgc .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,6,16,.45) 0%,rgba(2,6,16,.32) 14%,rgba(2,6,16,.34) 30%,rgba(2,5,12,.66) 40%,rgba(2,5,12,.86) 48%,rgba(2,5,12,.88) 92%,rgba(2,5,12,.8) 100%);pointer-events:none}   /* 2026-10-23: ~35 % navy over the art, the table area dark */")
 edit(IX, "    .lgc .tk1::before{content:'';position:absolute;left:50%;top:50%;width:300px;height:300px;transform:translate(-50%,-46%);border-radius:50%;background:radial-gradient(circle,rgba(4,6,12,.72) 0%,rgba(4,6,12,.45) 45%,rgba(4,6,12,0) 70%);z-index:0}",
      "    .lgc .tk1::before{content:'';position:absolute;left:50%;top:50%;width:400px;height:400px;transform:translate(-50%,-44%);border-radius:50%;background:radial-gradient(circle,rgba(2,5,12,.86) 0%,rgba(2,5,12,.7) 38%,rgba(2,5,12,.35) 58%,rgba(2,5,12,0) 72%);z-index:0}   /* 2026-10-23: darker behind each coin + price (Shaka) */")
+
+
+# ---- round 2 (Shaka, 2026-10-24: "I dont like how the image goes out past the frame … make both tokens larger and move them and
+#      their prices up a little") — the art + veil live INSIDE the frame (the rounded clip the old creatures used); coins 0.8 → 0.98,
+#      the coin row 290 → 232 px, names / prices a size up ----
+edit(IX, "background:#04070e url(logos/leagues/lg-atl-split.webp) center top/1560px auto no-repeat;", "background:#04070e;")
+edit(IX, "    .lgc .clipin{position:absolute;inset:16px;border-radius:24px;overflow:hidden;z-index:1;pointer-events:none}",
+     "    .lgc .clipin{position:absolute;inset:16px;border-radius:24px;overflow:hidden;z-index:1;pointer-events:none}\n"
+     "    .lgc .clipin .art{position:absolute;inset:0;background:url(logos/leagues/lg-atl-split.webp) center top/1560px auto no-repeat}   /* round 2: the art stops at the frame */")
+edit(IX, """          <div className="veil" aria-hidden="true"></div>
+          <div className="hd">""", """          <div className="clipin" aria-hidden="true"><div className="art"></div><div className="veil"></div></div>{/* round 2: art + veil clipped to the frame */}
+          <div className="hd">""")
+edit(IX, "    .lgc .coins{position:absolute;left:0;right:0;top:290px;display:grid;grid-template-columns:1fr 1fr;padding:0 150px}",
+         "    .lgc .coins{position:absolute;left:0;right:0;top:232px;display:grid;grid-template-columns:1fr 1fr;padding:0 130px}   /* round 2: up from 290 */")
+edit(IX, "    .lgc .tk1 .lg-coin{--u:.8px;", "    .lgc .tk1 .lg-coin{--u:.98px;")   # round 2: larger coins (156 → 191 px)
+edit(IX, "    .lgc .tk1 .nm{font-family:'Orbitron',monospace;font-weight:700;font-size:24px;letter-spacing:.08em;margin-top:10px;",
+         "    .lgc .tk1 .nm{font-family:'Orbitron',monospace;font-weight:700;font-size:27px;letter-spacing:.08em;margin-top:12px;")
+edit(IX, "    .lgc .tk1 .p{font-size:36px;font-weight:700;line-height:1;margin-top:4px;", "    .lgc .tk1 .p{font-size:42px;font-weight:700;line-height:1;margin-top:5px;")
 
 out = subprocess.run([sys.executable, 'tools/pf-v2.py'], capture_output=True, text=True)
 if out.returncode: print(out.stdout, out.stderr); sys.exit(1)

@@ -46,6 +46,12 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24: Leagues card round 2 (Shaka: "I dont like how the image goes out past the frame … make both tokens larger and move them
+and their prices up a little") — BUILT, on the Mac, NOT pushed.** `python3 tools/leagues-atlantis.py` (round 2 appended; idempotent,
+`done=` markers let round 1 skip what round 2 moved on). The Socials combined card's art + veil now sit in `.clipin` (inset 16 px,
+radius 24 — inside the gold → green frame); outside the frame is plain #04070e. Coins `--u` .8 → .98 (156 → 191 px), the coin row
+290 → 232 px, padding 150 → 130, name 24 → 27 px, price 36 → 42 px. index.html sha256 d98caccb. Batch 6 itself is PUSHED (`2193fa055`).
+
 **2026-10-24 (overnight): AUDIT IV BATCH 6 — the medium items e32–e41 (Shaka: "do them all") + the LEAGUES ATLANTIS ART — BUILT,
 on the Mac, NOT pushed.** Build = `python3 tools/audit4-batch6.py` then `python3 tools/leagues-atlantis.py` (both idempotent; from
 `3925eac36` the two give index.html 8db28c1c, portfolio f432811e, calculators 98b90af6, charts ee41c4e0, ledger bd5ad150; re-runs
