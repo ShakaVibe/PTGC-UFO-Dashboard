@@ -224,7 +224,7 @@ NEW_DRAW = """      const up=(d?.change!=null&&isFinite(d.change))?d.change>=0:n
           {ticks.length>0&&<div className="hc-yax" aria-hidden="true">{ticks.map(v=><span key={v} style={{top:`${(Y(v)/160*100).toFixed(2)}%`}}><HcTick p={v}/></span>)}</div>}
         </div>
       );"""
-edit(IX, OLD_DRAW, NEW_DRAW)
+edit(IX, OLD_DRAW, NEW_DRAW, done='HOME_SPARK_WIN')
 
 # ------------------------------------------------------------------ JSX: the card
 edit(IX, """    const HC_DONE_ICON=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>;""",
@@ -261,7 +261,7 @@ edit(IX, """            <div><span className="hc-lbl">MCAP</span><span className
           <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div>
             {masked?<HomeSparkFlat label={`${token} chart hidden during maintenance`}/>:<HomeSpark token={token} d={d}/>}
           </div>
-          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSelect(token);}} aria-label={`Open the ${token} dashboard`}><HcWave side="l"/><HcWave side="r"/><img src={cfg.logo} alt=""/>""")
+          {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSelect(token);}} aria-label={`Open the ${token} dashboard`}><HcWave side="l"/><HcWave side="r"/><img src={cfg.logo} alt=""/>""", done='{HC_CLOCK}7D')
 
 # the skeleton mirrors the new geometry (gotcha 11): art + veil, NATIVE TOKEN line, icon tiles, the chart panel
 edit(IX, """      <div aria-hidden="true" className={`hc-card hc-skel ${gold?'hc-gold':'hc-green'}`}>
@@ -276,7 +276,7 @@ edit(IX, """          {[0,1,2].map(i=><div key={i}><span className="hc-lbl"><HcS
         </div>
         <span className="hc-spark hc-sk animate-pulse"></span>""", """          {[0,1,2].map(i=><div key={i}><span className="hc-ico"></span><div><span className="hc-lbl"><HcSk w="5em" h="0.9em"/></span><span className="hc-val"><HcSk w="5.5em"/></span></div></div>)}
         </div>
-        <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>""")
+        <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>""", done='{HC_CLOCK}7D')
 
 print(f'{n} edit(s)')
 
@@ -306,4 +306,93 @@ R2_CSS = r"""    /* 2026-10-24 round 2: shorter cards (back to the old height) +
     .hc-green .hc-art{filter:saturate(.85) brightness(.78)}"""
 edit(IX, "    .hc-status>div{font-size:.8rem}\n", "    .hc-status>div{font-size:.8rem}\n" + R2_CSS + "\n")
 
-print(f'{n} edit(s) (round 2)')
+# ---- round 3 (Shaka, 2026-10-24: "make both backgrounds a little darker... and maybe we shold do the graph at 7 days not 24 hrs?") ----
+# The chart: GeckoTerminal HOURLY candles for the last 7 days (the same main pool, token= side, USD; <=170 rows, one request per card,
+# 10-minute cache) instead of 15-minute candles for 24 h. Fallback: the repo's data/charts-intraday.json hourly series (the pipeline's
+# CoinGecko on-chain closes for the same pool, 14 days, refreshed hourly) - used only when its last close is < 3 h old. The old 24 h
+# five-point fallback is gone (it cannot honestly be labelled 7D); with neither source the chart is the dashed "unavailable" line.
+# Volume bars use a square-root scale (one busy hour no longer flattens the other 167).
+# The chart label reads "7D" with the 7-day change beside it: the card's price / the first close inside the window - 1. The 24 h chip
+# by the price is unchanged (DexScreener's 24 h change).
+edit(IX, "      const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${cfg.mainPair}/ohlcv/minute?aggregate=15&limit=100&currency=usd&token=${cfg.address}`;",
+         "      const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${cfg.mainPair}/ohlcv/hour?aggregate=1&limit=170&currency=usd&token=${cfg.address}`;   // round 3: 7 days of hourly candles")
+edit(IX, "        const since=Date.now()-86400000;", "        const since=Date.now()-HOME_SPARK_WIN;")
+edit(IX, "        if(pts.length<4)return null;\n        _homeSparkCache[token]={at:Date.now(),pts};",
+         "        if(pts.length<12)return homeSparkRepo(token);\n        _homeSparkCache[token]={at:Date.now(),pts};")
+edit(IX, "      }catch(e){return null;}\n      finally{clearTimeout(to);}\n    };\n    const homeSparkFallback=(d)=>{",
+         "      }catch(e){return homeSparkRepo(token);}\n      finally{clearTimeout(to);}\n    };\n    const homeSparkFallback=(d)=>{",
+         done="      }catch(e){return homeSparkRepo(token);}")
+edit(IX, "        if(!r.ok)return null;\n        const j=await r.json();\n        const since=Date.now()-HOME_SPARK_WIN;",
+         "        if(!r.ok)return homeSparkRepo(token);\n        const j=await r.json();\n        const since=Date.now()-HOME_SPARK_WIN;")
+edit(IX, "    const HOME_SPARK_TTL=10*60*1000;\n    const _homeSparkCache={};",
+"""    const HOME_SPARK_TTL=10*60*1000;
+    const HOME_SPARK_WIN=7*86400000;   // round 3 (Shaka, 2026-10-24): the card chart is 7 days, hourly
+    const _homeSparkCache={};
+    /* Round 3 fallback: the repo's hourly closes (data/charts-intraday.json - the pipeline's CoinGecko on-chain series for the same
+       pool, 14 days). No volume. Only when the newest close is under 3 h old; one file read shared by both cards. */
+    let _hcRepoP=null;
+    const homeSparkRepo=async(token)=>{
+      try{
+        if(!_hcRepoP)_hcRepoP=dataFetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-intraday.json').then(r=>r.ok?r.json():null).catch(()=>null);
+        const j=await _hcRepoP;if(!j){_hcRepoP=null;return null;}
+        const ser=j?.tokens?.[token]?.hourly?.series;if(!Array.isArray(ser))return null;
+        const since=Date.now()-HOME_SPARK_WIN;
+        const pts=ser.map(c=>({t:Number(c[0]),p:parseFloat(c[1])})).filter(x=>isFinite(x.t)&&x.t>=since&&x.p>0&&isFinite(x.p)).sort((a,b)=>a.t-b.t);
+        if(pts.length<12||Date.now()-pts[pts.length-1].t>3*3600000)return null;
+        return pts;   // not put in _homeSparkCache: the next tick tries GeckoTerminal again
+      }catch(e){return null;}
+    };""")
+# the five-point 24 h fallback goes (it cannot be labelled 7D)
+edit(IX, "      if(!pts)pts=homeSparkFallback(d);\n      if(!pts)return<HomeSparkFlat label={`${token} 24 hour chart unavailable`}/>;",
+         "      if(!pts)return<><div className=\"hc-chart-hd\">{HC_CLOCK}7D</div><HomeSparkFlat label={`${token} 7 day chart unavailable`}/></>;")
+edit(IX, """      const seriesOk=series&&series.length>=4&&(!(d?.price>0)||Math.abs(series[series.length-1].p/d.price-1)<0.25);
+      if(seriesOk){
+        const now=Date.now(),t0=now-86400000;
+        const all=(d?.price>0)?series.concat([{t:now,p:d.price}]):series;   // end on the price the card prints
+        pts=all.map(s=>({x:Math.max(0,Math.min(1,(s.t-t0)/86400000)),p:s.p}));
+      }""", """      const seriesOk=series&&series.length>=12&&(!(d?.price>0)||Math.abs(series[series.length-1].p/d.price-1)<0.25);
+      let chg7=null;
+      if(seriesOk){
+        const now=Date.now(),t0=now-HOME_SPARK_WIN;
+        const all=(d?.price>0)?series.concat([{t:now,p:d.price}]):series;   // end on the price the card prints
+        pts=all.map(s=>({x:Math.max(0,Math.min(1,(s.t-t0)/HOME_SPARK_WIN)),p:s.p}));
+        chg7=(all[all.length-1].p/all[0].p-1)*100;   // 7D change: the price now / the first close inside the window
+      }""")
+edit(IX, "      const t0=Date.now()-86400000;\n      const gid=`hcg-${token}`;", "      const t0=Date.now()-HOME_SPARK_WIN;\n      const gid=`hcg-${token}`;")
+edit(IX, """      return(
+        <div className={`hc-plot${ticks.length?' hc-has-ax':''}`}>""", """      return(<>
+        <div className="hc-chart-hd">{HC_CLOCK}7D{chg7!=null&&isFinite(chg7)&&<span className={`hc-c7 ${chg7>=0?'up':'dn'}`}>{chg7>=0?'▲':'▼'} {Math.abs(chg7).toFixed(2)}%</span>}</div>
+        <div className={`hc-plot${ticks.length?' hc-has-ax':''}`}>""")
+edit(IX, """          {ticks.length>0&&<div className="hc-yax" aria-hidden="true">{ticks.map(v=><span key={v} style={{top:`${(Y(v)/160*100).toFixed(2)}%`}}><HcTick p={v}/></span>)}</div>}
+        </div>
+      );""", """          {ticks.length>0&&<div className="hc-yax" aria-hidden="true">{ticks.map(v=><span key={v} style={{top:`${(Y(v)/160*100).toFixed(2)}%`}}><HcTick p={v}/></span>)}</div>}
+        </div>
+      </>);""")
+edit(IX, "aria-label={`${token} price over the last 24 hours${up==null?'':up?', up':', down'}`}>",
+         "aria-label={`${token} price over the last 7 days${chg7==null?'':chg7>=0?', up':', down'}`}>")
+edit(IX, "                {[1,2,3,4,5,6,7].map(i=><line key={'v'+i} x1={i*75} x2={i*75} y1=\"0\" y2=\"160\" vectorEffect=\"non-scaling-stroke\"/>)}",
+         "                {[1,2,3,4,5,6].map(i=>{const x=(i*600/7).toFixed(1);return<line key={'v'+i} x1={x} x2={x} y1=\"0\" y2=\"160\" vectorEffect=\"non-scaling-stroke\"/>;})}")
+edit(IX, "const x=Math.max(0,Math.min(1,(s.t-t0)/86400000))*600,h=Math.max(1,s.v/vmax*34);return<rect key={s.t} x={(x-2).toFixed(1)} y={(160-h).toFixed(1)} width=\"4\" height={h.toFixed(1)}/>;",
+         "const x=Math.max(0,Math.min(1,(s.t-t0)/HOME_SPARK_WIN))*600,h=Math.max(1,Math.sqrt(s.v/vmax)*34);return<rect key={s.t} x={(x-1.1).toFixed(1)} y={(160-h).toFixed(1)} width=\"2.2\" height={h.toFixed(1)}/>;")
+edit(IX, "      const up=(d?.change!=null&&isFinite(d.change))?d.change>=0:null;\n      /* 2026-10-23 (Shaka's mockup)", "      /* 2026-10-23 (Shaka's mockup)",
+     done="price over the last 7 days")
+# remove the dead five-point helper
+_s = open(IX, encoding='utf-8').read()
+_i = _s.find("    const homeSparkFallback=(d)=>{")
+if _i >= 0:
+    _j = _s.index("    const HomeSparkFlat=", _i)
+    open(IX, 'w', encoding='utf-8').write(_s[:_i] + _s[_j:]); n += 1
+# the card + skeleton: HomeSpark draws its own label (it knows the 7D change)
+edit(IX, """          <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div>
+            {masked?<HomeSparkFlat label={`${token} chart hidden during maintenance`}/>:<HomeSpark token={token} d={d}/>}""",
+         """          <div className="hc-chart">
+            {masked?<><div className="hc-chart-hd">{HC_CLOCK}7D</div><HomeSparkFlat label={`${token} chart hidden during maintenance`}/></>:<HomeSpark token={token} d={d}/>}""")
+edit(IX, """<div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>""",
+         """<div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}7D</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>""")
+R3_CSS = r"""    /* 2026-10-24 round 3: both backgrounds a step darker (Shaka); the 7D change beside the chart label */
+    .hc-veil{background:radial-gradient(ellipse 62% 40% at 30% 22%,rgba(2,4,8,.82) 0%,rgba(2,4,8,.52) 55%,transparent 80%),linear-gradient(180deg,rgba(2,4,8,.54) 0%,rgba(2,4,8,.62) 32%,rgba(2,4,8,.76) 52%,rgba(2,4,8,.74) 78%,rgba(2,4,8,.60) 100%)}
+    .hc-c7{margin-left:4px;font-weight:700;letter-spacing:.02em}.hc-c7.up{color:#4BF07F}.hc-c7.dn{color:#FF5D5D}
+    @media(max-width:639.98px){.hc-yax span:nth-child(2):last-child{display:inline}}   /* two axis labels: keep both (round 2 hid every other one) */"""
+edit(IX, "    .hc-green .hc-art{filter:saturate(.85) brightness(.78)}\n", "    .hc-green .hc-art{filter:saturate(.85) brightness(.78)}\n" + R3_CSS + "\n")
+
+print(f'{n} edit(s)')

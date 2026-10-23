@@ -46,8 +46,19 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24: HOME CARDS ROUND 3 (Shaka: "make both backgrounds a little darker... and maybe we shold do the graph at 7 days not
+24 hrs?"; worked example shown first, then "make it live") — READY TO PUSH.** Appended to `tools/home-cards-atlantis.py` (round-1
+edits that round 3 moves on carry `done=` markers; from `743dd044` index.html sha256 d6a2acbc; from `f6f3cc7e` the same file; re-runs
+"0 edit(s)"). Chart = GeckoTerminal HOURLY candles, last 7 days (`/ohlcv/hour?aggregate=1&limit=170&token=`, `HOME_SPARK_WIN`),
+one line per day, volume bars on a square-root scale. Fallback = `homeSparkRepo` (data/charts-intraday.json hourly, only if its
+newest close is < 3 h old; no bars); the 24 h five-point fallback is deleted (it could not be labelled 7D). Label "7D ▼ x%" =
+card price ÷ first close inside the window − 1 (worked example 2026-10-23 18:49 UTC: PTGC 0.0₄2241 → 0.0₄1904 = −15.06 %, UFO
+0.0₅2984 → 0.0₅2462 = −17.49 %). The 24 h chip by the price is unchanged (Shaka chose no "24H" tag). Both veils darker
+(.42/.52/.70/.68/.50 → .54/.62/.76/.74/.60; radial .78/.45 → .82/.52). Phone axis keeps both labels when there are only two.
+Heights unchanged (453 at 1440×900, 365 at 390).
+
 **2026-10-24: HOME CARDS ROUND 2 (Shaka: "the boxes are taller than than used to be. Can you shorter up the boxes" + "make the
-backgrounds in the ufo box a little darker") — READY TO PUSH.** Appended to `tools/home-cards-atlantis.py` (one R2_CSS block after
+backgrounds in the ufo box a little darker") — PUSHED `743dd044`.** Appended to `tools/home-cards-atlantis.py` (one R2_CSS block after
 `.hc-status>div`, i.e. after every round-1 rule, never inside a round-1 insert; index.html sha256 5d266a60, re-runs "0 edit(s)").
 Card heights (harness, GT_CANDLES=1): 1440×900 613 → 453 px (before the redesign 457), 1280×800 555 → 419 (430), 1920×1080
 707 → 537 (511), 390 450 → 365 (357). Smaller logo / name / price, tighter gaps, slimmer tiles, a one-line 24H label, chart 62 px on

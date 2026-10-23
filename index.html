@@ -326,6 +326,10 @@
     @media(max-width:399.98px){.hc-meta{font-size:.84rem;gap:2px 6px}.hc-day{margin-left:4px}}
     @media(max-width:639.98px){.hc-yax span:nth-child(2n){display:none}}   /* a 62 px phone chart: every other price label */
     .hc-green .hc-art{filter:saturate(.85) brightness(.78)}
+    /* 2026-10-24 round 3: both backgrounds a step darker (Shaka); the 7D change beside the chart label */
+    .hc-veil{background:radial-gradient(ellipse 62% 40% at 30% 22%,rgba(2,4,8,.82) 0%,rgba(2,4,8,.52) 55%,transparent 80%),linear-gradient(180deg,rgba(2,4,8,.54) 0%,rgba(2,4,8,.62) 32%,rgba(2,4,8,.76) 52%,rgba(2,4,8,.74) 78%,rgba(2,4,8,.60) 100%)}
+    .hc-c7{margin-left:4px;font-weight:700;letter-spacing:.02em}.hc-c7.up{color:#4BF07F}.hc-c7.dn{color:#FF5D5D}
+    @media(max-width:639.98px){.hc-yax span:nth-child(2):last-child{display:inline}}   /* two axis labels: keep both (round 2 hid every other one) */
     @media(prefers-reduced-motion:reduce){.hc-card,.hc-buy,.hc-dash,.hc-art{transition:none!important}.hc-card:hover,.hc-buy:hover,.hc-dash:hover,.hc-card:hover .hc-art{transform:none}.hc-buy,.hc-buy::after{animation:none!important}}
   </style>
   <!-- the v2 header skin (h2-*) lives in h2.css since 2026-10-03 — shared with calculators / charts / portfolio. The
@@ -6303,39 +6307,43 @@
        24h/6h/1h/5m changes back-computed), and with neither it is a flat dashed line — never an
        invented shape. One request per card, cached per token for 10 minutes. */
     const HOME_SPARK_TTL=10*60*1000;
+    const HOME_SPARK_WIN=7*86400000;   // round 3 (Shaka, 2026-10-24): the card chart is 7 days, hourly
     const _homeSparkCache={};
+    /* Round 3 fallback: the repo's hourly closes (data/charts-intraday.json - the pipeline's CoinGecko on-chain series for the same
+       pool, 14 days). No volume. Only when the newest close is under 3 h old; one file read shared by both cards. */
+    let _hcRepoP=null;
+    const homeSparkRepo=async(token)=>{
+      try{
+        if(!_hcRepoP)_hcRepoP=dataFetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/charts-intraday.json').then(r=>r.ok?r.json():null).catch(()=>null);
+        const j=await _hcRepoP;if(!j){_hcRepoP=null;return null;}
+        const ser=j?.tokens?.[token]?.hourly?.series;if(!Array.isArray(ser))return null;
+        const since=Date.now()-HOME_SPARK_WIN;
+        const pts=ser.map(c=>({t:Number(c[0]),p:parseFloat(c[1])})).filter(x=>isFinite(x.t)&&x.t>=since&&x.p>0&&isFinite(x.p)).sort((a,b)=>a.t-b.t);
+        if(pts.length<12||Date.now()-pts[pts.length-1].t>3*3600000)return null;
+        return pts;   // not put in _homeSparkCache: the next tick tries GeckoTerminal again
+      }catch(e){return null;}
+    };
     const fetchHomeSpark=async(token)=>{
       const hit=_homeSparkCache[token];
       if(hit&&Date.now()-hit.at<HOME_SPARK_TTL)return hit.pts;
       const cfg=TOKENS[token];
       if(!cfg||!cfg.mainPair||!cfg.address)return null;
-      const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${cfg.mainPair}/ohlcv/minute?aggregate=15&limit=100&currency=usd&token=${cfg.address}`;
+      const url=`https://api.geckoterminal.com/api/v2/networks/pulsechain/pools/${cfg.mainPair}/ohlcv/hour?aggregate=1&limit=170&currency=usd&token=${cfg.address}`;   // round 3: 7 days of hourly candles
       const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),8000);
       try{
         const r=await fetch(url,{signal:ctl.signal,headers:{accept:'application/json'}});
-        if(!r.ok)return null;
+        if(!r.ok)return homeSparkRepo(token);
         const j=await r.json();
-        const since=Date.now()-86400000;
+        const since=Date.now()-HOME_SPARK_WIN;
         const pts=(j&&j.data&&j.data.attributes&&Array.isArray(j.data.attributes.ohlcv_list)?j.data.attributes.ohlcv_list:[])
           .map(c=>({t:Number(c[0])*1000,p:parseFloat(c[4]),v:parseFloat(c[5])}))   // v: the candle's USD volume (the bars under the line)
           .filter(x=>isFinite(x.t)&&x.t>=since&&x.p>0&&isFinite(x.p))
           .sort((a,b)=>a.t-b.t);
-        if(pts.length<4)return null;
+        if(pts.length<12)return homeSparkRepo(token);
         _homeSparkCache[token]={at:Date.now(),pts};
         return pts;
-      }catch(e){return null;}
+      }catch(e){return homeSparkRepo(token);}
       finally{clearTimeout(to);}
-    };
-    const homeSparkFallback=(d)=>{
-      const pc=d?.priceChange,price=d?.price||0;
-      if(!pc||!(price>0))return null;
-      const pts=[['h24',24],['h6',6],['h1',1],['m5',5/60]]
-        .filter(([k])=>pc[k]!=null&&isFinite(parseFloat(pc[k])))
-        .map(([k,hrs])=>({t:-hrs,p:price/(1+parseFloat(pc[k])/100)}))
-        .concat([{t:0,p:price}]);
-      if(pts.length<2)return null;
-      const tMax=Math.abs(pts[0].t)||1;   // sqrt-time x, as the classic sparkline (linear piles 6h/1h/5m into the last 4%)
-      return pts.map(x=>({x:1-Math.sqrt(Math.abs(x.t)/tMax),p:x.p}));
     };
     const HomeSparkFlat=({label})=>(
       <div className="hc-plot"><div className="hc-plotl">
@@ -6367,14 +6375,15 @@
       /* Sanity: the last candle must sit within 25% of the price the card prints. A pool read
          from the wrong side (GeckoTerminal's `token=` inverted) or a stale answer would draw a
          confident, wrong chart — use the fallback instead. */
-      const seriesOk=series&&series.length>=4&&(!(d?.price>0)||Math.abs(series[series.length-1].p/d.price-1)<0.25);
+      const seriesOk=series&&series.length>=12&&(!(d?.price>0)||Math.abs(series[series.length-1].p/d.price-1)<0.25);
+      let chg7=null;
       if(seriesOk){
-        const now=Date.now(),t0=now-86400000;
+        const now=Date.now(),t0=now-HOME_SPARK_WIN;
         const all=(d?.price>0)?series.concat([{t:now,p:d.price}]):series;   // end on the price the card prints
-        pts=all.map(s=>({x:Math.max(0,Math.min(1,(s.t-t0)/86400000)),p:s.p}));
+        pts=all.map(s=>({x:Math.max(0,Math.min(1,(s.t-t0)/HOME_SPARK_WIN)),p:s.p}));
+        chg7=(all[all.length-1].p/all[0].p-1)*100;   // 7D change: the price now / the first close inside the window
       }
-      if(!pts)pts=homeSparkFallback(d);
-      if(!pts)return<HomeSparkFlat label={`${token} 24 hour chart unavailable`}/>;
+      if(!pts)return<><div className="hc-chart-hd">{HC_CLOCK}7D</div><HomeSparkFlat label={`${token} 7 day chart unavailable`}/></>;
       const up=(d?.change!=null&&isFinite(d.change))?d.change>=0:null;
       /* 2026-10-23 (Shaka's mockup): a 600×160 plot — the line in 10…150 with 12 % headroom above and below, the price axis on the
          right (hcTicks), and the candles' USD volume as bars along the bottom 34 units (real candles only; the 5-point fallback has none). */
@@ -6385,19 +6394,20 @@
       const ticks=hcTicks(lo,hi);
       const vs=seriesOk?series.filter(s=>s.v>0&&isFinite(s.v)):[];
       const vmax=vs.length?Math.max(...vs.map(s=>s.v)):0;
-      const t0=Date.now()-86400000;
+      const t0=Date.now()-HOME_SPARK_WIN;
       const gid=`hcg-${token}`;
       const last=pts[pts.length-1];
-      return(
+      return(<>
+        <div className="hc-chart-hd">{HC_CLOCK}7D{chg7!=null&&isFinite(chg7)&&<span className={`hc-c7 ${chg7>=0?'up':'dn'}`}>{chg7>=0?'▲':'▼'} {Math.abs(chg7).toFixed(2)}%</span>}</div>
         <div className={`hc-plot${ticks.length?' hc-has-ax':''}`}>
           <div className="hc-plotl">
-            <svg className="hc-spark" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label={`${token} price over the last 24 hours${up==null?'':up?', up':', down'}`}>
+            <svg className="hc-spark" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label={`${token} price over the last 7 days${chg7==null?'':chg7>=0?', up':', down'}`}>
               <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{stopColor:'var(--hc-line)',stopOpacity:0.42}}/><stop offset="0.7" style={{stopColor:'var(--hc-line)',stopOpacity:0.1}}/><stop offset="1" style={{stopColor:'var(--hc-line)',stopOpacity:0}}/></linearGradient></defs>
               <g stroke="rgba(255,255,255,0.06)" strokeWidth="1" vectorEffect="non-scaling-stroke">
                 {ticks.map(v=><line key={'h'+v} x1="0" x2="600" y1={Y(v).toFixed(1)} y2={Y(v).toFixed(1)} vectorEffect="non-scaling-stroke"/>)}
-                {[1,2,3,4,5,6,7].map(i=><line key={'v'+i} x1={i*75} x2={i*75} y1="0" y2="160" vectorEffect="non-scaling-stroke"/>)}
+                {[1,2,3,4,5,6].map(i=>{const x=(i*600/7).toFixed(1);return<line key={'v'+i} x1={x} x2={x} y1="0" y2="160" vectorEffect="non-scaling-stroke"/>;})}
               </g>
-              {vmax>0&&<g style={{fill:'var(--hc-line)'}} opacity="0.42">{vs.map(s=>{const x=Math.max(0,Math.min(1,(s.t-t0)/86400000))*600,h=Math.max(1,s.v/vmax*34);return<rect key={s.t} x={(x-2).toFixed(1)} y={(160-h).toFixed(1)} width="4" height={h.toFixed(1)}/>;})}</g>}
+              {vmax>0&&<g style={{fill:'var(--hc-line)'}} opacity="0.42">{vs.map(s=>{const x=Math.max(0,Math.min(1,(s.t-t0)/HOME_SPARK_WIN))*600,h=Math.max(1,Math.sqrt(s.v/vmax)*34);return<rect key={s.t} x={(x-1.1).toFixed(1)} y={(160-h).toFixed(1)} width="2.2" height={h.toFixed(1)}/>;})}</g>}
               <path d={`${line} L600,160 L0,160 Z`} fill={`url(#${gid})`}/>
               <path className="hc-sl" d={line} fill="none" style={{stroke:'var(--hc-line)'}} strokeWidth="2.4" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
             </svg>
@@ -6405,7 +6415,7 @@
           </div>
           {ticks.length>0&&<div className="hc-yax" aria-hidden="true">{ticks.map(v=><span key={v} style={{top:`${(Y(v)/160*100).toFixed(2)}%`}}><HcTick p={v}/></span>)}</div>}
         </div>
-      );
+      </>);
     };
 
     const HC_COPY_ICON=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>;
@@ -6463,8 +6473,8 @@
             <div>{HC_ICO_COINS}<div><span className="hc-lbl">VOL (24H)</span><span className="hc-val">{masked?'—':fmtUSD(d?.vol)}</span></div></div>
             <div>{HC_ICO_LINK}<div><span className="hc-lbl">PLS RATIO</span><span className="hc-val">{masked?'—':plsRatio}</span></div></div>
           </div>
-          <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div>
-            {masked?<HomeSparkFlat label={`${token} chart hidden during maintenance`}/>:<HomeSpark token={token} d={d}/>}
+          <div className="hc-chart">
+            {masked?<><div className="hc-chart-hd">{HC_CLOCK}7D</div><HomeSparkFlat label={`${token} chart hidden during maintenance`}/></>:<HomeSpark token={token} d={d}/>}
           </div>
           {!masked&&<button type="button" className="hc-buy" onClick={e=>{e.stopPropagation();onSelect(token);}} aria-label={`Open the ${token} dashboard`}><HcWave side="l"/><HcWave side="r"/><img src={cfg.logo} alt=""/><span>ENTER DASHBOARD</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>}
         </div>
@@ -6488,7 +6498,7 @@
         <div className="hc-stats">
           {[0,1,2].map(i=><div key={i}><span className="hc-ico"></span><div><span className="hc-lbl"><HcSk w="5em" h="0.9em"/></span><span className="hc-val"><HcSk w="5.5em"/></span></div></div>)}
         </div>
-        <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}24H</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>
+        <div className="hc-chart"><div className="hc-chart-hd">{HC_CLOCK}7D</div><div className="hc-plot"><span className="hc-spark hc-sk animate-pulse"></span></div></div>
         <span className="hc-buy hc-sk animate-pulse"></span>
       </div>
     );
