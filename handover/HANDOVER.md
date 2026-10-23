@@ -46,14 +46,25 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24: HOME CARDS → THE ATLANTIS LOOK (Shaka sent a mockup + two background artworks: "make it look as close to the mock up as
+you can"; after the mockup: "can you darken the backgrounds more", then "make it live") — READY TO PUSH.** `python3 tools/home-cards-atlantis.py`
+(idempotent; from `f6f3cc7e` it gives index.html sha256 9a8266f0, a re-run prints "0 edit(s)"). New art: `logos/home/hc-art-ptgc.webp`
+(gold ruins) and `hc-art-ufo.webp` (green ruins + saucer), 1200×873. CosmicCard: art + a navy veil INSIDE the frame (`.hc-art` /
+`.hc-veil`, darkest behind logo/name/price), "NATIVE TOKEN" line, price + chip on one row, address + DAY on one row, icon stat tiles,
+the 24H chart in a panel with a price axis (`hcTicks`, ≤4 round prices in fmtPrice format), 15-min volume bars (column 5 of the SAME
+GeckoTerminal candles — no new request; the 5-point fallback has no bars) and an end dot; ENTER DASHBOARD is dark glass with waves.
+BUY / SELL: compact pill on phones, the ⇄ icon alone under 380 px (was 360). Skeleton mirrors the new geometry (gotcha 11). No number,
+source or formula changed. Harness: 1440 / 390 / 360 / 320, GT_CANDLES=1, fallback and SLOW skeleton — no sideways scroll, nothing
+outside the card, the pill clears the name at every width.
+
 **2026-10-24: Leagues card round 2 (Shaka: "I dont like how the image goes out past the frame … make both tokens larger and move them
-and their prices up a little") — BUILT, on the Mac, NOT pushed.** `python3 tools/leagues-atlantis.py` (round 2 appended; idempotent,
+and their prices up a little") — PUSHED `f6f3cc7e`, live.** `python3 tools/leagues-atlantis.py` (round 2 appended; idempotent,
 `done=` markers let round 1 skip what round 2 moved on). The Socials combined card's art + veil now sit in `.clipin` (inset 16 px,
 radius 24 — inside the gold → green frame); outside the frame is plain #04070e. Coins `--u` .8 → .98 (156 → 191 px), the coin row
 290 → 232 px, padding 150 → 130, name 24 → 27 px, price 36 → 42 px. index.html sha256 d98caccb. Batch 6 itself is PUSHED (`2193fa055`).
 
-**2026-10-24 (overnight): AUDIT IV BATCH 6 — the medium items e32–e41 (Shaka: "do them all") + the LEAGUES ATLANTIS ART — BUILT,
-on the Mac, NOT pushed.** Build = `python3 tools/audit4-batch6.py` then `python3 tools/leagues-atlantis.py` (both idempotent; from
+**2026-10-24 (overnight): AUDIT IV BATCH 6 — the medium items e32–e41 (Shaka: "do them all") + the LEAGUES ATLANTIS ART — PUSHED
+`2193fa055`, LIVE-VERIFIED (tw.css v6, the gate gone, /apple-touch-icon.png 200, #/ptgc at 320 px: no sideways scroll — it was 364).** Build = `python3 tools/audit4-batch6.py` then `python3 tools/leagues-atlantis.py` (both idempotent; from
 `3925eac36` the two give index.html 8db28c1c, portfolio f432811e, calculators 98b90af6, charts ee41c4e0, ledger bd5ad150; re-runs
 "0 edit(s)") + `cd tools/harness && npm run css` (tw.css loses two dead utilities → `?v=6`; h2.css / h2-header.jsx `?v=4`).
 **Leagues art (his kit, `design/leagues/atlantis/CLAUDE_INSTRUCTIONS.md`):** `logos/leagues/lg-atl-split.webp` (the Socials combined
