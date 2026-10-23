@@ -46,7 +46,17 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-24 (late): LOGOS THUMBNAILS (P-4) + "PTGC BURNED BY UFO" v4 — READY TO PUSH.** (Shaka: "1 yes … 3. yes"; the token:
+**2026-10-24 (late, 2): "PTGC BURNED BY UFO" COUNTS pTGC's 0.5 % FEE BURN ON BOTH CONTRACTS — READY TO PUSH.** (Shaka: asked
+which way → "what do you suggest" → Claude: count it on both (it exists only because UFO bought; no ratio fingerprint) → "do it".)
+`python3 tools/ufo-fee-legs.py` (idempotent, 11 edits): scripts/build-value-generated.mjs AND its twin in index.html no longer drop
+the leg that is 0.005/0.95 of the delivered leg (window scan + pre-window lifetime slice); the file checkpoint
+`delivered.ptgcPreWindow` is reused only with `method:'all-legs'`; the browser checkpoint key → grays_ptgc_by_ufo_pre_v2 (v1
+swept). index.html sha256 391de7b0, build-value-generated.mjs 3fe13acf. Ran the old and new builder side by side against the
+chain: v2 lifetime 316,468,990 → 318,127,174 (+0.524 % = 0.005/0.95 ✓); 24H 2.325 → 2.338 M, 7D 33.63 → 33.80 M, 30D 147.41 →
+148.18 M, 90D 238.57 → 239.82 M — the new windows equal fetch-ufo-ptgc-burns v4's v2 windows to the token (two independent
+methods agree). Site "PTGC burned by UFO" after both pushes ≈ 4,366.9 (v1) + 318.1 (v2) = 4,685.0 M (was 4,904.8 M).
+
+**2026-10-24 (late): LOGOS THUMBNAILS (P-4) + "PTGC BURNED BY UFO" v4 — PUSHED `7815732b`.** (Shaka: "1 yes … 3. yes"; the token:
 "ptgcapi pipeline dispatch" has NO expiration — checked by him; "saucer-claude" (expires Nov 4) is not used by this site.)
 *Logos:* `python3 tools/logos-thumbs.py` (idempotent; run on the Mac) → logos/{ptgc,ufo,combined}/thumbs/*.webp (18 files, 480 px
 longest side, 300 KB total vs 5.8 MB of originals), the three windows' <img> use them with loading="lazy" decoding="async";

@@ -650,16 +650,13 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
         let ptgcFeeLegsDropped=0;
         for(const tx of Object.keys(ptgcByTx)){
           const legs=ptgcByTx[tx].map(l=>({log:l,amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
-          const drop={};
+          /* 2026-10-24 (Shaka): EVERY leg counts — pTGC's own 0.5% burn fee on the buyback is burned because UFO bought, and the
+             retired contract's figure (fetch-ufo-ptgc-burns.js) always counted it. PTGC_FEE_RATIO is kept only to report how many
+             legs are fee legs (ptgcFeeLegsDropped is now "fee legs seen", none are dropped). */
           for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
-            if(i===j||drop[i])continue;
-            const r=legs[i].amt/legs[j].amt;
-            if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01){drop[i]=true;ptgcFeeLegsDropped++;}
+            if(i!==j&&legs[j].amt>0&&Math.abs(legs[i].amt/legs[j].amt-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01){ptgcFeeLegsDropped++;break;}
           }
-          legs.forEach((lg,i)=>{
-            if(drop[i])return;
-            addTo(parseInt(lg.log.blockNumber,16),a=>{a.ptgcBurned+=lg.amt;});
-          });
+          legs.forEach(lg=>{addTo(parseInt(lg.log.blockNumber,16),a=>{a.ptgcBurned+=lg.amt;});});
         }
 
         for(const p of pairs){
@@ -738,7 +735,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
           const a=accs[k];
           console.log(`   ${k}: ${a.swapbackTxs} swapbacks · ${Math.round(a.ufoBurned).toLocaleString()} UFO burned · ${Math.round(a.ptgcBurned).toLocaleString()} pTGC burned · LP ${Object.keys(a.lp).map(s=>`${s}:${a.lp[s].mints}`).join(' ')||'none'}`);
         });
-        if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) identified as pTGC's own 0.5% burn fee and excluded)`);
+        if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) are pTGC's own 0.5% burn fee — counted since 2026-10-24)`);
         if(swapScanOk&&feeInOk){
           const sf=swapFeeTokensByPeriod['24h']||0, ps=pairSwapByPeriod['24h']||0;
           const impl=sf/0.06;
@@ -797,14 +794,8 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
       }
       let sum=0;
       for(const tx of Object.keys(byTx)){
-        const legs=byTx[tx].map(l=>({amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
-        const drop={};
-        for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
-          if(i===j||drop[i])continue;
-          const r=legs[i].amt/legs[j].amt;
-          if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01)drop[i]=true;
-        }
-        legs.forEach((lg,i)=>{if(!drop[i])sum+=lg.amt;});
+        // 2026-10-24: every leg counts, the 0.5% fee burn included (see the window scan)
+        for(const l of byTx[tx])sum+=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
       }
       return sum;
     };
@@ -847,7 +838,7 @@ async function main(){
   // Previous file: carries the pre-window checkpoint forward (and is the carry-forward on failure).
   let prev=null;
   try{ if(fs.existsSync(OUT_PATH)) prev=JSON.parse(fs.readFileSync(OUT_PATH,'utf8')); }catch(e){ console.warn('could not read previous file:',e.message); }
-  const prevCheckpoint=prev&&prev.delivered&&prev.delivered.ptgcPreWindow||null;
+  const prevCheckpoint=(prev&&prev.delivered&&prev.delivered.ptgcPreWindow&&prev.delivered.ptgcPreWindow.method==='all-legs')?prev.delivered.ptgcPreWindow:null;   // 2026-10-24: older checkpoints left the fee legs out
 
   const [realizedFees, delivered, burnPeriods] = await Promise.all([
     fetchRealizedFees(UFO_ADDRESS, firstPoolMs),
@@ -867,7 +858,7 @@ async function main(){
   const win = delivered.byPeriod && delivered.byPeriod['90d'] ? (delivered.byPeriod['90d'].ptgcBurned||0) : 0;
   delivered.ptgcBurnedAll   = pre.ok ? win + pre.amount : win;
   delivered.ptgcBurnedAllOk = !!pre.ok;
-  if(pre.ok && pre.toBlock!=null) delivered.ptgcPreWindow = { toBlock: pre.toBlock, amount: pre.amount, launch: delivered.launch||0 };
+  if(pre.ok && pre.toBlock!=null) delivered.ptgcPreWindow = { toBlock: pre.toBlock, amount: pre.amount, launch: delivered.launch||0, method: 'all-legs' };
   else if(prevCheckpoint) delivered.ptgcPreWindow = prevCheckpoint;   // keep the last good checkpoint
 
   /* Burn periods are optional: a failed scan keeps the previous run's numbers (marked stale by

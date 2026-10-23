@@ -1751,7 +1751,7 @@
     const LS={
       DISCLAIMER:'grays_disclaimer_v1',           // value = the DISCLAIMER_VERSION the visitor accepted
       TIERS:'grays_tiers_v3_',   // v3 (Audit IV e13): people only — a v2 live scan counted addresses                    // + token address → {ts,tiers:{Poseidon,Whale,Shark,Dolphin,SquidAndBelow,ok,partial,error}}
-      PTGC_PRE:'grays_ptgc_by_ufo_pre_v1',        // + ':'+UFO address → {launch,toBlock,amount} pre-window checkpoint
+      PTGC_PRE:'grays_ptgc_by_ufo_pre_v2',        // + ':'+UFO address → {launch,toBlock,amount} pre-window checkpoint (v2 2026-10-24: fee legs counted)
       IMPLIED_SUPPLY:'grays_implied_supply_v1',   // {token:{supply,ts}} on-chain supply fallback
       DECK_POOLS:'grays_deck_pools_v1',           // + ':'+token → learned Live Feed pools
       HDR_PREVIEW:'grays_hdr_preview_v1',         // 1 = this device shows the v2 dashboard header before it is the default (HeaderPreviewGate)
@@ -1764,7 +1764,7 @@
        The old bare-"true" key is upgraded to '1' once, so the current wording is not re-prompted. */
     const DISCLAIMER_VERSION='1';
     const LS_RETIRED=['ptgc_ufo_disclaimer_accepted'];          // exact names that no longer exist
-    const LS_RETIRED_PREFIXES=['grays_tiers_0x','grays_tiers_v2_'];                // unversioned tier caches (pre 2026-09-16)
+    const LS_RETIRED_PREFIXES=['grays_tiers_0x','grays_tiers_v2_','grays_ptgc_by_ufo_pre_v1'];                // unversioned tier caches (pre 2026-09-16)
     const lsGet=(key,shapeOk)=>{try{const raw=localStorage.getItem(key);if(raw==null)return null;const v=JSON.parse(raw);return (!shapeOk||shapeOk(v))?v:null;}catch(e){return null;}};
     const lsSet=(key,v)=>{try{localStorage.setItem(key,JSON.stringify(v));}catch(e){}};
     const lsTake=key=>{try{const v=localStorage.getItem(key);if(v!=null)localStorage.removeItem(key);return v;}catch(e){return null;}};   // read-and-clear (handoff messages)
@@ -2880,16 +2880,13 @@
         let ptgcFeeLegsDropped=0;
         for(const tx of Object.keys(ptgcByTx)){
           const legs=ptgcByTx[tx].map(l=>({log:l,amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
-          const drop={};
+          /* 2026-10-24 (Shaka): EVERY leg counts — pTGC's own 0.5% burn fee on the buyback is burned because UFO bought, and the
+             retired contract's figure (fetch-ufo-ptgc-burns.js) always counted it. PTGC_FEE_RATIO is kept only to report how many
+             legs are fee legs (ptgcFeeLegsDropped is now "fee legs seen", none are dropped). */
           for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
-            if(i===j||drop[i])continue;
-            const r=legs[i].amt/legs[j].amt;
-            if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01){drop[i]=true;ptgcFeeLegsDropped++;}
+            if(i!==j&&legs[j].amt>0&&Math.abs(legs[i].amt/legs[j].amt-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01){ptgcFeeLegsDropped++;break;}
           }
-          legs.forEach((lg,i)=>{
-            if(drop[i])return;
-            addTo(parseInt(lg.log.blockNumber,16),a=>{a.ptgcBurned+=lg.amt;});
-          });
+          legs.forEach(lg=>{addTo(parseInt(lg.log.blockNumber,16),a=>{a.ptgcBurned+=lg.amt;});});
         }
 
         for(const p of pairs){
@@ -2968,7 +2965,7 @@
           const a=accs[k];
           console.log(`   ${k}: ${a.swapbackTxs} swapbacks · ${Math.round(a.ufoBurned).toLocaleString()} UFO burned · ${Math.round(a.ptgcBurned).toLocaleString()} pTGC burned · LP ${Object.keys(a.lp).map(s=>`${s}:${a.lp[s].mints}`).join(' ')||'none'}`);
         });
-        if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) identified as pTGC's own 0.5% burn fee and excluded)`);
+        if(ptgcFeeLegsDropped)console.log(`   (${ptgcFeeLegsDropped} pTGC leg(s) are pTGC's own 0.5% burn fee — counted since 2026-10-24)`);
         if(swapScanOk&&feeInOk){
           const sf=swapFeeTokensByPeriod['24h']||0, ps=pairSwapByPeriod['24h']||0;
           const impl=sf/0.06;
@@ -3002,14 +2999,8 @@
       }
       let sum=0;
       for(const tx of Object.keys(byTx)){
-        const legs=byTx[tx].map(l=>({amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
-        const drop={};
-        for(let i=0;i<legs.length;i++)for(let j=0;j<legs.length;j++){
-          if(i===j||drop[i])continue;
-          const r=legs[i].amt/legs[j].amt;
-          if(legs[j].amt>0&&Math.abs(r-PTGC_FEE_RATIO)/PTGC_FEE_RATIO<0.01)drop[i]=true;
-        }
-        legs.forEach((lg,i)=>{if(!drop[i])sum+=lg.amt;});
+        // 2026-10-24: every leg counts, the 0.5% fee burn included (see the window scan)
+        for(const l of byTx[tx])sum+=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));
       }
       return sum;
     };
@@ -4448,8 +4439,8 @@
          `lifetimeIsWindow` tells the panel to label it honestly instead of as "since launch". */
       const windowReachesLaunch=!!(delivered&&delivered.ok&&delivered.launch>0&&delivered.scanFrom<=delivered.launch);
       /* Third source for the live contract's lifetime: the generator's byContract[live] total
-         (schema 2, <24h old). Less precise than the chain scan (it cannot separate pTGC's own
-         0.5% fee leg), so it is the fallback when the pre-window read failed, not the primary. */
+         (schema 2, <24h old). Since 2026-10-24 both count pTGC's 0.5% fee leg; the file's definition (any tx with a UFO burn)
+         is a little wider than the scan's (UFO's swapback txs), so it stays the fallback when the pre-window read failed. */
       const fileLive=burnHistoryCache?.PTGCbyUFOLive;
       const fileLiveFresh=!!(fileLive&&fileLive.lastUpdated&&(Date.now()-Date.parse(fileLive.lastUpdated))<24*3600*1000&&typeof fileLive.totalBurned==='number');
       const lifetimeOk=!!(delivered&&delivered.ok&&(delivered.ptgcBurnedAllOk||windowReachesLaunch))||(!dvP&&!!(ptgcByUfoLive&&ptgcByUfoLive.windowReachesLaunch))||fileLiveFresh;
