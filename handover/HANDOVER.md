@@ -46,7 +46,32 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-23: AUDIT IV e1 + e2 BUILT ("fix 1 and 2") — written to the Mac, NOT pushed.** `python3 tools/audit4-e1e2.py` (idempotent;
+**2026-10-23 (afternoon): AUDIT IV BATCH P0b — e7 + e8 + e3 + e4 + e19 BUILT ("go"), written to the Mac, NOT pushed.** Build =
+`python3 tools/audit4-p0b.py` (idempotent; a clean run from `d6a7b13c6` = 49 edits, re-run "0 edit(s)") then `cd tools/harness && npm run
+css` (committed `tw.css`, `?v=3` on the five pages). **e7** portfolio GET / LOAD CODE: UTF-8-safe base64 (`pfB64Enc` / `pfB64Dec`) — an
+ASCII-only list gives the byte-identical code as before, old Latin-1 codes still load, emoji / en-dash / "✦" labels round-trip (harness:
+"Cold 🚀" + "Ledger – cold" / group "Vault ✦" → a code, Copy → "✓ Copied!", node round-trip exact; a 3,000-wallet list encodes in chunks);
+a code that still cannot be built says so (no empty box), Copy waits for the clipboard ("Copy failed — select the code" on a reject);
+LOAD CODE over a non-empty list asks once ("This replaces your 2 saved wallets with the 1 in this code" → button "Replace 2 wallets
+with 1") and drops the old queued scans. **e8** the UFO `balanceOf` is read in the PTGC batch and must pass `okWord` (and both per-lock
+reads too): a failed UFO read = "1 unreadable", total "—", Retry — was a green wallet with "UFO VALUE $0.00 · 0 UFO" (harness switch
+FAIL_UFO_BAL in a scratch copy of run.js, before vs after). **e3** DAO Treasury: no PLS price or no management balance → `null` ("—"
+everywhere, the a16 path); lockedAmount unreadable → Available / Pending "—", total EXACT (contract balance); a failed token balance /
+price or PTGC leg → listed in a visible amber note under the hero and the totals print "≥ $X" (panel, breakdown popup, share card;
+the card drops its split bar). Normal path: identical figures (harness). Live DexScreener check: HEX / PLSX / INC / PTGC all have
+base-side priced pools, so a healthy read never shows "≥". **e4** referrer window: rows carry the entry's `meetsThreshold` → a
+below-minimum month shows "Below", "—" in Comm., and the header Comm. leaves it out (a54 fixture, bob: was "Comm: 1.60K · 1,600 ·
+Unpaid" → "Comm: 0 · — · Below"; alice unchanged at 20.00K). **e19** fresh `tw.css` (79,763 B; has `text-purple-500/40` again, which
+the live Affiliates receipts lacked, plus the new classes). Compile: every babel block of index / portfolio / calculators / ledger
+compiles (compile.js itself still only reads the first tag — e20). Harness: portfolio 2-wallet recipe text identical before / after
+except one clock-driven 30D figure; #/ptgc 390 no overflow. index.html sha256 164c833f, portfolio.html 966e614e, tw.css 7e158f9c.
+**e1 + e2 LIVE-VERIFIED** (built-in browser, `d6a7b13c6`): the deployed pages carry both fixes; the real #100 PTGC wallet (0xae4d…)
+in the Top 100 checker → "HOLDS 412.51M · YOU'RE IN #100 · YOUR CUSHION 7.17M" (= 412.51M − the #101's 405.34M; the old code
+said ~20.5M); the portfolio's incremental UFO scan (REFRESH on the profile's one saved wallet, fetch wrapped to log) read
+0x1a94836 → 0x1a94837 = head in both directions, zero `latest`, balanceOf at 0x1a94837. **NEXT: his push → Claude's live check of
+p0b (DAO panel normal = no note; a portfolio with an emoji label → GET CODE; the affiliates receipts icon colour; ?v=3 live) →
+Worker v8 (e5 + e6, drafted by Claude, deployed by him) → e20–e23 (deploy gate) → the rank trio e9–e11.**
+**2026-10-23: AUDIT IV e1 + e2 BUILT ("fix 1 and 2") — PUSHED `d6a7b13c6`, LIVE-VERIFIED 2026-10-23 (see above).** `python3 tools/audit4-e1e2.py` (idempotent;
 run twice → "0 edit(s)"; it edits `tools/top100/t1.jsx` and re-splices index.html via `tools/top100.py`, then edits portfolio.html's data
 layer directly — that layer is NOT in the pf-v2 fragments, `tools/pf-v2.py` leaves it alone). **e1** `cush = k − list[99]` (was
 `list[100]`): harness `T1_BAL=412485544` (= the real #100's balance, a wallet not in `top`) → "YOU'RE IN #100 · YOUR CUSHION 0",
@@ -1637,7 +1662,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--27. **AUDIT IV e1 + e2 (2026-10-23) — BUILT by `tools/audit4-e1e2.py`, on the Mac, NOT pushed.** His push → Claude's live check
+-28. **AUDIT IV batch P0b (2026-10-23) — e7, e8, e3, e4, e19 BUILT by `tools/audit4-p0b.py` + `npm run css`, on the Mac, NOT
+   pushed.** His push → Claude's live check → Worker v8 (e5 + e6) → e20–e23 → e9–e11. Open P0: e5, e6 (the Worker).
+-27. **AUDIT IV e1 + e2 (2026-10-23) — BUILT by `tools/audit4-e1e2.py`, PUSHED `d6a7b13c6`, LIVE-VERIFIED.** His push → Claude's live check
    (above) → the next P0 picks (e3–e8).
 -26. **AUDIT IV (2026-10-22 night) — `sessions/2026-10-22-audit4.md`, written to the Mac, NOT pushed; nothing built.** e1–e47
    (8 × P0: Top 100 cushion, UFO reflections `exactTo`, DAO Treasury silent $0, referrer-window verdict, Worker rate/threshold
@@ -1822,6 +1849,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    in dry-run would have shown up here too).
 
 ## Session log
+- `sessions/2026-10-23.md` — Audit IV fixes: e1 + e2 (pushed, live-verified), batch P0b e7 / e8 / e3 / e4 / e19 (built, harness evidence).
 - `sessions/2026-10-22-audit4.md` — Audit IV: the merged e1–e47 list (P0–P3, TOP 10, security / mobile / performance / data sections, quick wins, ideas, do-not-change) and the eight raw sweeps (S, N, M, D, R, P, U, V) with evidence. No code changed.
 - `sessions/2026-10-22.md` — TOP 100: mock-ups, the build (holders + stakers, the checker), four look rounds, the audit, go-live, the stakers columns, the Telegram post.
 
