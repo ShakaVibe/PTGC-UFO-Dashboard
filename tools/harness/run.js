@@ -100,6 +100,7 @@ const rpcAnswer=(body)=>{
       else if(process.env.PF_ED&&d==='0x70a08231')result=pad(16_666_666_666n*10n**18n);
       else if(process.env.PF_ED&&d==='0xc64a041b')result=pad(2_000_000_000n*10n**18n);
       else if(process.env.PF_ED&&d==='0x4df9cfb3')result=pad(edW(16_666_666_666+2e9-edR(edDays)));
+      else if(process.env.T1_BAL&&process.env.T1_BY_ADDR&&d==='0x70a08231'){const k=parseInt((q.params[0].data||'').slice(-1),16)||1;result=pad(BigInt(process.env.T1_BAL)*BigInt(k)*10n**18n);}   // 2026-10-24 (combined rank): T1_BY_ADDR=1 → T1_BAL × the wallet address's last hex digit, so wallets differ
       else if(process.env.T1_BAL&&d==='0x70a08231')result=pad(BigInt(process.env.T1_BAL)*10n**18n);   // TOP 100 (2026-10-22): every balanceOf answers this many tokens (the checker's "out of the top 100" state)
       else if(process.env.PF_ED&&d==='0x15612933'){const now=Math.floor(Date.now()/1000);result='0x'+[10_000_000_000n*10n**18n,0n,BigInt(now-86400*400),edW(1e9-edDays*15e6),edW(2e8-edDays*1.2e6),6_000_000_000n*10n**18n,0n].map(v=>v.toString(16).padStart(64,'0')).join('');}
       else if(d==='0x70a08231'&&process.env.PF_HIST&&q.params[1]&&q.params[1]!=='latest'){const n=parseInt(q.params[1],16);const days=(HEAD-n)*10/86400;const f=days<10?1:Math.max(0.15,1.35-days/120);result=pad(BigInt(Math.round(16_666_666_666*f))*10n**18n);}

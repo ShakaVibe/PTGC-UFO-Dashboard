@@ -152,7 +152,7 @@
       useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(prev=>j.failed&&prev&&!prev.failed?prev:j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
       /* Audit IV e27: per token — the builder stamps generatedAt fresh even when it CARRIED one token's old list (its readAt
          stays old). A stale token ranks nothing; the column hides only when both are stale. */
-      const rdAt=tok=>Date.parse((d&&d.tokens[tok]&&d.tokens[tok].readAt)||(d&&d.generatedAt));
+      const rdAt=tok=>Date.parse((d&&d.tokens&&d.tokens[tok]&&d.tokens[tok].readAt)||(d&&d.generatedAt));   // 2026-10-24: a failed read has no tokens (it crashed the page)
       const staleTok=d?{PTGC:!(Date.now()-rdAt('PTGC')<PF_RANKS_STALE),UFO:!(Date.now()-rdAt('UFO')<PF_RANKS_STALE)}:null;
       const stale=!!d&&staleTok.PTGC&&staleTok.UFO;
       if(d&&d.failed)return{failed:true,stale:true,staleTok:{PTGC:true,UFO:true},tokens:{}};   // e40
@@ -172,11 +172,27 @@
       if(js.length===1)j=js[0];else if(js.length>1)j=js[0];   // a shared tag: the first (highest) — the caller re-picks by balance below
       const out=j<0?b:b.slice(0,j).concat(b.slice(j+1));out.js=js;c.set(a,out);return out;};
     /* → null when the list is missing / stale or the balance is 0; else {r, pass} */
-    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];   // e27: per-token stalenessif(!t||!Array.isArray(t.b)||!(bal>0))return null;
+    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];   // e27: per-token staleness
+      if(!t||!Array.isArray(t.b)||!(bal>0))return null;   // 2026-10-24: this guard had ended up behind the comment above
       const x=pfRankKey(bal);let b=pfRankList(t,addr);
       if(b.js&&b.js.length>1){const j=b.js.reduce((p,q)=>Math.abs(t.b[q]-x)<Math.abs(t.b[p]-x)?q:p);b=t.b.slice(0,j).concat(t.b.slice(j+1));}   // e9: tag collision → the entry nearest this balance
       let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
       const d=lo>0?b[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&b[lo-1]>=1?d+1:d+1e-6)};};
+    /* 2026-10-24 (Shaka: "show the ranking as if all wallets were one"): the counted wallets' balances added up and ranked against
+       the list WITHOUT each of those wallets' own entries (e9, per wallet — the chain lists them apart, and an entry can be up to 2 h
+       old, so a wallet that sold could otherwise sit above its own total). Wallets holding 0 are still looked up (a stale entry of
+       a wallet that sold everything is dropped too). items = [{addr, bal}] for the counted wallets that read.
+       → null (no usable list / nothing held) or {r, pass, list (the list it was ranked in), bal (the total)} */
+    const pfRankAll=(ranks,tok,items)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];
+      if(!t||!Array.isArray(t.b))return null;
+      const its=(items||[]).filter(Boolean),bal=its.reduce((s,x)=>s+(x.bal>0?x.bal:0),0);if(!(bal>0))return null;
+      const b=t.b,T=t.t,drop=new Set();
+      if(typeof T==='string'&&T.length===b.length*6)its.forEach(({addr,bal:wb})=>{if(!addr)return;
+        const tag=String(addr).toLowerCase().slice(2,8),js=[];let i=T.indexOf(tag);while(i>=0){if(i%6===0&&!drop.has(i/6))js.push(i/6);i=T.indexOf(tag,i+1);}
+        if(!js.length)return;const k=pfRankKey(wb>0?wb:0);drop.add(js.reduce((p,q)=>Math.abs(b[q]-k)<Math.abs(b[p]-k)?q:p));});   // a shared tag: the entry nearest this wallet's balance
+      const list=drop.size?b.filter((v,j)=>!drop.has(j)):b;
+      const x=pfRankKey(bal);let lo=0,hi=list.length;while(lo<hi){const m=(lo+hi)>>1;if(list[m]>x)lo=m+1;else hi=m;}
+      const d=lo>0?list[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&list[lo-1]>=1?d+1:d+1e-6),list,bal};};
     const pfPassAmt=v=>v>=1?pfAbbr(v):String(+v.toFixed(6));   // a dust holder's gap can be 0.000123
     const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
     /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
@@ -186,8 +202,9 @@
       const Tag=open?'button':'div';
       return <Tag type={open?'button':undefined} onClick={open} className={`pf2-rkb ${c}${sm?' sm':''}${open?' btn':''}`} title={open?`${tok} holder #${x.r.toLocaleString('en-US')} — rank history`:`${tok} holder #${x.r.toLocaleString('en-US')}`} aria-label={open?`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`:undefined}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>#{x.r.toLocaleString('en-US')}</b>
         {!sm&&<em>{pfPassTxt(x)}</em>}</Tag>;};
-    /* H3: the row under the league bar — shown only when ONE wallet is counted (2026-10-21 pm: "all N wallets as one" dropped) */
+    /* H3: the row under the league bar — ONE wallet counted: its rank; two or more (2026-10-24, Shaka — he had dropped "all N
+       wallets as one" on 2026-10-21 pm and asked for it back): "ALL N WALLETS COMBINED" + pfRankAll */
     /* H3 in the P2 look (Shaka, 2026-10-21 pm, mock-rank-badge-v2 P2): no pill — "HOLDER / RANK" stacked in tiny caps beside a big
        gold / green number; with several wallets the line's own label "ALL N WALLETS AS ONE" sits in front */
     /* Audit IV e40: with no usable list the League box says why instead of the rank line vanishing (the Top 100 window's wording) */
-    const PfRankRow=({tok,x,label,open,note})=>!x?(note?<div className="pf2-rk3 na" style={{fontSize:12,color:'rgba(255,255,255,.5)',padding:'6px 2px'}}>HOLDER RANK {'\u2014'} {note}</div>:null):<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    const PfRankRow=({tok,x,label,open,note})=>!x?(note?<div className="pf2-rk3 na" style={{fontSize:12,color:'rgba(255,255,255,.5)',padding:'6px 2px'}}>HOLDER RANK {'\u2014'} {note}</div>:null):<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${label?label.toLowerCase()+': ':''}${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;

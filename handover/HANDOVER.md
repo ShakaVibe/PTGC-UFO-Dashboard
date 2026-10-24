@@ -46,7 +46,33 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
-**2026-10-24 (late, 2): "PTGC BURNED BY UFO" COUNTS pTGC's 0.5 % FEE BURN ON BOTH CONTRACTS — READY TO PUSH.** (Shaka: asked
+**2026-10-24 (day): COMBINED HOLDER RANK + READY TO CLAIM AT 0 + TWO RANK CRASH FIXES — BUILT on the Mac, NOT pushed.**
+(Shaka: "when multiple wallets are selected … show the ranking as if all wallets were one … in the same place where we show the
+ranking details of a single wallet" — he had dropped "all N wallets as one" on 10-21 pm and asked for it back; then "if a wallet has
+no stakes or locks, its just this big blank space … show just they have 0 to claim".) Build = `python3 tools/pf-rank-combined.py`
+then `python3 tools/pf-claim-zero.py` (both idempotent, re-splice via tools/pf-v2.py; from `ecc9d1fe` → portfolio.html sha256
+e81d22b6, re-runs "0 edit(s)"; tw.css unchanged).
+*Combined rank:* two or more counted wallets → the League box row reads "ALL N WALLETS COMBINED · HOLDER RANK #r · ▲ x more to pass
+#r-1" (`pfRankAll`: the counted balances added up — the same sum as the box — ranked against holder-ranks.json with EACH counted
+wallet's own entry dropped by its tag, e9 per wallet, zero-balance wallets included so a sold wallet's stale entry goes too). One
+wallet → exactly as before. The row opens the rank window on a new first picker entry "All N combined": TODAY + "if your N wallets were
+one", tiles COMBINED / BEST WALLET ALONE / PLACES GAINED / TO PASS, WHAT IT TAKES + the calculator against the same list; no chart
+("Rank history is kept per wallet …" — the rank index has ranks per address per day, no balances, so a combined history cannot be
+built). The breakdown badges still open on their wallet, with the combined pick available.
+*Ready to claim:* once any wallet has read, the PTGC spotlight always shows — 0 PTGC, an empty Staking / Locks bar, "Nothing to claim
+— no PTGC staked or locked in this wallet / these wallets" (the old "rewards build up while you stake" line stays when something is
+staked or locked).
+*Fixes (live bugs):* (1) Audit IV batch 5's `// e27` comment had swallowed pfRank's guard on the same line — a stale token's list or a
+failed read made pfRank throw, a 0 balance got a rank; (2) usePfRanks read `d.tokens[tok]` before e40's failed check, so a failed
+holder-ranks.json read crashed the WHOLE Portfolio page ("Something went wrong … reading 'PTGC'") — reproduced in the harness at HEAD.
+*Evidence (cloud harness, real holder-ranks.json, new `T1_BY_ADDR=1` switch = T1_BAL × the address's last hex digit):* 3 wallets
+50M / 100M / 150M → combined 300M = PTGC #117 (▲ 2.87M to #116), UFO #256 (▲ 2.20M) = a Python count over the list; a wallet tagged
+like the real #100 entry (412.5M, i.e. "sold") → #116 (its entry dropped); window: BEST WALLET ALONE #223 (C), PLACES GAINED 106;
+2 wallets → 150M = #223, A alone #617, B #356; single wallet: page text + rank rows identical to HEAD; list missing (1 and 2 wallets)
+→ "HOLDER RANK — couldn't load …", no crash (HEAD: crash); UFO list stale → PTGC combined ranks, UFO says out of date; no sideways
+scroll at 1280 / 600 / 390; compile ok. Probe `probes/pf2-rank-all.js`.
+
+**2026-10-24 (late, 2): "PTGC BURNED BY UFO" COUNTS pTGC's 0.5 % FEE BURN ON BOTH CONTRACTS — PUSHED `ecc9d1fe` (data runs not yet seen — see Next up -36).** (Shaka: asked
 which way → "what do you suggest" → Claude: count it on both (it exists only because UFO bought; no ratio fingerprint) → "do it".)
 `python3 tools/ufo-fee-legs.py` (idempotent, 11 edits): scripts/build-value-generated.mjs AND its twin in index.html no longer drop
 the leg that is 0.005/0.95 of the delivered leg (window scan + pre-window lifetime slice); the file checkpoint
@@ -1932,10 +1958,29 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-37. **Combined holder rank + Ready to claim at 0 + the two rank crash fixes (2026-10-24 day) — BUILT, NOT pushed.** His push →
+   Claude's live look: Portfolio with 2+ wallets (the League rows, the window's "All N combined"), one wallet unchanged, a wallet with
+   nothing staked (the 0 box). Wording "ALL N WALLETS COMBINED" is a one-line swap (`rkLabel` in PortfolioV2.jsx) if he prefers his
+   "If all wallets were combined". Then the -36 list's "next work".
+-36. **DONE 2026-10-24 day — VERIFIED:** cache schema 4, v1 PTGCbyUFO 4,366.92 M, value-generated ptgcBurnedAll 318.13 M
+   method all-legs (its 30D 148.18 M = the v2 file's 30D), burn-summary reconcile ok PTGC + UFO (13:52 UTC), the 14:15 run 0 failed,
+   live #/ufo "PTGC BURNED BY UFO" 4.69B, index.html 391de7b0 with grays_ptgc_by_ufo_pre_v2. (PTGC 7D 164.5 M — the window moved.) Was:
+   **START OF NEXT SESSION — verify the 2026-10-24 burn pushes landed in the data (Shaka: "You can check tomorrow").**
+   Pushed today: `f2d25262` (burn archive v2 + cards round 5, VERIFIED), `7815732b` (Logos thumbnails, live; PTGC-burned-by-UFO
+   v4), `ecc9d1fe` (fee legs counted). Check on origin/main: (1) data/ufo-ptgc-burns-cache.json `schema: 4` and
+   ufo-ptgc-burns.json byContract.v1.PTGCbyUFO.totalBurned ≈ 4,366.9 M (+ a little new) — the v4 migration runs on the first
+   gated (6 h) ufo-ptgc-burns run after 21:16 UTC Oct 23; if pipeline-status shows it failed, read lastError (an unreadable
+   receipt makes the migration retry — all-or-nothing). (2) data/value-generated.json delivered.ptgcBurnedAll ≈ 318.1 M+ and
+   delivered.ptgcPreWindow.method = 'all-legs'. (3) burn-summary.json PTGC.archive.reconcile.ok true (and UFO). (4) live
+   ptgc-ufo.com: index has grays_ptgc_by_ufo_pre_v2; #/ufo "PTGC burned by UFO" headline ≈ 4,685 M; #/ptgc burn 7D ≈ 190 M.
+   Then the next work: D-4 (shared RPC pool with a head check), D-6 / c21 (rank-index shard count / data branch), P3s e42–e47,
+   P-5 lazy Chart.js, P-11 BUY glow, M-13 Ledger vs DAO Buys. Tokens: "ptgcapi pipeline dispatch" has NO expiry (Shaka checked
+   2026-10-24) — the ~Nov 5 worry is closed; "saucer-claude" (expires Nov 4) is not used by this site. Worker v8 (e5/e6) still
+   parked by him.
 -35. **Burn archive v2 + home cards round 5 (2026-10-24) — PUSHED `f2d25262`, VERIFIED (see Current state).** His push (promptly — the first run
    re-reads from the rebuild's last block) → check the pipeline's burn-history log + `PTGC.archive.reconcile.ok` → live look at the
    #/ptgc burn windows (7D ≈ 190 M) and the cards. e39 burn: DONE by this. Then: P-4 thumbnails, D-4 pool with a head check, D-6 / c21,
-   and the Worker DISPATCH_TOKEN before ~Nov 5. fetch-ufo-ptgc-burns.js still guesses times (dedupes by tx hash, so no double count).
+   (DISPATCH_TOKEN: no expiry — closed. fetch-ufo-ptgc-burns.js: fixed in v4, see -36.)
 -34. **AUDIT IV batch 6 + Leagues Atlantis art (2026-10-24) — BUILT, on the Mac, NOT pushed.** His push → Claude's live look (the
    Leagues window + Socials card, 320 px pages, the favicon on iOS). **Decision for him (e39 burn):** the archive overcounts PTGC burns
    in 2026 (see Current state) — options: (a) find and drop the extra rows (needs tx hashes in the archive — a rebuild of 2026 with

@@ -2045,7 +2045,7 @@
       useEffect(()=>{let live=true;const go=()=>pfRanksLoad().then(j=>{if(live&&j)setD(prev=>j.failed&&prev&&!prev.failed?prev:j);});go();const t=setInterval(go,30*60e3);return()=>{live=false;clearInterval(t);};},[]);
       /* Audit IV e27: per token — the builder stamps generatedAt fresh even when it CARRIED one token's old list (its readAt
          stays old). A stale token ranks nothing; the column hides only when both are stale. */
-      const rdAt=tok=>Date.parse((d&&d.tokens[tok]&&d.tokens[tok].readAt)||(d&&d.generatedAt));
+      const rdAt=tok=>Date.parse((d&&d.tokens&&d.tokens[tok]&&d.tokens[tok].readAt)||(d&&d.generatedAt));   // 2026-10-24: a failed read has no tokens (it crashed the page)
       const staleTok=d?{PTGC:!(Date.now()-rdAt('PTGC')<PF_RANKS_STALE),UFO:!(Date.now()-rdAt('UFO')<PF_RANKS_STALE)}:null;
       const stale=!!d&&staleTok.PTGC&&staleTok.UFO;
       if(d&&d.failed)return{failed:true,stale:true,staleTok:{PTGC:true,UFO:true},tokens:{}};   // e40
@@ -2065,11 +2065,27 @@
       if(js.length===1)j=js[0];else if(js.length>1)j=js[0];   // a shared tag: the first (highest) — the caller re-picks by balance below
       const out=j<0?b:b.slice(0,j).concat(b.slice(j+1));out.js=js;c.set(a,out);return out;};
     /* → null when the list is missing / stale or the balance is 0; else {r, pass} */
-    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];   // e27: per-token stalenessif(!t||!Array.isArray(t.b)||!(bal>0))return null;
+    const pfRank=(ranks,tok,bal,addr)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];   // e27: per-token staleness
+      if(!t||!Array.isArray(t.b)||!(bal>0))return null;   // 2026-10-24: this guard had ended up behind the comment above
       const x=pfRankKey(bal);let b=pfRankList(t,addr);
       if(b.js&&b.js.length>1){const j=b.js.reduce((p,q)=>Math.abs(t.b[q]-x)<Math.abs(t.b[p]-x)?q:p);b=t.b.slice(0,j).concat(t.b.slice(j+1));}   // e9: tag collision → the entry nearest this balance
       let lo=0,hi=b.length;while(lo<hi){const m=(lo+hi)>>1;if(b[m]>x)lo=m+1;else hi=m;}
       const d=lo>0?b[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&b[lo-1]>=1?d+1:d+1e-6)};};
+    /* 2026-10-24 (Shaka: "show the ranking as if all wallets were one"): the counted wallets' balances added up and ranked against
+       the list WITHOUT each of those wallets' own entries (e9, per wallet — the chain lists them apart, and an entry can be up to 2 h
+       old, so a wallet that sold could otherwise sit above its own total). Wallets holding 0 are still looked up (a stale entry of
+       a wallet that sold everything is dropped too). items = [{addr, bal}] for the counted wallets that read.
+       → null (no usable list / nothing held) or {r, pass, list (the list it was ranked in), bal (the total)} */
+    const pfRankAll=(ranks,tok,items)=>{const t=ranks&&!ranks.stale&&!(ranks.staleTok&&ranks.staleTok[tok])&&ranks.tokens&&ranks.tokens[tok];
+      if(!t||!Array.isArray(t.b))return null;
+      const its=(items||[]).filter(Boolean),bal=its.reduce((s,x)=>s+(x.bal>0?x.bal:0),0);if(!(bal>0))return null;
+      const b=t.b,T=t.t,drop=new Set();
+      if(typeof T==='string'&&T.length===b.length*6)its.forEach(({addr,bal:wb})=>{if(!addr)return;
+        const tag=String(addr).toLowerCase().slice(2,8),js=[];let i=T.indexOf(tag);while(i>=0){if(i%6===0&&!drop.has(i/6))js.push(i/6);i=T.indexOf(tag,i+1);}
+        if(!js.length)return;const k=pfRankKey(wb>0?wb:0);drop.add(js.reduce((p,q)=>Math.abs(b[q]-k)<Math.abs(b[p]-k)?q:p));});   // a shared tag: the entry nearest this wallet's balance
+      const list=drop.size?b.filter((v,j)=>!drop.has(j)):b;
+      const x=pfRankKey(bal);let lo=0,hi=list.length;while(lo<hi){const m=(lo+hi)>>1;if(list[m]>x)lo=m+1;else hi=m;}
+      const d=lo>0?list[lo-1]-x:null;return{r:lo+1,pass:d==null?null:(x>=1&&list[lo-1]>=1?d+1:d+1e-6),list,bal};};
     const pfPassAmt=v=>v>=1?pfAbbr(v):String(+v.toFixed(6));   // a dust holder's gap can be 0.000123
     const pfPassTxt=x=>x.pass==null?'Nobody above you':`▲ ${pfPassAmt(x.pass)} more to pass #${(x.r-1).toLocaleString('en-US')}`;
     /* the badge (G2): one line, "more to pass" at the right end — it wraps under the rank when the column is narrow */
@@ -2079,11 +2095,12 @@
       const Tag=open?'button':'div';
       return <Tag type={open?'button':undefined} onClick={open} className={`pf2-rkb ${c}${sm?' sm':''}${open?' btn':''}`} title={open?`${tok} holder #${x.r.toLocaleString('en-US')} — rank history`:`${tok} holder #${x.r.toLocaleString('en-US')}`} aria-label={open?`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`:undefined}><img src={logo} alt=""/><span className="k">{tok} RANK</span><b>#{x.r.toLocaleString('en-US')}</b>
         {!sm&&<em>{pfPassTxt(x)}</em>}</Tag>;};
-    /* H3: the row under the league bar — shown only when ONE wallet is counted (2026-10-21 pm: "all N wallets as one" dropped) */
+    /* H3: the row under the league bar — ONE wallet counted: its rank; two or more (2026-10-24, Shaka — he had dropped "all N
+       wallets as one" on 2026-10-21 pm and asked for it back): "ALL N WALLETS COMBINED" + pfRankAll */
     /* H3 in the P2 look (Shaka, 2026-10-21 pm, mock-rank-badge-v2 P2): no pill — "HOLDER / RANK" stacked in tiny caps beside a big
        gold / green number; with several wallets the line's own label "ALL N WALLETS AS ONE" sits in front */
     /* Audit IV e40: with no usable list the League box says why instead of the rank line vanishing (the Top 100 window's wording) */
-    const PfRankRow=({tok,x,label,open,note})=>!x?(note?<div className="pf2-rk3 na" style={{fontSize:12,color:'rgba(255,255,255,.5)',padding:'6px 2px'}}>HOLDER RANK {'\u2014'} {note}</div>:null):<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
+    const PfRankRow=({tok,x,label,open,note})=>!x?(note?<div className="pf2-rk3 na" style={{fontSize:12,color:'rgba(255,255,255,.5)',padding:'6px 2px'}}>HOLDER RANK {'\u2014'} {note}</div>:null):<div className={`pf2-rk3 ${tok==='UFO'?'u':'p'}`}><div className="l">{label&&<span className="k">{label}</span>}<button type="button" className="p2" onClick={open} title="Rank history" aria-label={`${label?label.toLowerCase()+': ':''}${tok} holder rank #${x.r.toLocaleString('en-US')}, open the rank history`}><span className="st"><small>HOLDER</small><small>RANK</small></span><b>#{x.r.toLocaleString('en-US')}</b></button></div><div className="r">{x.pass==null?pfPassTxt(x):<>{'\u25B2'} <strong>{pfPassAmt(x.pass)}</strong> more to pass #{(x.r-1).toLocaleString('en-US')}</>}</div></div>;
 
     /* Expects from PfLeagues.jsx (loaded first): PF_ADDR, PF_TOKEN_ADDR, PF_SUPPLY, pfAbbr, pfAddr, pfLsSet, PfModal. Used by PfTx.jsx
        and PortfolioV2.jsx: PFH_TOK, pfhPrices, pfhPriceAt, pfhRpc, usePfSeries, usePf24h, PfValueHistory, PfEarnedModal, usePfUfoV1.
@@ -2998,14 +3015,14 @@
       if(rec){let i=rec[0],r=0;for(const d of rec[1]){r+=d;if(i<series.length)series[i]=r;i++;}}   // schema 2: [firstDay, [rank delta per day]]
       return{day0:meta.day0,days:meta.days,series,holders:meta.holders||[],generatedAt:meta.generatedAt,known:!!rec};
     };
-    const usePfRankHist=(tok,addr)=>{const[d,setD]=useState({state:'loading'});
-      useEffect(()=>{let live=true;setD({state:'loading'});pfrLoad(tok,addr).then(h=>{if(!live)return;setD(h?{state:'ok',...h}:{state:'failed'});});return()=>{live=false;};},[tok,addr]);return d;};
+    const usePfRankHist=(tok,addr)=>{const[d,setD]=useState({state:addr?'loading':'none'});   // no addr (the combined view) = no history to read
+      useEffect(()=>{let live=true;if(!addr){setD({state:'none'});return;}setD({state:'loading'});pfrLoad(tok,addr).then(h=>{if(!live)return;setD(h?{state:'ok',...h}:{state:'failed'});});return()=>{live=false;};},[tok,addr]);return d;};
     const PFR_PERIODS=[['LIFE',Infinity],['1Y',365],['90D',90],['30D',30],['7D',7]];
     const pfrDate=(day0,i)=>new Date(Date.parse(day0+'T00:00:00Z')+i*86400e3);
     const pfrFmt=(d,long)=>long?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}):d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
     const pfrFmtY=d=>d.toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});
     /* small gold line icons for the tiles and section titles */
-    const PfIco=({k})=>{const P={trophy:'M6 3h12v3a5 5 0 0 1-3 4.6V13h3v2H6v-2h3v-2.4A5 5 0 0 1 6 6V3zm-3 2h3v2a3 3 0 0 1-3-2zm18 0h-3v2a3 3 0 0 0 3-2z',down:'M5 8l7 8 7-8z',bars:'M4 20V12h3v8zm6.5 0V5h3v15zm6.5 0v-9h3v9z',cal:'M5 5h14v15H5zM5 9h14M8 3v4m8-4v4',chart:'M4 18 9 12l3 3 7-8M19 7h-4m4 0v4',bolt:'M13 2 4 14h6l-1 8 9-12h-6z'};
+    const PfIco=({k})=>{const P={stack:'M4 6h16v4H4zm0 8h16v4H4z',trophy:'M6 3h12v3a5 5 0 0 1-3 4.6V13h3v2H6v-2h3v-2.4A5 5 0 0 1 6 6V3zm-3 2h3v2a3 3 0 0 1-3-2zm18 0h-3v2a3 3 0 0 0 3-2z',down:'M5 8l7 8 7-8z',bars:'M4 20V12h3v8zm6.5 0V5h3v15zm6.5 0v-9h3v9z',cal:'M5 5h14v15H5zM5 9h14M8 3v4m8-4v4',chart:'M4 18 9 12l3 3 7-8M19 7h-4m4 0v4',bolt:'M13 2 4 14h6l-1 8 9-12h-6z'};
       return <svg className={`pf2-ico${k==='down'?' dn':''}`} viewBox="0 0 24 24" aria-hidden="true"><path d={P[k]} fill={k==='bolt'||k==='down'||k==='bars'||k==='trophy'?'currentColor':'none'} stroke="currentColor" strokeWidth={k==='bolt'||k==='trophy'?0:1.8} strokeLinecap="round" strokeLinejoin="round"/></svg>;};
     /* the chart: rank over time, higher = better (y flipped), the period's own scale, buy / sell dots, the best point marked */
     const PfRankChart=({pts,day0,i0,col,evs,tok})=>{
@@ -3047,20 +3064,27 @@
         <circle cx={X(n-1)} cy={Y(pts[n-1])} r="6" fill="#0b0d12" stroke={col} strokeWidth="2.5"/><circle cx={X(n-1)} cy={Y(pts[n-1])} r="2.5" fill={col}/>
         <text x={X(n-1)-12} y={Y(pts[n-1])<T+16?Y(pts[n-1])+5:Y(pts[n-1])-10} textAnchor="end" fontSize="12" fill={col} fontFamily="Orbitron" fontWeight="900" style={{paintOrder:'stroke',stroke:'#05060a',strokeWidth:4}}>{bi[1]===pts[n-1]?'BEST ':''}#{pts[n-1].toLocaleString('en-US')}</text>{xl}</svg>;
     };
-    const PfRankModal=({tok:tok0,wallets,data,ranks,txs,prices,close})=>{
+    const PfRankModal=({tok:tok0,wallets,all,data,ranks,txs,prices,close})=>{
       const[tok,setTok]=useState(tok0);
-      const[sel,setSel]=useState(()=>wallets[0]&&wallets[0].address.toLowerCase());
+      const[sel,setSel]=useState(()=>all&&wallets.length>1?'*':wallets[0]&&wallets[0].address.toLowerCase());   // '*' = all the counted wallets combined (2026-10-24)
       const[per,setPer]=useState(()=>{try{return localStorage.getItem('grays_pf_rank_per')||'1Y';}catch(e){return '1Y';}});
       /* Shaka: "default the chart to NOT show buys and sells.. if they want to see them they can check a box.. and then they get a
          loading while it loads" + "should always default to off.. even on refresh" — off every time the window opens, never remembered */
       const[showTx,setShowTx]=useState(false);
       const[want,setWant]=useState('');   // the calculator's typed rank (his add, 2026-10-21 evening: mock-rank-calc-v2, pick C)
       const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
-      const w=wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0];
-      const d=w&&data[w.address.toLowerCase()];
+      /* 2026-10-24: the combined view — every counted wallet that read, added up (the same sum as the League box) and ranked as one
+         (pfRankAll); `w` is null there. BEST WALLET ALONE / PLACES GAINED compare it with the best single wallet's own rank. */
+      const comb=sel==='*'&&wallets.length>1;
+      const rd=wallets.map(x=>({x,z:data[x.address.toLowerCase()]})).filter(o=>o.z&&!o.z.error);
+      const w=comb?null:(wallets.find(x=>x.address.toLowerCase()===sel)||wallets[0]);
+      const d=comb?(rd.length?{ptgc:{totalHolding:rd.reduce((s,o)=>s+(o.z.ptgc.totalHolding||0),0)},ufo:{balance:rd.reduce((s,o)=>s+(o.z.ufo.balance||0),0)}}:null):w&&data[w.address.toLowerCase()];
       const bal=d&&!d.error?(isU?(d.ufo.balance||0):(d.ptgc.totalHolding||0)):0;
-      const live=pfRank(ranks,tok,bal,w&&w.address);   // e9: without the wallet's own (possibly stale) entry
-      const h=usePfRankHist(tok,w?w.address:'0x');
+      const balOf=z=>isU?(z.ufo.balance||0):(z.ptgc.totalHolding||0);
+      const live=comb?pfRankAll(ranks,tok,rd.map(o=>({addr:o.x.address,bal:balOf(o.z)}))):pfRank(ranks,tok,bal,w&&w.address);   // e9: without the wallet's own (possibly stale) entry
+      const solo=comb?rd.map(o=>{const r=pfRank(ranks,tok,balOf(o.z),o.x.address);return r?{w:o.x,r:r.r}:null;}).filter(Boolean).sort((p,q)=>p.r-q.r)[0]||null:null;
+      const nHold=comb?rd.filter(o=>balOf(o.z)>0).length:0;
+      const h=usePfRankHist(tok,comb?null:w?w.address:'0x');
       const nowT=usePfTick();
       /* the series + today's live point */
       const full=h.state==='ok'?[...h.series]:null;
@@ -3097,37 +3121,43 @@
       const txPct=!txs||txCov===undefined?0:Math.min(99,Math.max(1,Math.round((now-txCov)/Math.max(1,now-perStart)*100)));
       useEffect(()=>{if(showTx&&txs&&txs.prioritize&&wa)txs.prioritize(wa,tok);},[showTx,wa,tok,!!(txs&&txs.prioritize)]);
       /* what it takes: milestones from today's list */
-      const list=ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];
+      const list=comb?(live?live.list:[]):ranks&&ranks.tokens&&ranks.tokens[tok]&&ranks.tokens[tok].b||[];   // combined: the list it was ranked in (own entries out)
       const ms=live?[live.r-1,10,5,1].filter((r,i,a)=>r>=1&&r<live.r&&a.indexOf(r)===i):[];
       const px=isU?prices.ufo:prices.ptgc;
       return(
         <PfModal className="z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80" onClose={close} label={`${tok} holder rank`}>
           <div className={`pf2-erw pf2-rkw${isU?' u':''}`} onClick={ev=>ev.stopPropagation()}>
             <div aria-hidden="true" className={`pf2-rkw-sky${isU?' ufo':''}`}></div>
-            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2><span className="tk">{tok}</span> HOLDER RANK</h2><div className="sub"><span>{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null} {'·'} {pfAbbr(bal)} {tok}</span>
+            <div className="ehd"><img src={logo} alt=""/><div className="tt"><h2><span className="tk">{tok}</span> HOLDER RANK</h2><div className="sub"><span>{comb?<>All {wallets.length} wallets combined</>:<>{w?(w.name||pfAddr(w.address)):'—'}{w&&w.name?<> {'·'} {pfAddr(w.address)}</>:null}</>} {'·'} {pfAbbr(bal)} {tok}</span>
                 {/* 2026-10-21 (his pick B of mock-rank-league-v1): the wallet's league on BOTH tokens — the sea creature the League box
                    uses, the window's token lit, the other one quiet; a token it does not hold gets no chip */}
                 {d&&!d.error&&['PTGC','UFO'].map(T=>{const b=T==='UFO'?(d.ufo.balance||0):(d.ptgc.totalHolding||0),L=pfLeague(b,PF_SUPPLY[T]);if(!L||!L.cur)return null;
                   return <span key={T} className={`lgc${T==='UFO'?' u':''}${T===tok?' on':''}`} title={L.next?`${L.pct.toFixed(1)}% to ${L.next.name} · need ${pfAbbr(L.need)} ${T}`:`Top league — ${L.cur.name}`}><img src={pfSea(L.cur.emoji)} alt=""/>{T} {L.cur.name}</span>;})}</div></div>
               <div className="tw"><div className="tabs">{['PTGC','UFO'].map(t=><button key={t} className={tok===t?'on':''} aria-pressed={tok===t} onClick={()=>setTok(t)}><img src={t==='UFO'?TOKENS.UFO.logo:TOKENS.PTGC.logo} alt=""/>{t}</button>)}</div></div>
               <button className="x" onClick={close} aria-label="Close">{'×'}</button></div>
-            {wallets.length>1&&<div className="pf2-edsel"><div className="ws">{wallets.map(x=>{const a=x.address.toLowerCase();return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{x.name||pfAddr(x.address)}</button>;})}</div></div>}
+            {wallets.length>1&&<div className="pf2-edsel"><div className="ws"><button key="*" className={comb?'on':''} aria-pressed={comb} onClick={()=>setSel('*')}>All {wallets.length} combined</button>{wallets.map(x=>{const a=x.address.toLowerCase();return <button key={a} className={sel===a?'on':''} aria-pressed={sel===a} onClick={()=>setSel(a)}>{x.name||pfAddr(x.address)}</button>;})}</div></div>}
             <div className="hero">
               <div className="big"><small>TODAY</small><span className="wr"><b>{live?'#'+live.r.toLocaleString('en-US'):'—'}</b></span>
-                {chg==null?<span className="flat">{live?'—':'not holding '+tok}</span>:chg===0?<span className="flat">{'—'} no change</span>:<span className={chg<0?'up':'dn'}>{chg<0?'▲':'▼'} {Math.abs(chg).toLocaleString('en-US')} place{Math.abs(chg)===1?'':'s'}</span>}
-                <em>{per==='LIFE'?'since the first day held':`vs ${nDays} days ago`}</em></div>
-              <div className="tiles">
+                {comb?<span className="flat">{live?`if your ${wallets.length} wallets were one`:`none of these wallets hold ${tok}`}</span>:chg==null?<span className="flat">{live?'—':'not holding '+tok}</span>:chg===0?<span className="flat">{'—'} no change</span>:<span className={chg<0?'up':'dn'}>{chg<0?'▲':'▼'} {Math.abs(chg).toLocaleString('en-US')} place{Math.abs(chg)===1?'':'s'}</span>}
+                <em>{comb?'from today’s holder list':per==='LIFE'?'since the first day held':`vs ${nDays} days ago`}</em></div>
+              {comb?<div className="tiles">
+                <div className="tl"><div className="l"><PfIco k="stack"/>COMBINED</div>{(()=>{const v=bal>0?pfAbbr(bal).replace(/\.00(?=[KMBT]$)/,''):'—';return <div className="v" style={v.length>6?{fontSize:21}:undefined}>{v}</div>;})()}<div className="s">{tok} in {nHold} wallet{nHold===1?'':'s'}</div></div>
+                <div className="tl"><div className="l"><PfIco k="trophy"/>BEST WALLET ALONE</div><div className="v">{solo?'#'+solo.r.toLocaleString('en-US'):'—'}</div><div className="s">{solo?(solo.w.name||pfAddr(solo.w.address)):''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="chart"/>PLACES GAINED</div><div className="v">{live&&solo?(solo.r-live.r).toLocaleString('en-US'):'—'}</div><div className="s">{live&&solo?'vs your best wallet alone':''}</div></div>
+                <div className="tl"><div className="l"><PfIco k="bars"/>{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
+              </div>:<div className="tiles">
                 <div className="tl"><div className="l"><PfIco k="trophy"/>BEST EVER</div><div className="v">{best!=null?'#'+best.toLocaleString('en-US'):'—'}</div><div className="s">{bestI>=0?pfrFmt(pfrDate(h.day0,bestI),true):''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="down"/>LOWEST</div><div className="v">{worst!=null?'#'+worst.toLocaleString('en-US'):'—'}</div><div className="s">{worstI>=0?pfrFmt(pfrDate(h.day0,worstI),true):''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="bars"/>{live&&live.pass!=null?`TO PASS #${(live.r-1).toLocaleString('en-US')}`:'TO PASS'}</div><div className="v">{live?live.pass==null?'—':pfPassAmt(live.pass):'—'}</div><div className="s">{live?live.pass==null?'nobody above you':tok+' more':''}</div></div>
                 <div className="tl"><div className="l"><PfIco k="cal"/>DAYS IN TOP {topN[0].toLocaleString('en-US')}</div><div className="v">{full?topN[1].toLocaleString('en-US'):'—'}</div><div className="s">{full?`of ${tracked.toLocaleString('en-US')} held`:''}</div></div>
-              </div>
+              </div>}
             </div>
-            <div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
+            {comb&&<div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span></div><div className="pf2-hwait" style={{height:110}}><div>Rank history is kept per wallet {'—'} the chain lists your wallets separately, so there is no combined history. Pick a wallet above to see its chart.</div></div></div>}
+            {!comb&&<div className="ch"><div className="chh"><span><PfIco k="chart"/>RANK OVER TIME</span><div className="pp" role="group" aria-label="Period">{PFR_PERIODS.map(([k])=><button key={k} className={per===k?'on':''} aria-pressed={per===k} onClick={()=>{setPer(k);try{localStorage.setItem('grays_pf_rank_per',k);}catch(e){}}}>{k}</button>)}</div></div>
               {h.state==='loading'&&<div className="pf2-hwait" style={{height:200}}><div>Reading the rank history{'…'}</div></div>}
               {h.state==='failed'&&<div className="pf2-hwait" style={{height:200}}><div>The rank history isn{'’'}t available right now.</div></div>}
               {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={showTx?evs:[]} tok={tok}/>}
-              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>setShowTx(e.target.checked)}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'} <b>{txPct}%</b></span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>
+              <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>setShowTx(e.target.checked)}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'} <b>{txPct}%</b></span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>}
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
               {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
@@ -3147,7 +3177,7 @@
                   <div className="tl"><div className="l">YOU’D BE A</div><div className="v">{L&&L.cur?<><img src={pfSea(L.cur.emoji)} alt=""/>{L.cur.name}</>:'—'}</div><div className="s">{L&&L.cur?(L.next?`${L.pct.toFixed(1)}% of the way to ${L.next.name}`:'the top league'):L0&&L0.cur?`you’re a ${L0.cur.name} now`:''}</div></div>
                 </div>;})()}
             </div>}
-            <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} <span style={h.days<Math.floor((Date.now()-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-1?{color:'#E8C044'}:undefined}>history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</span></>:null}</div>
+            <div className="ft">Ranked among every wallet holding {tok}, except liquidity pools and other contracts, the burn addresses, the token contracts and the DAO{isU?' and UFO OA':''} wallets{comb?<> {'·'} your {wallets.length} wallets added up and ranked as if they were one</>:null} {'·'} history rebuilt from the chain, one point per UTC day{h.state==='ok'?<> {'·'} <span style={h.days<Math.floor((Date.now()-Date.parse(h.day0+'T00:00:00Z'))/86400e3)-1?{color:'#E8C044'}:undefined}>history to {pfrFmt(pfrDate(h.day0,h.days-1),true)}</span></>:null}</div>
           </div>
         </PfModal>
       );
@@ -3335,6 +3365,9 @@
       };
       const counted=wallets.filter(w=>isWalletChecked(w.address));
       const rkOne=counted.length===1;
+      /* 2026-10-24: two or more counted → the League box ranks them as ONE wallet (pfRankAll) and the row opens the window combined */
+      const rkItems=tok=>counted.map(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&!d.error?{addr:w.address,bal:tok==='PTGC'?(d.ptgc.totalHolding||0):(d.ufo.balance||0)}:null;}).filter(Boolean);
+      const rkLabel=`ALL ${counted.length} WALLETS COMBINED`;
       const rkNote=(tok,bal)=>!ranks||!(bal>0)?null:ranks.failed?'couldn\u2019t load the holder list right now':(ranks.stale||(ranks.staleTok&&ranks.staleTok[tok]))?'the holder list is out of date, so ranks are hidden until the next refresh':null;   // Audit IV e40   // 2026-10-21 pm (Shaka: "all 5 wallets as one is useless"): the League-box rank line only with ONE counted wallet — several → the breakdown has each wallet's
       const anyData=counted.some(w=>{const d=portfolioData[w.address.toLowerCase()];return d&&!d.error;});
       const ptgcUSD=anyData?usd(agg.ptgc.totalHolding,dp.ptgc):null;
@@ -3523,7 +3556,7 @@
                 <div className="pf2-dn"><PfRing parts={parts.map(x=>[x[1],x[2]])}/>
                   <div className="pf2-lg2">{parts.map(x=><div className="r" key={x[0]}><i style={{background:x[2]}}></i><span>{x[0]}</span><b>{pfAbbr(x[1])}</b><span className="usd">{fmtDollar(usd(x[1],dp.ptgc))}</span><em>{pfPct(x[1],pt.totalHolding)}</em></div>)}</div></div>);})()
               :<div className="pf2-wait">No PTGC in the counted wallets</div>}
-              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={rkOne&&<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding,counted[0]&&counted[0].address)} note={rkNote('PTGC',pt.totalHolding)} open={()=>setRkWin('PTGC')}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={pt.totalHolding} token="PTGC" price={dp.ptgc} onTiers={()=>setLgTok('PTGC')} rankRow={counted.length>1?<PfRankRow tok="PTGC" label={rkLabel} x={pfRankAll(ranks,'PTGC',rkItems('PTGC'))} note={rkNote('PTGC',pt.totalHolding)} open={()=>setRkWin({tok:'PTGC',all:true})}/>:rkOne&&<PfRankRow tok="PTGC" x={pfRank(ranks,'PTGC',pt.totalHolding,counted[0]&&counted[0].address)} note={rkNote('PTGC',pt.totalHolding)} open={()=>setRkWin('PTGC')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('PTGC')} aria-label="PTGC rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 <div className="pf2-src3">
@@ -3532,12 +3565,13 @@
                 </div>
                 {/* round 32 (Shaka: "this ready to claim section needs help… looks like a footer" — picked C of mock-claim-v1, kept
                     under the Earned-by-source tiles): a green-gold spotlight — the amount big, the dollars, a Staking / Locks bar */}
-                {(pt.totalPending>0||pt.staked>0)&&(()=>{const tp=pt.totalPending||0,ps=pt.pendingStake||0,pl=pt.pendingLocks||0;return(
+                {/* 2026-10-24 (Shaka: no stakes or locks left a big blank space): always shown once a wallet has read — 0 included */}
+                {(anyData||pt.totalPending>0||pt.staked>0)&&(()=>{const tp=pt.totalPending||0,ps=pt.pendingStake||0,pl=pt.pendingLocks||0;return(
                   <div className="pf2-spot"><img src="logos/portfolio/pf-claim2.webp" alt=""/>
                     <div className="b"><div className="k"><i aria-hidden="true"></i>READY TO CLAIM</div>
                       <div className="v">{pfAbbr(tp)}<small>PTGC</small></div>
-                      <div className="u">{tp>0?(usd(tp,dp.ptgc)==null?<>Live price unavailable {'\u2014'} the dollar value fills in when it returns</>:<>{fmtDollar(usd(tp,dp.ptgc))} waiting to be claimed{simulated&&<span className="mmtag">Moon Math prices</span>}</>):<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>}</div>
-                      {tp>0&&<><div className="bar" aria-hidden="true"><i style={{width:ps/tp*100+'%',background:'#B26BFF'}}></i><i style={{width:pl/tp*100+'%',background:'#EC4899'}}></i></div>
+                      <div className="u">{tp>0?(usd(tp,dp.ptgc)==null?<>Live price unavailable {'\u2014'} the dollar value fills in when it returns</>:<>{fmtDollar(usd(tp,dp.ptgc))} waiting to be claimed{simulated&&<span className="mmtag">Moon Math prices</span>}</>):(pt.staked>0||pt.locks.length>0)?<>Nothing to claim yet {'\u2014'} rewards build up while you stake</>:<>Nothing to claim {'\u2014'} no PTGC staked or locked in {counted.length===1?'this wallet':'these wallets'}</>}</div>
+                      {<><div className="bar" aria-hidden="true"><i style={{width:(tp>0?ps/tp*100:0)+'%',background:'#B26BFF'}}></i><i style={{width:(tp>0?pl/tp*100:0)+'%',background:'#EC4899'}}></i></div>
                         <div className="lg"><span><i style={{background:'#B26BFF'}}></i>Staking <b>{pfAbbr(ps)}</b>{usd(ps,dp.ptgc)!=null&&<> {'\u00B7'} {fmtDollar(usd(ps,dp.ptgc))}</>}</span><span><i style={{background:'#EC4899'}}></i>Locks <b>{pfAbbr(pl)}</b>{usd(pl,dp.ptgc)!=null&&<> {'\u00B7'} {fmtDollar(usd(pl,dp.ptgc))}</>}</span></div></>}
                     </div>
                   </div>);})()}
@@ -3586,7 +3620,7 @@
                     <div className="r"><i style={{background:'#22D3EE'}}></i><span>From reflections</span><b>{pfAbbr(ufoReflNow)}</b><span className="usd">{fmtDollar(usd(ufoReflNow,dp.ufo))}</span><em>{pfPct(ufoReflNow,uf.balance)}</em></div>
                   </div></div>
               ):<div className="pf2-wait">{!(uf.balance>0)?'No UFO in the counted wallets':uf.reflState==='failed'?'Reflections unavailable — the chain read failed':'Reading the reflections from the chain…'}</div>}
-              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={rkOne&&<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance,counted[0]&&counted[0].address)} note={rkNote('UFO',uf.balance)} open={()=>setRkWin('UFO')}/>}/></div>
+              <div className="pf2-lgw"><PfLeague balance={uf.balance} token="UFO" price={dp.ufo} onTiers={()=>setLgTok('UFO')} rankRow={counted.length>1?<PfRankRow tok="UFO" label={rkLabel} x={pfRankAll(ranks,'UFO',rkItems('UFO'))} note={rkNote('UFO',uf.balance)} open={()=>setRkWin({tok:'UFO',all:true})}/>:rkOne&&<PfRankRow tok="UFO" x={pfRank(ranks,'UFO',uf.balance,counted[0]&&counted[0].address)} note={rkNote('UFO',uf.balance)} open={()=>setRkWin('UFO')}/>}/></div>
               <div className="pf2-ebs">
                 <div className="h">Earned by source<button className="pf2-edb" onClick={()=>setEdTok('UFO')} aria-label="UFO rewards day by day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/></svg>DAY BY DAY</button></div>
                 {/* round 16 (Shaka: "treat it as just one UFO … one box with a total"): old + new contract reflections in one box */}
@@ -3681,7 +3715,7 @@
           <div className="pf2-foot">Portfolio data is read directly from the PulseChain blockchain. Not financial advice.<br/>Your portfolio is saved locally in your browser.</div>
         </div>
         {edit&&(()=>{const w=wallets.find(x=>x.address.toLowerCase()===edit);return w?<PfEditWallet w={w} groups={gNames} save={patch=>{p.updateWallet(edit,patch);setEdit(null);}} remove={()=>{removeWallet(w.address);setEdit(null);}} close={()=>setEdit(null)}/>:null;})()}
-        {rkWin&&<PfRankModal tok={typeof rkWin==='string'?rkWin:rkWin.tok} wallets={typeof rkWin==='string'?counted:[...counted].sort((x,y)=>(x.address.toLowerCase()===rkWin.a?-1:0)-(y.address.toLowerCase()===rkWin.a?-1:0))} data={portfolioData} ranks={ranks} txs={txs} prices={prices} close={()=>setRkWin(null)}/>}
+        {rkWin&&<PfRankModal tok={typeof rkWin==='string'?rkWin:rkWin.tok} wallets={typeof rkWin==='string'?counted:[...counted].sort((x,y)=>(x.address.toLowerCase()===rkWin.a?-1:0)-(y.address.toLowerCase()===rkWin.a?-1:0))} all={!!(rkWin&&rkWin.all)} data={portfolioData} ranks={ranks} txs={txs} prices={prices} close={()=>setRkWin(null)}/>}
         {edTok&&<PfEarnedModal tok={edTok} addrs={hAddrs} txs={txs} prices={prices} wallets={counted} hasUfo={uf.balance>0||(ufoEarned||0)>0} close={()=>setEdTok(null)}/>}
         {lgTok&&<PfTierInfoModal token={lgTok} price={lgTok==='PTGC'?(dp.ptgc||prices.ptgc):(dp.ufo||prices.ufo)} close={()=>setLgTok(null)}/>}
         {how&&(
