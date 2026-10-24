@@ -42,7 +42,7 @@ edit("""      const[showTop100,setShowTop100]=useState(false);""",
       const[showLeagueHist,setShowLeagueHist]=useState(false);   // LEAGUE HISTORY window (2026-10-24) — the dot until LEAGUE_HISTORY_LIVE, then the creature strip""")
 edit("""          {!TOP100_LIVE&&activeTab==='dashboard'&&<T1Dot""",
      """          {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
-          {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)}/>}
+          {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
           {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
           {!TOP100_LIVE&&activeTab==='dashboard'&&<T1Dot""")
 edit("""):hdrV2?<CreatureStripV2 tiers={holderTiers}/>:(""",

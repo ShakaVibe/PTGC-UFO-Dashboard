@@ -1277,6 +1277,13 @@
     .lh-story b{color:#fff;font-weight:700}.lh-story .k{font:700 12.5px 'Orbitron',sans-serif;letter-spacing:.14em;color:var(--a2)}
     @media(max-width:700px){.lh-cd .hd2 .w,.lh-cd .av .w{font-size:13px}.lh-cd .jl .w{font-size:11.5px}.lh-cd .jl .nt b{font-size:15.5px}.lh-cd .jl .w.nl{font-size:12px}
       .lh-story{font-size:15px;padding:10px 12px}.lh-story .k{font-size:11px}}
+    /* 2026-10-24 (Shaka): the LEAGUES button under SHARE — opens the dashboard's Leagues window for this token */
+    .lh-lgb{position:absolute;right:70px;top:67px;z-index:3;height:38px;padding:0 14px 0 8px;border-radius:19px;border:1px solid rgba(var(--rgb),.5);background:rgba(0,0,0,.55);
+      color:var(--a2);font:700 12px 'Orbitron',sans-serif;letter-spacing:.14em;display:flex;align-items:center;gap:7px;cursor:pointer}
+    .lh-lgb img{width:26px;height:26px;object-fit:contain;filter:drop-shadow(0 0 5px rgba(var(--rgb),.5))}
+    .lh-lgb:hover,.lh-cam:hover{background:rgba(var(--rgb),.16);border-color:rgba(var(--rgb),.85)}
+    .lh-lgb:focus-visible{outline:2px solid var(--a2);outline-offset:2px}
+    @media(max-width:700px){.lh-lgb{right:62px;top:58px;height:36px;width:38px;padding:0;justify-content:center}.lh-lgb span{display:none}}
     /* LH:CSS:END */
     /* T100:CSS:BEGIN */
     /* TOP 100 (2026-10-22) — the Token Allocation panel's "Top 100" window (Top100Modal), Shaka's picks from
@@ -13011,7 +13018,7 @@
           <div className="bt"><span>People only + the burn wallet {'\u00B7'} {basis==='circ'?'circulating':'starting'} supply {'\u00B7'} rebuilt from the chain</span><b>PTGC-UFO.COM</b></div>
         </div>);
     };
-    const LeagueHistoryModal=({token,onClose})=>{
+    const LeagueHistoryModal=({token,onClose,onLeagues})=>{
       const[tok,setTok]=useState(token==='UFO'?'UFO':'PTGC');
       const[per,setPer]=useState('1Y');   // every opening starts on 1Y (Shaka, 2026-10-24) — the pick is not remembered
       const[basis,setBasis]=useState('start');
@@ -13043,6 +13050,7 @@
         <Modal onClose={onClose} label={`${tok} league history`} className="z-50 overflow-y-auto overscroll-contain bg-black/85 sm:p-4">
           <div className={`lh-win${isU?' u':''}`} onClick={e=>e.stopPropagation()}>
             <div className="lh-hd"><div className="sky" aria-hidden="true"></div><div className="veil" aria-hidden="true"></div>
+              {onLeagues&&tok===token&&<button type="button" className="lh-lgb" onClick={onLeagues} aria-label={`Open the ${tok} Leagues window`}><img src={lhSea('trident')} alt=""/><span>LEAGUES</span></button>}
               {rows&&<button type="button" className="lh-cam" onClick={()=>setShare(true)} aria-label="Share the league history as an image">{'\u{1F4F7}'}<span>SHARE</span></button>}
               <button type="button" className="lh-x" onClick={onClose} aria-label="Close">{'×'}</button>
               <div className="lh-hc"><div className="lh-coinw"><LgCoin token={tok}/></div>
@@ -16016,7 +16024,7 @@
           {/* TOP 100 (2026-10-22): the Token Allocation panel's window. The button is hidden until TOP100_LIVE; the faint dot shows / hides it on this device. */}
           {showTop100&&<Top100Modal token={token} price={data&&data.price>0?data.price:0} onClose={()=>setShowTop100(false)}/>}
           {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
-          {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)}/>}
+          {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
           {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
           {!TOP100_LIVE&&activeTab==='dashboard'&&<T1Dot token={token} on={t100Preview} onToggle={()=>{const v=!t100Preview;setT100Preview(v);lsSet(LS.T100_PREVIEW,v?1:0);}}/>}
           

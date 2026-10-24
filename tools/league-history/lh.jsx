@@ -150,7 +150,7 @@
           <div className="bt"><span>People only + the burn wallet {'\u00B7'} {basis==='circ'?'circulating':'starting'} supply {'\u00B7'} rebuilt from the chain</span><b>PTGC-UFO.COM</b></div>
         </div>);
     };
-    const LeagueHistoryModal=({token,onClose})=>{
+    const LeagueHistoryModal=({token,onClose,onLeagues})=>{
       const[tok,setTok]=useState(token==='UFO'?'UFO':'PTGC');
       const[per,setPer]=useState('1Y');   // every opening starts on 1Y (Shaka, 2026-10-24) — the pick is not remembered
       const[basis,setBasis]=useState('start');
@@ -182,6 +182,7 @@
         <Modal onClose={onClose} label={`${tok} league history`} className="z-50 overflow-y-auto overscroll-contain bg-black/85 sm:p-4">
           <div className={`lh-win${isU?' u':''}`} onClick={e=>e.stopPropagation()}>
             <div className="lh-hd"><div className="sky" aria-hidden="true"></div><div className="veil" aria-hidden="true"></div>
+              {onLeagues&&tok===token&&<button type="button" className="lh-lgb" onClick={onLeagues} aria-label={`Open the ${tok} Leagues window`}><img src={lhSea('trident')} alt=""/><span>LEAGUES</span></button>}
               {rows&&<button type="button" className="lh-cam" onClick={()=>setShare(true)} aria-label="Share the league history as an image">{'\u{1F4F7}'}<span>SHARE</span></button>}
               <button type="button" className="lh-x" onClick={onClose} aria-label="Close">{'×'}</button>
               <div className="lh-hc"><div className="lh-coinw"><LgCoin token={tok}/></div>

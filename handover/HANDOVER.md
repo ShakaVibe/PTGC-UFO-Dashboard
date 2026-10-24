@@ -4,7 +4,7 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-24 night wrap) — everything is PUSHED (`a33e4dd4`), the working tree is clean
+## START HERE (2026-10-24 night wrap, updated after the late round) — everything PUSHED through lh-leagues-btn (see Next up -57)
 
 **League History** — the new window: every sea creature over time, PTGC + UFO, 7D … ALL, starting / circulating supply.
 - **Still HIDDEN** behind the faint dot at the bottom right of the dashboard (`LEAGUE_HISTORY_LIVE=false` in
@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`, `lh-story.py`, `lh-high.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`, `lh-story.py`, `lh-high.py`, `lh-leagues-btn.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -74,6 +74,15 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-22)
+
+**2026-10-24 (late night, last of the day): League History — a LEAGUES button — BUILT, NOT pushed.** (Shaka: "under the share
+button or to the left of it, a Leagues button — pops up the leagues chart for the token you are on".) `python3 tools/lh-leagues-btn.py`
+(from `3c87dfda` → index.html 97c394dd, lh.jsx aebcab53, lh.css fa88e7fd, league-history.py 9836d902): a LEAGUES pill (trident +
+text) under SHARE in the window's header (phone: a round trident icon under the camera); it opens the dashboard's Leagues window
+(TierInfoModal, "Holder tiers") on top of League History via a new `onLeagues` prop (Dashboard passes `setShowTierInfo(true)`);
+Escape / ✕ closes only the Leagues window. Shown only while the window's token = the dashboard's token (TierInfoModal reads that
+token's live price / burn / holders). The mount line in index.html AND its copy inside tools/league-history.py now carry onLeagues
+(so a re-run of league-history.py never adds a second mount).
 
 **2026-10-24 (late night): League History — the High pill always shows — BUILT, NOT pushed.** (Shaka: "I see the low marked on the
 chart, I don't see the high".) The pills were hidden when the extreme fell on the period's first / last day (PTGC Sharks 1Y: 105 on
@@ -2196,7 +2205,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--56. **LEAGUE HISTORY High pill always shows — BUILT, NOT pushed.**
+-57. **LEAGUE HISTORY Leagues button — BUILT, NOT pushed (last change of 2026-10-24).** After his push: the day's work is done; next session starts at START HERE.
+-56. **DONE — pushed `3c87dfda`** (High pill always shows).
 -55. **DONE — pushed `11d9e036`** (NET apart + quiet words + story line).
 -54. **DONE — pushed `468ff689`** (card text hierarchy).
 -53. **DONE — pushed `aeeab384`** (no High · Low on the cards).
