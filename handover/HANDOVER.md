@@ -46,6 +46,19 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (late evening): the BURN WALLET is a sea creature again + TOKENS HELD per league + a bigger League History logo — BUILT, NOT
+pushed.** (Shaka: "what happened to the poseidon???? Why is it gone... it was the burn wallet" → picked "Count it as Poseidon"; then
+"make the logo at the top bigger … how many tokens do those 107 wallets hold".) e13 (people only) had dropped 0x…0369 — PTGC's only
+Poseidon. Now: people only EXCEPT the burn wallet, which counts in the league its balance puts it in, marked 🔥 (`burnIn`).
+*Files:* `tools/burn-poseidon.py` (idempotent; edits scripts/build-token-allocation.mjs + index.html — strip 🔥 + hover, live fallback
+scan keeps 0x…0369 — and re-splices League History); `scripts/build-league-history.mjs` SCHEMA 3 (burn wallet in every day's counts,
+`burnIn {start,circ}`, `held {start,circ}` = tokens held per league per day) and `tools/league-history/lh.jsx` / `lh.css` edited
+directly (card icon 🔥, "hold 76.69B · 23.0%" line on each card, chart toggle WALLETS / TOKENS HELD, share card shows hold, footer
+"People only + the 🔥 burn wallet", logo 112 px / phone 84 px). Data rebuilt: token-allocation PTGC 1/12/96/693 (burnIn Poseidon),
+UFO 0/17/99/498 (burnIn Whale — 96.06 B = 9.6 %, a Whale until it passes 10 %); league-history.json schema 3, 319 KB.
+Shas: index.html 6252a0d9, build-token-allocation 71e84430, build-league-history 6ebce599, lh.jsx 886becb9, lh.css 4910dedd,
+league-history.json 2a6400ec, token-allocation.json d976e7a5. League History still HIDDEN (LEAGUE_HISTORY_LIVE=false).
+
 **2026-10-24 (evening): LEAGUE HISTORY window — BUILT, HIDDEN behind the faint bottom-right dot, NOT pushed.** (Shaka, after the mock:
 "Thats awesome... Lets build it, but I dont want to make it live yet.. hide this behind a small faint dot in the bottom right corner of
 the dashboard … then when I am ready I can tell you to go live and you can move it to where they can click the sea creature bar.")
@@ -2033,6 +2046,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-41. **BURN WALLET as Poseidon + TOKENS HELD + bigger logo (2026-10-24 late evening) — BUILT, NOT pushed.** His push → Claude's check:
+   the strip on ptgc-ufo.com shows Poseidon 1 with a 🔥 (UFO: the 🔥 on Whale); the next token-allocation run keeps `burnIn`; the
+   League History dot → cards show "hold …", TOKENS HELD toggle works; the `league-history` step stays ok (schema 3).
 -40. **LEAGUE HISTORY — BUILT hidden (2026-10-24 evening), NOT pushed.** His push → Claude's check: the dot on ptgc-ufo.com opens the
    window with the file's numbers; the next pipeline runs show `league-history` ok (a no-op until ~00:15 UTC, then it adds Oct 24).
    GO LIVE when he says: `LEAGUE_HISTORY_LIVE=true` in tools/league-history/lh.jsx → `python3 tools/league-history.py` → push (the dot

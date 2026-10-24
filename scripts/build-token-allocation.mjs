@@ -105,7 +105,8 @@ async function getJson(url, tries = 6) {
 const RANKS = 'data/holder-ranks.json';
 const RANKS_MAX_AGE_H = 12;
 let _ranks;
-function tiersFromRanks(sym, supply) {
+const TIER_OF = pct => pct >= 10 ? 'Poseidon' : pct >= 1 ? 'Whale' : pct >= 0.1 ? 'Shark' : pct >= 0.01 ? 'Dolphin' : null;
+function tiersFromRanks(sym, supply, burnedTok) {
   if (_ranks === undefined) { try { _ranks = JSON.parse(fs.readFileSync(RANKS, 'utf8')); } catch { _ranks = null; } }
   const t = _ranks && _ranks.tokens && _ranks.tokens[sym];
   const at = t && Date.parse(t.readAt);
@@ -123,7 +124,10 @@ function tiersFromRanks(sym, supply) {
     else counts.Dolphin++;
     counted++;
   }
-  return { tiers: { ...counts, SquidAndBelow: Math.max(0, t.holders - counted) }, asOf: t.readAt };
+  /* 2026-10-24 (Shaka: "what happened to the poseidon … it was the burn wallet"): people only, PLUS the burn wallet in its league */
+  const burnIn = burnedTok > 0 ? TIER_OF(burnedTok / sup * 100) : null;
+  if (burnIn) counts[burnIn]++;
+  return { tiers: { ...counts, SquidAndBelow: Math.max(0, t.holders - counted), burnIn }, asOf: t.readAt };
 }
 
 async function buildToken(sym, cfg) {
@@ -145,7 +149,7 @@ async function buildToken(sym, cfg) {
   if (held < 0n) held = 0n;
 
   // Tiers — people only (Audit IV e13): from the holder-ranks list; null → the caller keeps the previous file's tiers.
-  const tr = tiersFromRanks(sym, cfg.supply);
+  const tr = tiersFromRanks(sym, cfg.supply, toTok(burned));
 
   return {
     complete: !!tr,
@@ -185,7 +189,7 @@ async function main() {
       allocation: r.allocation,
       updatedAt: now,
       tiersUpdatedAt: tiersOk ? now : (old.tiersUpdatedAt ?? old.updatedAt ?? null),
-      tiersSource: tiersOk ? 'holder-ranks (people only)' : (old.tiersSource ?? null),   // Audit IV e13
+      tiersSource: tiersOk ? 'holder-ranks (people only) + the burn wallet' : (old.tiersSource ?? null),   // Audit IV e13
       tiersAsOf: tiersOk ? r.tiersAsOf : (old.tiersAsOf ?? null),                         // when holder-ranks read PulseScan
     };
     if (!tiersOk) console.warn(`::warning::token-allocation ${sym}: ${RANKS} missing, carried or older than ${RANKS_MAX_AGE_H} h — tiers kept from ${out.tokens[sym].tiersUpdatedAt || 'nothing'}`);

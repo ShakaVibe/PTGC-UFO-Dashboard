@@ -18,7 +18,7 @@ import rpcPool from './rpc-pool.js';
 
 const OUT = process.env.OUT_PATH || 'data/league-history.json';
 const ARCH = 'data/rank-history';
-const SCHEMA = 1;
+const SCHEMA = 3;   // 2 (2026-10-24): the burn wallet counts in its league (`burnIn`); 3: + `held` — the tokens each league holds per day
 const TIERS = [['Poseidon', 10], ['Whale', 1], ['Shark', 0.1], ['Dolphin', 0.01], ['Squid', 0.001], ['Turtle', 0.0001], ['Shrimp', 0.00001], ['Shell', 0]];
 const TOKENS = {   // starting supply = token-allocation.json's (the strip's) — whole tokens
   PTGC: { a: '0x94534eeee131840b1c0f61847c572228bdfdde93', supply: 333333333333 },
@@ -75,17 +75,19 @@ async function build(tok, prev) {
   // which days start a period (the period's first day = the last day − n, never before k0)
   const need = new Map(), span = days.length - k0;
   for (const [lab, n] of PERIODS) { const k = n == null || n >= span ? k0 : days.length - 1 - n; need.set(k, [...(need.get(k) || []), lab]); }
-  const cur = new Map(), start = [], circ = [], snaps = new Map();
+  const cur = new Map(), start = [], circ = [], hS = [], hC = [], snaps = new Map();
   days.forEach((d, k) => {
     const rec = st.days[d], fct = rec.f || 1;
     if (fct !== 1) for (const [a, v] of cur) cur.set(a, v * fct);
     for (const [a, v] of Object.entries(rec.m || {})) { if (v > 0) cur.set(a, v); else cur.delete(a); }
-    const cs = S - burned[k], s8 = new Array(8).fill(0), c8 = new Array(8).fill(0);
-    for (const v of cur.values()) { s8[tierOf(v, S)]++; c8[tierOf(v, cs)]++; }
-    start.push(s8); circ.push(c8);
+    const cs = S - burned[k], s8 = new Array(8).fill(0), c8 = new Array(8).fill(0), h8 = new Array(8).fill(0), g8 = new Array(8).fill(0);
+    for (const v of cur.values()) { const a = tierOf(v, S), b = tierOf(v, cs); s8[a]++; c8[b]++; h8[a] += v; g8[b] += v; }
+    if (burned[k] > 0) { const a = tierOf(burned[k], S), b = tierOf(burned[k], cs); s8[a]++; c8[b]++; h8[a] += burned[k]; g8[b] += burned[k]; }   // 2026-10-24 (Shaka): the burn wallet counts, in its league
+    start.push(s8); circ.push(c8); hS.push(h8.map(Math.round)); hC.push(g8.map(Math.round));   // held: whole tokens (Shaka: "how many tokens do those 107 wallets hold")
     if (need.has(k) || k === days.length - 1) {
       const a = new Map(), b = new Map();
       for (const [w, v] of cur) { a.set(w, tierOf(v, S)); b.set(w, tierOf(v, cs)); }
+      if (burned[k] > 0) { a.set('burn', tierOf(burned[k], S)); b.set('burn', tierOf(burned[k], cs)); }
       snaps.set(k, [a, b]);
     }
   });
@@ -101,7 +103,8 @@ async function build(tok, prev) {
   }
   const last = start[start.length - 1];
   console.log(`${tok}: ${lastDay} start ${last.join(' / ')} · circ ${circ[circ.length - 1].join(' / ')} · circulating ${Math.round(S - burned[burned.length - 1]).toLocaleString('en-US')}`);
-  return { day0: days[k0], lastDay, days: days.length - k0, supply: S, start: start.slice(k0), circ: circ.slice(k0), flows,
+  const bl = burned[burned.length - 1], burnIn = bl > 0 ? { start: tierOf(bl, S), circ: tierOf(bl, S - bl) } : null;   // the burn wallet's league today
+  return { day0: days[k0], lastDay, days: days.length - k0, supply: S, start: start.slice(k0), circ: circ.slice(k0), held: { start: hS.slice(k0), circ: hC.slice(k0) }, flows, burnIn,
     archiveDay0: days[0], burned: burned.map(v => Math.round(v * 1e6) / 1e6) };   // `burned` = per ARCHIVE day (the cache for the next run)
 }
 
@@ -109,7 +112,7 @@ const prevFile = (() => { try { const j = JSON.parse(fs.readFileSync(OUT, 'utf8'
   if (fs.existsSync(OUT)) { console.error(`::error::league-history: ${OUT} exists but is unreadable — not rebuilding over it (${e.message})`); process.exit(1); }
   return null; } })();
 const out = { schema: SCHEMA, generatedAt: null, tiers: TIERS.map(t => t[0]), thresholds: TIERS.map(t => t[1]),
-  note: 'people only (the Token Allocation strip population); start = % of the starting supply, circ = % of the circulating supply that day (starting − balanceOf(0x369) at the day\'s last block); one row per UTC day from day0', tokens: {} };
+  note: 'people only plus the burn wallet (the Token Allocation strip population); start = % of the starting supply, circ = % of the circulating supply that day (starting − balanceOf(0x369) at the day\'s last block); one row per UTC day from day0', tokens: {} };
 let changed = false;
 for (const tok of Object.keys(TOKENS)) {
   const prev = prevFile && prevFile.tokens && prevFile.tokens[tok];
