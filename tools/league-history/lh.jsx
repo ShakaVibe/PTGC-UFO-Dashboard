@@ -45,7 +45,7 @@
         return()=>{if(ro)ro.disconnect();else window.removeEventListener('resize',on);};},[]);
       useEffect(()=>{setHv(null);setPin(false);},[vals.length,i0,day0]);   // another period / token: back to the latest day
       const g=useMemo(()=>{
-        const ph=w<560,tt=tl||tr?20:0,H=(ph?230:290)+tt,L=ph?40:48,R=v2?(ph?44:56):12,T=16+tt,B=28;
+        const ph=w<560,tt=tl||tr?20:0,H=(ph?230:290)+tt,L=ph?40:48,R=v2?(ph?54:60):12,T=16+tt,B=28;
         const mn0=Math.min(...vals),mx0=Math.max(...vals),pad=Math.max(1,Math.round((mx0-mn0)*.12));   // f: lhFmt (wallets) or fmtAbbr (tokens held)
         let mn=Math.max(0,mn0-pad),mx=mx0+pad;const r0=(mx-mn)/4,p10=10**Math.floor(Math.log10(r0||1));
         const step=[1,2,2.5,5,10].map(m=>m*p10).filter(s=>f!==lhFmt||(s>=1&&Number.isInteger(s))).find(s=>s>=r0)||r0||1;   // counts: whole steps only
@@ -83,10 +83,10 @@
             {xt.map((q,t)=><text key={t} x={X(q)} y={H-8} fill="rgba(255,255,255,.5)" fontSize="12" fontFamily="Rajdhani" fontWeight="600" textAnchor={t===0?'start':t===nt-1?'end':'middle'}>{lhDate(lhDay(day0,i0+q),long)}</text>)}
             {v2&&<>{r2.map(([y,v],j)=><text key={'r'+j} x={w-R+7} y={y+4} fill={col2} fillOpacity=".75" fontSize="12" fontFamily="Rajdhani" fontWeight="600">{f2(v)}</text>)}
               <path d={`M${X(0)},${Y(mn)} L${pts2.split(' ').join(' L')} L${X(last)},${Y(mn)} Z`} fill={`url(#${gid}b)`}/>
-              <polyline points={pts2} fill="none" stroke={col2} strokeOpacity=".85" strokeWidth="1.8" strokeLinejoin="round"/>
+              <polyline points={pts2} fill="none" stroke={col2} strokeOpacity=".95" strokeWidth="2.2" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 4px ${col2})`}}/>
               <circle cx={X(last)} cy={Y2(v2[last])} r="4.5" fill={col2} stroke="#05070c" strokeWidth="2"/></>}
             {!v2&&<path d={`M${X(0)},${Y(mn)} L${pts.split(' ').join(' L')} L${X(last)},${Y(mn)} Z`} fill={`url(#${gid})`}/>}
-            <polyline points={pts} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round"/>
+            <polyline points={pts} fill="none" stroke={col} strokeWidth="2.8" strokeLinejoin="round" style={{filter:`drop-shadow(0 0 5px ${col})`}}/>
             {hi!==last&&hi!==0&&mx0!==mn0&&<g><circle cx={X(hi)} cy={Y(mx0)} r="4.5" fill="#05070c" stroke={col} strokeWidth="2.5"/>{(()=>{const tx=`High ${f(mx0)}`,pw=tx.length*7.4+16,cx=Math.min(w-R-pw/2,Math.max(L+pw/2,X(hi))),cy=Y(mx0)-17;return<g><rect x={cx-pw/2} y={cy-10.5} width={pw} height={21} rx={10.5} fill="rgba(5,7,12,.85)" stroke={col} strokeOpacity=".7"/><text x={cx} y={cy+4.5} fill="#fff" fontSize="13" fontFamily="Rajdhani" fontWeight="700" textAnchor="middle">{tx}</text></g>;})()}</g>}
             {lo!==last&&lo!==0&&lo!==hi&&mx0!==mn0&&<g><circle cx={X(lo)} cy={Y(mn0)} r="4.5" fill="#05070c" stroke={col} strokeWidth="2.5"/>{(()=>{const tx=`Low ${f(mn0)}`,pw=tx.length*7.4+16,cx=Math.min(w-R-pw/2,Math.max(L+pw/2,X(lo))),cy=Math.min(H-B-12,Y(mn0)+18);return<g><rect x={cx-pw/2} y={cy-10.5} width={pw} height={21} rx={10.5} fill="rgba(5,7,12,.85)" stroke={col} strokeOpacity=".7"/><text x={cx} y={cy+4.5} fill="#fff" fontSize="13" fontFamily="Rajdhani" fontWeight="700" textAnchor="middle">{tx}</text></g>;})()}</g>}
             <circle cx={X(last)} cy={Y(vals[last])} r="6" fill={col} stroke="#05070c" strokeWidth="2"/>
@@ -199,13 +199,15 @@
               {rows&&<>
                 <LhBeam t={t} tok={tok} basis={basis} last={last} onSel={setSel} shareOf={shareOf}/>
                 <div className="lh-cards">{LH_TIERS.map(([n,img,th],i)=>{const a=rows[i0][i],b=rows[last][i];return(
-                  <button type="button" key={n} className="lh-cd" aria-pressed={sel===i} onClick={()=>setSel(i)} aria-label={`${n}: ${lhFmt(b)} now, ${b===a?'no change':`${b>a?'up':'down'} ${lhFmt(Math.abs(b-a))}`} over ${pd[2]} — show the chart`}>
+                  <button type="button" key={n} className="lh-cd" style={{'--cc':LH_BEAM_C[i][1],'--cg':LH_BEAM_C[i][3]}} aria-pressed={sel===i} onClick={()=>setSel(i)} aria-label={`${n}: ${lhFmt(b)} now, ${b===a?'no change':`${b>a?'up':'down'} ${lhFmt(Math.abs(b-a))}`} over ${pd[2]} — show the chart`}>
                     <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/>{t.burnIn&&t.burnIn[basis]===i&&<span className="bw" title="Includes the burn wallet (0x…0369)" aria-label="includes the burn wallet">{'\u{1F525}'}</span>}</span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div>{t.burnIn&&t.burnIn[basis]===i&&<div className="bwl">{b===1?'The Burn address':'incl. the Burn address'}</div>}</div></div>
                     <div className="vr"><div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div></div>
                     {held&&<div className="hd2">hold <b>{fmtAbbr(held[last][i])}</b> {'\u00B7'} {shareOf(held[last][i],last)}%</div>}
                     {held&&<div className="av">{b>1?<>~<b>{per1(held[last][i],b)}</b> per {n.toLowerCase()}</>:b===1?'one wallet':'no wallets'}</div>}
                     <div className="jl">{fl?<><b className="lh-up">+{lhFmt(fl[0][i])}</b> joined {'·'} <b className="lh-dn">{'−'}{lhFmt(fl[1][i])}</b> left</>:' '}</div>
+                    {(()=>{const v=rows.slice(i0).map(r=>r[i]);return<div className="hl">High <b>{lhFmt(Math.max(...v))}</b> {'\u00B7'} Low <b>{lhFmt(Math.min(...v))}</b></div>;})()}
                     <LhSpark vals={rows.slice(i0).map(r=>r[i])} col={LH_BEAM_C[i][1]}/>   {/* the league's colour (the beam's) */}
+                    {sel===i&&<span className="lh-on" aria-hidden="true">{'\u25BC'} IN THE CHART</span>}
                   </button>);})}</div>
                 {(()=>{const[n,img]=LH_TIERS[sel],a=rows[i0][sel],b=rows[last][sel];return(
                   <div className="lh-big">
@@ -214,7 +216,7 @@
                         :<div className="s"><b>{lhFmt(a)}</b> {'→'} <b>{lhFmt(b)}</b> <LhChange a={a} b={b}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>}
                       {(tm||bm)&&<div className="s s3"><b>{lhFmt(total)}</b> holder wallets {'\u00B7'} people only</div>}
                       {bm&&<div className="s s2">hold <b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/></div>}</div></div>
-                      <div className="r"><div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
+                      <div className="r">{(()=>{const nt=fl?fl[0][sel]-fl[1][sel]:b-a;return<div className="lh-pill net"><div className="k"><span className="lg">NET CHANGE</span><span className="sm">NET</span></div><div className={`n ${nt>0?'lh-up':nt<0?'lh-dn':''}`}>{nt>0?'+':nt<0?'\u2212':''}{lhFmt(Math.abs(nt))}</div></div>;})()}<div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
                         <div className="lh-pill"><div className="k">LEFT</div><div className="n lh-dn">{fl?'−'+lhFmt(fl[1][sel]):'—'}</div></div>
                         {tm||bm?<div className="lh-pill"><div className="k"><span className="lg">SHARE OF SUPPLY</span><span className="sm">SHARE</span></div><div className="n">{shareOf(held[last][sel],last)}%</div></div>
                           :<div className="lh-pill" title="People only: pools and contracts are not counted (the dashboard's HOLDERS counts every address)"><div className="k">HOLDER WALLETS</div><div className="n">{lhFmt(total)}</div></div>}</div></div>
