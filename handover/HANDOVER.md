@@ -46,6 +46,20 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (night): League History — the ownership BEAM + card layout + strip label — BUILT, NOT pushed.** (Shaka: a bar of the
+ownership by league, "like the burn bar … a glowing beam of light … match the colors to the emojis"; mock-ups v1 (labels + key —
+"just want the bar"), v2 (beam), v3 (thinner, full to the end: A = pools lit violet / B = leagues stretched) → picked **B**; also
+"move the up down percentage to the right of the count … make the text under larger"; "get the text off the dashboards that say
+include the burn address".) `python3 tools/lh-beam.py` (from `bb42f591` → index.html 1b2cd94e, lh.jsx 76456c46, lh.css b96c701e):
+`LhBeam` between the controls and the cards — 10 px beam, one section per league, length = its share of the tokens in HOLDERS'
+wallets on the last day (pools / contracts / DAO not on it, so the leagues fill it), colours `LH_BEAM_C` (gold, blue, steel, cyan,
+red, green, orange, cream), white-hot node at each join, flames texture greyscale/overlay; no labels — mouse hover / finger tap /
+keyboard focus shows a tip (creature, wallets, % of the basis supply, tokens, 🔥 note), clamped inside the beam; click / tap also
+selects the league. Follows STARTING / CIRCULATING. Cards: `.vr` = count + change on one line; hold / per-wallet / joined-left
+16.5 / 15.5 / 16 px (phone 14.5 / 13.5 / 14). Strip: the label only when the burn wallet is alone in its league (PTGC "The Burn
+address"); UFO keeps just the 🔥 (desktop + phone caption). The League History card + beam tip still say "incl. the Burn address".
+Mock injectors kept out of the repo. Probes lh-beam-pt.js, lh-beam-state.js, lh-beam-tap.js.
+
 **2026-10-24 (late night): League History roadmap BATCH 1 — lh2–lh7, lh9–lh11, lh13, lh15 — BUILT, NOT pushed.** (Shaka: "lets fix a
 lot of those" → picked Fixes, Easier to read, Speed.) `python3 tools/lh-batch1.py` (from `61742b76` → index.html 7f67c67c, lh.jsx
 10fbb0e4, lh.css b66f3699, builder bfdaaa6e, harness run.js 37eba7af) + `data/league-history.json` rebuilt (a0407234).
@@ -2080,7 +2094,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--44. **LEAGUE HISTORY BATCH 1 — BUILT, NOT pushed.** His push → Claude: tick the 11 items on the roadmap artifact; the next daily
+-45. **LEAGUE HISTORY BEAM + card layout + strip label — BUILT, NOT pushed.** His push → Claude: live look (UFO strip has no
+   "incl." text; the dot's window shows the beam; hover tips).
+-44. **DONE — pushed `bb42f591`, live-checked, 11 roadmap items ticked.** Was: **LEAGUE HISTORY BATCH 1 — BUILT, NOT pushed.** His push → Claude: tick the 11 items on the roadmap artifact; the next daily
    `league-history` run (~00:15 UTC) must say "1 burn reading(s)" (not 1,100) and keep schema 4. Left on the list: lh1 (go live),
    lh8 (one file per token — skipped, little gain after lh7), lh12 (arrow keys), lh14 (chart on the share card).
 -43. **LEAGUE HISTORY AUDIT (2026-10-24 late night) — on the roadmap artifact as the "LEAGUE HISTORY" phase, lh1–lh15 (lh1 = go live; the A/E/I items below map to lh2–lh15), for LATER (his call).** Text bump + axis fix built

@@ -91,6 +91,43 @@
           </svg>
         </div>);
     };
+    /* the ownership BEAM (2026-10-24, Shaka's mock-up v3 "B"): one glowing section per league, its length = the league's share of the
+       tokens in holders' wallets on the last day (pools / contracts / the DAO are not on it, so the leagues fill the beam). No labels —
+       hover (mouse) or tap (finger) shows the creature, wallets, share of the supply (shareOf: the basis supply) and tokens; a click /
+       tap also selects the league. The tip is clamped inside the beam's width (never off a phone's edge). */
+    const LH_BEAM_C=[['#6B4A06','#E8B828','#FFF0A0','255,200,60'],['#0A2A7A','#2F7BFF','#BFDDFF','60,130,255'],['#2E3646','#8D99AC','#F2F5FA','190,200,220'],['#05506E','#1FB6EE','#C8F6FF','40,190,245'],
+      ['#5E0A12','#E8434B','#FFC2C4','240,70,80'],['#0C4E18','#3FC24A','#D2FFC0','70,210,80'],['#6A2A06','#FF8A3D','#FFDDB8','255,140,60'],['#6E463C','#EDB7A6','#FFF4EE','240,190,175']];   // [dark, core, hot end, glow] per league
+    const LhBeam=({t,tok,basis,last,onSel,shareOf})=>{
+      const box=useRef(null),tipRef=useRef(null);const[hv,setHv]=useState(null);const[pin,setPin]=useState(false);
+      const held=t&&t.held&&t.held[basis],row=held?held[last]:null,cnt=t&&t[basis]?t[basis][last]:null;
+      const tot=row?row.reduce((s,v)=>s+v,0):0;
+      useEffect(()=>{setHv(null);setPin(false);},[tok,basis]);
+      useEffect(()=>{if(!pin)return;const f=e=>{if(box.current&&!box.current.contains(e.target)){setHv(null);setPin(false);}};
+        document.addEventListener('pointerdown',f);return()=>document.removeEventListener('pointerdown',f);},[pin]);
+      useLayoutEffect(()=>{const b=box.current,tp=tipRef.current;if(!b||!tp||hv==null)return;const sg=b.querySelector(`[data-i="${hv}"]`);if(!sg)return;
+        const W=b.clientWidth,tw=tp.offsetWidth,c=sg.offsetLeft+sg.offsetWidth/2,x=Math.max(0,Math.min(W-tw,c-tw/2));
+        tp.style.left=`${x}px`;tp.style.setProperty('--ax',`${Math.max(14,Math.min(tw-14,c-x))}px`);},[hv,tok,basis,last]);
+      if(!row||!cnt||!(tot>0))return null;
+      const lastI=row.reduce((k,v,i)=>v>0?i:k,-1);
+      const tap=i=>{const off=hv===i&&pin;setHv(off?null:i);setPin(!off);};
+      const h=hv!=null&&row[hv]>0?hv:null;
+      return(
+        <div className="lh-bm" ref={box}>
+          <div className="lh-bm-tr" role="group" aria-label={`Who holds ${tok}: the leagues' share of the tokens in holders' wallets`}
+            onPointerLeave={e=>{if(e.pointerType==='mouse'&&!pin)setHv(null);}}>
+            {LH_TIERS.map(([nm],i)=>{if(!(row[i]>0))return null;const[k,m,l,g]=LH_BEAM_C[i],sh=shareOf(row[i],last);return(
+              <button type="button" key={nm} data-i={i} className={`lh-bm-s${h===i?' hv':''}`} style={{flex:`${(row[i]/tot*100).toFixed(5)} 1 0`,'--k':k,'--m':m,'--l':l,'--g':g}}
+                aria-label={`${nm}: ${lhFmt(cnt[i])} wallet${cnt[i]===1?'':'s'} hold ${fmtAbbr(row[i])} ${tok}${sh!=null?`, ${sh}% of the supply`:''} — show the chart`}
+                onPointerEnter={e=>{if(e.pointerType==='mouse'&&!pin)setHv(i);}} onPointerDown={e=>{if(e.pointerType!=='mouse')tap(i);}}
+                onFocus={()=>setHv(i)} onBlur={()=>{if(!pin)setHv(null);}} onClick={()=>onSel(i)}>{i!==lastI&&<i aria-hidden="true"></i>}</button>);})}
+          </div>
+          {h!=null&&(()=>{const[nm,img]=LH_TIERS[h],c=cnt[h],sh=shareOf(row[h],last),bw=t.burnIn&&t.burnIn[basis]===h;return(
+            <div className="lh-bm-tip" ref={tipRef} style={{'--g':LH_BEAM_C[h][3]}} aria-hidden="true">
+              <img src={lhSea(img)} alt=""/><div><div className="n">{nm.toUpperCase()} {'\u00B7'} {lhFmt(c)} WALLET{c===1?'':'S'}</div>
+                <div className="v">{sh!=null?`${sh}%`:'\u2014'}<small>{fmtAbbr(row[h])} {tok}</small></div>
+                {bw&&<div className="bn">{'\u{1F525}'} {c===1?'the Burn address':'incl. the Burn address'}</div>}</div></div>);})()}
+        </div>);
+    };
     /* the share card: Wide 1200 × 675, the eight leagues then → now with sparklines (screenshot-only, like the other v2 cards) */
     const LhShareCard=({tok,t,per,basis,i0})=>{const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',rows=t[basis],last=rows.length-1,pd=LH_PERS.find(p=>p[0]===per);
       return(
@@ -152,10 +189,11 @@
               {file===null&&<div className="lh-wait">Couldn{'’'}t load the league history right now.<button type="button" onClick={load}>RETRY</button></div>}
               {file&&!rows&&<div className="lh-wait">No league history for {tok} yet.</div>}
               {rows&&<>
+                <LhBeam t={t} tok={tok} basis={basis} last={last} onSel={setSel} shareOf={shareOf}/>
                 <div className="lh-cards">{LH_TIERS.map(([n,img,th],i)=>{const a=rows[i0][i],b=rows[last][i];return(
                   <button type="button" key={n} className="lh-cd" aria-pressed={sel===i} onClick={()=>setSel(i)} aria-label={`${n}: ${lhFmt(b)} now, ${b===a?'no change':`${b>a?'up':'down'} ${lhFmt(Math.abs(b-a))}`} over ${pd[2]} — show the chart`}>
                     <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/>{t.burnIn&&t.burnIn[basis]===i&&<span className="bw" title="Includes the burn wallet (0x…0369)" aria-label="includes the burn wallet">{'\u{1F525}'}</span>}</span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div>{t.burnIn&&t.burnIn[basis]===i&&<div className="bwl">{b===1?'The Burn address':'incl. the Burn address'}</div>}</div></div>
-                    <div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div>
+                    <div className="vr"><div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div></div>
                     {held&&<div className="hd2">hold <b>{fmtAbbr(held[last][i])}</b> {'\u00B7'} {shareOf(held[last][i],last)}%</div>}
                     {held&&<div className="av">{b>1?<>~<b>{per1(held[last][i],b)}</b> per {n.toLowerCase()}</>:b===1?'one wallet':'no wallets'}</div>}
                     <div className="jl">{fl?<><b className="lh-up">+{lhFmt(fl[0][i])}</b> joined {'·'} <b className="lh-dn">{'−'}{lhFmt(fl[1][i])}</b> left</>:' '}</div>
