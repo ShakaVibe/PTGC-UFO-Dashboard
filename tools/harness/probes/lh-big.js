@@ -1,0 +1,2 @@
+// LEAGUE HISTORY: scroll the big chart into view; its header text, the legend, the page width
+(()=>{const b=document.querySelector('.lh-big');if(!b)return null;b.scrollIntoView({block:'center'});return{h:b.querySelector('.lh-bh').innerText.replace(/\n/g,' | '),lg:(b.querySelector('.lh-lg')||{}).innerText,mode:[...b.querySelectorAll('.lh-mode button')].map(x=>x.innerText+(x.getAttribute('aria-pressed')==='true'?'*':'')).join(' '),pageW:document.documentElement.scrollWidth};})()

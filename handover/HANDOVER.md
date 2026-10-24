@@ -46,6 +46,18 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (night): "THE BURN ADDRESS" label + the OVERLAY chart + 1Y default — BUILT, NOT pushed.** (Shaka: 'next to the 1 Poseidon,
+lets put "The Burn address"' / 'could we add an overlay line chart of the token counts … use what you think makes it good' / 'lets
+default to 1 year and the shark selection. and lets make the hold joined and left text in each card larger'.)
+`python3 tools/burn-label-overlay.py` (idempotent; from `92a8ae65` → index.html 9176dde4, lh.jsx 34861884, lh.css d5fe4dc1):
+the strip says THE BURN ADDRESS beside the count when the burn wallet is alone in its league (PTGC's 1 Poseidon), INCL. THE BURN
+ADDRESS when it shares it (UFO's Whales); on a phone that becomes one caption line under the creatures ("🔥 Poseidon = the Burn
+address"). League History: the same label on the card; the big chart's new default BOTH = the wallets line (left axis) over the
+tokens held as a sky-blue area (right axis, ticks on the same grid lines), a legend, hover "102 sharks / hold 81.82B (24.5%) · ~802M
+each"; WALLETS / TOKENS HELD stay as single views. Opens on 1Y (new localStorage key grays_lh_per_v2) with Sharks; bigger "hold" and
+"joined · left" lines. Fixes: count axes take whole steps only (was 93/95/98), a league holding 0 shows 0%, phone + long period = 3
+date labels. Probes strip.js, lh-big.js. Still hidden (LEAGUE_HISTORY_LIVE=false).
+
 **2026-10-24 (late evening): the BURN WALLET is a sea creature again + TOKENS HELD per league + a bigger League History logo — BUILT, NOT
 pushed.** (Shaka: "what happened to the poseidon???? Why is it gone... it was the burn wallet" → picked "Count it as Poseidon"; then
 "make the logo at the top bigger … how many tokens do those 107 wallets hold".) e13 (people only) had dropped 0x…0369 — PTGC's only
@@ -2046,7 +2058,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--41. **BURN WALLET as Poseidon + TOKENS HELD + bigger logo (2026-10-24 late evening) — BUILT, NOT pushed.** His push → Claude's check:
+-42. **BURN ADDRESS label + overlay chart + 1Y default (2026-10-24 night) — BUILT, NOT pushed.** His push → Claude's check: the live
+   strip reads "1 THE BURN ADDRESS" (PTGC) / "17 INCL. THE BURN ADDRESS" (UFO); the dot's window opens on 1Y, Sharks, BOTH.
+-41. **DONE — pushed `92a8ae65` (one data-file conflict with the hourly run, kept ours).** Was: **BURN WALLET as Poseidon + TOKENS HELD + bigger logo (2026-10-24 late evening) — BUILT, NOT pushed.** His push → Claude's check:
    the strip on ptgc-ufo.com shows Poseidon 1 with a 🔥 (UFO: the 🔥 on Whale); the next token-allocation run keeps `burnIn`; the
    League History dot → cards show "hold …", TOKENS HELD toggle works; the `league-history` step stays ok (schema 3).
 -40. **LEAGUE HISTORY — BUILT hidden (2026-10-24 evening), NOT pushed.** His push → Claude's check: the dot on ptgc-ufo.com opens the

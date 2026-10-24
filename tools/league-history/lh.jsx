@@ -25,19 +25,28 @@
       const pts=vals.map((v,i)=>`${(i/(vals.length-1||1)*w).toFixed(1)},${(r?h-3-(v-mn)/r*(h-6):h/2).toFixed(1)}`).join(' ');
       return <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true"><polyline points={pts} fill="none" stroke={col} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></svg>;};
     /* the big chart: the selected league over the period — y on round steps, high / low marked, today's dot, hover / touch readout */
-    const LhChart=({vals,day0,i0,col,f=lhFmt,what="Count"})=>{
+    /* v2 (2026-10-24, Shaka: "an overlay line chart of the token counts"): a second series on its own right-hand axis, drawn as a
+       sky-blue area BEHIND the wallets line; its ticks sit on the same grid lines (a nice step × the same number of divisions).
+       unit = the hover's word for the first series ("sharks"); tip2(k) = the hover's second line for day k of the slice. */
+    const lhNice=r=>{const p=10**Math.floor(Math.log10(r||1));return[1,2,2.5,5,10].map(m=>m*p).find(s=>s>=r)||r||1;};
+    const LhChart=({vals,day0,i0,col,f=lhFmt,what="Count",unit=null,v2=null,f2=fmtAbbr,col2='#7DD3FC',tip2=null})=>{
       const box=useRef(null);const[w,setW]=useState(900);const[hv,setHv]=useState(null);
       useEffect(()=>{const el=box.current;if(!el)return;const on=()=>setW(Math.max(260,Math.round(el.clientWidth)));on();
         const ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(on):null;if(ro)ro.observe(el);else window.addEventListener('resize',on);
         return()=>{if(ro)ro.disconnect();else window.removeEventListener('resize',on);};},[]);
-      const ph=w<560,H=ph?230:290,L=ph?40:48,R=12,T=16,B=28;
+      const ph=w<560,H=ph?230:290,L=ph?40:48,R=v2?(ph?44:56):12,T=16,B=28;
       const mn0=Math.min(...vals),mx0=Math.max(...vals),pad=Math.max(1,Math.round((mx0-mn0)*.12));   // f: lhFmt (wallets) or fmtAbbr (tokens held)
       let mn=Math.max(0,mn0-pad),mx=mx0+pad;const r0=(mx-mn)/4,p10=10**Math.floor(Math.log10(r0||1));
-      const step=[1,2,2.5,5,10].map(m=>m*p10).find(s=>s>=r0)||r0||1;mn=Math.floor(mn/step)*step;mx=Math.ceil(mx/step)*step;if(mx===mn)mx=mn+step;
+      const step=[1,2,2.5,5,10].map(m=>m*p10).filter(s=>f!==lhFmt||(s>=1&&Number.isInteger(s))).find(s=>s>=r0)||r0||1;   // counts: whole steps onlymn=Math.floor(mn/step)*step;mx=Math.ceil(mx/step)*step;if(mx===mn)mx=mn+step;
       const X=k=>L+k/(vals.length-1||1)*(w-L-R),Y=v=>T+(1-(v-mn)/(mx-mn))*(H-T-B);
       const ticks=[];for(let v=mn;v<=mx+1e-9;v+=step)ticks.push(v);
-      const nt=ph?4:6,xt=[];for(let t=0;t<nt;t++)xt.push(Math.round(t/(nt-1)*(vals.length-1)));
+      const nt=ph?(vals.length>200?3:4):6,xt=[];/* phone + a long period (dates with the year): 3 labels, else they run into each other */for(let t=0;t<nt;t++)xt.push(Math.round(t/(nt-1)*(vals.length-1)));
       const pts=vals.map((v,k)=>`${X(k).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+      let Y2=null,pts2='',r2=[];
+      if(v2){const nd=ticks.length-1,a0=Math.min(...v2),b0=Math.max(...v2),pd2=(b0-a0)*.12||b0*.05||1,lo=Math.max(0,a0-pd2),hi2=b0+pd2;
+        let st=lhNice((hi2-lo)/nd),m2=Math.floor(lo/st)*st;for(let g=0;g<12&&m2+st*nd<hi2;g++){st=lhNice(st*1.001);m2=Math.floor(lo/st)*st;}
+        Y2=v=>T+(1-(v-m2)/(st*nd))*(H-T-B);pts2=v2.map((v,k)=>`${X(k).toFixed(1)},${Y2(v).toFixed(1)}`).join(' ');
+        r2=ticks.map((v,j)=>[Y(v),m2+st*j]);}
       const last=vals.length-1,hi=vals.indexOf(mx0),lo=vals.lastIndexOf(mn0),long=vals.length>200;
       const gid=`lhg${col.slice(1)}`;
       const move=e=>{const el=box.current;if(!el)return;const rc=el.getBoundingClientRect();const x=(e.touches?e.touches[0].clientX:e.clientX)-rc.left;
@@ -45,17 +54,22 @@
       return(
         <div className="lh-ch" ref={box} onMouseMove={move} onMouseLeave={()=>setHv(null)} onTouchStart={move} onTouchMove={move} onTouchEnd={()=>setHv(null)}>
           <svg viewBox={`0 0 ${w} ${H}`} role="img" aria-label={`${what} over the period: ${f(vals[0])} to ${f(vals[last])}, high ${f(mx0)}, low ${f(mn0)}`}>
-            <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".32"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient></defs>
+            <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col} stopOpacity=".32"/><stop offset="1" stopColor={col} stopOpacity="0"/></linearGradient>
+              {v2&&<linearGradient id={gid+'b'} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col2} stopOpacity=".26"/><stop offset="1" stopColor={col2} stopOpacity=".02"/></linearGradient>}</defs>
             {ticks.map(v=><g key={v}><line x1={L} x2={w-R} y1={Y(v)} y2={Y(v)} stroke="rgba(255,255,255,.07)"/><text x={L-8} y={Y(v)+4} fill="rgba(255,255,255,.5)" fontSize="12" fontFamily="Rajdhani" fontWeight="600" textAnchor="end">{f(v)}</text></g>)}
             {xt.map((k,t)=><text key={t} x={X(k)} y={H-8} fill="rgba(255,255,255,.5)" fontSize="12" fontFamily="Rajdhani" fontWeight="600" textAnchor={t===0?'start':t===nt-1?'end':'middle'}>{lhDate(lhDay(day0,i0+k),long)}</text>)}
-            <path d={`M${X(0)},${Y(mn)} L${pts.split(' ').join(' L')} L${X(last)},${Y(mn)} Z`} fill={`url(#${gid})`}/>
+            {v2&&<>{r2.map(([y,v],j)=><text key={'r'+j} x={w-R+7} y={y+4} fill={col2} fillOpacity=".75" fontSize="12" fontFamily="Rajdhani" fontWeight="600">{f2(v)}</text>)}
+              <path d={`M${X(0)},${Y(mn)} L${pts2.split(' ').join(' L')} L${X(last)},${Y(mn)} Z`} fill={`url(#${gid}b)`}/>
+              <polyline points={pts2} fill="none" stroke={col2} strokeOpacity=".85" strokeWidth="1.8" strokeLinejoin="round"/>
+              <circle cx={X(last)} cy={Y2(v2[last])} r="4.5" fill={col2} stroke="#05070c" strokeWidth="2"/></>}
+            {!v2&&<path d={`M${X(0)},${Y(mn)} L${pts.split(' ').join(' L')} L${X(last)},${Y(mn)} Z`} fill={`url(#${gid})`}/>}
             <polyline points={pts} fill="none" stroke={col} strokeWidth="2.6" strokeLinejoin="round"/>
             {hi!==last&&hi!==0&&mx0!==mn0&&<g><circle cx={X(hi)} cy={Y(mx0)} r="4.5" fill="#05070c" stroke={col} strokeWidth="2.5"/><text x={Math.min(w-R-24,Math.max(L+24,X(hi)))} y={Y(mx0)-12} fill="#fff" fontSize="13" fontFamily="Rajdhani" fontWeight="700" textAnchor="middle">high {f(mx0)}</text></g>}
             {lo!==last&&lo!==0&&lo!==hi&&mx0!==mn0&&<g><circle cx={X(lo)} cy={Y(mn0)} r="4.5" fill="#05070c" stroke={col} strokeWidth="2.5"/><text x={Math.min(w-R-24,Math.max(L+24,X(lo)))} y={Y(mn0)+21} fill="#fff" fontSize="13" fontFamily="Rajdhani" fontWeight="700" textAnchor="middle">low {f(mn0)}</text></g>}
             <circle cx={X(last)} cy={Y(vals[last])} r="6" fill={col} stroke="#05070c" strokeWidth="2"/>
-            {hv!=null&&<g><line x1={X(hv)} x2={X(hv)} y1={T} y2={H-B} stroke="rgba(255,255,255,.35)" strokeDasharray="3 4"/><circle cx={X(hv)} cy={Y(vals[hv])} r="5" fill={col} stroke="#05070c" strokeWidth="2"/></g>}
+            {hv!=null&&<g><line x1={X(hv)} x2={X(hv)} y1={T} y2={H-B} stroke="rgba(255,255,255,.35)" strokeDasharray="3 4"/><circle cx={X(hv)} cy={Y(vals[hv])} r="5" fill={col} stroke="#05070c" strokeWidth="2"/>{v2&&<circle cx={X(hv)} cy={Y2(v2[hv])} r="4.5" fill={col2} stroke="#05070c" strokeWidth="2"/>}</g>}
           </svg>
-          {hv!=null&&<div className="lh-tip" style={{left:`${Math.min(88,Math.max(12,X(hv)/w*100))}%`}}><small>{lhDate(lhDay(day0,i0+hv),true)}</small>{f(vals[hv])}</div>}
+          {hv!=null&&<div className="lh-tip" style={{left:`${Math.min(88,Math.max(12,X(hv)/w*100))}%`}}><small>{lhDate(lhDay(day0,i0+hv),true)}</small>{f(vals[hv])}{unit?` ${unit}`:''}{v2&&<div className="t2">{tip2?tip2(hv):`hold ${f2(v2[hv])}`}</div>}</div>}
         </div>);
     };
     /* the share card: Wide 1200 × 675, the eight leagues then → now with sparklines (screenshot-only, like the other v2 cards) */
@@ -73,12 +87,13 @@
     };
     const LeagueHistoryModal=({token,onClose})=>{
       const[tok,setTok]=useState(token==='UFO'?'UFO':'PTGC');
-      const[per,setPer]=useState(()=>{const v=lsGet(LS.LH_PER);return LH_PERS.some(p=>p[0]===v)?v:'6M';});
+      const LH_PER_KEY='grays_lh_per_v2';   // v2 (2026-10-24): the default became 1Y — a new key so an earlier pick of 6M does not stick
+      const[per,setPer]=useState(()=>{const v=lsGet(LH_PER_KEY);return LH_PERS.some(p=>p[0]===v)?v:'1Y';});
       const[basis,setBasis]=useState('start');
       const[sel,setSel]=useState(2);   // Shark — the one he asked about
       const[file,setFile]=useState(undefined);   // undefined = loading, null = failed
       const[share,setShare]=useState(false);
-      const[mode,setMode]=useState('w');   // the big chart: 'w' = wallets, 't' = tokens held (2026-10-24, Shaka: "how many tokens do those 107 wallets hold")
+      const[mode,setMode]=useState('b');   // the big chart: 'b' = both (the overlay, default), 'w' = wallets, 't' = tokens held (2026-10-24, Shaka: "how many tokens do those 107 wallets hold" → "an overlay line chart")
       const load=()=>{setFile(undefined);lhLoad().then(j=>setFile(j||null));};
       useEffect(load,[]);
       const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B';
@@ -89,15 +104,16 @@
       const fl=t&&t.flows&&t.flows[per]&&t.flows[per][basis];
       const ageDays=t?Math.floor((Date.now()-lhDay(t.day0,last).getTime())/86400e3):0;
       const span=rows?(i0===0&&pd[1]!=null&&pd[1]>last?`since ${lhDate(lhDay(t.day0,0),true)}`:`${lhDate(lhDay(t.day0,i0),true)} → ${lhDate(lhDay(t.day0,last),true)}`):'';
-      const setP=k=>{setPer(k);lsSet(LS.LH_PER,k);};
+      const setP=k=>{setPer(k);lsSet(LH_PER_KEY,k);};
       const total=rows?rows[last].reduce((s,v)=>s+v,0):null;
       /* tokens held per league (schema 3): `held[basis]` per day; the share is of the basis supply THAT day (circulating = starting − the
          burn wallet's balance, the `burned` line, which is per ARCHIVE day — offset by the days trimmed before the first holder) */
       const held=t&&t.held&&t.held[basis];
       const off=t&&t.archiveDay0?Math.round((Date.parse(t.day0)-Date.parse(t.archiveDay0))/864e5):0;
       const supAt=k=>!t?null:basis==='circ'?(Array.isArray(t.burned)&&t.burned[off+k]!=null?t.supply-t.burned[off+k]:null):t.supply;
-      const shareOf=(v,k)=>{const sp=supAt(k);if(!(sp>0)||v==null)return null;const p=v/sp*100;return p>=10?p.toFixed(1):p>=0.1?p.toFixed(2):p>=0.001?p.toFixed(3):'<0.001';};
-      const tm=mode==='t'&&!!held;
+      const shareOf=(v,k)=>{const sp=supAt(k);if(!(sp>0)||v==null)return null;if(v===0)return'0';const p=v/sp*100;return p>=10?p.toFixed(1):p>=0.1?p.toFixed(2):p>=0.001?p.toFixed(3):'<0.001';};
+      const tm=mode==='t'&&!!held,bm=mode==='b'&&!!held;
+      const per1=(v,c)=>c>0&&v>0?fmtAbbr(v/c):null;   // tokens per wallet, for the hover
       return(
         <Modal onClose={onClose} label={`${tok} league history`} className="z-50 overflow-y-auto overscroll-contain bg-black/85 sm:p-4">
           <div className={`lh-win${isU?' u':''}`} onClick={e=>e.stopPropagation()}>
@@ -119,7 +135,7 @@
               {rows&&<>
                 <div className="lh-cards">{LH_TIERS.map(([n,img,th],i)=>{const a=rows[i0][i],b=rows[last][i];return(
                   <button type="button" key={n} className="lh-cd" aria-pressed={sel===i} onClick={()=>setSel(i)} aria-label={`${n}: ${lhFmt(b)} now, ${b-a>=0?'up':'down'} ${lhFmt(Math.abs(b-a))} over ${pd[2]} — show the chart`}>
-                    <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/>{t.burnIn&&t.burnIn[basis]===i&&<span className="bw" title="Includes the burn wallet (0x…0369)" aria-label="includes the burn wallet">{'\u{1F525}'}</span>}</span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div></div></div>
+                    <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/>{t.burnIn&&t.burnIn[basis]===i&&<span className="bw" title="Includes the burn wallet (0x…0369)" aria-label="includes the burn wallet">{'\u{1F525}'}</span>}</span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div>{t.burnIn&&t.burnIn[basis]===i&&<div className="bwl">{b===1?'The Burn address':'incl. the Burn address'}</div>}</div></div>
                     <div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div>
                     {held&&<div className="hd2">hold <b>{fmtAbbr(held[last][i])}</b> {'\u00B7'} {shareOf(held[last][i],last)}%</div>}
                     <div className="jl">{fl?<><b className="lh-up">+{lhFmt(fl[0][i])}</b> joined {'·'} <b className="lh-dn">{'−'}{lhFmt(fl[1][i])}</b> left</>:' '}</div>
@@ -127,15 +143,19 @@
                   </button>);})}</div>
                 {(()=>{const[n,img]=LH_TIERS[sel],a=rows[i0][sel],b=rows[last][sel];return(
                   <div className="lh-big">
-                    <div className="lh-bh"><div className="l"><img src={lhSea(img)} alt=""/><div><h3>{n.toUpperCase()}S {tm?'\u2014 TOKENS HELD':'OVER TIME'}</h3>
+                    <div className="lh-bh"><div className="l"><img src={lhSea(img)} alt=""/><div><h3>{n.toUpperCase()}S {tm?'\u2014 TOKENS HELD':bm?'\u2014 WALLETS + TOKENS HELD':'OVER TIME'}</h3>
                       {tm?<div className="s"><b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>
-                        :<div className="s"><b>{lhFmt(a)}</b> {'→'} <b>{lhFmt(b)}</b> <LhChange a={a} b={b}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>}</div></div>
+                        :<div className="s"><b>{lhFmt(a)}</b> {'→'} <b>{lhFmt(b)}</b> <LhChange a={a} b={b}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>}
+                      {bm&&<div className="s s2">hold <b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/></div>}</div></div>
                       <div className="r"><div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
                         <div className="lh-pill"><div className="k">LEFT</div><div className="n lh-dn">{fl?'−'+lhFmt(fl[1][sel]):'—'}</div></div>
-                        {tm?<div className="lh-pill"><div className="k">SHARE OF SUPPLY</div><div className="n">{shareOf(held[last][sel],last)}%</div></div>
+                        {tm||bm?<div className="lh-pill"><div className="k">SHARE OF SUPPLY</div><div className="n">{shareOf(held[last][sel],last)}%</div></div>
                           :<div className="lh-pill"><div className="k">ALL HOLDERS</div><div className="n">{lhFmt(total)}</div></div>}</div></div>
-                    {held&&<div className="lh-tg lh-mode" role="group" aria-label="Chart"><button type="button" aria-pressed={!tm} onClick={()=>setMode('w')}>WALLETS</button><button type="button" aria-pressed={tm} onClick={()=>setMode('t')}>TOKENS HELD</button></div>}
+                    {held&&<div className="lh-mrow"><div className="lh-tg lh-mode" role="group" aria-label="Chart"><button type="button" aria-pressed={bm} onClick={()=>setMode('b')}>BOTH</button><button type="button" aria-pressed={!tm&&!bm} onClick={()=>setMode('w')}>WALLETS</button><button type="button" aria-pressed={tm} onClick={()=>setMode('t')}>TOKENS HELD</button></div>
+                      {bm&&<div className="lh-lg" aria-hidden="true"><span><i style={{background:col}}></i>Wallets <em>left</em></span><span><i className="a"></i>Tokens held <em>right</em></span></div>}</div>}
                     {tm?<LhChart key="t" vals={held.slice(i0).map(r=>r[sel])} day0={t.day0} i0={i0} col={col} f={fmtAbbr} what="Tokens held"/>
+                      :bm?<LhChart key="b" vals={rows.slice(i0).map(r=>r[sel])} day0={t.day0} i0={i0} col={col} unit={`${n.toLowerCase()}${rows[last][sel]===1&&rows[i0][sel]<=1?'':'s'}`} what={`${n}s (wallets) and the tokens they hold`}
+                          v2={held.slice(i0).map(r=>r[sel])} tip2={k=>{const v=held[i0+k][sel],c=rows[i0+k][sel],sh=shareOf(v,i0+k),e=per1(v,c);return`hold ${fmtAbbr(v)}${sh!=null?` (${sh}%)`:''}${e&&c>1?` \u00B7 ~${e} each`:''}`;}}/>
                       :<LhChart key="w" vals={rows.slice(i0).map(r=>r[sel])} day0={t.day0} i0={i0} col={col}/>}
                   </div>);})()}
                 <div className="lh-foot"><b>People only, plus the {'\u{1F525}'} burn wallet</b> {'—'} wallets holding {tok}; pools, contracts, the token contracts and the DAO{isU?' and UFO OA':''} wallets are left out; the burn wallet counts in the league its balance puts it in (the same count as the Token Allocation strip). Leagues are a share of the <b>{basis==='circ'?'circulating supply that day (starting − burned)':'starting supply'}</b>. One point per UTC day, rebuilt from the chain {'·'} <span className={ageDays>2?'old':undefined}>history to the close of {lhDate(lhDay(t.day0,last),true)} (UTC)</span>. <b>Hold</b> = the tokens that league{'\u2019'}s wallets hold that day, and their share of the {basis==='circ'?'circulating':'starting'} supply. <b>Joined / left</b> = wallets that moved into or out of a league over the period (by buying, selling, or {basis==='circ'?'a burn moving the line':'moving tokens'}); joined {'−'} left = the change.</div>
