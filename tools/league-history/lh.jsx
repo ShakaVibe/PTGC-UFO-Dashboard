@@ -37,7 +37,8 @@
       const ph=w<560,H=ph?230:290,L=ph?40:48,R=v2?(ph?44:56):12,T=16,B=28;
       const mn0=Math.min(...vals),mx0=Math.max(...vals),pad=Math.max(1,Math.round((mx0-mn0)*.12));   // f: lhFmt (wallets) or fmtAbbr (tokens held)
       let mn=Math.max(0,mn0-pad),mx=mx0+pad;const r0=(mx-mn)/4,p10=10**Math.floor(Math.log10(r0||1));
-      const step=[1,2,2.5,5,10].map(m=>m*p10).filter(s=>f!==lhFmt||(s>=1&&Number.isInteger(s))).find(s=>s>=r0)||r0||1;   // counts: whole steps onlymn=Math.floor(mn/step)*step;mx=Math.ceil(mx/step)*step;if(mx===mn)mx=mn+step;
+      const step=[1,2,2.5,5,10].map(m=>m*p10).filter(s=>f!==lhFmt||(s>=1&&Number.isInteger(s))).find(s=>s>=r0)||r0||1;   // counts: whole steps only
+      mn=Math.floor(mn/step)*step;mx=Math.ceil(mx/step)*step;if(mx===mn)mx=mn+step;
       const X=k=>L+k/(vals.length-1||1)*(w-L-R),Y=v=>T+(1-(v-mn)/(mx-mn))*(H-T-B);
       const ticks=[];for(let v=mn;v<=mx+1e-9;v+=step)ticks.push(v);
       const nt=ph?(vals.length>200?3:4):6,xt=[];/* phone + a long period (dates with the year): 3 labels, else they run into each other */for(let t=0;t<nt;t++)xt.push(Math.round(t/(nt-1)*(vals.length-1)));

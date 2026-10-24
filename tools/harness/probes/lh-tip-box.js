@@ -1,0 +1,2 @@
+// LEAGUE HISTORY: the hover box against the window's edges + the page width
+(()=>{const t=document.querySelector('.lh-tip'),w=document.querySelector('.lh-win');if(!t)return 'no tip';const a=t.getBoundingClientRect(),b=w.getBoundingClientRect();return{tipL:Math.round(a.left),tipR:Math.round(a.right),winL:Math.round(b.left),winR:Math.round(b.right),pageW:document.documentElement.scrollWidth,ctl:[...document.querySelectorAll('.lh-tg')].map(g=>Math.round(g.getBoundingClientRect().width)+'/'+g.scrollWidth).join(' ')};})()

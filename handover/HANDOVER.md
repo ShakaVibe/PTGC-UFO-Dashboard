@@ -46,6 +46,13 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (late night): League History — small text ~1 px bigger + the axis fix — BUILT, NOT pushed; AUDIT list given, waiting
+for his picks.** `python3 tools/lh-text-axis.py` (from `d81faff1` → index.html 05eb51a7, lh.jsx af19303d, lh.css 01a0dc47): one
+override block at the end of lh.css (toggles, card name / threshold / burn label, pills, legend, hover, axis labels via `.lh-ch svg
+text`, footer; desktop + phone). FIX: in d81faff1 the big chart's y-axis rounding sat after a `//` comment on the same line (swallowed)
+→ the axis started at odd values (89/94/99/104); now on its own line (85/90/95/100). Probes lh-hover-edge.js + lh-tip-box.js (the
+phone hover box at the left edge: left −43 px = clipped — audit item A1).
+
 **2026-10-24 (night): "THE BURN ADDRESS" label + the OVERLAY chart + 1Y default — BUILT, NOT pushed.** (Shaka: 'next to the 1 Poseidon,
 lets put "The Burn address"' / 'could we add an overlay line chart of the token counts … use what you think makes it good' / 'lets
 default to 1 year and the shark selection. and lets make the hold joined and left text in each card larger'.)
@@ -2058,7 +2065,16 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--42. **BURN ADDRESS label + overlay chart + 1Y default (2026-10-24 night) — BUILT, NOT pushed.** His push → Claude's check: the live
+-43. **LEAGUE HISTORY AUDIT (2026-10-24 late night) — on the roadmap artifact as the "LEAGUE HISTORY" phase, lh1–lh15 (lh1 = go live; the A/E/I items below map to lh2–lh15), for LATER (his call).** Text bump + axis fix built
+   (above). The list: A1 hover box clipped at phone edges / covers the top of the chart; A2 subtitle dates hard-coded (UFO "Jul 8" vs
+   the data's Jul 9); A3 the loaded file is kept for the whole tab life (stale after the daily update); A4 card aria-label "up 0" on no
+   change; A5 phone pill SHARE OF SUPPLY wraps to 3 lines; E1 the file 319 KB / 138 KB gz — 68 % is `held` (whole tokens, 11 digits)
+   → store in millions + round `burned` (~ −45 %); E2 split per token (open PTGC, load only PTGC); E3 the chart rebuilds every point on
+   each mouse move (memo the geometry); I1 total holders back on screen in BOTH; I2 phone: keep the readout after lifting the finger;
+   I3 arrow keys move the readout (keyboard); I4 "avg per wallet" on the cards; I5 the share card shows the selected league's
+   overlay chart; I6 a note that the history is to yesterday's close (the strip is hourly — can differ by 1).
+-42. **DONE — pushed `d81faff1`.** (Burn address label + overlay chart + 1Y default.)
+-42 (old). **BURN ADDRESS label + overlay chart + 1Y default (2026-10-24 night) — pushed d81faff1.** His push → Claude's check: the live
    strip reads "1 THE BURN ADDRESS" (PTGC) / "17 INCL. THE BURN ADDRESS" (UFO); the dot's window opens on 1Y, Sharks, BOTH.
 -41. **DONE — pushed `92a8ae65` (one data-file conflict with the hourly run, kept ours).** Was: **BURN WALLET as Poseidon + TOKENS HELD + bigger logo (2026-10-24 late evening) — BUILT, NOT pushed.** His push → Claude's check:
    the strip on ptgc-ufo.com shows Poseidon 1 with a 🔥 (UFO: the 🔥 on Whale); the next token-allocation run keeps `burnIn`; the
