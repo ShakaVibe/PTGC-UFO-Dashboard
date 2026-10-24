@@ -46,6 +46,21 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (late night): League History roadmap BATCH 1 — lh2–lh7, lh9–lh11, lh13, lh15 — BUILT, NOT pushed.** (Shaka: "lets fix a
+lot of those" → picked Fixes, Easier to read, Speed.) `python3 tools/lh-batch1.py` (from `61742b76` → index.html 7f67c67c, lh.jsx
+10fbb0e4, lh.css b66f3699, builder bfdaaa6e, harness run.js 37eba7af) + `data/league-history.json` rebuilt (a0407234).
+*lh2/lh11:* the floating hover box is gone — a READOUT ROW above the big chart always shows a day (latest, or under the mouse /
+finger); pointer events: a finger PINS the day (LATEST button goes back), the mouse follows and leaves. *lh3:* subtitle date from
+the file (PTGC Oct 11, 2023; UFO Jul 9, 2026). *lh4:* the read is kept 1 h, then re-read on opening. *lh5:* "no change" aria.
+*lh6:* the third pill reads SHARE on phones. *lh7:* SCHEMA 4 — start / circ / held delta-encoded per day (row 0 whole), held in
+units of 10,000 tokens (`enc.heldUnit`), burned whole tokens: 319 KB → 155 KB (gz 137 → 61 KB); decoded once in `lhDecode`
+(schema 1–3 pass through); the builder reuses any schema ≥ 2 file's burn readings (no RPC re-read) and rebuilds when the schema
+differs. Checked: every count identical, held within 5,000 tokens, flows identical. NOTE: a browser holding the OLD index.html
+would misread a schema-4 file (deltas as counts) — harmless while the window is hidden. *lh9:* LhChart geometry in useMemo.
+*lh10:* "17,081 holders of PTGC in all" on the big chart's title in BOTH / TOKENS HELD. *lh13:* "~799M per shark" on each card.
+*lh15:* footer line on yesterday's close vs the hourly strip. Harness: `LOCAL_DATA=1` serves this checkout's data/*.json for the
+raw-GitHub reads. Probes lh-read.js, lh-touch.js. Roadmap artifact: tick lh2–lh7, lh9–lh11, lh13, lh15 after the push.
+
 **2026-10-24 (late night): League History — small text ~1 px bigger + the axis fix — BUILT, NOT pushed; AUDIT list given, waiting
 for his picks.** `python3 tools/lh-text-axis.py` (from `d81faff1` → index.html 05eb51a7, lh.jsx af19303d, lh.css 01a0dc47): one
 override block at the end of lh.css (toggles, card name / threshold / burn label, pills, legend, hover, axis labels via `.lh-ch svg
@@ -2065,6 +2080,9 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-44. **LEAGUE HISTORY BATCH 1 — BUILT, NOT pushed.** His push → Claude: tick the 11 items on the roadmap artifact; the next daily
+   `league-history` run (~00:15 UTC) must say "1 burn reading(s)" (not 1,100) and keep schema 4. Left on the list: lh1 (go live),
+   lh8 (one file per token — skipped, little gain after lh7), lh12 (arrow keys), lh14 (chart on the share card).
 -43. **LEAGUE HISTORY AUDIT (2026-10-24 late night) — on the roadmap artifact as the "LEAGUE HISTORY" phase, lh1–lh15 (lh1 = go live; the A/E/I items below map to lh2–lh15), for LATER (his call).** Text bump + axis fix built
    (above). The list: A1 hover box clipped at phone edges / covers the top of the chart; A2 subtitle dates hard-coded (UFO "Jul 8" vs
    the data's Jul 9); A3 the loaded file is kept for the whole tab life (stale after the daily update); A4 card aria-label "up 0" on no

@@ -18,7 +18,10 @@ import rpcPool from './rpc-pool.js';
 
 const OUT = process.env.OUT_PATH || 'data/league-history.json';
 const ARCH = 'data/rank-history';
-const SCHEMA = 3;   // 2 (2026-10-24): the burn wallet counts in its league (`burnIn`); 3: + `held` — the tokens each league holds per day
+const SCHEMA = 4;   // 2 (2026-10-24): the burn wallet counts in its league (`burnIn`); 3: + `held` — the tokens each league holds per day;
+                    // 4 (lh7): start / circ / held DELTA-encoded per day (row 0 whole), held in units of HELD_UNIT tokens, burned in whole tokens
+const HELD_UNIT = 1e4;   // 10,000 tokens — the window prints 2 decimals of M / B, so nothing it shows changes
+const delta = rows => rows.map((r, k) => k ? r.map((v, i) => v - rows[k - 1][i]) : r.slice());
 const TIERS = [['Poseidon', 10], ['Whale', 1], ['Shark', 0.1], ['Dolphin', 0.01], ['Squid', 0.001], ['Turtle', 0.0001], ['Shrimp', 0.00001], ['Shell', 0]];
 const TOKENS = {   // starting supply = token-allocation.json's (the strip's) — whole tokens
   PTGC: { a: '0x94534eeee131840b1c0f61847c572228bdfdde93', supply: 333333333333 },
@@ -60,7 +63,7 @@ async function build(tok, prev) {
   const days = Object.keys(st.days).sort();
   for (let k = 1; k < days.length; k++) if (nextDay(days[k - 1]) !== days[k]) throw new Error(`${tok}: archive skips from ${days[k - 1]} to ${days[k]}`);
   const lastDay = days[days.length - 1];
-  if (prev && prev.archiveDay0 === days[0] && prev.lastDay === lastDay && !process.env.FORCE_LH) { console.log(`${tok}: already current → ${lastDay} — nothing to do`); return prev; }
+  if (prev && prevFile.schema === SCHEMA && prev.archiveDay0 === days[0] && prev.lastDay === lastDay && !process.env.FORCE_LH) { console.log(`${tok}: already current → ${lastDay} — nothing to do`); return prev; }
   const S = TOKENS[tok].supply;
   // the burned line: reuse every day the previous file already read (same day0), read the rest at the day's last block
   const burned = new Array(days.length).fill(null);
@@ -104,14 +107,15 @@ async function build(tok, prev) {
   const last = start[start.length - 1];
   console.log(`${tok}: ${lastDay} start ${last.join(' / ')} · circ ${circ[circ.length - 1].join(' / ')} · circulating ${Math.round(S - burned[burned.length - 1]).toLocaleString('en-US')}`);
   const bl = burned[burned.length - 1], burnIn = bl > 0 ? { start: tierOf(bl, S), circ: tierOf(bl, S - bl) } : null;   // the burn wallet's league today
-  return { day0: days[k0], lastDay, days: days.length - k0, supply: S, start: start.slice(k0), circ: circ.slice(k0), held: { start: hS.slice(k0), circ: hC.slice(k0) }, flows, burnIn,
-    archiveDay0: days[0], burned: burned.map(v => Math.round(v * 1e6) / 1e6) };   // `burned` = per ARCHIVE day (the cache for the next run)
+  return { day0: days[k0], lastDay, days: days.length - k0, supply: S, start: delta(start.slice(k0)), circ: delta(circ.slice(k0)),
+    held: { start: delta(hS.slice(k0).map(r => r.map(v => Math.round(v / HELD_UNIT)))), circ: delta(hC.slice(k0).map(r => r.map(v => Math.round(v / HELD_UNIT)))) }, flows, burnIn,
+    archiveDay0: days[0], burned: burned.map(v => v == null ? null : Math.round(v)) };   // `burned` = per ARCHIVE day (the cache for the next run)
 }
 
-const prevFile = (() => { try { const j = JSON.parse(fs.readFileSync(OUT, 'utf8')); return j && j.schema === SCHEMA ? j : null; } catch (e) {
+const prevFile = (() => { try { const j = JSON.parse(fs.readFileSync(OUT, 'utf8')); return j && j.schema >= 2 ? j : null; } catch (e) {   // any schema ≥ 2: its burn readings are reused (a schema change rebuilds the rest)
   if (fs.existsSync(OUT)) { console.error(`::error::league-history: ${OUT} exists but is unreadable — not rebuilding over it (${e.message})`); process.exit(1); }
   return null; } })();
-const out = { schema: SCHEMA, generatedAt: null, tiers: TIERS.map(t => t[0]), thresholds: TIERS.map(t => t[1]),
+const out = { schema: SCHEMA, generatedAt: null, enc: { rows: 'delta', heldUnit: HELD_UNIT }, tiers: TIERS.map(t => t[0]), thresholds: TIERS.map(t => t[1]),
   note: 'people only plus the burn wallet (the Token Allocation strip population); start = % of the starting supply, circ = % of the circulating supply that day (starting − balanceOf(0x369) at the day\'s last block); one row per UTC day from day0', tokens: {} };
 let changed = false;
 for (const tok of Object.keys(TOKENS)) {

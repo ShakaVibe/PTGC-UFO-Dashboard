@@ -175,7 +175,8 @@ const dsAnswer=(url)=>{
     if(slowUfo&&UFO_ADDR.test(u))await sleep(slowUfo);
     if(process.env.SLOW_SCAN&&/api\.scan\.pulsechain/.test(u))await sleep(+process.env.SLOW_SCAN);   // SLOW_SCAN=ms (round 30): only the PulseScan reads wait → the chart's trades loader stays up   // SLOW_UFO=ms: only the UFO token's DexScreener calls wait → the UFO load always lands AFTER a PTGC load started later (a7)
     if(slow&&process.env.SLOW_DATA&&/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/data\//.test(u))await sleep(slow);   // SLOW_DATA=1: the repo's data/*.json wait too (a35: sibling pages that only read those)
-    if(slowHist&&/data\/[a-z-]*history[a-z-]*\.json/.test(u))await sleep(slowHist);   // SLOW_HISTORY=ms: delay the data/*history*.json files only (u13)
+    if(slowHist&&/data\/[a-z-]*history[a-z-]*\.json/.test(u))await sleep(slowHist);
+    if(process.env.LOCAL_DATA){const m=u.match(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/(data\/[\w./-]+\.json)/);const fp=m&&path.join(REPO,m[1]);if(fp&&fs.existsSync(fp))return r.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:fs.readFileSync(fp)});}   // LOCAL_DATA=1: this checkout's data/*.json   // SLOW_HISTORY=ms: delay the data/*history*.json files only (u13)
     if(u.startsWith(`http://localhost:${port}`)||u.startsWith(`http://127.0.0.1:${port}`))return r.continue();
     /* SLOW_RPC=ms: the chain answers, but slowly — the case RPC_DOWN cannot reproduce (a 503
        comes back instantly). This is what delays first paint when the primary endpoint hangs:
