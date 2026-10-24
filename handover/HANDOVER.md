@@ -46,6 +46,11 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (night): League History — bigger sea creatures, brighter header, league-coloured sparklines — BUILT, NOT pushed.**
+`python3 tools/lh-icons-sky.py` (from `c00bcef9` → index.html 238a0541, lh.jsx b8fe7e40, lh.css ba5a6cf5): cards' creatures 60 px
+(phone 46), big chart's 70 (phone 56), beam tip's 46; header art brightness 1.3 / saturate 1.1 with a lighter veil (a soft dark pool
+stays behind the title); each card's sparkline in its league's beam colour (`LH_BEAM_C[i][1]`; the share card keeps the token colour).
+
 **2026-10-24 (night): League History — bigger header / boxes / readout + the holders wording — BUILT, NOT pushed.** (Shaka: "why the
 discrepancy of holders.. 18206 on the front page.. 17081 here" + bigger title lines, JOINED / LEFT / SHARE boxes, readout row.)
 `python3 tools/lh-bigger.py` (from `1afb7a5a` → index.html 74242784, lh.jsx 67d229f4, lh.css 39cc2981). The two numbers are both
@@ -2103,7 +2108,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--46. **LEAGUE HISTORY bigger header + holders wording — BUILT, NOT pushed.**
+-47. **LEAGUE HISTORY bigger creatures + brighter header + coloured sparklines — BUILT, NOT pushed.**
+-46. **DONE — pushed `c00bcef9`.** (bigger header + holders wording)
 -45. **DONE — pushed `1afb7a5a`, live-checked (strip, beam).** Was: **LEAGUE HISTORY BEAM + card layout + strip label — BUILT, NOT pushed.** His push → Claude: live look (UFO strip has no
    "incl." text; the dot's window shows the beam; hover tips).
 -44. **DONE — pushed `bb42f591`, live-checked, 11 roadmap items ticked.** Was: **LEAGUE HISTORY BATCH 1 — BUILT, NOT pushed.** His push → Claude: tick the 11 items on the roadmap artifact; the next daily
