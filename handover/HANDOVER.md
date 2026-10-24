@@ -46,6 +46,14 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (night): League History — chart art, axis titles, stronger border, bigger creatures — BUILT, NOT pushed.** (Shaka's
+chart mock-up + his underwater-ruins art; "shorten that long sentence"; "make the sea creature icons larger"; "a stronger border
+around the chart section".) `python3 tools/lh-chart-art.py` (from `f8db2d0a` → index.html d5480106, lh.jsx 422bde65, lh.css
+e02d2ce5) + NEW `logos/leagues/lh-chart-bg.webp` (9f91f807, 156 KB — the file transfer re-encoded it; same 1600×640, 1600×640 from his 1983×793 PNG): the art behind the big chart
+panel under a dark veil; 2 px glowing token-colour border; axis titles in the plot (`tl` / `tr` on LhChart: WALLETS left, TOKENS
+HELD (B/M/K) right — `lhUnit`); High / Low in dark pills; legend = glowing dots "Wallets (left)" / "Tokens held (right)"; holders
+line "17,081 holder wallets · people only"; creatures: cards 76 px (phone 56), big chart 92 (phone 66).
+
 **2026-10-24 (night): League History — bigger sea creatures, brighter header, league-coloured sparklines — BUILT, NOT pushed.**
 `python3 tools/lh-icons-sky.py` (from `c00bcef9` → index.html 238a0541, lh.jsx b8fe7e40, lh.css ba5a6cf5): cards' creatures 60 px
 (phone 46), big chart's 70 (phone 56), beam tip's 46; header art brightness 1.3 / saturate 1.1 with a lighter veil (a soft dark pool
@@ -2108,7 +2116,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--47. **LEAGUE HISTORY bigger creatures + brighter header + coloured sparklines — BUILT, NOT pushed.**
+-48. **LEAGUE HISTORY chart art + axis titles + border + bigger creatures — BUILT, NOT pushed.**
+-47. **DONE — pushed `f8db2d0a`.** (bigger creatures + brighter header + coloured sparklines)
 -46. **DONE — pushed `c00bcef9`.** (bigger header + holders wording)
 -45. **DONE — pushed `1afb7a5a`, live-checked (strip, beam).** Was: **LEAGUE HISTORY BEAM + card layout + strip label — BUILT, NOT pushed.** His push → Claude: live look (UFO strip has no
    "incl." text; the dot's window shows the beam; hover tips).
