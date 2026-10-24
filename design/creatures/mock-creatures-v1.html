@@ -1,0 +1,161 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>League History — mock v1</title>
+<style>
+@font-face{font-family:Orbitron;src:url(../../tools/harness/node_modules/@fontsource/orbitron/files/orbitron-latin-700-normal.woff2);font-weight:700}
+@font-face{font-family:Orbitron;src:url(../../tools/harness/node_modules/@fontsource/orbitron/files/orbitron-latin-500-normal.woff2);font-weight:500}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2);font-weight:700}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-600-normal.woff2);font-weight:600}
+@font-face{font-family:Rajdhani;src:url(../../tools/harness/node_modules/@fontsource/rajdhani/files/rajdhani-latin-500-normal.woff2);font-weight:500}
+*{box-sizing:border-box}
+html,body{margin:0;background:#06070b;font-family:Rajdhani,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+.page{min-height:100vh;background:#06070b url(../../logos/header/dash-bg.jpg) 50% 0/1600px auto no-repeat;position:relative}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.84);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
+/* ---------- the window ---------- */
+.win{--a:#F2D35B;--rgb:242,211,91;--a2:#FFE9A0;position:relative;width:100%;max-width:1040px;border-radius:24px;overflow:hidden;background:#05070c;
+  border:1px solid rgba(var(--rgb),.45);box-shadow:0 0 0 1px rgba(0,0,0,.6),0 30px 90px rgba(0,0,0,.8),0 0 60px rgba(var(--rgb),.12)}
+.win.ufo{--a:#8DFF3A;--rgb:141,255,58;--a2:#C8FF9C}
+.hd{position:relative;padding:22px 26px 18px;min-height:220px}
+.hd .sky{position:absolute;inset:0;background:url(../../logos/leagues/lg-atl-ptgc.webp) 50% 30%/cover no-repeat}
+.ufo .hd .sky{background-image:url(../../logos/leagues/lg-atl-ufo.webp)}
+.hd .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,7,12,.35) 0%,rgba(5,7,12,.55) 55%,#05070c 100%),radial-gradient(ellipse 50% 90% at 50% 40%,rgba(0,0,0,.55),rgba(0,0,0,0) 80%)}
+.x{position:absolute;right:20px;top:20px;z-index:3;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:36px;text-align:center}
+.cam{position:absolute;right:68px;top:20px;z-index:3;height:38px;padding:0 14px;border-radius:19px;border:1px solid rgba(var(--rgb),.5);background:rgba(0,0,0,.55);color:var(--a2);font:700 11px Orbitron;letter-spacing:.14em;display:flex;align-items:center;gap:8px}
+.hc{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+.coin{width:74px;height:74px;border-radius:50%;box-shadow:0 0 0 2px rgba(var(--rgb),.7),0 0 34px rgba(var(--rgb),.45)}
+h2{font:700 30px Orbitron;letter-spacing:.06em;margin:12px 0 0;text-shadow:0 2px 12px #000}
+h2 .t{color:var(--a)}h2 .w{color:#fff;margin-left:10px}
+.sub{color:rgba(255,255,255,.82);font-size:16.5px;font-weight:500;margin-top:5px;text-shadow:0 2px 8px #000}
+.ctl{position:relative;margin-top:18px;display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.tg{display:inline-flex;height:34px;align-items:center;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.14);border-radius:11px;padding:3px;gap:2px}
+.tg button{font:700 10.5px Orbitron;letter-spacing:.13em;height:100%;padding:0 12px;border:0;border-radius:8px;background:transparent;color:rgba(255,255,255,.55);display:flex;align-items:center;gap:7px;cursor:pointer}
+.tg button img{width:18px;height:18px;border-radius:50%}
+.tg button.on{color:#fff;background:linear-gradient(180deg,rgba(var(--rgb),.34),rgba(var(--rgb),.13));box-shadow:inset 0 0 0 1px rgba(var(--rgb),.65)}
+/* ---------- cards ---------- */
+.body{padding:6px 22px 22px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.cd{position:relative;border-radius:16px;padding:12px 13px 10px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(0,0,0,.4));border:1px solid rgba(255,255,255,.1);cursor:pointer;text-align:left;color:#fff;font:inherit;min-width:0}
+.cd.on{border-color:rgba(var(--rgb),.85);background:linear-gradient(180deg,rgba(var(--rgb),.16),rgba(0,0,0,.45));box-shadow:0 0 22px rgba(var(--rgb),.22),inset 0 0 0 1px rgba(var(--rgb),.35)}
+.cd .top{display:flex;align-items:center;gap:10px}
+.cd .top img{width:42px;height:42px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(0,0,0,.6))}
+.cd .nm{font:700 11px Orbitron;letter-spacing:.14em;color:rgba(255,255,255,.7);text-transform:uppercase}
+.cd .th{font-size:12.5px;color:rgba(255,255,255,.42);font-weight:600}
+.cd .v{font:700 26px Orbitron;letter-spacing:.02em;margin-top:8px;line-height:1}
+.cd .ch{margin-top:6px;font-size:14.5px;font-weight:700}
+.up{color:#39E15A}.dn{color:#FF5A64}.fl{color:rgba(255,255,255,.5)}
+.cd .jl{margin-top:3px;font-size:12.5px;color:rgba(255,255,255,.55);font-weight:600}
+.cd .jl b{font-weight:700}
+.cd svg{display:block;width:100%;height:34px;margin-top:6px}
+/* ---------- the big chart ---------- */
+.big{margin-top:16px;border-radius:18px;border:1px solid rgba(var(--rgb),.3);background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.5));padding:16px 18px 12px}
+.bh{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+.bh .l{display:flex;align-items:center;gap:12px}
+.bh .l img{width:54px;height:54px;object-fit:contain}
+.bh .t{font:700 13px Orbitron;letter-spacing:.16em;color:var(--a2)}
+.bh .s{font-size:15px;color:rgba(255,255,255,.7);font-weight:600;margin-top:3px}
+.bh .s b{color:#fff}
+.bh .r{display:flex;gap:10px}
+.pill{border-radius:12px;padding:7px 12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);text-align:right}
+.pill .k{font:700 9.5px Orbitron;letter-spacing:.14em;color:rgba(255,255,255,.5)}
+.pill .n{font:700 19px Orbitron;margin-top:3px}
+#chart{display:block;width:100%;height:290px;margin-top:10px}
+.foot{margin-top:14px;font-size:13px;color:rgba(255,255,255,.48);line-height:1.45}
+.foot b{color:rgba(255,255,255,.7)}
+/* ---------- the strip (entry point) ---------- */
+.strip{max-width:600px;margin:20px auto 0;display:flex;align-items:center;justify-content:space-around;gap:6px;padding:14px 18px;border-radius:18px;border:1px solid rgba(160,110,255,.45);background:rgba(16,10,30,.9);position:relative;color:#fff;font:700 18px Rajdhani;cursor:pointer;box-shadow:0 0 24px rgba(160,110,255,.25)}
+.strip span{display:flex;align-items:center;gap:6px}.strip img{width:34px;height:34px}
+.strip .go{position:absolute;right:-1px;top:-11px;font:700 9.5px Orbitron;letter-spacing:.14em;background:#2a1650;border:1px solid rgba(160,110,255,.7);border-radius:8px;padding:3px 8px;color:#E4D4FF}
+.lab{max-width:1040px;margin:18px auto 0;font:700 12px Orbitron;letter-spacing:.16em;color:rgba(255,255,255,.55);text-align:center}
+@media(max-width:700px){
+  .ov{padding:0}.win{border-radius:0;min-height:100vh}
+  .hd{padding:18px 14px 14px;min-height:0}.coin{width:56px;height:56px}h2{font-size:21px}.sub{font-size:14.5px}
+  .cam{right:62px;top:14px;height:34px;padding:0 11px;font-size:0}.cam::before{content:'📷';font-size:16px}.x{top:14px;right:14px;width:34px;height:34px;line-height:32px}
+  .tg button{padding:0 9px;font-size:9.5px;letter-spacing:.1em}
+  .body{padding:4px 12px 16px}.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .cd{padding:10px 10px 8px}.cd .top img{width:34px;height:34px}.cd .v{font-size:21px}.cd .ch{font-size:13.5px}
+  .bh .r{width:100%}.pill{flex:1}#chart{height:230px}.big{padding:13px 12px 10px}
+}
+/* ---------- the share card (Wide 1200×675) ---------- */
+.card{width:1200px;height:675px;position:relative;overflow:hidden;border-radius:28px;background:#05070c;border:2px solid rgba(var(--rgb),.6);margin:24px auto;--a:#F2D35B;--rgb:242,211,91;--a2:#FFE9A0}
+.card.ufo{--a:#8DFF3A;--rgb:141,255,58;--a2:#C8FF9C}
+.card .sky{position:absolute;inset:0;background:url(../../logos/leagues/lg-atl-ptgc.webp) 50% 35%/cover;opacity:.55}
+.card.ufo .sky{background-image:url(../../logos/leagues/lg-atl-ufo.webp)}
+.card .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,7,12,.2),rgba(5,7,12,.9) 62%,#05070c)}
+.card .in{position:relative;padding:34px 44px}
+.card .tt{display:flex;align-items:center;gap:18px}.card .tt img{width:76px;height:76px;border-radius:50%;box-shadow:0 0 0 2px rgba(var(--rgb),.7),0 0 30px rgba(var(--rgb),.4)}
+.card h3{margin:0;font:700 40px Orbitron;letter-spacing:.06em}.card h3 .t{color:var(--a)}
+.card .pd{font-size:21px;color:rgba(255,255,255,.8);font-weight:600;margin-top:4px}
+.card .g{margin-top:34px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card .c{border-radius:18px;padding:14px 16px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12)}
+.card .c .r1{display:flex;align-items:center;gap:10px}.card .c img{width:46px;height:46px}
+.card .c .nm{font:700 13px Orbitron;letter-spacing:.14em;color:rgba(255,255,255,.7)}
+.card .c .ft{font:700 30px Orbitron;margin-top:10px}.card .c .ft small{font:600 20px Rajdhani;color:rgba(255,255,255,.55);margin-right:8px}
+.card .c .ch{font-size:19px;font-weight:700;margin-top:4px}
+.card .c svg{display:block;width:100%;height:44px;margin-top:10px}
+.card .bt{position:absolute;left:44px;right:44px;bottom:26px;display:flex;justify-content:space-between;font-size:17px;color:rgba(255,255,255,.55);font-weight:600}
+.card .bt b{color:var(--a2);font:700 15px Orbitron;letter-spacing:.14em}
+</style></head><body>
+<div class="page"><div class="ov" id="ov"></div></div>
+<script src="mock-data.js"></script>
+<script>
+const TIERS=[['Poseidon','trident','10%'],['Whale','whale','1%'],['Shark','shark','0.1%'],['Dolphin','dolphin','0.01%'],['Squid','squid','0.001%'],['Turtle','turtle','0.0001%'],['Shrimp','shrimp','0.00001%'],['Shell','shell','below Shrimp']];
+const PERS=[['7D',7],['30D',30],['90D',90],['6M',182],['1Y',365],['ALL',null]];
+const q=new URLSearchParams(location.search);
+const S={tok:q.get('tok')||'PTGC',basis:q.get('basis')||'start',per:q.get('per')||'6M',sel:+(q.get('sel')||2),view:q.get('view')||'win'};
+const sea=n=>`../../logos/panels/sea-${n}.webp?v=4`, logo=t=>`../../logos/${t.toLowerCase()}/logo-512.webp`;
+const fmt=n=>n.toLocaleString('en-US');
+const pct=(a,b)=>a>0?((b-a)/a*100):null;
+const chTxt=(a,b)=>{const d=b-a,p=pct(a,b);if(d===0)return `<span class="fl">— no change</span>`;return `<span class="${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${fmt(Math.abs(d))}${p==null?'':` (${Math.abs(p).toFixed(1)}%)`}</span>`;};
+function slice(){const D=CRE[S.tok],rows=D.rows,n=(PERS.find(p=>p[0]===S.per)||[])[1];const i0=n==null||n>=rows.length?0:rows.length-1-n;
+  return{rows:rows.slice(i0),since:n!=null&&n>=rows.length?rows[0][0]:null,fl:D.flows[S.per]};}
+const col=(r,i)=>(S.basis==='circ'?r[2]:r[1])[i];
+function spark(vals,w,h,clr){const mn=Math.min(...vals),mx=Math.max(...vals),r=mx-mn||1;const pts=vals.map((v,i)=>`${(i/(vals.length-1||1)*w).toFixed(1)},${(h-3-(v-mn)/r*(h-6)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${clr}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;}
+const mdate=(k,long)=>new Date(k+'T00:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',year:long?'numeric':undefined,timeZone:'UTC'});
+function bigChart(rows,i,clr){const ph=innerWidth<=700,W=Math.round(Math.min(996,innerWidth-(ph?50:110))),H=ph?230:290,L=ph?38:46,R=12,T=14,B=28;const vals=rows.map(r=>col(r,i));const mn0=Math.min(...vals),mx0=Math.max(...vals);
+  const pad=Math.max(1,Math.round((mx0-mn0)*.12));let mn=Math.max(0,mn0-pad),mx=mx0+pad;
+  const step=(()=>{const r=(mx-mn)/4;const p=10**Math.floor(Math.log10(r||1));return [1,2,2.5,5,10].map(m=>m*p).find(s=>s>=r)||r;})();mn=Math.floor(mn/step)*step;mx=Math.ceil(mx/step)*step;
+  const X=k=>L+k/(rows.length-1||1)*(W-L-R),Y=v=>T+(1-(v-mn)/(mx-mn||1))*(H-T-B);
+  let g='';for(let v=mn;v<=mx+1e-9;v+=step){g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${L-8}" y="${Y(v)+4}" fill="rgba(255,255,255,.5)" font-size="12" font-family="Rajdhani" font-weight="600" text-anchor="end">${fmt(Math.round(v))}</text>`;}
+  const nt=ph?4:6;for(let t=0;t<nt;t++){const k=Math.round(t/(nt-1)*(rows.length-1));g+=`<text x="${X(k)}" y="${H-8}" fill="rgba(255,255,255,.5)" font-size="12" font-family="Rajdhani" font-weight="600" text-anchor="${t===0?'start':t===nt-1?'end':'middle'}">${mdate(rows[k][0],rows.length>200)}</text>`;}
+  const pts=vals.map((v,k)=>`${X(k).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const area=`M${X(0)},${Y(mn)} L`+pts.replace(/ /g,' L')+` L${X(vals.length-1)},${Y(mn)} Z`;
+  const last=vals.length-1,lo=vals.indexOf(mn0),hi=vals.indexOf(mx0);
+  const dot=(k,lab,up)=>`<circle cx="${X(k)}" cy="${Y(vals[k])}" r="4.5" fill="#05070c" stroke="${clr}" stroke-width="2.5"/><text x="${Math.min(W-R-4,Math.max(L+4,X(k)))}" y="${Y(vals[k])+(up?-12:20)}" fill="#fff" font-size="13" font-family="Rajdhani" font-weight="700" text-anchor="middle">${lab}</text>`;
+  return `<svg id="chart" viewBox="0 0 ${W} ${H}" style="height:auto"><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${clr}" stop-opacity=".32"/><stop offset="1" stop-color="${clr}" stop-opacity="0"/></linearGradient></defs>${g}<path d="${area}" fill="url(#ag)"/><polyline points="${pts}" fill="none" stroke="${clr}" stroke-width="2.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>${hi!==last&&hi!==0?dot(hi,'high '+fmt(mx0),true):''}${lo!==last&&lo!==0&&lo!==hi?dot(lo,'low '+fmt(mn0),false):''}<circle cx="${X(last)}" cy="${Y(vals[last])}" r="6" fill="${clr}" stroke="#05070c" stroke-width="2"/></svg>`;}
+function render(){
+  const isU=S.tok==='UFO',clr=isU?'#8DFF3A':'#F2D35B',{rows,since,fl}=slice(),a=rows[0],b=rows[rows.length-1];
+  const flb=fl&&fl[S.basis==='circ'?'circ':'start'];
+  if(S.view==='card'){render.card(isU,clr,rows,since);return;}
+  const cards=TIERS.map(([n,img,th],i)=>{const v0=col(a,i),v1=col(b,i);const vals=rows.map(r=>col(r,i));
+    return `<button class="cd${S.sel===i?' on':''}" onclick="S.sel=${i};render()"><div class="top"><img src="${sea(img)}" alt=""><div><div class="nm">${n}</div><div class="th">${th==='below Shrimp'?th:'≥ '+th+' of supply'}</div></div></div>
+      <div class="v">${fmt(v1)}</div><div class="ch">${chTxt(v0,v1)}</div>
+      <div class="jl">${flb?`<b class="up">+${fmt(flb[0][i])}</b> joined · <b class="dn">−${fmt(flb[1][i])}</b> left`:''}</div>${spark(vals,120,34,clr)}</button>`;}).join('');
+  const i=S.sel,v0=col(a,i),v1=col(b,i),[n,img]=TIERS[i];
+  const perTxt=since?`since ${mdate(since,true)}`:`${mdate(a[0],true)} → ${mdate(b[0],true)}`;
+  document.getElementById('ov').innerHTML=`
+  ${S.view==='entry'?`<div style="width:100%"><div class="lab">THE ENTRY — THE TOKEN ALLOCATION PANEL'S CREATURE STRIP BECOMES A BUTTON</div>
+    <div class="strip"><span class="go">HISTORY ›</span>${[['trident',0],['whale',1],['shark',2],['dolphin',3]].map(([im,k])=>`<span><img src="${sea(im)}">${fmt(col(b,k))}</span>`).join('')}<span><img src="${sea('squid')}">→<img src="${sea('shell')}">${fmt([4,5,6,7].reduce((s,k)=>s+col(b,k),0))}</span></div></div>`:''}
+  ${S.view==='entry'?'':`<div class="win${isU?' ufo':''}" role="dialog" aria-label="League history">
+    <div class="hd"><div class="sky"></div><div class="veil"></div><button class="cam">📷 SHARE</button><button class="x" aria-label="Close">×</button>
+      <div class="hc"><img class="coin" src="${logo(S.tok)}" alt=""><h2><span class="t">${S.tok}</span><span class="w">LEAGUE HISTORY</span></h2>
+        <div class="sub">How many of each sea creature hold ${S.tok} — every day since ${isU?'Jul 8, 2026':'launch, Oct 2023'}</div>
+        <div class="ctl">
+          <div class="tg">${['PTGC','UFO'].map(t=>`<button class="${S.tok===t?'on':''}" onclick="S.tok='${t}';render()"><img src="${logo(t)}">${t}</button>`).join('')}</div>
+          <div class="tg">${PERS.map(([k])=>`<button class="${S.per===k?'on':''}" onclick="S.per='${k}';render()">${k}</button>`).join('')}</div>
+          <div class="tg"><button class="${S.basis==='start'?'on':''}" onclick="S.basis='start';render()">STARTING SUPPLY</button><button class="${S.basis==='circ'?'on':''}" onclick="S.basis='circ';render()">CIRCULATING</button></div>
+        </div></div></div>
+    <div class="body">
+      <div class="cards">${cards}</div>
+      <div class="big"><div class="bh"><div class="l"><img src="${sea(img)}" alt=""><div><div class="t">${n.toUpperCase()}S OVER TIME</div><div class="s"><b>${fmt(v0)}</b> → <b>${fmt(v1)}</b> ${chTxt(v0,v1)} <span style="color:rgba(255,255,255,.45)">· ${perTxt}</span></div></div></div>
+        <div class="r"><div class="pill"><div class="k">JOINED</div><div class="n up">+${flb?fmt(flb[0][i]):'—'}</div></div><div class="pill"><div class="k">LEFT</div><div class="n dn">−${flb?fmt(flb[1][i]):'—'}</div></div><div class="pill"><div class="k">ALL HOLDERS</div><div class="n">${fmt(col(b,0)*0+[0,1,2,3,4,5,6,7].reduce((s,k)=>s+col(b,k),0))}</div></div></div></div>
+        ${bigChart(rows,i,clr)}</div>
+      <div class="foot"><b>People only</b> — wallets holding ${S.tok}; pools, contracts, the burn address, the token contracts and the DAO${isU?' and UFO OA':''} wallets are left out (the same count as the Token Allocation strip). Leagues are a share of the <b>${S.basis==='circ'?'circulating supply that day (starting − burned)':'starting supply'}</b>. One point per UTC day, rebuilt from the chain. <b>Joined / left</b> = wallets that moved into or out of a league over the period (by buying, selling, or a burn changing the circulating line).</div>
+    </div></div>`}`;
+}
+render.card=(isU,clr,rows,since)=>{const a=rows[0],b=rows[rows.length-1];
+  document.getElementById('ov').innerHTML=`<div class="card${isU?' ufo':''}"><div class="sky"></div><div class="veil"></div><div class="in">
+   <div class="tt"><img src="${logo(S.tok)}"><div><h3><span class="t">${S.tok}</span> LEAGUES</h3><div class="pd">${S.per==='ALL'?'Since launch':S.per.replace('D',' days').replace('6M','6 months').replace('1Y','1 year')} · ${mdate(a[0],true)} → ${mdate(b[0],true)}</div></div></div>
+   <div class="g">${TIERS.map(([n,img],i)=>`<div class="c"><div class="r1"><img src="${sea(img)}"><div class="nm">${n.toUpperCase()}</div></div><div class="ft"><small>${fmt(col(a,i))} →</small>${fmt(col(b,i))}</div><div class="ch">${chTxt(col(a,i),col(b,i))}</div>${spark(rows.map(r=>col(r,i)),240,44,clr)}</div>`).join('')}</div></div>
+   <div class="bt"><span>People only · ${S.basis==='circ'?'circulating':'starting'} supply · rebuilt from the chain</span><b>PTGC-UFO.COM</b></div></div>`;};
+render();
+</script></body></html>

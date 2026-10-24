@@ -46,6 +46,30 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (evening): LEAGUE HISTORY window — BUILT, HIDDEN behind the faint bottom-right dot, NOT pushed.** (Shaka, after the mock:
+"Thats awesome... Lets build it, but I dont want to make it live yet.. hide this behind a small faint dot in the bottom right corner of
+the dashboard … then when I am ready I can tell you to go live and you can move it to where they can click the sea creature bar.")
+Build = `python3 tools/league-history.py` (idempotent; from `36377545b` index.html sha256 6a3329a9, re-runs "0 edit(s)"; it also wires
+the pipeline step). New: `scripts/build-league-history.mjs`, `tools/league-history/lh.css` + `lh.jsx` (the fragments — edit those, never
+the spliced copy), `data/league-history.json` (104 KB, built here so the window works right after the push), probes lh-state.js /
+lh-hover.js. Design + data notes: `design/creatures/README.md`.
+*Data:* the rank-history archive walked day by day (people only = the strip's population), counts of all 8 leagues per UTC day on
+the starting AND circulating basis; circulating = starting − balanceOf(0x369) at each day's last block (cached per archive day in the
+file; one read per new day); joined / left for 7D … ALL (a wallet's league on the period's first day vs the last; joined − left = the
+change — checked for every league, period and basis: 0 mismatches). The history starts on the first day with a holder (PTGC
+2023-10-11, UFO 2026-07-09). Oct 23 PTGC 0 / 12 / 96 / 696 / 2,226 / 2,930 / 1,844 / 9,276 (= the mock; circulating 286,997,740,190
+from balanceOf = the same as the burn-archive sum). Pipeline: step `league-history` in the holder-ranks lane after rank-history (no
+gate; writes only when the archive has a new day — a no-op run takes ~1 s), commit list + `only` description updated.
+*Window (LeagueHistoryModal, index.html, Modal shell → Escape / Back close it):* the mock as built — PTGC / UFO, 7D … ALL (remembered:
+LS.LH_PER), Starting / Circulating, eight cards (count, ▲▼ change %, joined / left, sparkline), the big chart of the tapped league
+(high / low, today's dot, hover / touch readout of any day), JOINED / LEFT / ALL HOLDERS, the foot (people only, basis, "history to
+the close of Oct 23 (UTC)", amber past 2 days), 📷 = a Wide 1200 × 675 screenshot card. Loading = skeleton cards; a failed read =
+"Couldn't load … RETRY". `LhDot` (the VsDot pattern) opens it on the dashboard tab while `LEAGUE_HISTORY_LIVE=false`.
+*Evidence (harness, real data):* the dot opens it; 6M Sharks 103 → 96 ▼ 7, +21 / −28; 1Y circulating Whales 16 → 13, +1 / −4; hover
+"Aug 9, 2026 98"; share card renders; Escape closes the card first, then Back closes the window and stays on #/ptgc; 390 px UFO
+cards two across, no sideways scroll; missing file → Retry; dashboard DOM = before + the dot only; a LIVE copy: no dot, the strip is
+a button with a "HISTORY ›" tag and opens the window (1280 / 390, no overflow); compile + ci-mount 7/7; tw.css unchanged.
+
 **2026-10-24 (afternoon): ROADMAP + D-4 + D-6 + AUDIT IV P3s + P-5 / P-11 / M-13 — BUILT on the Mac, NOT pushed.** (Shaka, on
 the "what's next" list: "1 no [share link], 2 yes, 3 yes, 4 yes, 5 yes, 6 yes"; then picked "256 bigger files" for D-6, "Chart
 counts it too" for M-13, "Later" for e43's names / gold mock-up.) Build, in this order (all idempotent, re-runs "0 edit(s)"; a clean
@@ -2009,7 +2033,16 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--38. **Roadmap + D-4 + D-6 + e42/e44/e45/e46 + P-5/P-11/M-13 (2026-10-24 afternoon) — BUILT, NOT pushed.** His push → Claude's
+-40. **LEAGUE HISTORY — BUILT hidden (2026-10-24 evening), NOT pushed.** His push → Claude's check: the dot on ptgc-ufo.com opens the
+   window with the file's numbers; the next pipeline runs show `league-history` ok (a no-op until ~00:15 UTC, then it adds Oct 24).
+   GO LIVE when he says: `LEAGUE_HISTORY_LIVE=true` in tools/league-history/lh.jsx → `python3 tools/league-history.py` → push (the dot
+   goes, the Token Allocation creature strip becomes the button with "HISTORY ›"). Optional later: a Tall card shape.
+-39. **DONE — mock-up v1 approved ("Thats awesome... Lets build it"), see -40.** Was: **LEAGUE HISTORY window — mock-up v1 shown 2026-10-24, waiting for his notes** (`design/creatures/README.md`, renders in
+   `design/creatures/renders/`). His picks so far: all 8 leagues, cards + one big chart, joined / left, Starting / Circulating,
+   share card, PTGC + UFO. Data = the rank-history archive walked day by day (real, people only, matches the strip). Build after
+   his OK: a `data/league-history.json` output in the rank-history step, the window (module scope, PfModal-style dialog), the strip
+   as its button, the card (screenshot-only, Wide + Tall?).
+-38. **DONE — pushed `36377545`, live-verified (lazy Chart.js, h1, skip link, panel names); pipeline + rank reshard checks still owed.** Was: **Roadmap + D-4 + D-6 + e42/e44/e45/e46 + P-5/P-11/M-13 (2026-10-24 afternoon) — BUILT, NOT pushed.** His push → Claude's
    checks: (1) the next Data Pipeline run is green and no step slower (a "rpc pool:" line only if the primary failed); (2) after
    ~00:15 UTC Oct 25 data/rank-index/PTGC has 256 files + meta `shard: 2` (or Run workflow only=rank-history force=true now);
    the rank window still draws; (3) dao-buys.json `tokenPaidBuys: 3`, July = 6 buys; (4) live: #/ptgc boots with no chart.umd.js
