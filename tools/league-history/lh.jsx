@@ -128,7 +128,7 @@
             <div className="lh-bm-tip" ref={tipRef} style={{'--g':LH_BEAM_C[h][3]}} aria-hidden="true">
               <img src={lhSea(img)} alt=""/><div><div className="n">{nm.toUpperCase()} {'\u00B7'} {lhFmt(c)} WALLET{c===1?'':'S'}</div>
                 <div className="v">{sh!=null?`${sh}%`:'\u2014'}<small>{fmtAbbr(row[h])} {tok}</small></div>
-                {bw&&<div className="bn">{'\u{1F525}'} {c===1?'the Burn address':'incl. the Burn address'}</div>}</div></div>);})()}
+                {bw&&<div className="bn">{c===1?'the Burn address':'incl. the Burn address'}</div>}</div></div>);})()}
         </div>);
     };
     /* the share card — Wide 1200 × 675 (screenshot-only, like the other v2 cards). v2 (2026-10-24, Shaka: "update the card to have the
@@ -147,7 +147,7 @@
               <div className="vr"><span className="ft">{lhFmt(b)}</span><span className="ch"><LhChange a={a} b={b}/></span></div>
               {held&&<div className="hd">hold <b>{fmtAbbr(held[last][i])}</b>{sh!=null&&<> {'\u00B7'} {sh}%</>}</div>}
               <LhSpark vals={rows.slice(i0).map(r=>r[i])} w={240} h={40} col={LH_BEAM_C[i][1]}/></div>);})}</div></div>
-          <div className="bt"><span>People only + the {'\u{1F525}'} burn wallet {'\u00B7'} {basis==='circ'?'circulating':'starting'} supply {'\u00B7'} rebuilt from the chain</span><b>PTGC-UFO.COM</b></div>
+          <div className="bt"><span>People only + the burn wallet {'\u00B7'} {basis==='circ'?'circulating':'starting'} supply {'\u00B7'} rebuilt from the chain</span><b>PTGC-UFO.COM</b></div>
         </div>);
     };
     const LeagueHistoryModal=({token,onClose})=>{
@@ -200,14 +200,13 @@
                 <LhBeam t={t} tok={tok} basis={basis} last={last} onSel={setSel} shareOf={shareOf}/>
                 <div className="lh-cards">{LH_TIERS.map(([n,img,th],i)=>{const a=rows[i0][i],b=rows[last][i];return(
                   <button type="button" key={n} className="lh-cd" style={{'--cc':LH_BEAM_C[i][1],'--cg':LH_BEAM_C[i][3]}} aria-pressed={sel===i} onClick={()=>setSel(i)} aria-label={`${n}: ${lhFmt(b)} now, ${b===a?'no change':`${b>a?'up':'down'} ${lhFmt(Math.abs(b-a))}`} over ${pd[2]} — show the chart`}>
-                    <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/>{t.burnIn&&t.burnIn[basis]===i&&<span className="bw" title="Includes the burn wallet (0x…0369)" aria-label="includes the burn wallet">{'\u{1F525}'}</span>}</span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div>{t.burnIn&&t.burnIn[basis]===i&&<div className="bwl">{b===1?'The Burn address':'incl. the Burn address'}</div>}</div></div>
+                    <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/></span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div>{t.burnIn&&t.burnIn[basis]===i&&<div className="bwl">{b===1?'The Burn address':'incl. the Burn address'}</div>}</div></div>
                     <div className="vr"><div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div></div>
                     {held&&<div className="hd2">hold <b>{fmtAbbr(held[last][i])}</b> {'\u00B7'} {shareOf(held[last][i],last)}%</div>}
                     {held&&<div className="av">{b>1?<>~<b>{per1(held[last][i],b)}</b> per {n.toLowerCase()}</>:b===1?'one wallet':'no wallets'}</div>}
                     <div className="jl">{fl?<><b className="lh-up">+{lhFmt(fl[0][i])}</b> joined {'·'} <b className="lh-dn">{'−'}{lhFmt(fl[1][i])}</b> left</>:' '}</div>
                     {(()=>{const v=rows.slice(i0).map(r=>r[i]);return<div className="hl">High <b>{lhFmt(Math.max(...v))}</b> {'\u00B7'} Low <b>{lhFmt(Math.min(...v))}</b></div>;})()}
                     <LhSpark vals={rows.slice(i0).map(r=>r[i])} col={LH_BEAM_C[i][1]}/>   {/* the league's colour (the beam's) */}
-                    {sel===i&&<span className="lh-on" aria-hidden="true">{'\u25BC'} IN THE CHART</span>}
                   </button>);})}</div>
                 {(()=>{const[n,img]=LH_TIERS[sel],a=rows[i0][sel],b=rows[last][sel];return(
                   <div className="lh-big">
@@ -216,7 +215,7 @@
                         :<div className="s"><b>{lhFmt(a)}</b> {'→'} <b>{lhFmt(b)}</b> <LhChange a={a} b={b}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>}
                       {(tm||bm)&&<div className="s s3"><b>{lhFmt(total)}</b> holder wallets {'\u00B7'} people only</div>}
                       {bm&&<div className="s s2">hold <b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/></div>}</div></div>
-                      <div className="r">{(()=>{const nt=fl?fl[0][sel]-fl[1][sel]:b-a;return<div className="lh-pill net"><div className="k"><span className="lg">NET CHANGE</span><span className="sm">NET</span></div><div className={`n ${nt>0?'lh-up':nt<0?'lh-dn':''}`}>{nt>0?'+':nt<0?'\u2212':''}{lhFmt(Math.abs(nt))}</div></div>;})()}<div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
+                      <div className="r"><div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
                         <div className="lh-pill"><div className="k">LEFT</div><div className="n lh-dn">{fl?'−'+lhFmt(fl[1][sel]):'—'}</div></div>
                         {tm||bm?<div className="lh-pill"><div className="k"><span className="lg">SHARE OF SUPPLY</span><span className="sm">SHARE</span></div><div className="n">{shareOf(held[last][sel],last)}%</div></div>
                           :<div className="lh-pill" title="People only: pools and contracts are not counted (the dashboard's HOLDERS counts every address)"><div className="k">HOLDER WALLETS</div><div className="n">{lhFmt(total)}</div></div>}</div></div>
@@ -230,7 +229,7 @@
                           v2={held.slice(i0).map(r=>r[sel])} rd={q=>{const v=held[i0+q][sel],c=rows[i0+q][sel],sh=shareOf(v,i0+q),e=per1(v,c);return[un(c),`hold ${fmtAbbr(v)}${sh!=null?` (${sh}%)`:''}${e&&c>1?` \u00B7 ~${e} each`:''}`];}}/>
                         :<LhChart key="w" vals={rows.slice(i0).map(r=>r[sel])} day0={t.day0} i0={i0} col={col} tl="WALLETS" rd={q=>[un(rows[i0+q][sel]),null]}/>;})()}
                   </div>);})()}
-                <div className="lh-foot"><b>People only, plus the {'\u{1F525}'} burn wallet</b> {'—'} wallets holding {tok}; pools, contracts, the token contracts and the DAO{isU?' and UFO OA':''} wallets are left out; the burn wallet counts in the league its balance puts it in (the same count as the Token Allocation strip). Leagues are a share of the <b>{basis==='circ'?'circulating supply that day (starting − burned)':'starting supply'}</b>. One point per UTC day, rebuilt from the chain {'·'} <span className={ageDays>2?'old':undefined}>history to the close of {lhDate(lhDay(t.day0,last),true)} (UTC)</span>. <b>Hold</b> = the tokens that league{'\u2019'}s wallets hold that day, and their share of the {basis==='circ'?'circulating':'starting'} supply. <b>Joined / left</b> = wallets that moved into or out of a league over the period (by buying, selling, or {basis==='circ'?'a burn moving the line':'moving tokens'}); joined {'−'} left = the change. The history runs to yesterday{'’'}s close (UTC); the creature strip on the dashboard is updated every hour, so a count there can differ by one or two.</div>
+                <div className="lh-foot"><b>People only, plus the burn wallet</b> {'—'} wallets holding {tok}; pools, contracts, the token contracts and the DAO{isU?' and UFO OA':''} wallets are left out; the burn wallet counts in the league its balance puts it in (the same count as the Token Allocation strip). Leagues are a share of the <b>{basis==='circ'?'circulating supply that day (starting − burned)':'starting supply'}</b>. One point per UTC day, rebuilt from the chain {'·'} <span className={ageDays>2?'old':undefined}>history to the close of {lhDate(lhDay(t.day0,last),true)} (UTC)</span>. <b>Hold</b> = the tokens that league{'\u2019'}s wallets hold that day, and their share of the {basis==='circ'?'circulating':'starting'} supply. <b>Joined / left</b> = wallets that moved into or out of a league over the period (by buying, selling, or {basis==='circ'?'a burn moving the line':'moving tokens'}); joined {'−'} left = the change. The history runs to yesterday{'’'}s close (UTC); the creature strip on the dashboard is updated every hour, so a count there can differ by one or two.</div>
               </>}
             </div>
           </div>

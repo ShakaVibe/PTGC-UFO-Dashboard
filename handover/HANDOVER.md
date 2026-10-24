@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -74,6 +74,14 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-22)
+
+**2026-10-24 (late night): League History — undo NET + the tab, no 🔥 — BUILT, NOT pushed.** (Shaka: "I don't like how the net made
+you change it all to a new line.. put it back.. let's not put the net"; "I don't like the text 'in the chart' — rather the border";
+"I also don't like the fire emoji you added to Poseidon".) `python3 tools/lh-cards-fix.py` (from `ce3ea771` → index.html ecf7947d,
+lh.jsx 90faab4e, lh.css c7a99d7b): NET CHANGE gone, JOINED / LEFT / SHARE back beside the title; the IN THE CHART tab gone — the
+selected card's frame is 2.5 px bright token colour + a stronger glow + the lift; NO 🔥 for the burn wallet anywhere (window card,
+beam tip, footers, share card, the dashboard strip icon + phone caption). Kept from lh-cards-live: hover, High · Low, darker plot,
+glowing lines, the mascot. DON'T bring back: NET CHANGE, text tabs on the selected card, the flame emoji.
 
 **2026-10-24 (late night, after the wrap): League History — Shaka's six — BUILT, NOT pushed.** `python3 tools/lh-cards-live.py`
 (from `a33e4dd4`+data → index.html 55e73c4d, lh.jsx 438de175, lh.css c4b96417): (1) the selected card lifted with a gold / blue inner
@@ -2161,7 +2169,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--50. **LEAGUE HISTORY "six" (selected card, hover, High·Low, darker plot, mascot, NET CHANGE) — BUILT, NOT pushed.**
+-51. **LEAGUE HISTORY undo NET + tab, no 🔥 — BUILT, NOT pushed.**
+-50. **DONE — pushed `ce3ea771`** ("six"; NET + tab + 🔥 then removed in -51).
 -49. **DONE — pushed `a33e4dd4`.** (always-1Y + lit coin + share card v2) — session wrapped here, see START HERE.
 -48. **DONE — pushed `e4ed57ea`.** (chart art + axis titles + border + bigger creatures)
 -47. **DONE — pushed `f8db2d0a`.** (bigger creatures + brighter header + coloured sparklines)
