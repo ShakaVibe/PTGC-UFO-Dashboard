@@ -204,12 +204,12 @@
                     <div className="lh-bh"><div className="l"><img src={lhSea(img)} alt=""/><div><h3>{n.toUpperCase()}S {tm?'\u2014 TOKENS HELD':bm?'\u2014 WALLETS + TOKENS HELD':'OVER TIME'}</h3>
                       {tm?<div className="s"><b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>
                         :<div className="s"><b>{lhFmt(a)}</b> {'→'} <b>{lhFmt(b)}</b> <LhChange a={a} b={b}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>}
-                      {(tm||bm)&&<div className="s s3"><b>{lhFmt(total)}</b> holders of {tok} in all</div>}
+                      {(tm||bm)&&<div className="s s3"><b>{lhFmt(total)}</b> holder wallets {'\u00B7'} people only {'\u2014'} pools and contracts not counted</div>}
                       {bm&&<div className="s s2">hold <b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/></div>}</div></div>
                       <div className="r"><div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
                         <div className="lh-pill"><div className="k">LEFT</div><div className="n lh-dn">{fl?'−'+lhFmt(fl[1][sel]):'—'}</div></div>
                         {tm||bm?<div className="lh-pill"><div className="k"><span className="lg">SHARE OF SUPPLY</span><span className="sm">SHARE</span></div><div className="n">{shareOf(held[last][sel],last)}%</div></div>
-                          :<div className="lh-pill"><div className="k">ALL HOLDERS</div><div className="n">{lhFmt(total)}</div></div>}</div></div>
+                          :<div className="lh-pill" title="People only: pools and contracts are not counted (the dashboard's HOLDERS counts every address)"><div className="k">HOLDER WALLETS</div><div className="n">{lhFmt(total)}</div></div>}</div></div>
                     {held&&<div className="lh-mrow"><div className="lh-tg lh-mode" role="group" aria-label="Chart"><button type="button" aria-pressed={bm} onClick={()=>setMode('b')}>BOTH</button><button type="button" aria-pressed={!tm&&!bm} onClick={()=>setMode('w')}>WALLETS</button><button type="button" aria-pressed={tm} onClick={()=>setMode('t')}>TOKENS HELD</button></div>
                       {bm&&<div className="lh-lg" aria-hidden="true"><span><i style={{background:col}}></i>Wallets <em>left</em></span><span><i className="a"></i>Tokens held <em>right</em></span></div>}</div>}
                     {(()=>{const nm=n.toLowerCase(),un=c=>`${lhFmt(c)} ${c===1?nm:nm+'s'}`;   // lh2: what the readout row says for day q of the slice

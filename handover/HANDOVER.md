@@ -46,6 +46,15 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (night): League History — bigger header / boxes / readout + the holders wording — BUILT, NOT pushed.** (Shaka: "why the
+discrepancy of holders.. 18206 on the front page.. 17081 here" + bigger title lines, JOINED / LEFT / SHARE boxes, readout row.)
+`python3 tools/lh-bigger.py` (from `1afb7a5a` → index.html 74242784, lh.jsx 67d229f4, lh.css 39cc2981). The two numbers are both
+right: the dashboard HOLDERS tile = every address holding the token (PulseScan's count, live), League History = people only (the
+rank archive skips contracts — 1,341 contract addresses seen for PTGC: LP pairs, routers, bots, contract wallets — and the
+excluded DAO / token wallets) to yesterday's close. The line now says "17,081 holder wallets · people only — pools and contracts
+not counted"; the WALLETS-view pill reads HOLDER WALLETS. Bigger: .lh-bh .s 18 px, boxes 26 px figures / 12 px labels, readout
+19.5 px; on desktop the boxes stay at the right (the title lines wrap).
+
 **2026-10-24 (night): League History — the ownership BEAM + card layout + strip label — BUILT, NOT pushed.** (Shaka: a bar of the
 ownership by league, "like the burn bar … a glowing beam of light … match the colors to the emojis"; mock-ups v1 (labels + key —
 "just want the bar"), v2 (beam), v3 (thinner, full to the end: A = pools lit violet / B = leagues stretched) → picked **B**; also
@@ -2094,7 +2103,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--45. **LEAGUE HISTORY BEAM + card layout + strip label — BUILT, NOT pushed.** His push → Claude: live look (UFO strip has no
+-46. **LEAGUE HISTORY bigger header + holders wording — BUILT, NOT pushed.**
+-45. **DONE — pushed `1afb7a5a`, live-checked (strip, beam).** Was: **LEAGUE HISTORY BEAM + card layout + strip label — BUILT, NOT pushed.** His push → Claude: live look (UFO strip has no
    "incl." text; the dot's window shows the beam; hover tips).
 -44. **DONE — pushed `bb42f591`, live-checked, 11 roadmap items ticked.** Was: **LEAGUE HISTORY BATCH 1 — BUILT, NOT pushed.** His push → Claude: tick the 11 items on the roadmap artifact; the next daily
    `league-history` run (~00:15 UTC) must say "1 burn reading(s)" (not 1,100) and keep schema 4. Left on the list: lh1 (go live),
