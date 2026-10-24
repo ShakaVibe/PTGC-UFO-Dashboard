@@ -4,7 +4,14 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-24 night wrap, updated after the late round) — everything PUSHED through lh-leagues-btn (see Next up -57)
+## START HERE (2026-10-24 final wrap) — everything PUSHED (`036ffc3b`), working tree clean
+
+**PLAN FOR THE NEXT SESSION (Shaka, 2026-10-24 night): "any last little bit of polishing tomorrow, and look to make it live
+tomorrow."** So: (1) the owed checks below (the first daily league-history run after 00:15 UTC Oct 25 — Oct 24 as "latest",
+"1 burn reading(s)", schema 4); (2) ask him for any last polish (show it with a mock-up / render first — he likes that); (3) GO
+LIVE on his word: `LEAGUE_HISTORY_LIVE=true` in tools/league-history/lh.jsx → `python3 tools/league-history.py` → harness check
+(the dot gone, the Token Allocation creature strip is the button with "HISTORY ›", PTGC + UFO, desktop + 390 px) → push → live
+check in the browser pane → tick lh1 on the roadmap artifact. Possibly a short announcement for him (he likes short ones in his voice).
 
 **League History** — the new window: every sea creature over time, PTGC + UFO, 7D … ALL, starting / circulating supply.
 - **Still HIDDEN** behind the faint dot at the bottom right of the dashboard (`LEAGUE_HISTORY_LIVE=false` in
@@ -2211,7 +2218,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--58. **LEAGUE HISTORY small LEAGUES + SHARE pills — BUILT, NOT pushed (last change of 2026-10-24).** After his push the day is done; next session starts at START HERE.
+-58. **DONE — pushed `036ffc3b`** (small LEAGUES + SHARE pills) — the last change of 2026-10-24. Next: START HERE (polish → go live).
 -57. **DONE — pushed `919f9b7e`** (Leagues button).
 -56. **DONE — pushed `3c87dfda`** (High pill always shows).
 -55. **DONE — pushed `11d9e036`** (NET apart + quiet words + story line).
