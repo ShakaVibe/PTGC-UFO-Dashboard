@@ -131,23 +131,28 @@
                 {bw&&<div className="bn">{'\u{1F525}'} {c===1?'the Burn address':'incl. the Burn address'}</div>}</div></div>);})()}
         </div>);
     };
-    /* the share card: Wide 1200 × 675, the eight leagues then → now with sparklines (screenshot-only, like the other v2 cards) */
-    const LhShareCard=({tok,t,per,basis,i0})=>{const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',rows=t[basis],last=rows.length-1,pd=LH_PERS.find(p=>p[0]===per);
+    /* the share card — Wide 1200 × 675 (screenshot-only, like the other v2 cards). v2 (2026-10-24, Shaka: "update the card to have the
+       new look"): the lit coin, the ownership beam, the eight leagues with the big creatures, count + change on one line, the tokens
+       held, league-coloured sparklines. */
+    const LhShareCard=({tok,t,per,basis,i0,shareOf})=>{const isU=tok==='UFO',rows=t[basis],last=rows.length-1,pd=LH_PERS.find(p=>p[0]===per);
+      const held=t.held&&t.held[basis],total=rows[last].reduce((s,v)=>s+v,0);
       return(
-        <div className={`lh-card${isU?' u':''}`}><div className="sky"></div><div className="veil"></div><div className="in">
-          <div className="tt"><img src={TOKENS[tok].logo} alt=""/><div><div className="h"><span className="t">{tok}</span> LEAGUES</div>
-            <div className="pd">{i0===0&&pd[1]!=null?`Since ${lhDate(lhDay(t.day0,0),true)}`:pd[0]==='ALL'?'Since launch':pd[2].replace(/^./,c=>c.toUpperCase())} {'·'} {lhDate(lhDay(t.day0,i0),true)} {'→'} {lhDate(lhDay(t.day0,last),true)}</div></div></div>
-          <div className="g">{LH_TIERS.map(([n,img],i)=>{const a=rows[i0][i],b=rows[last][i];return(
+        <div className={`lh-card v2${isU?' u':''}`}><div className="sky"></div><div className="veil"></div><div className="in">
+          <div className="tt"><div className="cw"><LgCoin token={tok}/></div><div className="tx"><div className="h"><span className="t">{tok}</span> LEAGUE HISTORY</div>
+            <div className="pd">{(i0===0&&pd[1]!=null&&pd[1]>last)||pd[0]==='ALL'?'Since launch':`Last ${pd[2]}`} {'\u00B7'} {lhDate(lhDay(t.day0,i0),true)} {'\u2192'} {lhDate(lhDay(t.day0,last),true)}</div></div>
+            <div className="tot"><b>{lhFmt(total)}</b><span>holder wallets</span></div></div>
+          {held&&<div className="bmw"><LhBeam t={t} tok={tok} basis={basis} last={last} onSel={()=>{}} shareOf={shareOf}/></div>}
+          <div className="g">{LH_TIERS.map(([n,img],i)=>{const a=rows[i0][i],b=rows[last][i],sh=held?shareOf(held[last][i],last):null;return(
             <div className="c" key={n}><div className="r1"><img src={lhSea(img)} alt=""/><div className="nm">{n.toUpperCase()}</div></div>
-              <div className="ft"><small>{lhFmt(a)} {'→'}</small>{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/>{t.held&&t.held[basis]&&<span className="hd"> {'\u00B7'} hold {fmtAbbr(t.held[basis][last][i])}</span>}</div>
-              <LhSpark vals={rows.slice(i0).map(r=>r[i])} w={240} h={44} col={col}/></div>);})}</div></div>
-          <div className="bt"><span>People only + the {'\u{1F525}'} burn wallet {'·'} {basis==='circ'?'circulating':'starting'} supply {'·'} rebuilt from the chain</span><b>PTGC-UFO.COM</b></div>
+              <div className="vr"><span className="ft">{lhFmt(b)}</span><span className="ch"><LhChange a={a} b={b}/></span></div>
+              {held&&<div className="hd">hold <b>{fmtAbbr(held[last][i])}</b>{sh!=null&&<> {'\u00B7'} {sh}%</>}</div>}
+              <LhSpark vals={rows.slice(i0).map(r=>r[i])} w={240} h={40} col={LH_BEAM_C[i][1]}/></div>);})}</div></div>
+          <div className="bt"><span>People only + the {'\u{1F525}'} burn wallet {'\u00B7'} {basis==='circ'?'circulating':'starting'} supply {'\u00B7'} rebuilt from the chain</span><b>PTGC-UFO.COM</b></div>
         </div>);
     };
     const LeagueHistoryModal=({token,onClose})=>{
       const[tok,setTok]=useState(token==='UFO'?'UFO':'PTGC');
-      const LH_PER_KEY='grays_lh_per_v2';   // v2 (2026-10-24): the default became 1Y — a new key so an earlier pick of 6M does not stick
-      const[per,setPer]=useState(()=>{const v=lsGet(LH_PER_KEY);return LH_PERS.some(p=>p[0]===v)?v:'1Y';});
+      const[per,setPer]=useState('1Y');   // every opening starts on 1Y (Shaka, 2026-10-24) — the pick is not remembered
       const[basis,setBasis]=useState('start');
       const[sel,setSel]=useState(2);   // Shark — the one he asked about
       const[file,setFile]=useState(undefined);   // undefined = loading, null = failed
@@ -163,7 +168,7 @@
       const fl=t&&t.flows&&t.flows[per]&&t.flows[per][basis];
       const ageDays=t?Math.floor((Date.now()-lhDay(t.day0,last).getTime())/86400e3):0;
       const span=rows?(i0===0&&pd[1]!=null&&pd[1]>last?`since ${lhDate(lhDay(t.day0,0),true)}`:`${lhDate(lhDay(t.day0,i0),true)} → ${lhDate(lhDay(t.day0,last),true)}`):'';
-      const setP=k=>{setPer(k);lsSet(LH_PER_KEY,k);};
+      const setP=k=>setPer(k);
       const total=rows?rows[last].reduce((s,v)=>s+v,0):null;
       /* tokens held per league (schema 3): `held[basis]` per day; the share is of the basis supply THAT day (circulating = starting − the
          burn wallet's balance, the `burned` line, which is per ARCHIVE day — offset by the days trimmed before the first holder) */
@@ -179,7 +184,7 @@
             <div className="lh-hd"><div className="sky" aria-hidden="true"></div><div className="veil" aria-hidden="true"></div>
               {rows&&<button type="button" className="lh-cam" onClick={()=>setShare(true)} aria-label="Share the league history as an image">{'\u{1F4F7}'}<span>SHARE</span></button>}
               <button type="button" className="lh-x" onClick={onClose} aria-label="Close">{'×'}</button>
-              <div className="lh-hc"><img className="lh-coin" src={TOKENS[tok].logo} alt=""/>
+              <div className="lh-hc"><div className="lh-coinw"><LgCoin token={tok}/></div>
                 <h2><span className="t">{tok}</span><span className="w">LEAGUE HISTORY</span></h2>
                 <div className="lh-sub">How many of each sea creature hold {tok} {'—'} every day since {t?lhDate(lhDay(t.day0,0),true):'launch'}</div>
                 <div className="lh-ctl">
@@ -228,7 +233,7 @@
             </div>
           </div>
           {share&&rows&&<ShareCardModal onClose={()=>setShare(false)} width={1200} height={675} zIndex={60} screenshot label={`${tok} league history share card`} filename={`${tok.toLowerCase()}-leagues-${per.toLowerCase()}-${new Date().toISOString().slice(0,10)}.png`}>
-            <LhShareCard tok={tok} t={t} per={per} basis={basis} i0={i0}/>
+            <LhShareCard tok={tok} t={t} per={per} basis={basis} i0={i0} shareOf={shareOf}/>
           </ShareCardModal>}
         </Modal>);
     };

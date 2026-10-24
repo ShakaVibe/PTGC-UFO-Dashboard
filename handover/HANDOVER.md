@@ -46,6 +46,14 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (night): League History — always 1Y, bigger card lines, darker chart panel, the lit coin, share card v2 — BUILT, NOT
+pushed.** `python3 tools/lh-card-v2.py` (from `e4ed57ea` → index.html 84d09d56, lh.jsx b48390ff, lh.css 60855c61): the period is
+no longer remembered (every opening = 1Y; the grays_lh_per_* keys are unused now); cards' hold / per-wallet / joined-left 18.5 / 17
+/ 18 px (phone 15.5 / 14.5 / 15.5); chart veil .7 → .9; header coin = `LgCoin` (the dashboard's lit coin — halo, corona, flares)
+at 112 px (phone 84); share card v2 (Wide 1200×675): lit coin, "TOKEN LEAGUE HISTORY", "Last 1 year / Since launch · from → to",
+holder-wallets total at the right, the ownership beam (LhBeam reused), eight cells with 58 px creatures, count + change on one
+line, "hold … · …%", league-coloured sparklines.
+
 **2026-10-24 (night): League History — chart art, axis titles, stronger border, bigger creatures — BUILT, NOT pushed.** (Shaka's
 chart mock-up + his underwater-ruins art; "shorten that long sentence"; "make the sea creature icons larger"; "a stronger border
 around the chart section".) `python3 tools/lh-chart-art.py` (from `f8db2d0a` → index.html d5480106, lh.jsx 422bde65, lh.css
@@ -2116,7 +2124,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--48. **LEAGUE HISTORY chart art + axis titles + border + bigger creatures — BUILT, NOT pushed.**
+-49. **LEAGUE HISTORY always-1Y + lit coin + share card v2 — BUILT, NOT pushed.**
+-48. **DONE — pushed `e4ed57ea`.** (chart art + axis titles + border + bigger creatures)
 -47. **DONE — pushed `f8db2d0a`.** (bigger creatures + brighter header + coloured sparklines)
 -46. **DONE — pushed `c00bcef9`.** (bigger header + holders wording)
 -45. **DONE — pushed `1afb7a5a`, live-checked (strip, beam).** Was: **LEAGUE HISTORY BEAM + card layout + strip label — BUILT, NOT pushed.** His push → Claude: live look (UFO strip has no
