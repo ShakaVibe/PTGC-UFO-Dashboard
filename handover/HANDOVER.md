@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -75,13 +75,18 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (late night): League History — the NET box where his mock-up put it — BUILT, NOT pushed.** `python3 tools/lh-net.py`
+(from `a67f5433` → index.html 5f1ad9b7, lh.jsx 30f27a0b, lh.css a7fcc22a): JOINED · LEFT · **NET** · SHARE OF SUPPLY in ONE row beside the
+title (NET = joined − left, coloured, gold frame); the four boxes smaller (76 px min, 22 px figures, centred labels), the title
+letter-spacing .12em + mascot padding 98 px so the title stays on one line; phone: four in one row (18 px figures, label SHARE).
+
 **2026-10-24 (late night): League History — undo NET + the tab, no 🔥 — BUILT, NOT pushed.** (Shaka: "I don't like how the net made
 you change it all to a new line.. put it back.. let's not put the net"; "I don't like the text 'in the chart' — rather the border";
 "I also don't like the fire emoji you added to Poseidon".) `python3 tools/lh-cards-fix.py` (from `ce3ea771` → index.html ecf7947d,
 lh.jsx 90faab4e, lh.css c7a99d7b): NET CHANGE gone, JOINED / LEFT / SHARE back beside the title; the IN THE CHART tab gone — the
 selected card's frame is 2.5 px bright token colour + a stronger glow + the lift; NO 🔥 for the burn wallet anywhere (window card,
 beam tip, footers, share card, the dashboard strip icon + phone caption). Kept from lh-cards-live: hover, High · Low, darker plot,
-glowing lines, the mascot. DON'T bring back: NET CHANGE, text tabs on the selected card, the flame emoji.
+glowing lines, the mascot. DON'T bring back: text tabs on the selected card, the flame emoji. (NET came back as a small box in the title row — `lh-net.py`, his mock-up.)
 
 **2026-10-24 (late night, after the wrap): League History — Shaka's six — BUILT, NOT pushed.** `python3 tools/lh-cards-live.py`
 (from `a33e4dd4`+data → index.html 55e73c4d, lh.jsx 438de175, lh.css c4b96417): (1) the selected card lifted with a gold / blue inner
@@ -2169,7 +2174,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--51. **LEAGUE HISTORY undo NET + tab, no 🔥 — BUILT, NOT pushed.**
+-52. **LEAGUE HISTORY NET box (his mock-up) — BUILT, NOT pushed.**
+-51. **DONE — pushed `a67f5433`** (undo NET + tab, no 🔥).
 -50. **DONE — pushed `ce3ea771`** ("six"; NET + tab + 🔥 then removed in -51).
 -49. **DONE — pushed `a33e4dd4`.** (always-1Y + lit coin + share card v2) — session wrapped here, see START HERE.
 -48. **DONE — pushed `e4ed57ea`.** (chart art + axis titles + border + bigger creatures)
