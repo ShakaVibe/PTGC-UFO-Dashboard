@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -74,6 +74,10 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-22)
+
+**2026-10-24 (late night): League History — the cards' High · Low line removed (Shaka: "that info is in the chart area already")
+— BUILT, NOT pushed.** `python3 tools/lh-no-hilo.py` (from `c6f76e58` → index.html faabbd74, lh.jsx 90e46c35; the `.lh-cd .hl` CSS
+stays unused).
 
 **2026-10-24 (late night): League History — the NET box where his mock-up put it — BUILT, NOT pushed.** `python3 tools/lh-net.py`
 (from `a67f5433` → index.html 5f1ad9b7, lh.jsx 30f27a0b, lh.css a7fcc22a): JOINED · LEFT · **NET** · SHARE OF SUPPLY in ONE row beside the
@@ -2174,7 +2178,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--52. **LEAGUE HISTORY NET box (his mock-up) — BUILT, NOT pushed.**
+-53. **LEAGUE HISTORY no High · Low on the cards — BUILT, NOT pushed.**
+-52. **DONE — pushed `c6f76e58`** (NET box).
 -51. **DONE — pushed `a67f5433`** (undo NET + tab, no 🔥).
 -50. **DONE — pushed `ce3ea771`** ("six"; NET + tab + 🔥 then removed in -51).
 -49. **DONE — pushed `a33e4dd4`.** (always-1Y + lit coin + share card v2) — session wrapped here, see START HERE.
