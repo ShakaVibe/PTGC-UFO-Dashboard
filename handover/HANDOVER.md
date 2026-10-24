@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`, `lh-story.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -74,6 +74,13 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-22)
+
+**2026-10-24 (late night): League History — NET apart on the cards, quiet words +1 px, the STORY line — BUILT, NOT pushed.**
+`python3 tools/lh-story.py` (from `468ff689` → index.html 593bb30d, lh.jsx 249029ca, lh.css 105a292b): cards "+28 joined · −37 left | −9 NET"
+(divider, NET 17 px, joined / left words 13 px); "PTGC held" / "avg per shark" 15 px; numbers a hair smaller + card padding 10 / 7 px
+so Shrimp / Shell stay one line; the story box under the chart (before the footer), from the selected league + period + basis:
+"1 YEAR IN SHARKS · Shark wallets fell from 105 → 96 (−8.6%), while their combined holdings fell from 88.80B → 76.69B PTGC (−13.6%)."
+(rose / fell / held steady at; SINCE LAUNCH when the period is longer than the history; ALL TIME for ALL.)
 
 **2026-10-24 (late night): League History — the cards' text hierarchy (his card-text mock-up, approved from a render) — BUILT, NOT
 pushed.** `python3 tools/lh-card-text.py` (from `aeeab384` → index.html b585d340, lh.jsx 98897a47, lh.css c741421b): "76.69B PTGC held ·
@@ -2184,7 +2191,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--54. **LEAGUE HISTORY card text hierarchy — BUILT, NOT pushed.**
+-55. **LEAGUE HISTORY NET apart + quiet words + story line — BUILT, NOT pushed.**
+-54. **DONE — pushed `468ff689`** (card text hierarchy).
 -53. **DONE — pushed `aeeab384`** (no High · Low on the cards).
 -52. **DONE — pushed `c6f76e58`** (NET box).
 -51. **DONE — pushed `a67f5433`** (undo NET + tab, no 🔥).
