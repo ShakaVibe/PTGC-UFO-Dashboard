@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -74,6 +74,12 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-22)
+
+**2026-10-24 (late night): League History — the cards' text hierarchy (his card-text mock-up, approved from a render) — BUILT, NOT
+pushed.** `python3 tools/lh-card-text.py` (from `aeeab384` → index.html b585d340, lh.jsx 98897a47, lh.css c741421b): "76.69B PTGC held ·
+23.0% supply" (amount white, share cyan #5CC8FF, words 14 px grey), "~798.83M avg per shark", "+28 joined · −37 left · −9 NET" (NET =
+joined − left; each number green / red / grey by sign); number + word kept together (`.g` nowrap) so phones wrap only between groups;
+tight "·" (`.w.d` margin −2 px) + card side padding 11 / 9 px so Shrimp / Shell stay one line at desktop width. Cards ~10 px shorter.
 
 **2026-10-24 (late night): League History — the cards' High · Low line removed (Shaka: "that info is in the chart area already")
 — BUILT, NOT pushed.** `python3 tools/lh-no-hilo.py` (from `c6f76e58` → index.html faabbd74, lh.jsx 90e46c35; the `.lh-cd .hl` CSS
@@ -2178,7 +2184,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--53. **LEAGUE HISTORY no High · Low on the cards — BUILT, NOT pushed.**
+-54. **LEAGUE HISTORY card text hierarchy — BUILT, NOT pushed.**
+-53. **DONE — pushed `aeeab384`** (no High · Low on the cards).
 -52. **DONE — pushed `c6f76e58`** (NET box).
 -51. **DONE — pushed `a67f5433`** (undo NET + tab, no 🔥).
 -50. **DONE — pushed `ce3ea771`** ("six"; NET + tab + 🔥 then removed in -51).
