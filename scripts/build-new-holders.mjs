@@ -32,6 +32,7 @@
 //
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/new-holders.json';
 const RPC = process.env.RPC || 'https://rpc.pulsechain.com';
@@ -86,7 +87,7 @@ const rpc = async (method, params, tries = 5) => {
     try {
       const ctl = new AbortController();
       const t = setTimeout(() => ctl.abort(), 30000);
-      const res = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' },
+      const res = await rpcPool.poolFetch({ attemptMs: 30000, method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctl.signal });
       clearTimeout(t);
       if (res.status === 429 || res.status >= 500) throw new Error('HTTP ' + res.status);

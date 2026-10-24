@@ -45,7 +45,7 @@
     };
     const T1Tile=({l,ic,v,f,cls=''})=>(<div className={`t1t ${cls}`}><div className="l">{ic&&T1I[ic]}{l}</div><div className="v">{v}</div>{f!=null&&<div className="f">{f}</div>}</div>);
     const T1Amt=({v,tok})=>(<>{fmtAbbr(v)}<small>{tok}</small></>);
-    const T1Cost=()=>(<span className="t1ii" tabIndex={0} aria-label="About the cost">i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></span>);
+    const T1Cost=()=>{const[o,setO]=useState(false);return(<button type="button" className={`t1ii${o?' open':''}`} aria-label="About the cost" aria-expanded={o} onClick={e=>{e.stopPropagation();setO(v=>!v);}} onBlur={()=>setO(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></button>);};   // e46: a tap toggles it (was hover / focus only)
     const T1Dot=({token,on,onToggle})=>(
       <button type="button" onClick={onToggle} aria-label="Top 100 (preview)" aria-pressed={on} title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
         <span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:(TOKENS[token]||TOKENS.PTGC).colorHex,opacity:on?0.4:0.16}}></span>

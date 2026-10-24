@@ -1,0 +1,2 @@
+// Audit IV P-11: the infinite animations running, and which CSS property each animates
+(()=>JSON.stringify(document.getAnimations().filter(a=>a.effect&&a.effect.getTiming().iterations===Infinity).map(a=>{const t=a.effect.target,ps=a.effect.pseudoElement||'';const kf=a.effect.getKeyframes();const props=[...new Set(kf.flatMap(k=>Object.keys(k).filter(x=>!['offset','easing','composite','computedOffset'].includes(x))))];return (a.animationName||'?')+'@'+(t.className&&t.className.baseVal===undefined?String(t.className).split(' ')[0]:t.tagName)+ps+'['+props.join(',')+']';})))()

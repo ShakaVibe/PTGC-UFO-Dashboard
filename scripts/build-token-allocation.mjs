@@ -30,6 +30,7 @@
 // live scan flaky; don't reintroduce it.
 
 import fs from 'node:fs';
+import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const RPC  = 'https://rpc.pulsechain.com';
 const SCAN = 'https://api.scan.pulsechain.com/api/v2';
@@ -63,7 +64,7 @@ async function rpc(to, data) {
   const body = { jsonrpc: '2.0', method: 'eth_call', params: [{ to, data }, 'latest'], id: 1 };
   for (let a = 0; a < 4; a++) {
     try {
-      const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await rpcPool.poolFetch({ attemptMs: 20000, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
       if (j && typeof j.result === 'string' && j.result.startsWith('0x')) return j.result;
     } catch {}

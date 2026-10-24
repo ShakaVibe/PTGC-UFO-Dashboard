@@ -68,14 +68,14 @@
        version here and you MUST regenerate its hash (openssl dgst -sha384 -binary f | openssl base64 -A).
        Tailwind's play CDN generates its script and does not allow cross-origin reads, so it
        cannot carry a hash; it is scheduled to be replaced by a build step. -->
-  <link rel="stylesheet" href="tw.css?v=6">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
+  <link rel="stylesheet" href="tw.css?v=7">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
   <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
   <!-- chart.umd.js is the file that actually ships in the chart.js package (already minified).
        chart.umd.min.js did not exist there; jsDelivr was minifying it on the fly, which is not
        a stable artifact to pin a hash against. -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
+  <!-- Audit IV P-5 (2026-10-24): Chart.js is loaded on demand by loadChartJs() (same file, same SRI) when a chart opens -->
   <!-- html2canvas (200 KB) was loaded on every visit but never called anywhere on the page;
        removed. Re-add it (lazily, inside the share-card handler) when the PNG download ships. -->
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -117,8 +117,11 @@
     .clickable:hover{transform:scale(1.02);cursor:pointer}
     @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
     @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
-    .buy-btn{--g:rgba(212,175,55,.28);position:relative;overflow:hidden;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);transition:all 0.3s ease;box-shadow:0 0 20px var(--g),inset 0 1px 0 rgba(255,255,255,0.15);animation:buyGlow 3s ease-in-out infinite}
-    @keyframes buyGlow{0%,100%{box-shadow:0 0 18px var(--g),inset 0 1px 0 rgba(255,255,255,0.15)}50%{box-shadow:0 0 34px var(--g),0 0 3px var(--g),inset 0 1px 0 rgba(255,255,255,0.22)}}
+    .buy-btn{--g:rgba(212,175,55,.28);position:relative;overflow:hidden;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);transition:all 0.3s ease;box-shadow:0 0 26px var(--g),inset 0 1px 0 rgba(255,255,255,0.18)}
+    /* Audit IV P-11 (2026-10-24): the pulse was a box-shadow keyframe (a repaint every frame while the page is open); now the outer glow is
+       static at the pulse's middle and the pulse is an inset glow whose OPACITY animates on a ::before (composited) */
+    .buy-btn::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 14px var(--g),0 0 0 1px var(--g);opacity:0;animation:buyGlowO 3s ease-in-out infinite}
+    @keyframes buyGlowO{0%,100%{opacity:0}50%{opacity:1}}
     .buy-btn::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.15) 45%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.15) 55%,transparent 60%);animation:shimmer 3s ease-in-out infinite}
     .buy-btn:hover{transform:scale(1.05);filter:brightness(1.15)}
     /* u8 `.tap` / `.tap-h`, the u7 / u9 focus rings and the c28 `.hit` box live in h2.css since 2026-10-07 (Audit III c28 / c29) —
@@ -132,7 +135,7 @@
     /* u9: honour the OS "reduce motion" setting. Looping/decorative animation stops and hover
        transforms go static; spinners (animate-spin) keep turning because they mean "working". */
     @media(prefers-reduced-motion:reduce){
-      .animate-fire,.animate-pulse-slow,.animate-pulse,[class*="animate-[sweep"],[class*="animate-[shimmer"],.buy-btn,.buy-btn::after{animation:none!important}
+      .animate-fire,.animate-pulse-slow,.animate-pulse,[class*="animate-[sweep"],[class*="animate-[shimmer"],.buy-btn,.buy-btn::before,.buy-btn::after{animation:none!important}
       .scroll-cue,.token-card,.buy-btn,.clickable,.transition-all,.transition-colors,.transition-opacity,.transition-transform,.transition{transition:none!important}
       .token-card:hover,.buy-btn:hover,.clickable:hover{transform:none}
     }
@@ -244,7 +247,7 @@
     @media(max-width:360px){h3.font-orbitron.uppercase{letter-spacing:.04em!important;gap:6px!important}}   /* Audit IV e37: the panel titles pushed their 📷 share buttons out of the panel on a 320 phone (and the Token Allocation title row scrolled the page) */
     .hc-dash:hover{background:var(--hc-c);color:#0b0b06;box-shadow:0 0 24px var(--hc-glow);transform:translateY(-1px)}
     .hc-dash svg{flex-shrink:0}
-    @supports not (height:100dvh){.h-\[100dvh\]{height:100vh}}   /* Audit IV e38: iOS 15.0–15.3 have no dvh — the phone windows fall back to 100vh */
+    @supports not (height:100dvh){.h-\[100dvh\]{height:100vh}.max-h-\[92dvh\]{max-height:92vh}.max-h-\[90dvh\]{max-height:90vh}.max-h-\[80dvh\]{max-height:80vh}}   /* + e46: the Leagues / disclaimer / Affiliates / Logos windows */   /* Audit IV e38: iOS 15.0–15.3 have no dvh — the phone windows fall back to 100vh */
     .hc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
     .hc-stats>div{display:flex;align-items:center;gap:10px;min-width:0;padding:10px;border-radius:10px;background:rgba(3,6,10,.62);border:1px solid var(--hc-panel);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
     @media(min-width:1024px){.hc-stats{gap:clamp(10px,1.1vw,16px)}.hc-stats>div{gap:clamp(8px,.8vw,14px);padding:clamp(12px,1.1vw,18px) clamp(10px,1vw,18px)}}
@@ -277,7 +280,9 @@
     .hc-buy{position:relative;overflow:hidden;height:58px;width:100%;border:1.5px solid var(--hc-c);border-radius:14px;display:flex;align-items:center;justify-content:center;gap:14px;
       background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 45%),rgba(3,6,10,.72);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);color:var(--hc-t);
       font-family:'Orbitron',monospace;font-weight:700;font-size:.82rem;letter-spacing:.26em;cursor:pointer;
-      box-shadow:0 0 18px var(--hc-glow2),inset 0 0 18px var(--hc-glow2),inset 0 1px 0 rgba(255,255,255,.12);animation:hcGlow 3s ease-in-out infinite;transition:background .2s ease,transform .2s ease}
+      box-shadow:0 0 23px var(--hc-glow2),inset 0 0 18px var(--hc-glow2),inset 0 1px 0 rgba(255,255,255,.14);transition:background .2s ease,transform .2s ease}   /* P-11: static — the pulse is the ::before's opacity */
+    .hc-buy::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 22px var(--hc-glow);opacity:0;animation:hcGlowO 3s ease-in-out infinite}
+    @keyframes hcGlowO{0%,100%{opacity:0}50%{opacity:.9}}
     .hc-buy span{text-shadow:0 0 10px var(--hc-glow)}
     @media(min-width:1024px){.hc-buy{height:clamp(62px,5.4vw,82px);font-size:clamp(.85rem,1.2vw,1.2rem);gap:clamp(14px,1.6vw,26px)}}
     .hc-buy img{position:relative;width:40px;height:40px;border-radius:50%;flex-shrink:0;filter:drop-shadow(0 0 8px var(--hc-glow))}
@@ -287,7 +292,7 @@
     .hc-buy::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;
       background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.10) 48%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.10) 52%,transparent 60%);animation:hcSweep 4s ease-in-out infinite}
     @keyframes hcSweep{0%{transform:translateX(-100%)}60%,100%{transform:translateX(100%)}}
-    @keyframes hcGlow{0%,100%{box-shadow:0 0 16px var(--hc-glow2),inset 0 0 16px var(--hc-glow2),inset 0 1px 0 rgba(255,255,255,.12)}50%{box-shadow:0 0 30px var(--hc-glow),inset 0 0 22px var(--hc-glow2),inset 0 1px 0 rgba(255,255,255,.16)}}
+    /* (P-11: the hcGlow box-shadow keyframes went with the pulse — see .hc-buy::before) */
     .hc-buy:hover{background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,0) 45%),rgba(12,14,10,.8);transform:translateY(-1px)}
     .hc-buy:active{transform:translateY(0)}
     .hc-maint{position:absolute;top:10px;right:10px;z-index:2;display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:rgba(234,179,8,.2);border:1px solid rgba(250,204,21,.4);color:#FEF08A;font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
@@ -335,11 +340,11 @@
     .hc-veil{background:radial-gradient(ellipse 62% 40% at 30% 22%,rgba(2,4,8,.86) 0%,rgba(2,4,8,.6) 55%,transparent 80%),linear-gradient(180deg,rgba(2,4,8,.64) 0%,rgba(2,4,8,.70) 32%,rgba(2,4,8,.80) 52%,rgba(2,4,8,.78) 78%,rgba(2,4,8,.68) 100%)}
     .hc-gold .hc-art{filter:saturate(.9) brightness(.85)}.hc-green .hc-art{filter:saturate(.85) brightness(.58)}
     .hc-yax{display:none}.hc-plot.hc-has-ax{padding-right:12px}   /* round 5: no price labels right of the chart (Shaka: "we dont need them there") — the faint price gridlines stay */
-    @media(prefers-reduced-motion:reduce){.hc-card,.hc-buy,.hc-dash,.hc-art{transition:none!important}.hc-card:hover,.hc-buy:hover,.hc-dash:hover,.hc-card:hover .hc-art{transform:none}.hc-buy,.hc-buy::after{animation:none!important}}
+    @media(prefers-reduced-motion:reduce){.hc-card,.hc-buy,.hc-dash,.hc-art{transition:none!important}.hc-card:hover,.hc-buy:hover,.hc-dash:hover,.hc-card:hover .hc-art{transform:none}.hc-buy,.hc-buy::before,.hc-buy::after{animation:none!important}}
   </style>
   <!-- the v2 header skin (h2-*) lives in h2.css since 2026-10-03 — shared with calculators / charts / portfolio. The
        link sits exactly where the inline block was (between the hc-* and p2-* blocks) so the cascade is unchanged. -->
-  <link rel="stylesheet" href="h2.css?v=4">
+  <link rel="stylesheet" href="h2.css?v=5">
   <style>
     /* ===== DASHBOARD PANELS v2 (2026-09-30) — the four panels under the KPI tiles (and the UFO page's
        "PTGC Burned by UFO") in the look Shaka approved in design/dashboard-panels/ (README there = every
@@ -1110,7 +1115,9 @@
     .t1ii{position:relative;display:inline-flex;width:15px;height:15px;border-radius:50%;border:1px solid rgba(255,255,255,.45);font:700 10px 'Rajdhani',sans-serif;color:rgba(255,255,255,.75);align-items:center;justify-content:center;cursor:help;letter-spacing:0;text-transform:none;outline:none}
     .t1ii .tip{display:none;position:absolute;right:-8px;top:22px;z-index:8;width:290px;border-radius:10px;border:1px solid rgba(242,211,91,.6);background:#0b0c10;padding:10px 12px;font:600 13.5px/1.35 'Rajdhani',sans-serif;color:rgba(255,255,255,.82);box-shadow:0 10px 30px rgba(0,0,0,.6);white-space:normal;text-align:left}
     .t1ii .tip b{color:#F6E98A}
-    .t1ii:hover .tip,.t1ii:focus .tip{display:block}
+    @media(hover:hover){.t1ii:hover .tip{display:block}}
+    .t1ii.open .tip{display:block}
+    button.t1ii{background:transparent;padding:0;margin:0}   /* e46: a button now — a tap toggles it; hover only with a mouse (a sticky :hover / kept focus held it open on phones) */
     .t1prog{margin-top:9px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,.62)}
     .t1prog .tr{flex:1;height:8px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
     .t1prog .tr i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,#B8891A,#F2D35B 70%,#FFF2B0);box-shadow:0 0 10px rgba(242,211,91,.55)}
@@ -3633,7 +3640,7 @@
       }
       return{...BURN_C[BURN_C.length-1],cnt:0};
     };
-    const getWhaleProgress=pct=>({whales:Math.floor(pct),progress:(pct-Math.floor(pct))*100});
+    const getWhaleProgress=pct=>{const w=creatureCount(pct,1);return{whales:w,progress:Math.max(0,(pct-w)*100)};};   // e46: the a42 epsilon (4.9999999 % is 5 whales)
     const getHolderTier=(holdingPct)=>{for(const tier of HOLDER_TIERS){if(holdingPct>=tier.p)return tier.n}return'Shell'};
     
     // Twitter image helpers
@@ -5579,8 +5586,8 @@
           if(h.length<256)return null;
           const w=i=>BigInt('0x'+h.slice(i*64,(i+1)*64)); // amount0In, amount1In, amount0Out, amount1Out
           const tokIn=weiToTokens(m.isT0?w(0):w(1)),tokOut=weiToTokens(m.isT0?w(2):w(3));
-          const amt=tokIn+tokOut;if(!(amt>0))return null;
           const side=tokOut>=tokIn?'BUY':'SELL';    // token leaving the pool = someone bought it
+          const amt=side==='SELL'&&st.fee>0&&st.fee<1?tokIn/(1-st.fee)+tokOut:tokIn+tokOut;if(!(amt>0))return null;   // e46: a sell is what the seller SENT (the pool gets it net of the fee) — as resolveViaReceipt
           const usd=amt*st.price;
           return{id:l.transactionHash+':'+l.logIndex,tx:l.transactionHash,block:parseInt(l.blockNumber,16),side,tokens:amt,usd,gen:usd*st.fee,pool:m.symbol,logo:m.logo,initial:m.initial,pair:(l.address||'').toLowerCase()};
         };
@@ -6003,7 +6010,7 @@
                 close it. The row now wraps: title and ✕ on the first line, the controls on their own line
                 below sm; on sm+ it is the single row it was. ✕ is a 32 px tap target. */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-              <div className={`font-orbitron text-base sm:text-xl font-black tracking-[0.14em] ${metal}`}>LIVE FEED</div>
+              <h2 className={`font-orbitron text-base sm:text-xl font-black tracking-[0.14em] ${metal}`}>LIVE FEED</h2>   {/* e42: was a div */}
               <span className="hidden sm:inline text-[13px] text-white/55 tracking-[0.04em]">Every fee, as it lands on the chain.</span>
               <button onClick={close} className="tap order-1 ml-auto sm:order-3 sm:ml-1 text-white/60 hover:text-white text-2xl leading-none" aria-label="Close">{'×'}</button>
               <div className="order-2 basis-full sm:basis-auto sm:ml-auto flex items-center justify-between sm:justify-start gap-2">
@@ -6690,9 +6697,21 @@
        modal underneath it on the next press. */
     const claimKeys=(getEl)=>{const e={id:++_modalSeq,getEl};MODAL_STACK.push(e);return{isTop:()=>MODAL_STACK[MODAL_STACK.length-1]===e,release:()=>{const i=MODAL_STACK.indexOf(e);if(i>=0)MODAL_STACK.splice(i,1);}};};
     const topModalEl=()=>{for(let i=MODAL_STACK.length-1;i>=0;i--){const el=MODAL_STACK[i].getEl&&MODAL_STACK[i].getEl();if(el)return el;}return null;};
+    /* Audit IV e44 (2026-10-24): the browser / phone Back closes the open window instead of leaving the page. Each window with
+       an onClose pushes one same-URL history entry (state.grayModal); Back pops it → popstate → the TOP window closes. A window
+       closed any other way (×, Escape, the backdrop) takes its own entry back off — only while that entry is still the current
+       one (a window closed BY a navigation leaves it, and Back then just steps over it). The entries share the URL, so the hash
+       router sees no hashchange. */
+    const MODAL_HIST=[];let _histSkip=0;
+    if(typeof window!=='undefined')window.addEventListener('popstate',()=>{if(_histSkip>0){_histSkip--;return;}const h=MODAL_HIST[MODAL_HIST.length-1];if(h){h.fromBack=true;h.close();}});
+    const useBackCloses=(closeRef)=>{useEffect(()=>{if(!closeRef.current)return;const h={id:'gm'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),fromBack:false,close:()=>{if(closeRef.current)closeRef.current();}};
+      try{history.pushState(Object.assign({},history.state||{},{grayModal:h.id}),'');}catch(e){return;}
+      MODAL_HIST.push(h);
+      return()=>{const i=MODAL_HIST.indexOf(h);if(i>=0)MODAL_HIST.splice(i,1);if(!h.fromBack&&history.state&&history.state.grayModal===h.id){_histSkip++;history.back();}};},[]);};
     const FOCUSABLE='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
     const useDialog=(dlgRef,onClose)=>{
       const closeRef=useRef(onClose);closeRef.current=onClose;
+      useBackCloses(closeRef);   // e44
       useEffect(()=>{
         const prevFocus=document.activeElement;
         if(_lockCount++===0){_bodyOverflow=document.body.style.overflow;document.body.style.overflow='hidden';}
@@ -6749,6 +6768,26 @@
      *     behaviour as every other modal; Escape closes only the topmost one.
      * `children` is the card at its natural W×H; `controls` renders above the card (period
      * pills, month pickers) and is never part of the image. */
+    /* Audit IV P-5 (2026-10-24): Chart.js on demand — no chart is on the first screen, so the 69 KB gz file waits for the first
+       window that draws one. useChartJs() starts the load on mount and re-renders when it lands; each chart effect lists it. */
+    const CHARTJS_SRC='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js';
+    const CHARTJS_SRI='sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG';
+    let _cjsP=null;
+    const loadChartJs=()=>{
+      if(window.Chart)return Promise.resolve(window.Chart);
+      if(_cjsP)return _cjsP;
+      _cjsP=new Promise((res,rej)=>{
+        const el=document.createElement('script');
+        el.src=CHARTJS_SRC;el.integrity=CHARTJS_SRI;el.crossOrigin='anonymous';el.async=true;
+        el.onload=()=>window.Chart?res(window.Chart):rej(new Error('Chart.js did not initialise'));
+        el.onerror=()=>{_cjsP=null;rej(new Error('could not load Chart.js'));};
+        document.head.appendChild(el);
+      });
+      return _cjsP;
+    };
+    const useChartJs=()=>{const[ok,setOk]=useState(()=>!!window.Chart);
+      useEffect(()=>{if(ok)return;let live=true;loadChartJs().then(()=>{if(live)setOk(true);}).catch(e=>console.warn(e.message));return()=>{live=false;};},[]);
+      return ok;};
     const HTML2CANVAS_SRC='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
     const HTML2CANVAS_SRI='sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H';
     let _h2cP=null;
@@ -7255,6 +7294,8 @@
     const fmtUnitAxis=(v,step,unit,phone)=>unit==='PLS'?fmtAxisPls(v,step,phone):fmtAxisUsd(v,step);
     /* Price in the chart's unit as HTML (USD keeps the subscript-zero look, PLS is plain). */
     const daoPriceHtml=(v,unit)=>{if(unit==='PLS')return `${fmtPls(v)} PLS`;const f=fmtPrice(v);return typeof f==='string'?f:`${f.pre}<sub class="text-[0.6em] opacity-70">${f.z}</sub>${f.d}`;};
+    /* M-13 (2026-10-24): a buy paid in another token prints that token, not its PLS-equivalent */
+    const daoPaidTxt=b=>b&&b.paidWith?`${fmtAbbr(b.paidWith.amount)} ${String(b.paidWith.symbol).replace(/[^A-Za-z0-9.\- ]/g,'')}`:`${fmtAbbr(b.pls)} PLS`;
     const DaoPrice=({v,unit,c=''})=>unit==='PLS'?<span className={c}>{fmtPls(v)} <span className="text-[0.7em] opacity-70">PLS</span></span>:<Price p={v} c={c}/>;
     const fmtDateTick=(ms,spanDays)=>{
       const d=new Date(ms);
@@ -7429,7 +7470,7 @@
                   `<div class="flex items-center gap-2.5"><img src="${logo}" alt="" class="w-8 h-8 shrink-0"><div class="min-w-0"><div class="text-[#F0C94A] text-[10px] uppercase tracking-[0.18em] font-semibold">DAO buy${b.fresh?' <span class="text-emerald-300">· new</span>':''}</div><div class="text-white/60 text-[11px] tabular-nums truncate">${fmtDateTime(b.ts)}</div></div></div>`+
                   `<div class="mt-2.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px] leading-tight">`+
                   `<span class="text-white/45">Bought</span><span class="text-right text-white font-semibold tabular-nums">${fmtAbbr(b.ptgc)} PTGC</span>`+
-                  `<span class="text-white/45">Spent</span><span class="text-right text-white font-semibold tabular-nums">${fmtAbbr(b.pls)} PLS <span class="text-white/45 font-normal">(${fmtDollar(b.usd,0)})</span></span>`+
+                  `<span class="text-white/45">Spent</span><span class="text-right text-white font-semibold tabular-nums">${daoPaidTxt(b)} <span class="text-white/45 font-normal">(${fmtDollar(b.usd,0)})</span></span>`+
                   `<span class="text-white/45">Price paid</span><span class="text-right text-[#F0C94A] font-semibold tabular-nums">${daoPriceHtml(view.paidOf(b),unit)}</span>`+
                   `<span class="text-white/45">Market then</span><span class="text-right text-white/80 tabular-nums">${daoPriceHtml(view.marketOf(b),unit)}</span>`+
                   (b.wallet?`<span class="text-white/45">Wallet</span><span class="text-right text-white/60 tabular-nums font-mono text-[11px]">${b.wallet.slice(0,6)}…${b.wallet.slice(-4)}</span>`:'')+
@@ -7522,7 +7563,7 @@
             </div>
           </NhsFit>
           <div className="relative mt-2 text-sm sm:text-base text-white/80 tabular-nums leading-snug">
-            for <span className="text-white font-semibold">{fmtAbbr(buy.pls)} PLS</span> <span className="text-white/55">({fmtDollar(buy.usd,0)})</span> at <DaoPrice v={paid} unit={unit} c="text-[#F5DE83] font-semibold"/>
+            for <span className="text-white font-semibold">{daoPaidTxt(buy)}</span> <span className="text-white/55">({fmtDollar(buy.usd,0)})</span> at <DaoPrice v={paid} unit={unit} c="text-[#F5DE83] font-semibold"/>
           </div>
           <div className="relative mt-2 flex items-center justify-between gap-2 text-xs sm:text-sm text-white/55">
             <span className="tabular-nums truncate">{fmtDateTime(buy.ts)}</span>
@@ -7536,6 +7577,7 @@
     const DaoBuysCadence=({view,hex,phone,share=false})=>{
       const ref=useRef(null),inst=useRef(null),tip=useRef(null),wrap=useRef(null);
       const cad=React.useMemo(()=>computeDaoBuysCadence(view),[view]);
+      const cjsOk=useChartJs();   // P-5
       useEffect(()=>{
         if(!ref.current||!window.Chart)return;
         if(inst.current){inst.current.destroy();inst.current=null;}
@@ -7586,7 +7628,7 @@
           });
         }catch(e){console.error('DaoBuysCadence chart error:',e);}
         return()=>{if(inst.current){inst.current.destroy();inst.current=null;}};
-      },[cad,phone,share]);
+      },[cad,phone,share,cjsOk]);
       const unitWord=cad.kind==='day'?'day':cad.kind==='week'?'week':'month';
       return(
         <div ref={wrap} className="relative">
@@ -7602,13 +7644,14 @@
        config builder, so it is the same picture as the modal at a known size. */
     const DaoBuysShareCard=({view,unit,logY,hex,cfg,rangeDef,livePrice,asOf})=>{
       const ref=useRef(null),inst=useRef(null);
+      const cjsOk=useChartJs();   // P-5
       useEffect(()=>{
         if(!ref.current||!window.Chart)return;
         const ctx=ref.current.getContext('2d');
         try{inst.current=new window.Chart(ctx,buildDaoBuysChartConfig({view,unit,logY,phone:false,hex,logo:cfg.logo,share:true,ctx}));}
         catch(e){console.error('DaoBuysShareCard chart error:',e);}
         return()=>{if(inst.current){inst.current.destroy();inst.current=null;}};
-      },[view,unit,logY]);
+      },[view,unit,logY,cjsOk]);
       const rangeLabel=rangeDef.days?`${rangeDef.label||rangeDef.k}`:'Lifetime';
       const avg=unit==='PLS'?view.avgPls:view.avgUsd;
       return(
@@ -7676,6 +7719,7 @@
       const rangeDef=DAO_BUYS_RANGES.find(r=>r.k===range)||DAO_BUYS_RANGES.find(r=>r.k==='ALL');
       const view=React.useMemo(()=>computeDaoBuysView({file,fresh,rangeDef,livePrice,livePls,unit,phone}),[file,fresh,range,livePrice,livePls,unit,phone]);
 
+      const cjsOk=useChartJs();   // P-5
       useEffect(()=>{
         if(!view||!canvasRef.current||!window.Chart)return;
         if(chartRef.current){chartRef.current.destroy();chartRef.current=null;}
@@ -7683,7 +7727,7 @@
         try{chartRef.current=new window.Chart(ctx,buildDaoBuysChartConfig({view,unit,logY,phone,hex,logo:cfg.logo,tipRef,plotRef,touch,ctx}));}
         catch(e){console.error('DaoBuysModal chart error:',e);}
         return()=>{if(chartRef.current){chartRef.current.destroy();chartRef.current=null;}};
-      },[view,logY]);
+      },[view,logY,cjsOk]);
 
       const asOf=file&&file.generatedAt?new Date(file.generatedAt):null;
       const ageMs=asOf?Date.now()-asOf.getTime():null;
@@ -7806,7 +7850,7 @@
                               <a href={`https://scan.pulsechain.com/tx/${b.hash}`} target="_blank" rel="noopener noreferrer" className="tap-h inline-flex items-center gap-1 text-white/80 whitespace-nowrap">{fmtLedgerDatePhone(b.ts)} <span className="text-white/45">{'\u00b7'} {fmtLedgerTime(b.ts)}</span><span aria-hidden="true" className="text-white/35 text-xs">{'\u2197'}</span>{b.fresh&&<span className="ml-1 rounded-full bg-emerald-400/20 text-emerald-300 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em]">NEW</span>}</a>
                               <span className="text-[#D4AF37] font-semibold whitespace-nowrap">{fmt(b.ptgc)} <span className="text-white/45 text-xs font-normal">PTGC</span></span>
                             </div>
-                            <div className="mt-1 text-white/60 text-sm whitespace-nowrap">{fmtAbbr(b.pls)} PLS <span className="text-white/45">({fmtDollar(b.usd,0)})</span>{athPrice>0&&<span className="text-white/45"> {'\u00b7'} at ATH {fmtDollar(b.ptgc*athPrice,0)}</span>}</div>
+                            <div className="mt-1 text-white/60 text-sm whitespace-nowrap">{daoPaidTxt(b)} <span className="text-white/45">({fmtDollar(b.usd,0)})</span>{athPrice>0&&<span className="text-white/45"> {'\u00b7'} at ATH {fmtDollar(b.ptgc*athPrice,0)}</span>}</div>
                             <div className="mt-1.5"><DaoCreatures ptgc={b.ptgc} size="text-lg"/></div>
                           </li>
                         ))}
@@ -7837,7 +7881,7 @@
                                   {b.fresh&&<span className="ml-2 rounded-full bg-emerald-400/20 text-emerald-300 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] align-middle">NEW</span>}
                                 </td>
                                 <td className="text-right px-5 lg:px-6 py-3 whitespace-nowrap text-[#D4AF37] font-semibold">{fmt(b.ptgc)}</td>
-                                <td className="text-right px-5 lg:px-6 py-3 whitespace-nowrap text-white/80">{fmtAbbr(b.pls)} <span className="text-white/45 text-base">PLS</span></td>
+                                <td className="text-right px-5 lg:px-6 py-3 whitespace-nowrap text-white/80">{b.paidWith?<>{fmtAbbr(b.paidWith.amount)} <span className="text-white/45 text-base">{daoPaidTxt(b).split(' ').slice(1).join(' ')}</span></>:<>{fmtAbbr(b.pls)} <span className="text-white/45 text-base">PLS</span></>}</td>
                                 <td className="text-right px-5 lg:px-6 py-3 whitespace-nowrap text-white">{fmtDollar(b.usd,0)}</td>
                                 <td className="text-right px-5 lg:px-6 py-3 whitespace-nowrap text-white/80">{athPrice>0?fmtDollar(b.ptgc*athPrice,0):'\u2014'}</td>
                                 <td className="px-5 lg:px-6 py-3"><DaoCreatures ptgc={b.ptgc} size="text-2xl"/></td>
@@ -8091,9 +8135,9 @@
 
             {/* detail line */}
             <div className="tabular-nums" style={{marginTop:tall?(tight?24:34):28,fontSize:z.detail,color:'rgba(255,255,255,0.8)',lineHeight:1.25,textAlign:tall?'center':'left'}}>
-              {has&&isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(hero.pls)} PLS</b> <DaoUsd v={hero.usd}/>{tall?<br/>:' '}at <Price p={hero.price} c="text-[#F5DE83] font-semibold"/> <span style={{color:'rgba(255,255,255,0.45)',fontSize:z.perPtgc}}>per PTGC</span></>}
+              {has&&isL&&<>for <b style={{color:'#fff'}}>{daoPaidTxt(hero)}</b> <DaoUsd v={hero.usd}/>{tall?<br/>:' '}at <Price p={hero.price} c="text-[#F5DE83] font-semibold"/> <span style={{color:'rgba(255,255,255,0.45)',fontSize:z.perPtgc}}>per PTGC</span></>}
               {has&&!isL&&<>for <b style={{color:'#fff'}}>{fmtAbbr(v.t.pls)} PLS</b> <DaoUsd v={v.t.usd}/>{tall?<br/>:' '}across <b style={{color:'#fff'}}>{plural(v.buys.length)}</b> {'·'} avg <Price p={v.avgUsd} c="text-[#F5DE83] font-semibold"/></>}
-              {!has&&L&&<>Last buy <span style={{color:'#F5DE83',fontWeight:600}}>{ago}</span>:{tall?<br/>:' '}<b style={{color:'#fff'}}>{fmtAbbr(L.ptgc)} PTGC</b> for {fmtAbbr(L.pls)} PLS <DaoUsd v={L.usd}/></>}
+              {!has&&L&&<>Last buy <span style={{color:'#F5DE83',fontWeight:600}}>{ago}</span>:{tall?<br/>:' '}<b style={{color:'#fff'}}>{fmtAbbr(L.ptgc)} PTGC</b> for {daoPaidTxt(L)} <DaoUsd v={L.usd}/></>}
             </div>
 
             <div style={{flex:1}}></div>
@@ -12086,7 +12130,7 @@
       const plsRatioVal=(d?.price>0&&pls>0)?d.price/pls:null;
       const volChange=(t===token)
         ?(()=>{const v24=d?.vol||0;const v7=volumeByPeriod?.vol7d||0;const avg=v7/7;return(v24>0&&avg>0)?((v24-avg)/avg)*100:null;})()
-        :(burnHistoryCache?.[t]?.changes?.volume24h??null);
+        :(()=>{const v24=d?.vol||0;const avg=(vol7dFromCache(t)||0)/7;return(v24>0&&avg>0)?((v24-avg)/avg)*100:null;})();   // e46: was changes.volume24h, a field no file writes
       /* the window box is 30 DAYS since 2026-10-05 round 3 (Shaka: "let's move the burn box to a 30 day burn not 7 day") — was d7 */
       const burn7dKnown=bp!=null&&bp.d30!=null;
       const burn7dAmt=burn7dKnown?bp.d30:0;
@@ -12540,7 +12584,7 @@
       };
       return(
         <Modal className="z-50 flex items-center justify-center p-3 sm:p-4 modal-overlay bg-black/80" onClose={close} label="Holder tiers">
-          <div className={`lg-m max-w-[560px] w-full max-h-[92vh] overflow-y-auto overscroll-contain${isPTGC?'':' ufo'}`} onClick={e=>e.stopPropagation()}>
+          <div className={`lg-m max-w-[560px] w-full max-h-[92dvh] overflow-y-auto overscroll-contain${isPTGC?'':' ufo'}`} onClick={e=>e.stopPropagation()}>
             <div className="lg-hd">
               <div className="sky" aria-hidden="true"></div><div className="fade" aria-hidden="true"></div>{/* 2026-10-23: the Atlantis art; no whale / shark hero (the creatures live in the rows) */}
               <div className="tg"><SupplyBasisToggle mode={supplyMode} setMode={setSupplyMode} color={isPTGC?'#FFE27A':'#B4FF86'} color2={isPTGC?'#E3B52A':'#5BE632'}/></div>
@@ -12625,7 +12669,7 @@
     };
     const T1Tile=({l,ic,v,f,cls=''})=>(<div className={`t1t ${cls}`}><div className="l">{ic&&T1I[ic]}{l}</div><div className="v">{v}</div>{f!=null&&<div className="f">{f}</div>}</div>);
     const T1Amt=({v,tok})=>(<>{fmtAbbr(v)}<small>{tok}</small></>);
-    const T1Cost=()=>(<span className="t1ii" tabIndex={0} aria-label="About the cost">i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></span>);
+    const T1Cost=()=>{const[o,setO]=useState(false);return(<button type="button" className={`t1ii${o?' open':''}`} aria-label="About the cost" aria-expanded={o} onClick={e=>{e.stopPropagation();setO(v=>!v);}} onBlur={()=>setO(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></button>);};   // e46: a tap toggles it (was hover / focus only)
     const T1Dot=({token,on,onToggle})=>(
       <button type="button" onClick={onToggle} aria-label="Top 100 (preview)" aria-pressed={on} title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
         <span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:(TOKENS[token]||TOKENS.PTGC).colorHex,opacity:on?0.4:0.16}}></span>
@@ -14106,7 +14150,7 @@
       // X's to a Penny
       const xToPenny=data?.price>0&&data.price<0.01?(0.01/data.price).toFixed(1):'\u2014';
       // Format large X values with abbreviations
-      const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};
+      const fmtX=v=>{if(v==='\u2014')return'\u2014';const n=parseFloat(v);if(isNaN(n))return'\u2014';if(n>=1e6)return(n/1e6).toFixed(1)+'Mx';if(n>=1e4)return(n/1e3).toFixed(0)+'Kx';if(n>=1e3)return(n/1e3).toFixed(1)+'Kx';return n>=100?Math.round(n)+'x':n.toFixed(1)+'x';};
       const liqMcapRatio=(data?.mcap>0&&data?.liq!=null)?((data.liq/data.mcap)*100).toFixed(2):'\u2014';
       const whaleProgress=getWhaleProgress(burn?.pct||0);
       const tokensInLPKnown=data?.tokensInLP!=null;   // a14: null when no pair could be read at all
@@ -14219,6 +14263,9 @@
 
       return(
         <div className="min-h-screen">
+          {/* Audit IV e42: the page's h1 (the v2 title is art) and a skip link past the header + tab band to the content */}
+          <a href="#" className="g-skip" onClick={e=>{e.preventDefault();const m=document.getElementById('g-main');if(m){try{m.focus({preventScroll:true});m.scrollIntoView({block:'start'});}catch(err){}}}}>Skip to content</a>
+          <h1 className="g-sr">{token} dashboard {'\u2014'} {activeTab==='kpi'?'KPI Report':activeTab==='social'?'Socials':'overview'}</h1>
           
           {/* ===== HEADER v2 (2026-09-30): Shaka's mock-up — banner + sticky tab row (DashHeaderV2).
               Same handlers and values as the classic header below; the classic block is untouched. */}
@@ -14422,6 +14469,7 @@
           {loading&&<div className="h-0.5 w-full overflow-hidden bg-white/[0.04]" aria-hidden="true"><div className="h-full w-1/3 animate-[sweep_1.4s_ease-in-out_infinite]" style={{background:cfg.colorHex,opacity:0.8}}></div></div>}
 
           {/* Dashboard Tab Content */}
+          <div id="g-main" tabIndex={-1} className="outline-none" style={{scrollMarginTop:72}}></div>   {/* e42: the skip link's target */}
           {activeTab==='dashboard'&&loading&&(hdrV2?<><KpiTilesV2 token={token} data={data} loading={true} changeKnown={false} priceUp={true} changeTxt={'\u2014'} volumeByPeriod={volumeByPeriod} liqMcapRatio={'\u2014'} holdersByPeriod={holdersByPeriod} holders={holders} holderChange={null} tokensInLPKnown={false} tokensInLP={0} tokensInLPPct={'\u2014'} txnsKnown={false} txnChange24h={null} burnHistoryCache={burnHistoryCache} openVolume={()=>{}} openRH={()=>{}} openHolders={()=>{}}/><DashboardSkeleton token={token} tiles={false}/></>:<DashboardSkeleton token={token}/>)}
           {activeTab==='dashboard'&&!loading&&(<>
           {/* v2: the seven KPI tiles with 30-day sparklines (KpiTilesV2); the classic strip is untouched below */}
@@ -14502,7 +14550,7 @@
                   {/* u8: `flex-wrap` + `ml-auto` let the USD/TOK toggle drop under the title on a
                       375px phone instead of squeezing "Total Supply Burned" onto three lines. */}
                   <div className="flex flex-wrap justify-between items-center mb-4 gap-x-3 gap-y-2">
-                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0">
+                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0" aria-label="Total Supply Burned">
                       {hdrV2?<P2Icon svg={<img src="logos/panels/vg-flame.webp" alt="" className="p2-ici"/>}/>:<span className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.7)] shrink-0"></span>}
                       <span className="whitespace-nowrap">Total Supply Burned</span>
                       <img src={TOKENS[token].logo} alt={token} title={token} className="w-5 h-5 sm:w-6 sm:h-6 -my-1 rounded-full object-contain shrink-0"/>
@@ -14604,7 +14652,7 @@
                       title (w-full sm:w-auto) — the header used to wrap to three ragged lines at
                       320–375px. u7: ⓘ explains the term; the note line says where the fee goes. */}
                   <div className="flex justify-between items-center mb-1.5 gap-x-3 gap-y-2 flex-wrap">
-                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0">
+                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0" aria-label="Value Generated">
                       {hdrV2?<P2Icon svg={<img src="logos/panels/vg-moneybag.webp" alt="" className="p2-ici"/>}/>:<span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)] shrink-0"></span>}
                       <span className="whitespace-nowrap">Value Generated</span>
                       <img src={TOKENS[token].logo} alt={token} title={token} className="w-5 h-5 sm:w-6 sm:h-6 -my-1 rounded-full object-contain shrink-0"/>
@@ -14905,7 +14953,7 @@
                 {hdrV2&&<P2Art/>}
                 <div className="p-5 sm:p-6">
                   <div className="flex flex-wrap justify-between items-center mb-4 gap-x-3 gap-y-2">
-                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0">
+                    <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2 min-w-0" aria-label="Token Allocation">
                       {hdrV2?<P2Icon svg={<img src="logos/panels/alloc-pie.webp" alt="" className="p2-ici"/>}/>:<span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.7)] shrink-0"></span>}
                       <span className="whitespace-nowrap">Token Allocation</span>
                       <img src={TOKENS[token].logo} alt={token} title={token} className="w-5 h-5 sm:w-6 sm:h-6 -my-1 rounded-full object-contain shrink-0"/>
@@ -14967,7 +15015,7 @@
                   {hdrV2&&<P2Art/>}
                   <div className="p-5 sm:p-6">
                     <div className="flex justify-between items-center mb-5 gap-3 flex-wrap">{/* wraps on phones: "PTGC Buys" + "Ledger" no longer fit beside the title */}
-                      <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
+                      <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2" aria-label="DAO Treasury">
                         {hdrV2?<P2Icon svg={<img src={P2_DAO_ICONS.building} alt=""/>}/>:<span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>}
                         DAO Treasury
                         <img src={TOKENS[token].logo} alt={token} title={token} className="w-5 h-5 sm:w-6 sm:h-6 -my-1 rounded-full object-contain shrink-0"/>
@@ -15091,7 +15139,7 @@
                   {hdrV2&&<P2Art/>}
                   <div className="p-5 sm:p-6">
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2">
+                      <h3 className="font-orbitron text-xs sm:text-sm uppercase tracking-[0.18em] text-white/85 flex items-center gap-2" aria-label="PTGC Burned by UFO">
                         {hdrV2?<P2Icon svg={<img src="logos/panels/vg-flame.webp" alt="" className="p2-ici"/>}/>:<span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.7)]"></span>}
                         PTGC Burned by UFO
                         <button onClick={()=>setShowDAOShareModal(true)} aria-label="Share this panel as an image" className="tap -my-2 text-xs opacity-40 hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</button>
@@ -15275,6 +15323,7 @@
           </>)}
           
           {/* KPI Report Tab Content — LIVE. */}
+          {activeTab==='kpi'&&<h2 className="g-sr">KPI Report</h2>}   {/* e42 */}
           {activeTab==='kpi'&&loading&&<DashboardSkeleton token={token}/>}
           {activeTab==='kpi'&&!loading&&(
             /* u5: the card's 7D Value Generated is `valueGen7d` — the same model object the
@@ -15637,7 +15686,7 @@
           {/* PTGC Logos Modal */}
           {showPTGCLogosModal&&(
             <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClose={()=>closeModalAndReturn(setShowPTGCLogosModal)} label="PTGC logos">
-              <div className="relative bg-black/95 border border-[#D4AF37]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+              <div className="relative bg-black/95 border border-[#D4AF37]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80dvh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                 <button aria-label="Close" onClick={()=>closeModalAndReturn(setShowPTGCLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
                   <img src={TOKENS.PTGC.logo} alt="PTGC" className="w-12 h-12"/>
@@ -15674,7 +15723,7 @@
           {/* UFO Logos Modal */}
           {showUFOLogosModal&&(
             <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClose={()=>closeModalAndReturn(setShowUFOLogosModal)} label="UFO logos">
-              <div className="relative bg-black/95 border border-[#7CFC00]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+              <div className="relative bg-black/95 border border-[#7CFC00]/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80dvh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                 <button aria-label="Close" onClick={()=>closeModalAndReturn(setShowUFOLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
                   <img src={TOKENS.UFO.logo} alt="UFO" className="w-12 h-12"/>
@@ -15710,7 +15759,7 @@
           {/* Combined Logos Modal */}
           {showCombinedLogosModal&&(
             <Modal className="z-50 flex items-center justify-center p-4 modal-overlay bg-black/90 overflow-y-auto" onClose={()=>closeModalAndReturn(setShowCombinedLogosModal)} label="Combined logos">
-              <div className="relative bg-black/95 border border-white/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+              <div className="relative bg-black/95 border border-white/30 rounded-2xl p-6 max-w-4xl w-full max-h-[80dvh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
                 <button aria-label="Close" onClick={()=>closeModalAndReturn(setShowCombinedLogosModal)} className="absolute top-4 right-4 text-white/60 hover:text-white text-xl">✕</button>
                 <div className="flex items-center gap-3 mb-6">
                   <img src={COMBINED_LOGO} alt="Combined" className="h-12" style={{transform:'scale(1.5)'}}/>
@@ -15764,7 +15813,7 @@
             const calcLX=(tl)=>{if(!liq||liq<=0||tl<=liq)return null;return tl/liq;};
             const calcHX=(t)=>{const h=holders||0;if(!h||h<=0||t<=h)return null;return t/h;};
             const calcATHX=()=>{const ap=athPrice;if(!price||price<=0||!ap||ap<=price)return null;return ap/price;};
-            const fmtX=(x)=>{if(!x)return null;if(x>=1e5)return Math.round(x/1000)+'K';if(x>=1e3)return(x/1e3).toFixed(1)+'K';if(x>=100)return Math.round(x)+'x';if(x>=10)return x.toFixed(1)+'x';return x.toFixed(2)+'x';};
+            const fmtX=(x)=>{if(!x)return null;if(x>=1e5)return Math.round(x/1000)+'Kx';if(x>=1e3)return(x/1e3).toFixed(1)+'Kx';if(x>=100)return Math.round(x)+'x';if(x>=10)return x.toFixed(1)+'x';return x.toFixed(2)+'x';};
             const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
             const mkCoin=(bg,stroke,inner,text,tc)=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><radialGradient id="cg" cx="38%" cy="32%"><stop offset="0%" stop-color="${inner}"/><stop offset="100%" stop-color="${bg}"/></radialGradient></defs><circle cx="50" cy="50" r="47" fill="url(#cg)" stroke="${stroke}" stroke-width="4"/><circle cx="50" cy="50" r="39" fill="none" stroke="${inner}" stroke-width="1.5"/><text x="50" y="59" text-anchor="middle" fill="${tc}" font-family="Georgia,serif" font-size="42" font-weight="bold">${text}</text></svg>`)}`;
             const pennyImg=mkCoin('#b87333','#6b3a0f','#e8a060','1¢','#3d1800');
@@ -15917,7 +15966,7 @@
           {showPriceWithCoresModal&&<GraysCoresSocialModal cores={corePrices} grays={grayPrices} period={priceModalPeriod} setPeriod={setPriceModalPeriod} onClose={()=>closeModalAndReturn(setShowPriceWithCoresModal)}/>}
 
           <MaintenanceNotice open={showMaintNotice} onClose={()=>setShowMaintNotice(false)}/>{/* MAINT-MIGRATION */}
-          <footer className="text-center py-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
+          <footer className="text-center py-4 px-4 border-t border-white/10 mt-8"><p className="text-white/30 text-xs">Data, calculators, and projections may be inaccurate or delayed. Not financial advice — do not make investment decisions based on this dashboard. DYOR. Use at your own risk.</p></footer>
           
         </div>
       );
@@ -16014,8 +16063,9 @@
       const[headerCopied,setHeaderCopied]=useState(false);
 
       // Chart
+      const cjsOk=useChartJs();   // P-5
       useEffect(()=>{
-        if(!chartRef.current||sortedWallets.length===0)return;
+        if(!chartRef.current||sortedWallets.length===0||!window.Chart)return;
         if(chartInstanceRef.current)chartInstanceRef.current.destroy();
         const getV=(w)=>metric==='ptgc'?w.ptgc:metric==='usd'?w.usd:w.buys;
         const tot=sortedWallets.reduce((s,w)=>s+getV(w),0);
@@ -16044,13 +16094,13 @@
           }
         });
         return()=>{if(chartInstanceRef.current){chartInstanceRef.current.destroy();chartInstanceRef.current=null;}};
-      },[sortedWallets,metric]);
+      },[sortedWallets,metric,cjsOk]);
 
       const progressPct=fetchTotal>0?Math.round((fetchProgress/fetchTotal)*100):0;
 
       return(
         <Modal className="z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/80" style={{backdropFilter:'blur(6px)'}} onClose={onClose} label="Referrer details">
-          <div className="bg-[#111] border border-[#D4AF37]/30 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+          <div className="bg-[#111] border border-[#D4AF37]/30 rounded-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
 
             {/* Header — matches referrer card style */}
             <div className="flex items-center justify-between p-3 sm:p-4 border-b border-white/10 gap-2">
@@ -16845,7 +16895,7 @@
             return(
               <>
               <Modal className="z-[100] flex items-center justify-center p-4 bg-black/90" onClose={()=>{setSelectedReferrer(null);setExpandedTxMonths(new Set());setShowAllReceipts(false);setShowAllCurrentMonthTx(false);setShowBuyerDist(false);}} label="Referrer details">
-                <div className="bg-[#111] border border-[#D4AF37]/30 rounded-2xl max-w-3xl w-full max-h-[90vh] shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
+                <div className="bg-[#111] border border-[#D4AF37]/30 rounded-2xl max-w-3xl w-full max-h-[90dvh] shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
                   <div className="overflow-y-auto flex-1">
                   {/* Header — phone (2026-09-29): the row wraps, the link button drops under the name at full width, × is pinned top-right */}
                   <div className="relative flex items-center justify-between gap-3 flex-wrap p-4 pr-10 sm:pr-4 border-b border-white/10">
@@ -17257,7 +17307,7 @@
             
             return(
               <Modal className="z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm" onClose={()=>setShowLeaderboard(false)} label="Affiliate leaderboard">
-                <div className="bg-gradient-to-b from-[#151515] to-[#0a0a0a] border border-[#D4AF37]/20 rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+                <div className="bg-gradient-to-b from-[#151515] to-[#0a0a0a] border border-[#D4AF37]/20 rounded-2xl max-w-5xl w-full max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
                   
                   {/* Header with Logo */}
                   <div className="relative border-b border-[#D4AF37]/20 bg-gradient-to-b from-[#D4AF37]/10 to-transparent">
@@ -17362,7 +17412,7 @@
           {/* Payment Receipts Modal */}
           {showPayments&&(
             <Modal className="z-[100] flex items-center justify-center p-4 bg-black/90" onClose={()=>setShowPayments(false)} label="Payment receipts">
-              <div className="bg-[#111] border border-purple-500/30 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+              <div className="bg-[#111] border border-purple-500/30 rounded-2xl max-w-3xl w-full max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
                 <div className="flex items-center justify-between p-4 border-b border-white/10">
                   <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">💰 Payment Receipts ({data?.receipts?.length||0})<span className="ml-1.5 text-white/30 text-xs font-normal" title="Every date and time on this page is UTC, and the months are cut at UTC midnight, so the figures read the same for every viewer.">(UTC)</span></h2>
                   <button aria-label="Close" onClick={()=>setShowPayments(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
@@ -17737,7 +17787,7 @@
         <Modal className="z-[100] flex items-center justify-center p-4 bg-black/95" label="Disclaimer">
           {/* Audit IV e17 (2026-10-23): the text scrolls and the Accept button sits in a footer that never scrolls away — on a phone it
              used to be ~360 px below the fold of ONE scroll box, with no cue. Wording unchanged, so DISCLAIMER_VERSION stays. */}
-          <div className="bg-[#111] border border-yellow-500/30 rounded-2xl max-w-lg w-full shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" style={{maxHeight:'90dvh'}}>
+          <div className="bg-[#111] border border-yellow-500/30 rounded-2xl max-w-lg w-full shadow-2xl flex flex-col overflow-hidden max-h-[90dvh]" style={{maxHeight:'90dvh'}}>
             <div className="flex-1 min-h-0 overflow-y-auto p-6 pb-2">
             <div className="text-center mb-6">
               <div className="text-4xl mb-3">⚠️</div>

@@ -16,7 +16,8 @@
       if(i===0)return{cur:tiers[0],next:null,pct:100,need:0};
       const cur=i===-1?null:tiers[i],next=i===-1?tiers[tiers.length-1]:tiers[i-1];
       const floor=cur?cur.min:0,ceil=next.min;
-      return{cur,next,pct:Math.max(0,Math.min(100,(balance-floor)/(ceil-floor)*100)),need:Math.max(0,ceil-balance)};
+      const need=Math.max(0,ceil-balance);   // e46: below the line = at most 99.9 % (it printed "100.0% … need 1 ≈ $0")
+      return{cur,next,pct:Math.max(0,Math.min(need>0?99.9:100,(balance-floor)/(ceil-floor)*100)),need};
     };
     /* round 5 (Shaka: "fix the pie chart … where the yellow meets the purple"): each segment's own drop-shadow painted over
        its neighbour and the last arc overlapped the first at 12 o'clock. Now a 2-unit dark gap between arcs (the dataviz
@@ -57,7 +58,7 @@
           {L.next?(
             <>
               <div className="pf2-bar">{L.cur?<img src={pfSea(L.cur.emoji)} alt=""/>:<span style={{width:28}}/>}<div className="pf2-trk" role="progressbar" aria-valuenow={Math.round(L.pct)} aria-valuemin="0" aria-valuemax="100" aria-label={`Progress to ${L.next.name}`}><div className="pf2-fl" style={{width:L.pct+'%'}}></div><i className="pf2-tip" style={{left:L.pct+'%'}}></i></div><img className="nx" src={pfSea(L.next.emoji)} alt=""/></div>
-              <div className="pf2-lgbf"><span><b>{L.pct.toFixed(1)}%</b> to <b className="c2">{L.next.name}</b></span><span>need <b>{pfAbbr(L.need)}</b>{cost!=null&&<> {'≈'} {fmtDollar(cost,0)}</>}</span></div>
+              <div className="pf2-lgbf"><span><b>{L.pct.toFixed(1)}%</b> to <b className="c2">{L.next.name}</b></span><span>need <b>{pfPassAmt(L.need)}</b>{cost!=null&&<> {'≈'} {cost<1?'< $1':fmtDollar(cost,0)}</>}</span></div>
             </>
           ):<div className="pf2-top c2">Top league reached {'—'} {L.cur.name}</div>}
           {rankRow}
@@ -283,6 +284,7 @@
             <div className="pf2-newg"><input value={p.newGroupName} onChange={e=>p.setNewGroupName(e.target.value)} placeholder="New group name…" aria-label="New group name" onKeyDown={e=>{if(e.key==='Enter'&&p.newGroupName.trim()){p.setInputGroup(p.newGroupName.trim());p.setNewGroupName('');}}}/><button className="pf2-lnk" onClick={()=>{if(p.newGroupName.trim()){p.setInputGroup(p.newGroupName.trim());p.setNewGroupName('');}}}>Create</button></div>
           )}
           {addMsg&&<div className="pf2-addmsg" role="alert">{addMsg}</div>}
+          {p.walletSaveFailed&&<div className="pf2-addmsg" role="alert">This browser didn{'\u2019'}t let the page save your wallet list (its storage is full or blocked), so it will be gone after a reload. Use GET CODE to keep a copy.</div>}   {/* Audit IV e45 */}
           {/* round 29 (Shaka: "better visual separation from the wallets to the start of all the data" — picked C of mock-sep-v1):
               the toolbar + deck (+ the Moon Math banner) sit in their own bordered panel, then the YOUR HOLDINGS heading */}
           <section className="pf2-pn pf2-wpan" aria-label="My wallets">

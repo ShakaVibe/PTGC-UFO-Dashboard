@@ -53,7 +53,8 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // ============================================
 // RPC INFRASTRUCTURE (replaces Moralis for burn fetching)
 // ============================================
-const RPC_URL = 'https://rpc.pulsechain.com';
+const RPC_URL = 'https://rpc.pulsechain.com';   // the pool's primary; the calls go through scripts/rpc-pool.js (Audit IV e33 / D-4)
+const rpcPool = require('./rpc-pool.js');
 // Transfer(address indexed from, address indexed to, uint256 value)
 const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 // Burn address 0x...0369 padded to 32 bytes as a log topic
@@ -65,7 +66,8 @@ async function rpcCall(method, params, retries = 3) {
     try {
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch(RPC_URL, {
+      const res = await rpcPool.poolFetch({
+        attemptMs: 30000,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
@@ -145,7 +147,7 @@ async function rpcBatch(reqs) {
     try {
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), 60000);
-      const res = await fetch(RPC_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+      const res = await rpcPool.poolFetch({ attemptMs: 60000, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
       clearTimeout(tid);
       const json = await res.json();
       if (!Array.isArray(json)) throw new Error('the node did not answer the batch with a list: ' + JSON.stringify(json).slice(0, 160));

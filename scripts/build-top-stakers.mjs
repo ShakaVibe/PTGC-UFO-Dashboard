@@ -19,6 +19,7 @@
 //
 // Node 20+ (global fetch; locally NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/top-stakers.json';
 const CACHE_PATH = process.env.CACHE_PATH || 'data/top-stakers-cache.json';
@@ -38,9 +39,8 @@ let rr = 0;
 async function rpc(method, params) {
   let last;
   for (let t = 0; t < 6; t++) {
-    const url = RPCS[(rr++) % RPCS.length];
-    try {
-      const r = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(20000), headers: { 'content-type': 'application/json' },
+    try {   // the pool picks the endpoint (primary first; RPC_URLS still overrides the list)
+      const r = await rpcPool.poolFetch({ attemptMs: 20000, method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
       const j = await r.json();
       if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 160));

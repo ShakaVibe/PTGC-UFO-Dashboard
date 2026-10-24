@@ -351,6 +351,7 @@ const dsAnswer=(url)=>{
       return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{attributes:{ohlcv_list:list.reverse()}}})});
     }
     if(/fonts\.g/.test(u))return r.fulfill({status:200,contentType:'text/css',body:''});
+    if(/cdn\.jsdelivr\.net\/npm\/chart\.js@4\.4\.1\/dist\/chart\.umd\.js/.test(u))return r.fulfill({status:200,contentType:'text/javascript',headers:{'access-control-allow-origin':'*'},body:fs.readFileSync(path.join(__dirname,'node_modules/chart.js/dist/chart.umd.js'),'utf8')});   // Audit IV P-5: index loads Chart.js on demand
     if(/cdnjs.*html2canvas/.test(u))return r.fulfill({status:200,contentType:'text/javascript',body:process.env.H2C?fs.readFileSync(path.join(__dirname,'node_modules/html2canvas/dist/html2canvas.min.js'),'utf8'):'window.html2canvas=null;'});
     return r.fulfill({status:404,body:''});
   });
@@ -365,6 +366,7 @@ const dsAnswer=(url)=>{
     if(kind==='wait')await page.waitForTimeout(+arg);
     if(kind==='reload'){await page.reload({waitUntil:'load'});await page.waitForFunction(()=>{const r=document.querySelector('#root');return r?(r.children.length>0&&!r.querySelector('[data-boot]')):true;},{timeout:30000});await page.waitForTimeout(+arg||2500);}   // reload=<ms>: reload in place (localStorage survives) and wait. Same #root rule as the first load — charts.html has none, and `reload` used to time out there (a59)
     if(kind==='key'){await page.keyboard.press(arg);await page.waitForTimeout(300);}
+    if(kind==='back'){await page.goBack({waitUntil:'commit',timeout:5000}).catch(()=>{});await page.waitForTimeout(+arg||600);}   // Audit IV e44: the browser Back button
     if(kind==='scroll'){await page.evaluate(y=>window.scrollTo(0,y),+arg);await page.waitForTimeout(400);}
     if(kind==='scrollnav'){await page.evaluate(()=>{const el=document.querySelector('.no-scrollbar');if(el)el.scrollLeft=9999;});await page.waitForTimeout(400);}
     if(kind==='evalfile'){const v=await page.evaluate(fs.readFileSync(arg,'utf8'));console.log('EVAL',arg,'=>',JSON.stringify(v,null,1));}

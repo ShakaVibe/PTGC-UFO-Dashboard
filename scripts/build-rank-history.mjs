@@ -11,17 +11,20 @@
 //                                           then the day's m applied. Seeded by the one-off backfill (design/portfolio/ranks-mock/
 //                                           backfill-fast.mjs), EXTENDED here one UTC day at a time by the same walk forwards.
 //                                           NOT deployed (deploy.yml ships an allow-list) — only the index below is.
-//   data/rank-index/<TOKEN>/<xxx>.json       the index — 4,096 shards by the address's first three hex chars: for every wallet
+//   data/rank-index/<TOKEN>/<xx>.json        the index — 256 shards by the address's first TWO hex chars (D-6, 2026-10-24; was
+//                                           4,096 by three — ~6,900 files rewritten into git every day): for every wallet
 //                                           that ever held, [firstDayIndex, [rank delta per day]] (a rank of 0 = not holding);
 //                                           data/rank-index/<TOKEN>/meta.json = day 0's date, the day count, holders per day.
 // Honest-failure rules (gotcha 20): any RPC failure aborts before the archive is written — a half-extended day would be a
 // wrong rank forever. The index is rebuilt from the archive every run (deterministic), so it can never disagree with it.
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 import path from 'node:path';
 
 const RPC = process.env.RPC || 'https://rpc.pulsechain.com';
 const ARCH_DIR = 'data/rank-history', IDX_DIR = 'data/rank-index';
+const SHARD_HEX = 2;   // D-6: the index shard = the address's first SHARD_HEX hex chars (meta.json `shard`; the page reads either layout)
 const TOKENS = {
   PTGC: { a: '0x94534eeee131840b1c0f61847c572228bdfdde93', launch: '2023-10-10' },
   UFO:  { a: '0x49ed499433bee42dd34c169470fef2c8f9fae6e6', launch: '2026-07-08' },
@@ -36,7 +39,7 @@ let id = 1;
 async function rpc(method, params, tries = 6) {
   for (let k = 0; k < tries; k++) {
     try {
-      const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: id++, method, params }) });
+      const r = await rpcPool.poolFetch({ attemptMs: 30000, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: id++, method, params }) });
       const j = await r.json(); if (j.error) throw new Error(JSON.stringify(j.error).slice(0, 120)); return j.result;
     } catch (e) { if (k === tries - 1) throw e; await sleep(800 * (k + 1)); }
   }
@@ -131,22 +134,30 @@ function index(sym, st) {
   });
   // per wallet: [firstDayIndex, [delta per day]] — the day-to-day CHANGE of the rank (0 = unchanged; a rank of 0 = not holding
   // is stored as the delta to 0). Ranks shift by a place or two most days, so deltas are tiny numbers and the shard is ~3× smaller
-  // than run-lengths (which almost never repeat). 4,096 shards by the address's first three hex chars → ~10 KB each for PTGC.
+  // than run-lengths (which almost never repeat). 256 shards by the address's first two hex chars → ~110 KB each for PTGC (D-6).
   const shards = {};
   for (const [a, t] of tracks) {
     const ks = [...t.keys()].sort((x, y) => x - y), ds = []; let prev = 0;
     for (let k = ks[0]; k <= ks[ks.length - 1]; k++) { const r = t.get(k) || 0; ds.push(r - prev); prev = r; }
-    (shards[a.slice(2, 5)] = shards[a.slice(2, 5)] || {})[a] = [ks[0], ds];
+    const sk = a.slice(2, 2 + SHARD_HEX); (shards[sk] = shards[sk] || {})[a] = [ks[0], ds];
   }
   const dir = path.join(IDX_DIR, sym); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
   for (const [xxx, obj] of Object.entries(shards)) fs.writeFileSync(path.join(dir, xxx + '.json'), JSON.stringify(obj));
-  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ schema: 2, token: sym, day0: days[0], days: days.length, holders: counts, generatedAt: st.generatedAt || new Date().toISOString() }));
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ schema: 2, shard: SHARD_HEX, token: sym, day0: days[0], days: days.length, holders: counts, generatedAt: st.generatedAt || new Date().toISOString() }));
   console.log(`${sym}: index — ${tracks.size} wallets over ${days.length} days in ${Object.keys(shards).length} shards`);
 }
 
 let ok = 0;
+/* D-6: an index in another shard layout is rebuilt from the archive even when the archive did not move (no RPC);
+   INDEX_ONLY=1 does just that for every token (a local reshard / check) */
+const metaShard = sym => { try { return JSON.parse(fs.readFileSync(path.join(IDX_DIR, sym, 'meta.json'), 'utf8')).shard || 3; } catch { return null; } };
+const archiveOf = sym => JSON.parse(fs.readFileSync(path.join(ARCH_DIR, sym + '.json'), 'utf8'));
 for (const sym of Object.keys(TOKENS)) {
-  try { const st = await extend(sym); if (st) { if (!st.unchanged) index(sym, st); ok++; } }   // e33: no index rebuild on a no-op
+  try {
+    if (process.env.INDEX_ONLY) { index(sym, archiveOf(sym)); ok++; continue; }
+    const st = await extend(sym);
+    if (st) { if (!st.unchanged) index(sym, st); else if (metaShard(sym) !== SHARD_HEX) { console.log(`${sym}: index is in the ${metaShard(sym)}-char layout → resharding to ${SHARD_HEX}`); index(sym, archiveOf(sym)); } ok++; }
+  }   // e33: no index rebuild on a no-op
   catch (e) { console.log(`::warning::rank-history ${sym} failed: ${e.message} — archive and index left as they were`); }
 }
 if (!ok) { console.error('rank-history: nothing updated'); process.exit(1); }

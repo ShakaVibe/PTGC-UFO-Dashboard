@@ -1,5 +1,6 @@
     /* ===== HOLDER RANK WINDOW (2026-10-21, design/portfolio/mock-rank-window-v1.html, "perfect!") =====
-       Opens from any rank badge. Reads data/rank-index/<TOKEN>/meta.json + the wallet's shard (<first three hex>.json): for every
+       Opens from any rank badge. Reads data/rank-index/<TOKEN>/meta.json + the wallet's shard (<first two hex>.json since D-6, 2026-10-24;
+       three before — meta.shard says which): for every
        wallet that ever held, [firstDayIndex, [rank delta per day]] over the token's life (rank 0 = not holding). Today's point is the
        LIVE rank from holder-ranks.json (pfRank), so the chart ends where the badge says. Periods LIFE · 1Y · 90D · 30D · 7D. Buy /
        sell dots = Recent Transactions' rows (t, addr, tok, type). Several wallets → "as one" is not in the index (it is a sum), so
@@ -10,8 +11,11 @@
     /* → {day0, days, series:[rank|0 per day index], holders:[count per day]} for one wallet, or null */
     const pfrLoad=async(tok,addr)=>{
       const a=addr.toLowerCase();
-      const[meta,shard]=await Promise.all([pfrGet(`${PFR_RAW}${tok}/meta.json`),pfrGet(`${PFR_RAW}${tok}/${a.slice(2,5)}.json`)]);
+      /* D-6 (2026-10-24): 256 shards by two hex chars (meta.shard 2); the old layout had 4,096 by three. The two-char file is read
+         together with meta (the usual case after the switch-over); the other layout only when meta names it or the file is missing. */
+      const[meta,s2]=await Promise.all([pfrGet(`${PFR_RAW}${tok}/meta.json`),pfrGet(`${PFR_RAW}${tok}/${a.slice(2,4)}.json`)]);
       if(!meta||meta.schema!==2)return null;
+      const shard=meta.shard===2?(s2||await pfrGet(`${PFR_RAW}${tok}/${a.slice(2,5)}.json`)):(await pfrGet(`${PFR_RAW}${tok}/${a.slice(2,5)}.json`)||s2);
       const series=new Array(meta.days).fill(0);
       const rec=shard&&shard[a];
       if(rec){let i=rec[0],r=0;for(const d of rec[1]){r+=d;if(i<series.length)series[i]=r;i++;}}   // schema 2: [firstDay, [rank delta per day]]
@@ -73,7 +77,8 @@
       /* Shaka: "default the chart to NOT show buys and sells.. if they want to see them they can check a box.. and then they get a
          loading while it loads" + "should always default to off.. even on refresh" — off every time the window opens, never remembered */
       const[showTx,setShowTx]=useState(false);
-      const[want,setWant]=useState('');   // the calculator's typed rank (his add, 2026-10-21 evening: mock-rank-calc-v2, pick C)
+      const[want,setWant]=useState('');
+      const[iiOpen,setIiOpen]=useState(false);   // e46: the cost ⓘ opens on a tap   // the calculator's typed rank (his add, 2026-10-21 evening: mock-rank-calc-v2, pick C)
       const isU=tok==='UFO',col=isU?'#8DFF3A':'#F2D35B',logo=isU?TOKENS.UFO.logo:TOKENS.PTGC.logo;
       /* 2026-10-24: the combined view — every counted wallet that read, added up (the same sum as the League box) and ranked as one
          (pfRankAll); `w` is null there. BEST WALLET ALONE / PLACES GAINED compare it with the best single wallet's own rank. */
@@ -171,7 +176,7 @@
                 const L=ok&&n<mine?pfLeague(bal+need,PF_SUPPLY[tok]):null;const L0=pfLeague(bal,PF_SUPPLY[tok]);
                 const msg=!want?null:!ok?(n>list.length?`the list ends at #${list.length.toLocaleString('en-US')}`:'type a rank'):n>=mine?(n===mine?`that’s you — #${mine.toLocaleString('en-US')} today`:`you’re already above #${n.toLocaleString('en-US')}`):null;
                 return <div className="ctl">
-                  <div className="ask"><div className="l">I WANT TO BE RANK <span className="ii" tabIndex="0" aria-label="About the cost">i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It’s the tokens you’d need at today’s price. A real buy moves the price as it fills — slippage and the price rising while you buy aren’t included, so expect the real cost to be higher.</span></span></div>
+                  <div className="ask"><div className="l">I WANT TO BE RANK <button type="button" className={`ii${iiOpen?' open':''}`} aria-label="About the cost" aria-expanded={iiOpen} onClick={e=>{e.stopPropagation();setIiOpen(o=>!o);}} onBlur={()=>setIiOpen(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It’s the tokens you’d need at today’s price. A real buy moves the price as it fills — slippage and the price rising while you buy aren’t included, so expect the real cost to be higher.</span></button></div>
                     <label className="inp"><span>#</span><input inputMode="numeric" pattern="[0-9]*" placeholder={mine>1?String(Math.max(1,Math.ceil(mine/2))):'1'} value={want} onChange={e=>setWant(e.target.value.replace(/[^0-9]/g,'').slice(0,6))} aria-label="The rank you want"/></label>
                     <div className="s">{msg||<>any rank above your #{mine.toLocaleString('en-US')} {'·'} from today{'’'}s holder list</>}</div></div>
                   <div className="tl"><div className="l">TOKENS TO BUY</div><div className="v">{ok&&n<mine?pfPassAmt(need):'—'}</div><div className="s">{tok} more than you hold</div></div>

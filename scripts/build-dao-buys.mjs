@@ -36,6 +36,7 @@
 //
 // Node 20+ (global fetch). ESM so it runs regardless of repo package.json.
 import fs from 'node:fs';
+import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/dao-buys.json';
 const RPC = process.env.RPC || 'https://rpc.pulsechain.com';
@@ -51,6 +52,12 @@ const PTGC = '0x94534eeee131840b1c0f61847c572228bdfdde93';
 const PAIR_PTGC_WPLS = '0xf5a89a6487d62df5308cdda89c566c5b5ef94c11'; // token0 = PTGC, token1 = WPLS (checked on chain)
 const PAIR_WPLS_DAI = '0xe56043671df55de5cdf8459710433c10324de0ae';  // token0 = WPLS, token1 = DAI (checked on chain)
 const LP_REMOVAL_SELECTORS = new Set(['0x2195995c', '0x02751cec', '0xded9382a', '0x5b0d5984', '0xaf2979eb']); // removeLiquidityETH* family
+const LP_ADD_SELECTORS = new Set(['0xe8e33700', '0xf305d719']);   // addLiquidity / addLiquidityETH (the Ledger's rule 1)
+const BURN_ADDR = '0x0000000000000000000000000000000000000369';
+/* M-13 (2026-10-24): the Ledger's LP-token test (ledger.html isLPToken), so the two surfaces agree on what a token-paid buy is */
+const isLpToken = t => { const s = (t.tokenSymbol || '').toUpperCase(), nm = (t.tokenName || '').toLowerCase();
+  return s.includes('LP') || s.includes('PLP') || s.includes('UNI-V2') || nm.includes('liquidity') || nm.includes('lp token') || nm.includes('pulsex'); };
+const cleanSym = s => String(s || '').replace(/[^A-Za-z0-9.\- ]/g, '').trim().slice(0, 12) || 'tokens';
 
 const DAILY_STRIDE = 8640;     // ~1 day at PulseChain's ~10 s blocks
 const HOURLY_STRIDE = 360;     // ~1 hour
@@ -68,7 +75,7 @@ const rpc = async (method, params, tries = 4) => {
     try {
       const ctl = new AbortController();
       const t = setTimeout(() => ctl.abort(), 20000);
-      const res = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' },
+      const res = await rpcPool.poolFetch({ attemptMs: 20000, method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctl.signal });
       clearTimeout(t);
       if (res.status === 429 || res.status >= 500) throw new Error('HTTP ' + res.status);
@@ -118,15 +125,16 @@ const pmap = async (items, fn, limit = CONCURRENCY) => {
 const lc = s => (s || '').toLowerCase();
 export function deriveBuys(txns, transfers, wallet) {
   const WALLET = lc(wallet);
-  const byHash = new Map();
+  const byHash = new Map(), outByHash = new Map();
   for (const t of transfers) {
+    if (lc(t.from) === WALLET) { const o = outByHash.get(t.hash) || []; o.push(t); outByHash.set(t.hash, o); }   // M-13: every token the wallet sent
     if (lc(t.contractAddress) !== PTGC) continue;
     const e = byHash.get(t.hash) || { inn: 0n, out: 0n };
     if (lc(t.to) === WALLET) e.inn += BigInt(t.value);
     if (lc(t.from) === WALLET) e.out += BigInt(t.value);
     byHash.set(t.hash, e);
   }
-  const buys = []; let lpRemovals = 0, noPlsPaid = 0;
+  const buys = []; let lpRemovals = 0, noPlsPaid = 0, tokenPaid = 0;
   for (const tx of txns) {
     if (lc(tx.from) !== WALLET) continue;
     if (tx.isError === '1' || tx.txreceipt_status === '0') continue;
@@ -136,7 +144,21 @@ export function deriveBuys(txns, transfers, wallet) {
     if (LP_REMOVAL_SELECTORS.has(sel)) { lpRemovals++; continue; }
     // PTGC arrived but no PLS left the wallet: a token-for-token route or another LP path.
     // Not priceable as a PLS buy; counted so a change here is visible in the file.
-    if (tx.value === '0') { noPlsPaid++; continue; }
+    if (tx.value === '0') {
+      /* M-13 (2026-10-24, Shaka: "Chart counts it too"): a buy PAID IN ANOTHER TOKEN, by the Ledger's rule — the wallet sent a
+         non-LP token, no PTGC went to the burn address, and it is not an LP add. Priced in main() at its block's market price. */
+      const outs = outByHash.get(tx.hash) || [];
+      const paid = outs.filter(t => lc(t.contractAddress) !== PTGC && !isLpToken(t));
+      const burnt = outs.some(t => lc(t.contractAddress) === PTGC && lc(t.to) === BURN_ADDR);
+      if (!LP_ADD_SELECTORS.has(sel) && paid.length && !outs.some(isLpToken) && !burnt) {
+        const p0 = paid[0], dec = Number(p0.tokenDecimal) || 18;
+        const amt = paid.filter(t => lc(t.contractAddress) === lc(p0.contractAddress)).reduce((a, t) => a + Number(BigInt(t.value)) / 10 ** dec, 0);
+        buys.push({ hash: tx.hash, block: Number(tx.block_number), ts: Number(tx.timeStamp), ptgc: Number(flow.inn) / 1e18, pls: null,
+          paidWith: { symbol: cleanSym(p0.tokenSymbol), amount: amt, token: lc(p0.contractAddress) }, router: lc(tx.to), wallet: WALLET });
+        tokenPaid++; continue;
+      }
+      noPlsPaid++; continue;
+    }
     let refund = 0n;
     for (const it of (tx.internal_transactions || [])) {
       if (lc(it.to) === WALLET && it.value && it.value !== '0' && !it.error) refund += BigInt(it.value);
@@ -153,7 +175,7 @@ export function deriveBuys(txns, transfers, wallet) {
     });
   }
   buys.sort((a, b) => a.ts - b.ts || a.block - b.block);
-  return { buys, lpRemovals, noPlsPaid };
+  return { buys, lpRemovals, noPlsPaid, tokenPaid };
 }
 
 // ---------------------------------------------------------------- main
@@ -165,14 +187,14 @@ async function main() {
   const prev = readJson(OUT_PATH, null);
   const prevBuys = new Map(((prev && prev.buys) || []).map(b => [b.hash, b]));
 
-  const buys = []; let lpRemovals = 0, noPlsPaid = 0; const source = {};
+  const buys = []; let lpRemovals = 0, noPlsPaid = 0, tokenPaid = 0; const source = {};
   for (const w of WALLETS) {
     const txnsFile = readJson(w.txns, null), tokensFile = readJson(w.tokens, null);
     if (!txnsFile || !tokensFile) throw new Error(`missing treasury input files for ${w.addr}`);
     if (lc(txnsFile.wallet || '') !== w.addr || lc(tokensFile.wallet || '') !== w.addr) throw new Error(`treasury files for ${w.addr} are for ${txnsFile.wallet} / ${tokensFile.wallet}`);
     const d = deriveBuys(txnsFile.transactions || [], tokensFile.transfers || [], w.addr);
-    console.log(`${w.addr.slice(0, 6)}…${w.addr.slice(-4)}: ${d.buys.length} buys (excluded: ${d.lpRemovals} LP removals, ${d.noPlsPaid} with no PLS paid)`);
-    buys.push(...d.buys); lpRemovals += d.lpRemovals; noPlsPaid += d.noPlsPaid;
+    console.log(`${w.addr.slice(0, 6)}…${w.addr.slice(-4)}: ${d.buys.length} buys (${d.tokenPaid} paid in another token; excluded: ${d.lpRemovals} LP removals, ${d.noPlsPaid} with no PLS paid)`);
+    buys.push(...d.buys); lpRemovals += d.lpRemovals; noPlsPaid += d.noPlsPaid; tokenPaid += d.tokenPaid;
     source[w.addr] = { txns: txnsFile.lastUpdated, tokens: tokensFile.lastUpdated };
   }
   buys.sort((a, b) => a.ts - b.ts || a.block - b.block);
@@ -182,7 +204,7 @@ async function main() {
   const toPrice = buys.filter(b => {
     const p = prevBuys.get(b.hash);
     const same = (x, y) => Math.abs(x - y) <= 1e-8 * Math.max(Math.abs(x), Math.abs(y), 1); // stored values are rounded to 10 sig figs
-    return !(p && p.plsUsd > 0 && same(p.pls, b.pls) && same(p.ptgc, b.ptgc));
+    return !(p && p.plsUsd > 0 && (b.paidWith ? p.marketUsd > 0 : same(p.pls, b.pls)) && same(p.ptgc, b.ptgc));   // M-13: a token-paid buy has no PLS of its own to compare
   });
   console.log(`pricing ${toPrice.length} new buys…`);
   await pmap(toPrice, async (b) => { const p = await pricesAt(b.block); b.plsUsd = p.plsUsd; b.marketUsd = p.ptgcUsd; });
@@ -190,6 +212,10 @@ async function main() {
     const p = prevBuys.get(b.hash);
     if (b.plsUsd == null && p) { b.plsUsd = p.plsUsd; b.marketUsd = p.marketUsd; }
     if (!(b.plsUsd > 0)) throw new Error(`buy ${b.hash} has no price — aborting write`);
+    if (b.paidWith) {   // M-13: valued at the PTGC market price of its block; pls = the PLS-equivalent
+      if (!(b.marketUsd > 0)) throw new Error(`token-paid buy ${b.hash} has no market price — aborting write`);
+      b.pls = b.ptgc * b.marketUsd / b.plsUsd;
+    }
     b.usd = b.pls * b.plsUsd;
     b.price = b.ptgc > 0 ? b.usd / b.ptgc : 0;       // effective USD per PTGC (after fee + slippage)
   }
@@ -248,8 +274,10 @@ async function main() {
     source,
     totals: { ...totals, ptgc: round(totals.ptgc, 12), pls: round(totals.pls, 12), usd: round(totals.usd, 10), avgPrice: round(totals.avgPrice, 8) },
     excluded: { lpRemovals, noPlsPaid },
+    tokenPaidBuys: tokenPaid,   // M-13: buys paid in another token (their `pls` is the PLS-equivalent)
     buys: buys.map(b => ({ hash: b.hash, wallet: b.wallet, block: b.block, ts: b.ts, ptgc: round(b.ptgc, 10), pls: round(b.pls, 10),
-      plsUsd: round(b.plsUsd, 6), usd: round(b.usd, 8), price: round(b.price, 6), marketUsd: round(b.marketUsd || b.price, 6) })),
+      plsUsd: round(b.plsUsd, 6), usd: round(b.usd, 8), price: round(b.price, 6), marketUsd: round(b.marketUsd || b.price, 6),
+      ...(b.paidWith ? { paidWith: { symbol: b.paidWith.symbol, amount: round(b.paidWith.amount, 10), token: b.paidWith.token } } : {}) })),
     price
   };
   fs.mkdirSync(OUT_PATH.slice(0, OUT_PATH.lastIndexOf('/')) || '.', { recursive: true });

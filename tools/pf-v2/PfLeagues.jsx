@@ -64,8 +64,20 @@
     /* round 26 (audit D1 / D2 / D9): every window traps Tab inside itself, gives focus back to the button that opened it,
        leaves an autoFocus'd field alone, and locks the page behind on iOS too (position:fixed — overflow:hidden isn't enough there) */
     const PF_FOCUSABLE='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    /* Audit IV e44 (2026-10-24): the browser / phone Back closes the open window instead of leaving the page. Each window with
+       an onClose pushes one same-URL history entry (state.grayModal); Back pops it → popstate → the TOP window closes. A window
+       closed any other way (×, Escape, the backdrop) takes its own entry back off — only while that entry is still the current
+       one (a window closed BY a navigation leaves it, and Back then just steps over it). The entries share the URL, so the hash
+       router sees no hashchange. */
+    const PF_MODAL_HIST=[];let _pfHistSkip=0;
+    if(typeof window!=='undefined')window.addEventListener('popstate',()=>{if(_pfHistSkip>0){_pfHistSkip--;return;}const h=PF_MODAL_HIST[PF_MODAL_HIST.length-1];if(h){h.fromBack=true;h.close();}});
+    const pfUseBackCloses=(closeRef)=>{useEffect(()=>{if(!closeRef.current)return;const h={id:'pm'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),fromBack:false,close:()=>{if(closeRef.current)closeRef.current();}};
+      try{history.pushState(Object.assign({},history.state||{},{grayModal:h.id}),'');}catch(e){return;}
+      PF_MODAL_HIST.push(h);
+      return()=>{const i=PF_MODAL_HIST.indexOf(h);if(i>=0)PF_MODAL_HIST.splice(i,1);if(!h.fromBack&&history.state&&history.state.grayModal===h.id){_pfHistSkip++;history.back();}};},[]);};
     const PfModal=({onClose,label,className='',children})=>{
       const ref=React.useRef(null);const cl=React.useRef(onClose);cl.current=onClose;
+      pfUseBackCloses(cl);   // e44 (runs before the scroll lock below, so the entry keeps the real scroll position)
       const prevRef=React.useRef(typeof document!=='undefined'?document.activeElement:null);   // captured at render, before anything inside autofocuses
       useEffect(()=>{const prev=prevRef.current,b=document.body,saved={ov:b.style.overflow,pos:b.style.position,top:b.style.top,w:b.style.width},y=window.scrollY;
         b.style.overflow='hidden';b.style.position='fixed';b.style.top=(-y)+'px';b.style.width='100%';
@@ -105,7 +117,7 @@
       const usdCell=v=>!v||isNaN(v)?'—':v>=1?'$'+Math.floor(v).toLocaleString('en-US'):'$'+v.toFixed(2);
       return(
         <PfModal className="z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80" onClose={close} label={`${token} leagues`}>
-          <div className={`lg-m max-w-[560px] w-full max-h-[92vh] overflow-y-auto overscroll-contain${isPTGC?'':' ufo'}`} onClick={e=>e.stopPropagation()}>
+          <div className={`lg-m max-w-[560px] w-full max-h-[92dvh] overflow-y-auto overscroll-contain${isPTGC?'':' ufo'}`} onClick={e=>e.stopPropagation()}>
             <div className="lg-hd">
               <div className="sky" aria-hidden="true"></div><div className="fade" aria-hidden="true"></div>{/* 2026-10-23: = index.html — the Atlantis art, no whale / shark */}
               <div className="tg"><PfSupplyToggle mode={mode} setMode={m=>setMode(m==='circ'&&!burnKnown?'start':m)} color={isPTGC?'#FFE27A':'#B4FF86'} color2={isPTGC?'#E3B52A':'#5BE632'}/></div>

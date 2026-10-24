@@ -9,6 +9,7 @@
 //
 // Node 22+ (global fetch / AbortController). ESM so it runs regardless of repo package.json.
 import fs from 'node:fs';
+import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
 
 // ===== lifted from index.html: RPC + rpcFetch =====
@@ -20,7 +21,7 @@ const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
       try{
         const controller=new AbortController();
         const timeoutId=setTimeout(()=>controller.abort(),timeout);
-        const res=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+        const res=await rpcPool.poolFetch({attemptMs:timeout,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
         clearTimeout(timeoutId);
         return await res.json();
       }catch(e){

@@ -1,0 +1,2 @@
+// Audit IV P-5: is Chart.js loaded, and did the DAO Buys window draw its charts?
+(()=>JSON.stringify({chart:!!window.Chart,scripts:[...document.scripts].filter(s=>/chart/i.test(s.src)).map(s=>s.src.replace(/^https?:\/\/[^/]+/,'')),canvases:[...document.querySelectorAll('[role=dialog] canvas')].map(c=>{const i=window.Chart&&window.Chart.getChart(c);return i?i.config.type+':'+i.data.datasets.length:'none'})}))()

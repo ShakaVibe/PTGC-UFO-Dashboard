@@ -46,6 +46,49 @@ Update it at the end of every session.
 
 ## Current state (2026-10-22)
 
+**2026-10-24 (afternoon): ROADMAP + D-4 + D-6 + AUDIT IV P3s + P-5 / P-11 / M-13 — BUILT on the Mac, NOT pushed.** (Shaka, on
+the "what's next" list: "1 no [share link], 2 yes, 3 yes, 4 yes, 5 yes, 6 yes"; then picked "256 bigger files" for D-6, "Chart
+counts it too" for M-13, "Later" for e43's names / gold mock-up.) Build, in this order (all idempotent, re-runs "0 edit(s)"; a clean
+run from `aa7eebd75` = these shas): `python3 tools/pipeline-rpc-pool.py` → `tools/rank-index-256.py` → `tools/audit4-batch7.py` →
+`tools/dao-buys-token-paid.py` → `tools/audit4-polish.py`, then `cd tools/harness && npm run css` (tw.css 52dd311b → `?v=7`; h2.css
+2ae97342 → `?v=5`). index.html bd04ec8c, portfolio bfb42701, calculators c74b2d4c, charts fe40aba4. New file `scripts/rpc-pool.js`.
+*Roadmap artifact:* "AUDIT IV" phase added (e1–e47 from the audit file; phone overflow of the page fixed); ticked: every e-item but
+e5 / e6 (Worker v8, parked) and e43 (names / gold — his "later").
+*D-4 (e33) — one RPC pool for the pipeline:* `scripts/rpc-pool.js` (CommonJS; the .mjs import it as default) — rpc.pulsechain.com
+first, then rpc-pulsechain.g4mm4.io and pulsechain-rpc.publicnode.com (`RPC_URLS` overrides, a script's own `RPC=` pins one).
+The primary is always tried first, so nothing changes while it is healthy; a transport error / timeout / HTTP 429-5xx / JSON-RPC
+rate limit cools it 30 s and the next one answers. HEAD CHECK: a call naming a block (getLogs toBlock, eth_call at a block,
+getBlockByNumber) only goes to a node whose eth_blockNumber has reached it (re-probed when short), and 'latest' calls skip a node
+> 30 blocks behind — so a lagging fallback can never return an empty getLogs and make a scan skip blocks. Wired into
+fetch-burn-history (→ fetch-ufo-ptgc-burns too), value-generated, dao-buys, new-holders, swap-volume, rank-history,
+token-allocation, top-stakers; each keeps its own retries / halving; per-try budget passed as `attemptMs`. A script that used a
+fallback prints one "rpc pool:" line at exit. Tested: 12 fake-node cases (healthy, 503, -32005, hang, all down, lagging B → C,
+nobody has the block → error not []), and real runs of dao-buys, burn-history (reconcile ✓ both tokens), swap-volume, rank-history.
+*D-6 — 256 rank-index shards:* `meta.json` gains `shard: 2`; files are `<first two hex>.json` (~110 KB PTGC, 35 KB gz; 512 files a
+day instead of ~6,900). The builder reshards on its next run even with nothing to extend (`INDEX_ONLY=1` does it locally, no RPC);
+PfRank reads meta + the 2-char shard together and falls back to the other layout. Verified: resharded index = the old one wallet
+for wallet (19,270 / 5,106), meta identical but `shard`; the rank window renders the same on both layouts.
+*e42:* sr-only h1 per dashboard ("PTGC dashboard — overview / KPI Report / Socials") + "Skip to content" (h2.css `.g-skip`, focus →
+`#g-main`); KPI tab h2, Live Feed title h2; the five panel h3s named by their title (aria-label); Calculators / Charts titles h1.
+*e44:* Back closes the open window — index's `useDialog` (every Modal / share card) and portfolio's `PfModal` push one same-URL
+history entry; Back pops it → the top window closes; ×/Escape take it back off; hash router untouched. Harness `back=` action.
+*e45:* a refused wallet-list save drops the two history caches and retries, else "This browser didn't let the page save your
+wallet list … Use GET CODE to keep a copy."  *e46:* league bar ≤ 99.9 % while below the line + "need 1.3 ≈ < $1"; fmtX keeps
+"x" above 1,000 (UFO "4.1Kx"); getWhaleProgress with the a42 epsilon (5.00 % = 5 whales, 0.0 %); KPI compare card's other-token
+Volume badge computed (vol24h vs vol7dFromCache/7); Live Feed SELL on a known pool grossed up by 1/(1−fee) ($0.32 → $0.34 in
+the stub); footer px-4; Leagues / disclaimer / Affiliates / Logos windows in dvh (+ @supports vh fallback); "About the cost" ⓘ
+(Top 100 + rank window) is a tap-toggle button (hover only with a mouse); Volume / Holders tiles at 1024–1199 get a 7 px gap.
+*P-5:* index loads Chart.js on demand (`loadChartJs` / `useChartJs`, same SRI) — #/ptgc boots with no chart script; the DAO Buys
+window loads it and draws (line + bar, share card too). Calculators keep `defer` (six charts with long shared deps).
+*P-11:* Home "ENTER DASHBOARD" + classic BUY: the box-shadow pulse → static glow + an inset glow on ::before animating OPACITY
+(getAnimations: boxShadow → opacity); looks the same.
+*M-13:* build-dao-buys counts token-paid buys by the Ledger's rule; priced at the block's PTGC market price, `pls` = PLS-equivalent,
+`paidWith {symbol, amount, token}`, `tokenPaidBuys` in the file; the window prints the token ("5.56B Burn") on those buys. Real
+rebuild: July 5 / 168.1 M → 6 / 183.0 M (= the Ledger), Jun / Aug / Sep unchanged, plus 2024-12-19 (3,000 EHEX → 0.03 M) and
+2025-03-16 (15 B "808" → 33.1 M, ≈ $12.5K): 321 → 324 buys, $1.912 M → $1.925 M.
+*e47:* numbers only (Actions minutes free while the repo is public; Pages / CoinGecko / PulseScan budgets far from a limit).
+*Harness:* `T1_BY_ADDR`, `back=`, the jsDelivr chart.umd.js route; probes back-state.js, anims.js, chart-lazy.js; ci-mount 7/7.
+
 **2026-10-24 (day): COMBINED HOLDER RANK + READY TO CLAIM AT 0 + TWO RANK CRASH FIXES — BUILT on the Mac, NOT pushed.**
 (Shaka: "when multiple wallets are selected … show the ranking as if all wallets were one … in the same place where we show the
 ranking details of a single wallet" — he had dropped "all N wallets as one" on 10-21 pm and asked for it back; then "if a wallet has
@@ -1956,9 +1999,24 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   worked when triggered by hand (`/__scheduled?cron=7+*+*+*+*` from the editor's HTTP tab). A redeploy did NOT help. Deleting both
   cron rows and adding them back did: the next :07 fired. Tell-tale: a "Next" time already in the past on the Triggers page.
 
+- **The pipeline's RPC goes through `scripts/rpc-pool.js` (2026-10-24, D-4).** Never `fetch('https://rpc.pulsechain.com', …)` in a
+  new script — `rpcPool.poolFetch({attemptMs, body})` (CommonJS: `require('./rpc-pool.js')`; ESM: `import rpcPool from
+  './rpc-pool.js'`). The pool's head check is what makes a fallback safe for incremental scans: name the block (hex `toBlock`,
+  the block tag on eth_call) — a call on 'latest' cannot be checked. Rank-index shards are 2 hex chars since D-6 (meta.shard).
+- **Windows are history entries (2026-10-24, e44).** index's `useDialog` and portfolio's `PfModal` push a same-URL history entry;
+  a window that closes itself while it is the current entry calls `history.back()`. A new overlay that does not use `Modal` /
+  `useDialog` / `PfModal` gets no Back behaviour — use them.
+
 ## Next up (in order)
 
--37. **Combined holder rank + Ready to claim at 0 + the two rank crash fixes (2026-10-24 day) — BUILT, NOT pushed.** His push →
+-38. **Roadmap + D-4 + D-6 + e42/e44/e45/e46 + P-5/P-11/M-13 (2026-10-24 afternoon) — BUILT, NOT pushed.** His push → Claude's
+   checks: (1) the next Data Pipeline run is green and no step slower (a "rpc pool:" line only if the primary failed); (2) after
+   ~00:15 UTC Oct 25 data/rank-index/PTGC has 256 files + meta `shard: 2` (or Run workflow only=rank-history force=true now);
+   the rank window still draws; (3) dao-buys.json `tokenPaidBuys: 3`, July = 6 buys; (4) live: #/ptgc boots with no chart.umd.js
+   request, DAO Buys window draws; Back closes a window on a phone; the skip link on Tab. Left: e43 (names / one gold — his "later",
+   mock-up first), e5 / e6 (Worker v8, parked), the share link F4 (he said no for now).
+-37. **DONE — pushed `aa7eebd75`** (combined holder rank, Ready to claim at 0, rank crash fixes). Was:
+   **Combined holder rank + Ready to claim at 0 + the two rank crash fixes (2026-10-24 day) — BUILT, NOT pushed.** His push →
    Claude's live look: Portfolio with 2+ wallets (the League rows, the window's "All N combined"), one wallet unchanged, a wallet with
    nothing staked (the 0 box). Wording "ALL N WALLETS COMBINED" is a one-line swap (`rkLabel` in PortfolioV2.jsx) if he prefers his
    "If all wallets were combined". Then the -36 list's "next work".
