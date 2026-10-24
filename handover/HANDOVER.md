@@ -19,7 +19,7 @@ Update it at the end of every session.
   the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
   titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
 - The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
-  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`, `lh-story.py`, `lh-high.py`, `lh-leagues-btn.py`.
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`, `lh-cards-live.py`, `lh-cards-fix.py`, `lh-net.py`, `lh-no-hilo.py`, `lh-card-text.py`, `lh-story.py`, `lh-high.py`, `lh-leagues-btn.py`, `lh-btns-small.py`.
   NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
   the fragments are the truth.
 - **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
@@ -74,6 +74,12 @@ Update it at the end of every session.
   art is `logos/socials/hub-sky.jpg` + `logos/socials/hub/*.png` (2026-10-03, `tools/socials-hub.py` = the build).
 
 ## Current state (2026-10-22)
+
+**2026-10-24 (late night): League History — LEAGUES + SHARE as two small pills in one row — BUILT, NOT pushed.** (Shaka: "it doesn't
+look good up there… unless you can make the share and the leagues smaller" → mock-ups A (small pills) / B (icon circles) → "A, but
+even smaller".) `python3 tools/lh-btns-small.py` (from `919f9b7e` → index.html 4c89cd6f, lh.css 3a5a331b): 26 px pills, 9.5 px text,
+16 px icons, left of a 34 px ✕; phone: 30 px icon circles, trident under the camera. (A removal script lh-leagues-btn-off.py was
+written and NOT used — deleted in the push command.)
 
 **2026-10-24 (late night, last of the day): League History — a LEAGUES button — BUILT, NOT pushed.** (Shaka: "under the share
 button or to the left of it, a Leagues button — pops up the leagues chart for the token you are on".) `python3 tools/lh-leagues-btn.py`
@@ -2205,7 +2211,8 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--57. **LEAGUE HISTORY Leagues button — BUILT, NOT pushed (last change of 2026-10-24).** After his push: the day's work is done; next session starts at START HERE.
+-58. **LEAGUE HISTORY small LEAGUES + SHARE pills — BUILT, NOT pushed (last change of 2026-10-24).** After his push the day is done; next session starts at START HERE.
+-57. **DONE — pushed `919f9b7e`** (Leagues button).
 -56. **DONE — pushed `3c87dfda`** (High pill always shows).
 -55. **DONE — pushed `11d9e036`** (NET apart + quiet words + story line).
 -54. **DONE — pushed `468ff689`** (card text hierarchy).
