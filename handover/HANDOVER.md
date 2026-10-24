@@ -4,6 +4,35 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## START HERE (2026-10-24 night wrap) — everything is PUSHED (`a33e4dd4`), the working tree is clean
+
+**League History** — the new window: every sea creature over time, PTGC + UFO, 7D … ALL, starting / circulating supply.
+- **Still HIDDEN** behind the faint dot at the bottom right of the dashboard (`LEAGUE_HISTORY_LIVE=false` in
+  `tools/league-history/lh.jsx`). **GO LIVE only when Shaka says:** set it `true` → `python3 tools/league-history.py` → push
+  (the dot goes; the Token Allocation creature strip becomes the button with a small "HISTORY ›" tag).
+- **Source = the fragments** `tools/league-history/lh.jsx` + `lh.css`, spliced into index.html by `tools/league-history.py` — edit
+  the fragments (or with an idempotent script), never the spliced copy. Data `data/league-history.json` (schema 4: delta-encoded,
+  held in units of 10,000 tokens — decoded in `lhDecode`) by `scripts/build-league-history.mjs`, the `league-history` step in the
+  holder-ranks lane (after rank-history, ~00:15 UTC once a day).
+- **What it has now (all live):** the lit coin header (`LgCoin`), Shaka's art; controls; the ownership BEAM (`LhBeam`, hover / tap
+  tips, click selects); 8 cards (76 px creatures, count + change, hold · %, ~per wallet, joined / left, league-coloured sparkline);
+  the big chart panel (his underwater art `logos/leagues/lh-chart-bg.webp`, glowing border, BOTH / WALLETS / TOKENS HELD, axis
+  titles, readout row, High / Low pills); footer; share card v2 (📷). Always opens on 1Y + Sharks.
+- The scripts of this evening, in order (each idempotent, each from the previous push): `burn-poseidon.py`, `burn-label-overlay.py`,
+  `lh-text-axis.py`, `lh-batch1.py`, `lh-beam.py`, `lh-bigger.py`, `lh-icons-sky.py`, `lh-chart-art.py`, `lh-card-v2.py`.
+  NOTE: an older script re-run AFTER a later one can fail its anchors (later scripts changed the same lines) — they are a history,
+  the fragments are the truth.
+- **Roadmap artifact** has a "LEAGUE HISTORY" phase lh1–lh15: done + ticked lh2–lh7, lh9–lh11, lh13, lh15. Open: lh1 (go live),
+  lh8 (one file per token — skipped, little gain), lh12 (arrow keys on the chart), lh14 (chart on the share card — partly covered
+  by share card v2's beam).
+- **Checks owed next session:** (1) the first daily `league-history` run after 00:15 UTC Oct 25 must log "1 burn reading(s)" per
+  token (not ~1,100) and keep schema 4 + `enc`; the window must show Oct 24 as "latest". (2) Rank-index reshard to 256 files
+  (D-6) + DAO buys tokenPaidBuys 3 (from -38) if not yet confirmed. (3) The 🔥 Poseidon on the PTGC strip / 🔥 on UFO's Whale
+  survive the next token-allocation runs (`burnIn`).
+- Shaka's style notes from tonight: he wants MOCK-UPS before building new visuals; bigger text everywhere; no labels on the beam;
+  "people only" counts explained in-place (the dashboard HOLDERS 18,206 = every address incl. ~1,100 contracts; League History
+  17,081 = holder wallets, people only, to yesterday's close).
+
 - Live site: https://ptgc-ufo.com (GitHub Pages from `main`, `deploy.yml` — since 2026-09-17 it
   publishes an allow-listed `_site/`, not the checkout: `handover/`, `tools/`, `scripts/` and the
   burn archive are on GitHub but not on the site, a38)
@@ -2124,7 +2153,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
--49. **LEAGUE HISTORY always-1Y + lit coin + share card v2 — BUILT, NOT pushed.**
+-49. **DONE — pushed `a33e4dd4`.** (always-1Y + lit coin + share card v2) — session wrapped here, see START HERE.
 -48. **DONE — pushed `e4ed57ea`.** (chart art + axis titles + border + bigger creatures)
 -47. **DONE — pushed `f8db2d0a`.** (bigger creatures + brighter header + coloured sparklines)
 -46. **DONE — pushed `c00bcef9`.** (bigger header + holders wording)
