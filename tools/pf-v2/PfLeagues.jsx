@@ -11,6 +11,11 @@
     /* round 27 (audit E2): ONE place for the addresses and supplies every v2 file uses (there were four copies) */
     const PF_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',STAKING:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',BURN:'0x0000000000000000000000000000000000000369'};
     const PF_SUPPLY={PTGC:333333333333,UFO:999999999051};
+    /* Audit V v9 (2026-10-25): the fee is charged on the transfer INTO your wallet, so ending up with N more tokens means buying
+       N ÷ (1 − fee). PTGC 5 % (renounced); UFO ~6 % at today's rates (its owner can change them — roadmap v31). A buy a router splits
+       across pools is charged twice; the cost ⓘ says so. */
+    const PF_BUY_FEE={PTGC:0.05,UFO:0.06};
+    const pfBuyCost=(need,price,tok)=>(need==null||price==null||isNaN(need)||isNaN(price))?null:(need/(1-(PF_BUY_FEE[tok]||0)))*price;
     /* round 31 (Shaka: "audit this number… tokens that have been burned are not getting rewards… a percentage of circulating supply"):
        the UFO holder reward (the hidden 1 % of every fee-paying transfer) is shared by balance among the holders that are NOT
        excluded from rewards. The contract is unverified and has no isExcludedFromReward getter, so the excluded set was MEASURED

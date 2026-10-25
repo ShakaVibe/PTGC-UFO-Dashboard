@@ -111,7 +111,7 @@
         daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
         daoTreasury:'0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',
         stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
-        feeBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
+        feeBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',label:'Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
       UFO:{name:'UFO',address:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',logo:'logos/ufo/logo-512.webp',color:'green',colorHex:'#7CFC00',decimals:18,mainPair:'0xE221e6fC30e5787F0d551f980B4da1055D832A03',pulseScanUrl:'https://scan.pulsechain.com/token/0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',totalSupply:999999999051,feeRate:0.06,hasDAO:false,
         // MIGRATION: new UFO fee model = 6% split 1% each. The three LP buckets are AUTO-LIQUIDITY
@@ -1498,25 +1498,29 @@
        BUYBACK_POLICY says what share of each bucket becomes a code-driven BUY of the token
        being projected, and whether the user may edit it. `locked` = an automatic mechanism
        or non-discretionary protocol flow, so it renders as static text.
-         Buy & Burn / Burn UFO  100% — the entire bucket buys the token and burns it
-         Burn PTGC                0% — buys PTGC, not UFO: no UFO buy pressure
-         Add LP / LP *           50% — AUTO-LIQUIDITY: half of the bucket buys the token,
-                                       half is the paired asset, and the full bucket lands
-                                       in the pool as permanent depth
+         Audit V v3 (2026-10-25): the fee is taken IN TOKENS on every transfer, so a bucket only
+         buys when PLS is spent on the token. Before this the table said Buy & Burn / Burn UFO
+         100 % and Add LP / LP * 50 %, which counted burns and auto-liquidity as buying.
+         Burn (PTGC 0.5 %)        0% — burned straight from the transfer: supply only, nothing bought
+         Burn UFO                 0% — UFO's swapback SELLS its fee UFO for PLS first, then buys
+                                       UFO back with part of it: no net buying
+         Burn PTGC                0% — buys PTGC, not UFO (and is paid for by selling UFO)
+         Add LP / LP *            0% — the token half is fee tokens, the paired half is bought by
+                                       SELLING the token: depth, not buy pressure
          Holders / Stakers        0% — reflections, not buys
-         DAO                     50% — discretionary, so this one stays editable
+         DAO                     50% — discretionary (the DAO buys PTGC with PLS), so it stays editable
        LP buckets are matched by the isLP flag, so adding a fourth pool to feeBreakdown
        picks up the right policy automatically. */
     const BUYBACK_POLICY = {
-      PTGC: { 'Buy & Burn':{buyback:100,locked:true}, 'Add LP':{buyback:50,locked:true}, 'Holders':{buyback:0,locked:true}, 'Stakers':{buyback:0,locked:true}, 'DAO':{buyback:50,locked:false} },
-      UFO:  { 'Holders':{buyback:0,locked:true}, 'Burn UFO':{buyback:100,locked:true}, 'Burn PTGC':{buyback:0,locked:true} },
+      PTGC: { 'Buy & Burn':{buyback:0,locked:true}, 'Add LP':{buyback:0,locked:true}, 'Holders':{buyback:0,locked:true}, 'Stakers':{buyback:0,locked:true}, 'DAO':{buyback:50,locked:false} },
+      UFO:  { 'Holders':{buyback:0,locked:true}, 'Burn UFO':{buyback:0,locked:true}, 'Burn PTGC':{buyback:0,locked:true} },
     };
-    const LP_BUCKET_POLICY = { buyback:50, locked:true };   // any feeBreakdown row with isLP:true
+    const LP_BUCKET_POLICY = { buyback:0, locked:true };   // any feeBreakdown row with isLP:true (Audit V v3: was 50)
     const buildFeeBreakdown = (tk) => (TOKENS[tk].feeBreakdown || []).map(t => {
       const pol = t.isLP ? LP_BUCKET_POLICY : (BUYBACK_POLICY[tk]?.[t.name] || { buyback:0, locked:true });
       return {
         id: t.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),
-        label: t.name,
+        label: t.label || t.name,   // Audit V v6: PTGC's 0.5% is a direct burn — shown as "Burn"
         pct: t.pct,
         defaultBuyback: pol.buyback,
         locked: pol.locked,
@@ -2157,6 +2161,7 @@
                     <span className="text-white/35 uppercase tracking-widest text-[10px] font-bold">Effective Code Buyback</span>
                     <span className=""><span className={`${theme.text} font-bold text-base`}>{buybackPct}%</span><span className="text-white/40 text-xs"> of {(cfg.feeRate * 100).toFixed(0)}% fee</span></span>
                   </div>
+                  <p className="mt-1.5 px-1 text-white/40 text-[11px] leading-snug">Fees are collected in tokens. Burns remove supply but don{'\u2019'}t buy, and auto-liquidity is paired by selling the token, so only the DAO line buys.{growthToken==='UFO'?<> UFO{'\u2019'}s contract sells its fee tokens to fund its burns and liquidity.</>:null}</p>
                 </div>
 
                 <div className="mb-5">
@@ -2441,7 +2446,7 @@
               <div className="text-white/35 text-sm leading-relaxed">
                 <span className="text-yellow-500/60 font-bold uppercase text-sm">Disclaimer &mdash; Not Financial Advice</span>
                 <p className="mt-1.5">This calculator is provided <strong className="text-white/50">strictly for entertainment and educational purposes only</strong>. The 10-year projections shown are highly simplified, hypothetical scenarios based on a constant-product AMM model and a chain of compounding user-defined assumptions. They do <strong className="text-white/50">not</strong> constitute financial, investment, or legal advice of any kind.</p>
-                <p className="mt-1.5">The model assumes constant annual LP growth, constant new-user growth, constant average price-injection per user, constant sell-pressure percentages, and a steady code-buyback rate derived from {cfg.name}&apos;s <strong className="text-white/50">{(cfg.feeRate * 100).toFixed(0)}% trade fee</strong> &mdash; none of which is guaranteed to hold over a single year, let alone ten. Real-world prices are influenced by <strong className="text-white/50">countless factors not modeled here</strong>, including market sentiment, liquidity depth, macroeconomic conditions, regulatory changes, smart-contract risks, impermanent loss, whale activity, exchange listings, and overall crypto market cycles.</p>
+                <p className="mt-1.5">The model assumes constant annual LP growth, constant new-user growth, constant average price-injection per user, constant sell-pressure percentages, and a steady code-buyback rate derived from {cfg.name}&apos;s <strong className="text-white/50">{(cfg.feeRate * 100).toFixed(0)}% fee on every transfer</strong> &mdash; none of which is guaranteed to hold over a single year, let alone ten. Real-world prices are influenced by <strong className="text-white/50">countless factors not modeled here</strong>, including market sentiment, liquidity depth, macroeconomic conditions, regulatory changes, smart-contract risks, impermanent loss, whale activity, exchange listings, and overall crypto market cycles.</p>
                 <p className="mt-1.5">These projections are <strong className="text-white/50">extremely rough estimates meant for exploration and discussion</strong>, not investment planning. Past performance does not guarantee future results. You could lose some or all of your investment. <strong className="text-white/50">Always do your own research (DYOR)</strong> and consult with a qualified financial advisor before making any investment decisions. The creators of this tool accept no responsibility or liability for any losses incurred.</p>
               </div>
             </div>
@@ -4300,7 +4305,7 @@ if(p>0)setRwdPtgcPrice(p);
                     <div className="text-white/25 text-sm">Circ. Supply: <span className="text-white/50 font-semibold">{fmtAbbr(circulatingSupply)}</span>{supplyUnknown&&!loading&&<span className="text-amber-300/70 ml-2">burn could not be read from the chain; rewards need it. Reload to retry.</span>}</div>
                     {isPTGC&&<div className="text-white/25 text-sm">Total Staked: <span className="text-white/50 font-semibold">{totalStakedPool>0?fmtAbbr(totalStakedPool):'\u2014'}</span></div>}
                     {!isPTGC&&<div className="text-white/25 text-sm">Eligible for Reflections: <span className="text-white/50 font-semibold">{fmtAbbr(eligibleSupply)}</span></div>}
-                    <div className="text-white/25 text-sm">Fee: <span className="text-white/50 font-semibold">{(cfg.feeRate*100)}%</span> ({cfg.feeBreakdown.map(t=>`${t.name} ${t.pct}%`).join(' \u00B7 ')})</div>
+                    <div className="text-white/25 text-sm">Fee: <span className="text-white/50 font-semibold">{(cfg.feeRate*100)}%</span> ({cfg.feeBreakdown.map(t=>`${t.label||t.name} ${t.pct}%`).join(' \u00B7 ')})</div>
                   </div>
                 </div>
               </div>
@@ -4657,6 +4662,7 @@ if(p>0)setRwdPtgcPrice(p);
                         <div className="text-white/40 text-xs uppercase tracking-widest">Tokens Received</div>
                         <div className={`text-3xl font-bold ${isEmpty?'text-white/15':tText}`} style={isEmpty?{}:{textShadow:`0 0 15px ${tGlow}0.3)`}}>{isEmpty?'—':fmtAbbr(tokens)}</div>
                         <div className="text-white/30 text-sm">{isEmpty?'Enter amount above':fmt(Math.floor(tokens))+' exact'}</div>
+                        {!isEmpty&&<div className="text-white/35 text-xs mt-0.5">{'\u2248 '}{fmtAbbr(tokens*(1-tCfg.feeRate))} if a router splits the buy (two fees)</div>}{/* Audit V v11: the PulseX app's smart router pays each pool to itself, then itself to you — a second taxed transfer */}
                       </div>
                       {!isEmpty&&creatures.length>0&&(
                       <div className="flex items-center gap-3">
@@ -4988,9 +4994,9 @@ if(p>0)setRwdPtgcPrice(p);
                   <span className="text-yellow-500/60 text-lg mt-0.5">{'\u26A0\uFE0F'}</span>
                   <div className="text-white/35 text-sm leading-relaxed">
                     <span className="text-yellow-500/60 font-bold uppercase text-xs">Educational Tool — Not Financial Advice</span>
-                    <p className="mt-2">The New Capital Simulator calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. All projections shown are hypothetical and based on current conditions at the time of calculation. Token amounts are calculated using live prices and account for buy fees (PTGC {(ptgcCfg.feeRate*100)}%, UFO {(ufoCfg.feeRate*100)}%).</p>
+                    <p className="mt-2">The New Capital Simulator calculator provides <strong className="text-white/50">rough estimates for entertainment and educational purposes only</strong>. All projections shown are hypothetical and based on current conditions at the time of calculation. Token amounts are calculated using live prices and take off one fee (PTGC {(ptgcCfg.feeRate*100)}%, UFO ~{(ufoCfg.feeRate*100)}%) for the transfer into your wallet. A buy that a router splits across several pools is charged twice {'\u2014'} about {(2*ptgcCfg.feeRate*100).toFixed(0)}% for PTGC {'\u2014'} which the smaller figure under each token count shows.</p>
                     <p className="mt-2"><strong className="text-yellow-500/50">Results will NOT match reality.</strong> There are countless real-world factors that will cause actual outcomes to differ significantly from these projections, including but not limited to: changes in trading volume (which fluctuates constantly and can drop to near zero), price volatility and market crashes, changes in the number of holders and their proportional share of supply, staking pool size changes as other users stake or unstake, LP pool composition changes, arbitrage bot activity, MEV and front-running, slippage on large trades, sell pressure from other holders, overall crypto market cycles and sentiment, regulatory changes, smart contract risks, liquidity additions and removals, token burns affecting supply, whale activity, exchange listings or delistings, and general macroeconomic conditions.</p>
-                    <p className="mt-2"><strong className="text-white/50">Past performance does not guarantee future results.</strong> Historical volume averages shown here reflect past activity and should not be interpreted as a prediction of future volume. A token that had $5M daily volume last month could have $50K daily volume next month, or vice versa. Reward projections scale linearly with volume — if volume drops 90%, your rewards drop 90%.</p>
+                    <p className="mt-2"><strong className="text-white/50">Past performance does not guarantee future results.</strong> Historical volume averages shown here reflect past activity and should not be interpreted as a prediction of future volume. A token that had $5M daily volume last month could have $50K daily volume next month, or vice versa. Rewards follow fee-paying transfers, and volume is only a stand-in for them: an arbitrage bot{'\u2019'}s loop counts twice in volume but pays the fee once, while a router-split buy pays it twice. If activity drops 90%, rewards drop about 90%.</p>
                     <p className="mt-2">UFO holder reflections (1%) are shared across eligible holders; tokens locked in LP contracts are excluded from the eligible supply used in that calculation.</p>
                     <p className="mt-2 text-yellow-500/40">This tool does not constitute financial advice. Always do your own research (DYOR), consult with a qualified financial advisor before making investment decisions, and <strong className="text-white/50">never invest more than you can afford to lose</strong>. Cryptocurrency investments carry significant risk including the potential loss of your entire investment.</p>
                   </div>

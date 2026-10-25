@@ -49,7 +49,7 @@
     const PfLeague=({balance,token,price,onTiers,rankRow})=>{
       const L=pfLeague(balance,PF_SUPPLY[token]);
       if(!L)return null;
-      const cost=usd(L.need,price);
+      const cost=pfBuyCost(L.need,price,token);   // Audit V v9: includes the buy fee
       return(
         <div className="pf2-lgb">
           <div className="pf2-lgbh"><span className="lb">League</span>

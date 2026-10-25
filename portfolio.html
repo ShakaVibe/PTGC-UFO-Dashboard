@@ -1905,6 +1905,11 @@
     /* round 27 (audit E2): ONE place for the addresses and supplies every v2 file uses (there were four copies) */
     const PF_ADDR={PTGC:'0x94534EeEe131840b1c0F61847c572228bdfDDE93',UFO:'0x49eD499433Bee42DD34C169470feF2C8f9fAe6e6',STAKING:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',BURN:'0x0000000000000000000000000000000000000369'};
     const PF_SUPPLY={PTGC:333333333333,UFO:999999999051};
+    /* Audit V v9 (2026-10-25): the fee is charged on the transfer INTO your wallet, so ending up with N more tokens means buying
+       N ÷ (1 − fee). PTGC 5 % (renounced); UFO ~6 % at today's rates (its owner can change them — roadmap v31). A buy a router splits
+       across pools is charged twice; the cost ⓘ says so. */
+    const PF_BUY_FEE={PTGC:0.05,UFO:0.06};
+    const pfBuyCost=(need,price,tok)=>(need==null||price==null||isNaN(need)||isNaN(price))?null:(need/(1-(PF_BUY_FEE[tok]||0)))*price;
     /* round 31 (Shaka: "audit this number… tokens that have been burned are not getting rewards… a percentage of circulating supply"):
        the UFO holder reward (the hidden 1 % of every fee-paying transfer) is shared by balance among the holders that are NOT
        excluded from rewards. The contract is unverified and has no isExcludedFromReward getter, so the excluded set was MEASURED
@@ -2837,6 +2842,9 @@
     const PFT_VERB={Buy:'Bought',Sell:'Sold',Claim:'Claimed','Add LP':'Added to LP','Remove LP':'Removed from LP',Move:'Moved',Receive:'Received',Send:'Sent',Unstake:'Unstaked'};
     const PFT_AMT={Sell:'neg',Send:'neg','Add LP':'neg',Buy:'pos',Receive:'pos',Claim:'pos','Remove LP':'pos'};
     const PFT_VAL={Sell:'received',Buy:'paid',Claim:'earned'};
+    /* Audit V v10 (2026-10-25): the fee comes off the transfer, so a BUY that landed N tokens paid for N ÷ (1 − fee) (more when a
+       router split it across pools), and a SELL of N tokens got PLS for N × (1 − fee). Every other type is valued at N × price. */
+    const pftUsd=(type,amt,p,tok)=>{if(p==null)return null;const f=PF_BUY_FEE[tok]||0;return Math.abs(amt)*p*(type==='Buy'?1/(1-f):type==='Sell'?(1-f):1);};
     const pftTm=t=>new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     const pftNameOf=wallets=>{const m={};wallets.forEach(w=>{m[w.address.toLowerCase()]=w.name||pfAddr(w.address);});return a=>m[a]||(a?a.slice(0,6)+'…'+a.slice(-4):'');};
     const pftWhoOf=(nameOf,r)=>r.type==='Move'&&r.cp?(r.dir>=0?nameOf(r.cp)+' → '+nameOf(r.addr):nameOf(r.addr)+' → '+nameOf(r.cp)):nameOf(r.addr);
@@ -2894,7 +2902,7 @@
                 /* newer than the price files (they refresh hourly) → today's price */
                 if(p==null){const ser=px&&px.hourly[tok];const last=ser&&ser.length?ser[ser.length-1][0]:null;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(last!=null&&t>=last&&cur>0)p=cur;}   // round 23 (audit A3): never "today's price" for old rows when the price files failed
                 const cp=mcp;
-                rows.push({id:addr+legs[0].h+tok,t,addr,cp:type==='Move'?cp:null,dir:net>=0?1:-1,tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});   // round 25 (audit C3): the name is looked up at render, so a rename shows at once
+                rows.push({id:addr+legs[0].h+tok,t,addr,cp:type==='Move'?cp:null,dir:net>=0?1:-1,tok,type,sub,amt:net,p,usd:pftUsd(type,net,p,tok),h:legs[0].h});});   // round 25 (audit C3): the name is looked up at render, so a rename shows at once
             });
             /* a Move shows once (the receiving side), not twice */
             const seen=new Set();const out=[];
@@ -2954,8 +2962,8 @@
       const[det,setDet]=useState({});
       /* LP / unstake detail first (it can turn a "Sell" into "Add LP"), so the chips count the corrected types */
       const fix=r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
-        if(d.lp&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:d.lp==='add'?'Add LP':'Remove LP'};
-        if(d.swap===false&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:r.type==='Sell'?'Send':'Receive'};
+        if(d.lp&&(r.type==='Sell'||r.type==='Buy')){const ty=d.lp==='add'?'Add LP':'Remove LP';return{...r,type:ty,usd:pftUsd(ty,r.amt,r.p,r.tok)};}
+        if(d.swap===false&&(r.type==='Sell'||r.type==='Buy')){const ty=r.type==='Sell'?'Send':'Receive';return{...r,type:ty,usd:pftUsd(ty,r.amt,r.p,r.tok)};}
         if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
         return r;};
       const all0=st.rows.map(fix);
@@ -3177,17 +3185,17 @@
               {full&&<PfRankChart pts={pts} day0={h.day0} i0={i0} col={col} evs={showTx?evs:[]} tok={tok}/>}
               <div className="lg"><span><i style={{background:col}}></i>your rank {'·'} higher is better</span><label className="tx"><input type="checkbox" checked={showTx} onChange={e=>setShowTx(e.target.checked)}/><span className="bx" aria-hidden="true"></span>show buys {'&'} sells</label>{showTx&&<span><i style={{background:'#39E15A'}}></i>tokens in</span>}{showTx&&<span><i style={{background:'#FF4B55'}}></i>tokens out</span>}{showTx&&txBusy&&<span className="ld"><i className="sp"></i>reading your transactions{'…'} <b>{txPct}%</b></span>}{showTx&&!txBusy&&!evs.length&&<span className="ld" style={{opacity:.6}}>none in this period</span>}<span className="r">one point per UTC day {'·'} today{'’'}s point is live</span></div></div>}
             {live&&ms.length>0&&<div className="wt"><div className="chh"><span><PfIco k="bolt"/>WHAT IT TAKES</span><span className="r">from today{'’'}s holder list</span></div><div className="lad">
-              {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=usd(need,px);
+              {ms.map(r=>{const need=Math.max(0,(list[r-1]||0)-pfRankKey(bal)+1);const pct=list[r-1]>0?Math.min(100,pfRankKey(bal)/list[r-1]*100):0;const c=pfBuyCost(need,px,tok);
                 return <div className="st" key={r}><span className="rk">#{r.toLocaleString('en-US')}</span><span className="bar"><i style={{width:pct+'%'}}></i></span><span className="nd">+ {pfPassAmt(need)} {tok}{c!=null&&<small className="usd"> {'≈'} {fmtDollar(c,0)}</small>}</span></div>;})}
             </div>
               {/* the calculator (mock-rank-calc-v2, his pick C): type any rank → tokens to buy, cost at today's price, the league it makes you.
                  The ⓘ: cost is a snapshot — slippage and the price moving as you buy are not in it. */}
               {(()=>{const n=parseInt(String(want).replace(/[^0-9]/g,''),10);const ok=n>=1&&n<=list.length;const mine=live.r;
-                const need=ok&&n<mine?Math.max(0,(list[n-1]||0)-pfRankKey(bal)+1):0;const c=usd(need,px);
+                const need=ok&&n<mine?Math.max(0,(list[n-1]||0)-pfRankKey(bal)+1):0;const c=pfBuyCost(need,px,tok);
                 const L=ok&&n<mine?pfLeague(bal+need,PF_SUPPLY[tok]):null;const L0=pfLeague(bal,PF_SUPPLY[tok]);
                 const msg=!want?null:!ok?(n>list.length?`the list ends at #${list.length.toLocaleString('en-US')}`:'type a rank'):n>=mine?(n===mine?`that’s you — #${mine.toLocaleString('en-US')} today`:`you’re already above #${n.toLocaleString('en-US')}`):null;
                 return <div className="ctl">
-                  <div className="ask"><div className="l">I WANT TO BE RANK <button type="button" className={`ii${iiOpen?' open':''}`} aria-label="About the cost" aria-expanded={iiOpen} onClick={e=>{e.stopPropagation();setIiOpen(o=>!o);}} onBlur={()=>setIiOpen(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It’s the tokens you’d need at today’s price. A real buy moves the price as it fills — slippage and the price rising while you buy aren’t included, so expect the real cost to be higher.</span></button></div>
+                  <div className="ask"><div className="l">I WANT TO BE RANK <button type="button" className={`ii${iiOpen?' open':''}`} aria-label="About the cost" aria-expanded={iiOpen} onClick={e=>{e.stopPropagation();setIiOpen(o=>!o);}} onBlur={()=>setIiOpen(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It’s the tokens you’d need at today’s price, plus the fee on the way into your wallet (PTGC 5%, UFO ~6%) {'—'} a buy a router splits across pools is charged twice. A real buy also moves the price as it fills {'—'} slippage and the price rising while you buy aren’t included, so expect the real cost to be higher.</span></button></div>
                     <label className="inp"><span>#</span><input inputMode="numeric" pattern="[0-9]*" placeholder={mine>1?String(Math.max(1,Math.ceil(mine/2))):'1'} value={want} onChange={e=>setWant(e.target.value.replace(/[^0-9]/g,'').slice(0,6))} aria-label="The rank you want"/></label>
                     <div className="s">{msg||<>any rank above your #{mine.toLocaleString('en-US')} {'·'} from today{'’'}s holder list</>}</div></div>
                   <div className="tl"><div className="l">TOKENS TO BUY</div><div className="v">{ok&&n<mine?pfPassAmt(need):'—'}</div><div className="s">{tok} more than you hold</div></div>
@@ -3252,7 +3260,7 @@
     const PfLeague=({balance,token,price,onTiers,rankRow})=>{
       const L=pfLeague(balance,PF_SUPPLY[token]);
       if(!L)return null;
-      const cost=usd(L.need,price);
+      const cost=pfBuyCost(L.need,price,token);   // Audit V v9: includes the buy fee
       return(
         <div className="pf2-lgb">
           <div className="pf2-lgbh"><span className="lb">League</span>

@@ -142,6 +142,9 @@
     const PFT_VERB={Buy:'Bought',Sell:'Sold',Claim:'Claimed','Add LP':'Added to LP','Remove LP':'Removed from LP',Move:'Moved',Receive:'Received',Send:'Sent',Unstake:'Unstaked'};
     const PFT_AMT={Sell:'neg',Send:'neg','Add LP':'neg',Buy:'pos',Receive:'pos',Claim:'pos','Remove LP':'pos'};
     const PFT_VAL={Sell:'received',Buy:'paid',Claim:'earned'};
+    /* Audit V v10 (2026-10-25): the fee comes off the transfer, so a BUY that landed N tokens paid for N ÷ (1 − fee) (more when a
+       router split it across pools), and a SELL of N tokens got PLS for N × (1 − fee). Every other type is valued at N × price. */
+    const pftUsd=(type,amt,p,tok)=>{if(p==null)return null;const f=PF_BUY_FEE[tok]||0;return Math.abs(amt)*p*(type==='Buy'?1/(1-f):type==='Sell'?(1-f):1);};
     const pftTm=t=>new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     const pftNameOf=wallets=>{const m={};wallets.forEach(w=>{m[w.address.toLowerCase()]=w.name||pfAddr(w.address);});return a=>m[a]||(a?a.slice(0,6)+'…'+a.slice(-4):'');};
     const pftWhoOf=(nameOf,r)=>r.type==='Move'&&r.cp?(r.dir>=0?nameOf(r.cp)+' → '+nameOf(r.addr):nameOf(r.addr)+' → '+nameOf(r.cp)):nameOf(r.addr);
@@ -199,7 +202,7 @@
                 /* newer than the price files (they refresh hourly) → today's price */
                 if(p==null){const ser=px&&px.hourly[tok];const last=ser&&ser.length?ser[ser.length-1][0]:null;const cur=pxNow.current&&pxNow.current[tok==='PTGC'?'ptgc':'ufo'];if(last!=null&&t>=last&&cur>0)p=cur;}   // round 23 (audit A3): never "today's price" for old rows when the price files failed
                 const cp=mcp;
-                rows.push({id:addr+legs[0].h+tok,t,addr,cp:type==='Move'?cp:null,dir:net>=0?1:-1,tok,type,sub,amt:net,p,usd:p==null?null:Math.abs(net)*p,h:legs[0].h});});   // round 25 (audit C3): the name is looked up at render, so a rename shows at once
+                rows.push({id:addr+legs[0].h+tok,t,addr,cp:type==='Move'?cp:null,dir:net>=0?1:-1,tok,type,sub,amt:net,p,usd:pftUsd(type,net,p,tok),h:legs[0].h});});   // round 25 (audit C3): the name is looked up at render, so a rename shows at once
             });
             /* a Move shows once (the receiving side), not twice */
             const seen=new Set();const out=[];
@@ -259,8 +262,8 @@
       const[det,setDet]=useState({});
       /* LP / unstake detail first (it can turn a "Sell" into "Add LP"), so the chips count the corrected types */
       const fix=r=>{const d=det[r.h+'|'+r.addr];if(!d)return r;
-        if(d.lp&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:d.lp==='add'?'Add LP':'Remove LP'};
-        if(d.swap===false&&(r.type==='Sell'||r.type==='Buy'))return{...r,type:r.type==='Sell'?'Send':'Receive'};
+        if(d.lp&&(r.type==='Sell'||r.type==='Buy')){const ty=d.lp==='add'?'Add LP':'Remove LP';return{...r,type:ty,usd:pftUsd(ty,r.amt,r.p,r.tok)};}
+        if(d.swap===false&&(r.type==='Sell'||r.type==='Buy')){const ty=r.type==='Sell'?'Send':'Receive';return{...r,type:ty,usd:pftUsd(ty,r.amt,r.p,r.tok)};}
         if(r.type==='Unstake'&&d.principal>0)return{...r,net:r.amt,amt:d.principal,unstake:true,usd:r.p==null?null:d.principal*r.p};
         return r;};
       const all0=st.rows.map(fix);

@@ -2038,7 +2038,7 @@
         daoContract:'0x305ACfAb82103c2b82B19543919d1c93b44E55DB',
         daoTreasury:'0xeeac1da7f930078ab757ad8a64cf7c5e17b931e1',
         stakingContract:'0xC71f597a2AC39E47F07102E849d18489C96f39EF',
-        feeBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Buy & Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
+        feeBreakdown:[{name:'DAO',pct:2,emoji:'\u{1F3DB}\u{FE0F}'},{name:'Holders',pct:1,emoji:'\u{1F48E}'},{name:'Stakers',pct:1,emoji:'\u{1F48E}\u{1F48E}'},{name:'Burn',pct:0.5,emoji:'\u{1F525}'},{name:'Add LP',pct:0.5,emoji:'\u{1F4A7}'}]
       },
       UFO:{name:'UFO',address:ADDR.UFO,logo:'logos/ufo/logo-512.webp',color:'green',colorHex:'#7CFC00',decimals:18,
         /* MIGRATION: seeded with the known UFO/WPLS pair; re-confirmed on-chain at boot
@@ -3695,7 +3695,7 @@
       if(token==='PTGC'){
         const find=n=>cfg.feeBreakdown.find(t=>t.name===n);
         const holders=find('Holders'),stakers=find('Stakers');
-        const items=[find('DAO'),find('Add LP'),find('Buy & Burn'),holders,stakers].filter(Boolean);
+        const items=[find('DAO'),find('Add LP'),find('Burn'),holders,stakers].filter(Boolean);   // Audit V v6: the 0.5 % is burned straight from each transfer — "Burn", not "Buy & Burn"
         items.push({name:'Total H&S',pct:(holders?.pct||0)+(stakers?.pct||0),emoji:'\u{1F48E}\u{1F48E}\u{1F48E}',isTotal:true});
         return items;
       }
@@ -3710,7 +3710,7 @@
        `ptgcPrice` / `plsxPrice` / `wethPrice` are only ever fetched inside an
        `if(token==='UFO')` block — they exist so the UFO dashboard can price its PTGC-burn
        and LP buckets. On the PTGC dashboard nothing fills them, so vgPrices.PTGC was 0 and
-       the four PTGC-denominated buckets (Buy & Burn, Holders, Stakers, Total H&S) silently
+       the four PTGC-denominated buckets (Burn, Holders, Stakers, Total H&S) silently
        stayed in USD, while DAO and Add LP — priced in PLS, which IS loaded — flipped. Two
        of six changed. That is the whole bug.
 
@@ -4363,8 +4363,10 @@
             })(),
             liq: (_dsLive || _liqSum > 0) ? _liqSum : null,
             vol: _dsLive ? pairs.reduce((s, p) => s + p.vol, 0) : null,
-            buys: _dsLive ? pairs.reduce((s, p) => s + (p.txns?.h24?.buys || 0), 0) : null,
-            sells: _dsLive ? pairs.reduce((s, p) => s + (p.txns?.h24?.sells || 0), 0) : null,
+            /* Audit V v2/v8: DexScreener's buys / sells are of the pair's BASE token. On a pool where this token is the quote
+               (Liquid/pTGC, Burn/pTGC, 808/pTGC, TEDDY/pTGC …) its "sells" are this token being BOUGHT — flip them. */
+            buys: _dsLive ? pairs.reduce((s, p) => s + ((pairIsBase(p, addr) ? p.txns?.h24?.buys : p.txns?.h24?.sells) || 0), 0) : null,
+            sells: _dsLive ? pairs.reduce((s, p) => s + ((pairIsBase(p, addr) ? p.txns?.h24?.sells : p.txns?.h24?.buys) || 0), 0) : null,
             tokensInLP: totalTokensInLP,
             pairs,
             _fromChain: !_dsLive
@@ -4857,6 +4859,9 @@
        UFO token): (a) the window is not longer than the token's life (DexScreener's oldest pairCreatedAt in `d`), (b) the
        series is monotonic (7d <= 30d <= 90d — a series built for another contract or a broken run fails this), (c) the file
        itself is fresh (< 12 h, c17; it is rebuilt hourly). Anything failing → null → "—", never $0 (a14 / a19). */
+    /* Audit V v2/v8: is `addr` the pair's base token? (DexScreener reports txns / priceChange for the BASE token.) A pair with
+       no base address is treated as base, as before. */
+    const pairIsBase = (p, addr) => { const b = p?.baseToken?.address; return !b || !addr || b.toLowerCase() === String(addr).toLowerCase(); };
     const cgVolWindows = (token, d) => {
       const none = { vol7d: null, vol30d: null, vol90d: null };
       const cg = coingeckoDataCache;
@@ -6261,7 +6266,7 @@
                 below sm; on sm+ it is the single row it was. ✕ is a 32 px tap target. */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
               <h2 className={`font-orbitron text-base sm:text-xl font-black tracking-[0.14em] ${metal}`}>LIVE FEED</h2>   {/* e42: was a div */}
-              <span className="hidden sm:inline text-[13px] text-white/55 tracking-[0.04em]">Every fee, as it lands on the chain.</span>
+              <span className="hidden sm:inline text-[13px] text-white/55 tracking-[0.04em]">Every swap and fee-paying transfer, as it lands on the chain.</span>
               <button onClick={close} className="tap order-1 ml-auto sm:order-3 sm:ml-1 text-white/60 hover:text-white text-2xl leading-none" aria-label="Close">{'×'}</button>
               <div className="order-2 basis-full sm:basis-auto sm:ml-auto flex items-center justify-between sm:justify-start gap-2">
                 {/* token toggle: switching loads the other dashboard on the SAME Dashboard instance (gotcha 7), so the
@@ -6370,7 +6375,7 @@
               </div>
             </div>
             <div className="mt-3 text-[11px] text-white/30 leading-relaxed">
-              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus fee-paying wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
+              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus fee-paying wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. A swap{'\u2019'}s “lifted” is an estimate: the fee is charged per token transfer, so an arbitrage loop that shows here as a buy and a sell paid one fee, and a buy a router splits across pools paid two. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
             </div>
           </div>
         </Modal>
@@ -6399,7 +6404,8 @@
       const[det,setDet]=useState(false);
       const liq=pair.liq||0,vol=pair.vol||0;
       const ratio=liq>0?(vol/liq).toFixed(3):'0.000';
-      const buys=pair.txns?.h24?.buys||0,sells=pair.txns?.h24?.sells||0;
+      const isBaseTx=pairIsBase(pair,mainAddr);   // Audit V v8: flip on a quote-side pool
+      const buys=(isBaseTx?pair.txns?.h24?.buys:pair.txns?.h24?.sells)||0,sells=(isBaseTx?pair.txns?.h24?.sells:pair.txns?.h24?.buys)||0;
       const chg=pair.priceChange?.h24||0,up=chg>=0;
       const isBase=pair.baseToken?.address?.toLowerCase()===mainAddr?.toLowerCase();
       const other=isBase?pair.quoteToken:pair.baseToken;
@@ -7241,10 +7247,10 @@
         const rate=cfg&&cfg.feeRate>0?(cfg.feeRate*100).toFixed(cfg.feeRate*100%1?1:0):null;
         return(
           <>
-            <p>Every {token} trade pays a {rate?`${rate}% `:''}fee. This panel shows what that fee produced in the selected window, split by where it went — each tile is one destination.</p>
+            <p>Every {token} transfer pays a {rate?`${rate}% `:''}fee {'\u2014'} a buy, a sell, or a plain send between wallets. This panel shows what that fee produced in the selected window, split by where it went {'\u2014'} each tile is one destination.</p>
             {token==='UFO'
               ?<p>Figures are measured from the fee transfers on chain, not estimated from volume.</p>
-              :<p>Figures are estimated as trading volume × the fee rate for the window.</p>}
+              :<p>PTGC{'\u2019'}s figures are estimated as trading volume × the fee rate. That is rough: an arbitrage bot{'\u2019'}s loop counts twice in volume but pays the fee once, a buy a router splits across pools pays it twice, and sends between wallets pay it with no volume at all. A measured figure is on the way.</p>}
           </>
         );
       },
@@ -7276,7 +7282,7 @@
         <p>Liquidity as a share of market cap. A higher ratio means more of {token}'s value is backed by pool depth; a very low one means a small trade can move the price a lot.</p>
       ),
       volume24h:(token)=>(
-        <p>USD traded across every {token} pool in the past 24 hours. The badge, when shown, compares it with the average day of the past week.</p>
+        <p>USD swapped across every {token} pool in the past 24 hours. An arbitrage loop through two pools counts twice here (a buy in one, a sell in the other), so this is more than the outside money that traded. The badge, when shown, compares it with the average day of the past week.</p>
       ),
       totalBurned:(token)=>(
         <p>{token} sent to the burn address since launch — gone from the supply for good — as tokens, as USD at today's price, and as a share of the starting supply. The creatures count that share in league tiers; the bar is the progress to the next whole Whale (1 %).</p>
@@ -7999,7 +8005,7 @@
                 <div className="flex-1 min-w-0">
                   <div className="text-white/40 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.25em] flex items-center gap-1 min-w-0"><span className="truncate">{'\u{1F3DB}️'} DAO Treasury {'·'} PTGC</span><InfoTip label="DAO Buys" className="-my-2 ml-0.5" glyphClass="text-[10px]">
                       <p>Every time a DAO treasury wallet swapped PLS for PTGC on PulseX, shown as a gold dot on the PTGC price line. Bigger dot = bigger buy. Two wallets are tracked: the treasury ({TOKENS.PTGC.daoTreasury.slice(0,6)}…{TOKENS.PTGC.daoTreasury.slice(-4)}) and the earlier buying wallet ({ADDR.DAO_WALLET2.slice(0,6)}…{ADDR.DAO_WALLET2.slice(-4)}, Oct 2023 – May 2025); the hover card says which.</p>
-                      <p>Hover or tap a dot for the details. {'"'}Price paid{'"'} (PLS spent {'÷'} PTGC received) runs a little above the market price because of the 5% fee and slippage; the totals and the dashed running-average line use what was actually paid, and both are for the buys in the selected range.</p>
+                      <p>Hover or tap a dot for the details. {'"'}Price paid{'"'} (PLS spent {'÷'} PTGC received) runs a little above the market price because of the 5% fee (charged twice when a router splits the buy across pools) and slippage; the totals and the dashed running-average line use what was actually paid, and both are for the buys in the selected range.</p>
                       <p>USD / PLS switches the price axis — the DAO pays in PLS, so the PLS view is the actual trade rate. LP withdrawals and transfers are not buys and are left out.</p>
                       <p>Grays = the buy in sea-creature tiers of the starting supply ({'\u{1F40B}'} 1%, {'\u{1F988}'} 0.1%, {'\u{1F42C}'} 0.01%, {'\u{1F991}'} 0.001%, {'\u{1F422}'} 0.0001%, {'\u{1F990}'} 0.00001%), biggest first, three tiers deep.</p>
 </InfoTip></div>
@@ -8893,7 +8899,7 @@
       tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,logo:220,big:160,note:34,barH:20,leg:22,tl:21,tv:50,tq:22,tp:'20px 24px 22px',gap:16}
     };
     const VG_GREEN='52,211,153';
-    const VG_COLORS={'DAO':'#E8C044','Add LP':'#60A5FA','Buy & Burn':'#FB923C','Holders':'#34D399','Stakers':'#2DD4BF','Total H&S':'#A7F3D0',
+    const VG_COLORS={'DAO':'#E8C044','Add LP':'#60A5FA','Burn':'#FB923C','Holders':'#34D399','Stakers':'#2DD4BF','Total H&S':'#A7F3D0',
       reflection:'#34D399',ufoBurn:'#FB923C',ptgcBurn:'#E8C044',plsLP:'#C084FC',plsxLP:'#38BDF8',wethLP:'#818CF8'};
     const vgColor=item=>VG_COLORS[item.key||item.name]||'#9DE8C4';
     const VG_TILE_BG={background:'linear-gradient(180deg,rgba(8,30,20,0.9),rgba(4,16,11,0.93))',border:'1px solid rgba(110,231,183,0.38)',boxShadow:'inset 0 1px 0 rgba(200,255,230,0.12), 0 0 24px -8px rgba(52,211,153,0.6)'};
@@ -8924,7 +8930,7 @@
       const tiles=items.map(it=>{const usd=valueGenBucketUsd(vg,it);return{it,usd,parts:usd==null?null:valueGenParts(token,it,usd,prices)};});
       const barItems=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0);
       const barSum=barItems.reduce((s,t)=>s+t.usd,0);
-      const basis=!vg?'—':vg.pending?'reading fees from the chain…':vg.basis==='delivered'?'measured on chain, delivered to each bucket':vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
+      const basis=!vg?'—':vg.pending?'reading fees from the chain…':vg.basis==='delivered'?'measured on chain, delivered to each bucket':vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>est. from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
       const title=(
         <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
           <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F4B0}'}</span>
@@ -9969,7 +9975,7 @@
       if(vg.pending)return'reading fees from the chain…';
       if(vg.basis==='delivered')return<>from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume {'·'} measured on chain</>;
       if(vg.basis==='accrued')return'accrued on chain — delivery still being read';
-      if(vg.basis==='volume')return<>from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume{tkn==='UFO'?<> {'·'} est.</>:null}</>;
+      if(vg.basis==='volume')return<>est. from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume × {(TOKENS[tkn]?.feeRate*100||0).toFixed(0)}%</>;   // Audit V v4: PTGC too
       return vg.error?'chain read failed':'—';
     };
     /* The combined family's frame (the RH Cores card's): gold glow top-left, green bottom-right, a gold → green edge. */
@@ -10045,7 +10051,7 @@
       const dao=[b(ptgc,'PTGC','DAO')];
       const hsP=[b(ptgc,'PTGC','Holders'),b(ptgc,'PTGC','Stakers')],hsU=[b(ufo,'UFO','reflection')];
       const lpP=[b(ptgc,'PTGC','Add LP')],lpU=[b(ufo,'UFO','plsLP'),b(ufo,'UFO','plsxLP'),b(ufo,'UFO','wethLP')];
-      const brP=[b(ptgc,'PTGC','Buy & Burn'),b(ufo,'UFO','ptgcBurn')],brU=[b(ufo,'UFO','ufoBurn')];
+      const brP=[b(ptgc,'PTGC','Burn'),b(ufo,'UFO','ptgcBurn')],brU=[b(ufo,'UFO','ufoBurn')];
       const daoPls=qty(dao,'PLS'),burnPtgc=qty(brP,'PTGC'),burnUfo=qty(brU,'UFO');
       return[
         {e:'\u{1F3DB}\u{FE0F}',l:'DAO treasury',c:'#E8C044',v:sum(dao),s:daoPls!=null?`${fmtTokenQty(daoPls)} PLS`:null},
@@ -10713,7 +10719,7 @@
      * icon square, the fire/green progress bar, the allocation ring and the creature strip. */
     const P2Art=()=><div className="p2-art" aria-hidden="true"><div className="p2-veil"></div></div>;
     const P2Icon=({e,svg})=><span className="p2-ic" aria-hidden="true">{svg||e}</span>;
-    const P2_VG_ICONS={'DAO':'logos/panels/dao-building.webp','Add LP':'logos/panels/vg-droplet.webp','Buy & Burn':'logos/panels/vg-flame.webp','Holders':'logos/panels/vg-diamond.webp','Stakers':'logos/panels/vg-diamonds2.webp','Total H&S':'logos/panels/vg-diamonds3-v2.webp','Burn UFO':'logos/panels/vg-flame.webp','Burn PTGC':'logos/panels/vg-flame.webp'};   // Shaka's Value Generated icons by tile name (UFO's two burn tiles take the flame too, beside their token logo) (2026-10-01, value_generated_icons.zip); DAO = the Treasury's building, his call; a name not here keeps its emoji
+    const P2_VG_ICONS={'DAO':'logos/panels/dao-building.webp','Add LP':'logos/panels/vg-droplet.webp','Burn':'logos/panels/vg-flame.webp','Holders':'logos/panels/vg-diamond.webp','Stakers':'logos/panels/vg-diamonds2.webp','Total H&S':'logos/panels/vg-diamonds3-v2.webp','Burn UFO':'logos/panels/vg-flame.webp','Burn PTGC':'logos/panels/vg-flame.webp'};   // Shaka's Value Generated icons by tile name (UFO's two burn tiles take the flame too, beside their token logo) (2026-10-01, value_generated_icons.zip); DAO = the Treasury's building, his call; a name not here keeps its emoji
     const P2_DAO_ICONS={building:'logos/panels/dao-building.webp',coins:'logos/panels/dao-coins.webp',hourglass:'logos/panels/dao-hourglass.webp',rocket:'logos/panels/dao-rocket.webp',total:'logos/panels/dao-total.webp'};   // Shaka's DAO Treasury icons (2026-10-01, dao_dashboard_icons.zip) — v2 only, the classic keeps its emoji
     const P2Bar=({pct,green})=>{const w=Math.max(0,Math.min(100,pct||0));return(
       <div className={`p2-bar ${green?'green':''}`} role="presentation">
@@ -10963,7 +10969,8 @@
          txns — the RhCoresModal rule (a14): those are UNKNOWN here, "—", never $0 / 0 / 0 */
       const liq=pair.liq,vol=(!pair._fromChain&&pair.vol!=null&&isFinite(pair.vol))?pair.vol:null;
       const ratio=liq>0&&vol!=null?(vol/liq).toFixed(3):'\u2014';
-      const buys=pair._fromChain?null:pair.txns?.h24?.buys,sells=pair._fromChain?null:pair.txns?.h24?.sells,txTotal=(buys!=null&&sells!=null)?buys+sells:null;
+      const isBaseTx=pairIsBase(pair,mainAddr);   // Audit V v8: on a quote-side pool DexScreener's sells are this token's buys
+      const buys=pair._fromChain?null:(isBaseTx?pair.txns?.h24?.buys:pair.txns?.h24?.sells),sells=pair._fromChain?null:(isBaseTx?pair.txns?.h24?.sells:pair.txns?.h24?.buys),txTotal=(buys!=null&&sells!=null)?buys+sells:null;
       const chg=pair.priceChange?.h24,chgKnown=chg!=null&&isFinite(chg);
       /* volume vs the day before (Shaka's mock-up): today's DexScreener 24 h against the previous 24 h of the pool's curve (bins -8..-4, complete ones) — null when the curve is missing or that day was zero */
       const prior=(pts&&pts.length>=8)?pts.slice(-8,-4).reduce((s,p)=>s+(p.v>0?p.v:0),0):0;
@@ -11575,7 +11582,7 @@
                   {pools.length>6&&<button type="button" className="vw-more" onClick={()=>setAllPools(a=>!a)} aria-expanded={allPools}>{allPools?<>show the top 6</>:<>and <b>{pools.length-6} more pool{pools.length-6===1?'':'s'}</b> {'—'} show all</>}</button>}
                 </div>
               )}
-              <div className="vw-conf">24H is DexScreener's, summed over every pair {'—'} the Volume tile's own number. 7D / 30D / 90D are CoinGecko's on-chain daily candles over the 20 largest pools (today counts as a partial day). The daily chart and the pool table are on-chain swap volume from the hourly file (the Humans vs Bots data). Three sources, so they will not match each other to the dollar.</div>
+              <div className="vw-conf">24H is DexScreener's, summed over every pair {'—'} the Volume tile's own number. 7D / 30D / 90D are CoinGecko's on-chain daily candles over the 20 largest pools (today counts as a partial day). The daily chart and the pool table are on-chain swap volume from the hourly file (the Humans vs Bots data). Three sources, so they will not match each other to the dollar. All of them count an arbitrage loop in two pools (a buy in one, a sell in the other), so they run above the outside money that traded.</div>
             </div>
           </div>
         </Modal>
@@ -11744,10 +11751,10 @@
                       </div>)}
                   </VsFold>
                   <VsFold open={showHow} onToggle={()=>setShowHow(s=>!s)} title="How we tell" count="" color="rgba(255,255,255,.6)">
-                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days.</div>
+                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days. One thing to know about the fee: it is charged per token transfer, not per swap. A bot's round trip moves the token pool-to-pool once, so it pays one fee while counting as a buy and a sell here, and a PulseX app buy split across pools can pay it twice.</div>
                   </VsFold>
                   {/* round 12 (Shaka): a confidence note — the split is vastly right, a few small trades at the edges may still be mislabelled */}
-                  <p className="vs-conf">How sure are we? Very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land exactly where they belong. A handful of small trades at the edges can still be mislabelled, so read this as a very close picture rather than a to-the-cent ledger.</p>
+                  <p className="vs-conf">How sure are we? Of who is who: very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land on the right side. The sums are another matter: a bot{'\u2019'}s loop is one transaction and one fee but two swaps, and the volumes and trade counts here still count every swap, so the bot side reads larger than it is. A fix that counts each loop once is on the way.</p>
                 </>
               )}
             </div>
@@ -12402,7 +12409,7 @@
         :computeValueGen({token:t,cfg:c,period:'7d',periodVol:(t===token?volumeByPeriod?.vol7d:vol7dFromCache(t)),delivered:null,realizedFees:null,prices:{},estimate:t!==token});
       const valueGenPending=!!vg7.pending;
       const valueGenUsd=vg7.total;
-      const valueGenTag=vg7.basis==='volume'&&t==='UFO'?'7D EST':'7D';
+      const valueGenTag=vg7.basis==='volume'?'7D EST':'7D';   // Audit V v4: PTGC is volume × fee too — an estimate (was UFO only)
       const creatures=getBurnC(burnPctNum,'Squid').filter(cr=>['Poseidon','Whale','Shark','Dolphin','Squid'].includes(cr.n));
       const burn7dPct=b?.supply>0?(burn7dAmt/b.supply)*100:0;
       const singleCreature7d=getSingleC(burn7dPct);
@@ -13176,7 +13183,9 @@
     };
     const T1Tile=({l,ic,v,f,cls=''})=>(<div className={`t1t ${cls}`}><div className="l">{ic&&T1I[ic]}{l}</div><div className="v">{v}</div>{f!=null&&<div className="f">{f}</div>}</div>);
     const T1Amt=({v,tok})=>(<>{fmtAbbr(v)}<small>{tok}</small></>);
-    const T1Cost=()=>{const[o,setO]=useState(false);return(<button type="button" className={`t1ii${o?' open':''}`} aria-label="About the cost" aria-expanded={o} onClick={e=>{e.stopPropagation();setO(v=>!v);}} onBlur={()=>setO(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></button>);};   // e46: a tap toggles it (was hover / focus only)
+    /* Audit V v9: tokens to BUY so that `n` more land in the wallet — the fee comes off the transfer in (index's live rate). */
+    const t1Gross=(n,tok)=>{const f=(TOKENS[tok]&&TOKENS[tok].feeRate)||0;return f>0&&f<1?n/(1-f):n;};
+    const T1Cost=()=>{const[o,setO]=useState(false);return(<button type="button" className={`t1ii${o?' open':''}`} aria-label="About the cost" aria-expanded={o} onClick={e=>{e.stopPropagation();setO(v=>!v);}} onBlur={()=>setO(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price, plus the fee on the way into your wallet (PTGC 5%, UFO ~6%) {'—'} a buy a router splits across pools is charged twice. A real buy also moves the price as it fills {'—'} slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></button>);};   // e46: a tap toggles it (was hover / focus only)
     const T1Dot=({token,on,onToggle})=>(
       <button type="button" onClick={onToggle} aria-label="Top 100 (preview)" aria-pressed={on} title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
         <span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:(TOKENS[token]||TOKENS.PTGC).colorHex,opacity:on?0.4:0.16}}></span>
@@ -13309,21 +13318,21 @@
             <T1Tile key="1" l="Staked" v={<T1Amt v={k} tok="PTGC"/>} f={k>0?(chk.l>0?`${fmtAbbr(chk.l)} of it locked`:'none of it locked'):'nothing staked'}/>,
             <T1Tile key="2" l="Staker rank" v={rank?`#${rank.toLocaleString('en-US')}`:'—'} f={rank?`of ${view.count.toLocaleString('en-US')} stakers`:'not staking'}/>,
             <T1Tile key="3" l="Stake more" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok="PTGC"/></>} f={`to pass #100 (${fmtAbbr(T2)} staked)`}/>,
-            <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{buy===0?'$0':P?t1Usd(buy*P):'—'}</span>} f={free>0?(buy>0?`stake your ${fmtAbbr(free)} unstaked + buy ${fmtAbbr(buy)}`:`stake ${fmtAbbr(need)} of your ${fmtAbbr(free)} unstaked`):`buy ${fmtAbbr(need)} PTGC and stake it`}/>]};
+            <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{buy===0?'$0':P?t1Usd(t1Gross(buy,tok)*P):'—'}</span>} f={free>0?(buy>0?`stake your ${fmtAbbr(free)} unstaked + buy ${fmtAbbr(buy)}`:`stake ${fmtAbbr(need)} of your ${fmtAbbr(free)} unstaked`):`buy ${fmtAbbr(need)} PTGC and stake it`}/>]};
         }
         const lg=t1League(k,SUP);
         const lgEl=lg?<span className="t1lgc"><SeaIcon e={lg.e} size={22}/>{lg.n}</span>:'not holding';
         if(inTop){const up=rank>1?list[rank-2]:null;return{rank,inTop,tiles:[
           <T1Tile key="1" l="Holds" v={<T1Amt v={k} tok={tok}/>} f={P?<>≈ <span className="usd">{t1Usd(k*P)}</span></>:null}/>,
           <T1Tile key="2" l="You're in" ic="trophy" cls="in" v={`#${rank}`} f={<>{lgEl} · in the top 100</>}/>,
-          up!=null?<T1Tile key="3" l={`To pass #${rank-1}`} ic="bolt" cls="hot" v={<>+<T1Amt v={up-k+1} tok={tok}/></>} f={P?<>≈ <span className="usd">{t1Usd((up-k+1)*P)}</span> today</>:null}/>:<T1Tile key="3" l="Top holder" ic="crown" cls="hot" v="#1" f="nobody above you"/>,
+          up!=null?<T1Tile key="3" l={`To pass #${rank-1}`} ic="bolt" cls="hot" v={<>+<T1Amt v={up-k+1} tok={tok}/></>} f={P?<>≈ <span className="usd">{t1Usd(t1Gross(up-k+1,tok)*P)}</span> today</>:null}/>:<T1Tile key="3" l="Top holder" ic="crown" cls="hot" v="#1" f="nobody above you"/>,
           <T1Tile key="4" l="Your cushion" v={<T1Amt v={cush} tok={tok}/>} f="above #101 — sell more than this and you drop out"/>]};}
         const need=Math.max(0,T2-k+1);
         return{rank,inTop,pct,tiles:[
           <T1Tile key="1" l="Holds" v={<T1Amt v={k} tok={tok}/>} f={P?<>≈ <span className="usd">{t1Usd(k*P)}</span></>:null}/>,
           <T1Tile key="2" l="Rank" v={rank?`#${rank.toLocaleString('en-US')}`:'—'} f={lgEl}/>,
           <T1Tile key="3" l="To break in" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok={tok}/></>} f={`to pass #100 (${fmtAbbr(T2)})`}/>,
-          <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{P?t1Usd(need*P):'—'}</span>} f={P?`at $${t1Px(P)} per ${tok}`:'price unavailable'}/>]};
+          <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{P?t1Usd(t1Gross(need,tok)*P):'—'}</span>} f={P?`at $${t1Px(P)} per ${tok}`:'price unavailable'}/>]};
       })():null;
       const top=view&&view.top,tot=view&&view.tot;
       const me=chk&&chk.a?chk.a.toLowerCase():null;
@@ -15340,8 +15349,8 @@
                           ):(hasData&&token!=='UFO')?(
                             <>
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text} ${hdrV2?'p2-hl sm':''}`}>{fmtUSD(totalGen)}</span>
-                              {hdrV2?<span className="p2-vgfrom">from <b>{fmtUSD(periodVol)}</b> of volume</span>
-                                    :<span className="text-white/45 text-sm sm:text-base">from {fmtUSD(periodVol)} vol</span>}
+                              {hdrV2?<span className="p2-vgfrom">est. from <b>{fmtUSD(periodVol)}</b> vol</span>
+                                    :<span className="text-white/45 text-sm sm:text-base">est. from {fmtUSD(periodVol)} vol {'\u00D7'} {(cfg.feeRate*100).toFixed(0)}%</span>}{/* Audit V v4 */}
                             </>
                           ):(token==='UFO'&&realizedFees&&!realizedFees.ok)?(
                             <div className="flex flex-col gap-1">

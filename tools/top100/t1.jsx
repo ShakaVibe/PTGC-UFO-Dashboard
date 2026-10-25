@@ -45,7 +45,9 @@
     };
     const T1Tile=({l,ic,v,f,cls=''})=>(<div className={`t1t ${cls}`}><div className="l">{ic&&T1I[ic]}{l}</div><div className="v">{v}</div>{f!=null&&<div className="f">{f}</div>}</div>);
     const T1Amt=({v,tok})=>(<>{fmtAbbr(v)}<small>{tok}</small></>);
-    const T1Cost=()=>{const[o,setO]=useState(false);return(<button type="button" className={`t1ii${o?' open':''}`} aria-label="About the cost" aria-expanded={o} onClick={e=>{e.stopPropagation();setO(v=>!v);}} onBlur={()=>setO(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price. A real buy moves the price as it fills — slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></button>);};   // e46: a tap toggles it (was hover / focus only)
+    /* Audit V v9: tokens to BUY so that `n` more land in the wallet — the fee comes off the transfer in (index's live rate). */
+    const t1Gross=(n,tok)=>{const f=(TOKENS[tok]&&TOKENS[tok].feeRate)||0;return f>0&&f<1?n/(1-f):n;};
+    const T1Cost=()=>{const[o,setO]=useState(false);return(<button type="button" className={`t1ii${o?' open':''}`} aria-label="About the cost" aria-expanded={o} onClick={e=>{e.stopPropagation();setO(v=>!v);}} onBlur={()=>setO(false)}>i<span className="tip" role="tooltip"><b>Cost is a snapshot.</b> It's the tokens you'd need at today's price, plus the fee on the way into your wallet (PTGC 5%, UFO ~6%) {'—'} a buy a router splits across pools is charged twice. A real buy also moves the price as it fills {'—'} slippage and the price rising while you buy aren't included, so expect the real cost to be higher.</span></button>);};   // e46: a tap toggles it (was hover / focus only)
     const T1Dot=({token,on,onToggle})=>(
       <button type="button" onClick={onToggle} aria-label="Top 100 (preview)" aria-pressed={on} title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
         <span aria-hidden="true" className="block w-1.5 h-1.5 rounded-full" style={{background:(TOKENS[token]||TOKENS.PTGC).colorHex,opacity:on?0.4:0.16}}></span>
@@ -178,21 +180,21 @@
             <T1Tile key="1" l="Staked" v={<T1Amt v={k} tok="PTGC"/>} f={k>0?(chk.l>0?`${fmtAbbr(chk.l)} of it locked`:'none of it locked'):'nothing staked'}/>,
             <T1Tile key="2" l="Staker rank" v={rank?`#${rank.toLocaleString('en-US')}`:'—'} f={rank?`of ${view.count.toLocaleString('en-US')} stakers`:'not staking'}/>,
             <T1Tile key="3" l="Stake more" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok="PTGC"/></>} f={`to pass #100 (${fmtAbbr(T2)} staked)`}/>,
-            <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{buy===0?'$0':P?t1Usd(buy*P):'—'}</span>} f={free>0?(buy>0?`stake your ${fmtAbbr(free)} unstaked + buy ${fmtAbbr(buy)}`:`stake ${fmtAbbr(need)} of your ${fmtAbbr(free)} unstaked`):`buy ${fmtAbbr(need)} PTGC and stake it`}/>]};
+            <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{buy===0?'$0':P?t1Usd(t1Gross(buy,tok)*P):'—'}</span>} f={free>0?(buy>0?`stake your ${fmtAbbr(free)} unstaked + buy ${fmtAbbr(buy)}`:`stake ${fmtAbbr(need)} of your ${fmtAbbr(free)} unstaked`):`buy ${fmtAbbr(need)} PTGC and stake it`}/>]};
         }
         const lg=t1League(k,SUP);
         const lgEl=lg?<span className="t1lgc"><SeaIcon e={lg.e} size={22}/>{lg.n}</span>:'not holding';
         if(inTop){const up=rank>1?list[rank-2]:null;return{rank,inTop,tiles:[
           <T1Tile key="1" l="Holds" v={<T1Amt v={k} tok={tok}/>} f={P?<>≈ <span className="usd">{t1Usd(k*P)}</span></>:null}/>,
           <T1Tile key="2" l="You're in" ic="trophy" cls="in" v={`#${rank}`} f={<>{lgEl} · in the top 100</>}/>,
-          up!=null?<T1Tile key="3" l={`To pass #${rank-1}`} ic="bolt" cls="hot" v={<>+<T1Amt v={up-k+1} tok={tok}/></>} f={P?<>≈ <span className="usd">{t1Usd((up-k+1)*P)}</span> today</>:null}/>:<T1Tile key="3" l="Top holder" ic="crown" cls="hot" v="#1" f="nobody above you"/>,
+          up!=null?<T1Tile key="3" l={`To pass #${rank-1}`} ic="bolt" cls="hot" v={<>+<T1Amt v={up-k+1} tok={tok}/></>} f={P?<>≈ <span className="usd">{t1Usd(t1Gross(up-k+1,tok)*P)}</span> today</>:null}/>:<T1Tile key="3" l="Top holder" ic="crown" cls="hot" v="#1" f="nobody above you"/>,
           <T1Tile key="4" l="Your cushion" v={<T1Amt v={cush} tok={tok}/>} f="above #101 — sell more than this and you drop out"/>]};}
         const need=Math.max(0,T2-k+1);
         return{rank,inTop,pct,tiles:[
           <T1Tile key="1" l="Holds" v={<T1Amt v={k} tok={tok}/>} f={P?<>≈ <span className="usd">{t1Usd(k*P)}</span></>:null}/>,
           <T1Tile key="2" l="Rank" v={rank?`#${rank.toLocaleString('en-US')}`:'—'} f={lgEl}/>,
           <T1Tile key="3" l="To break in" ic="bolt" cls="hot" v={<>+<T1Amt v={need} tok={tok}/></>} f={`to pass #100 (${fmtAbbr(T2)})`}/>,
-          <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{P?t1Usd(need*P):'—'}</span>} f={P?`at $${t1Px(P)} per ${tok}`:'price unavailable'}/>]};
+          <T1Tile key="4" l={<>Cost today <T1Cost/></>} v={<span className="usd">{P?t1Usd(t1Gross(need,tok)*P):'—'}</span>} f={P?`at $${t1Px(P)} per ${tok}`:'price unavailable'}/>]};
       })():null;
       const top=view&&view.top,tot=view&&view.tot;
       const me=chk&&chk.a?chk.a.toLowerCase():null;

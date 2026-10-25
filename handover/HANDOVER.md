@@ -17,6 +17,24 @@ mock-ups for v1 / v2 / v7) → Phase B one builder change in build-swap-volume (
 UFO swapbacks as protocol) + burn sources (v15–v16) → Phase C switch the surfaces (v20–v28) → D calculators / portfolio → E
 explainer (v33, mock-up first). League History go-live does not depend on any of it.
 
+**2026-10-25 afternoon — AUDIT V batch A1 BUILT, NOT pushed** (v3, v4, v5, v6, v8 + the flip half of v2, v9, v10, v11). Shaka: "take
+note of the results of everything BEFORE we change it so you can show me … the before and after for each change". The BEFORE
+record: `design/audit5/before/` (39 renders + `before.json` = the text of every window on frozen data, `tools/harness/a5-capture.sh
+before|after` reproduces it; DS_PAIRS=burn, data/ frozen at 14:15 UTC) + `live-before-2026-10-25T1535Z.json` (the live site's
+Humans vs Bots / tiles / LP rows read in the browser pane). AFTER: `design/audit5/after/`; the comparison page =
+`design/audit5/before-after-batch-a1.html` (also the "Audit V Before and After" artifact). What changed: 10 Yr buyback policy
+(burns / auto-LP no longer "buy": PTGC 35 % → 20 %, UFO 42 % → 0 %, + a note); "est." on every PTGC volume-based Value Generated
+(panel "est. from $X vol", KPI "7D EST", share + Combined cards); "Buy & Burn" → "Burn" (index: the bucket's NAME is now 'Burn' —
+VG_COLORS / P2_VG_ICONS / brP / buildValueGenItems follow; calculators keep the key and show `label:'Burn'`); "per transfer"
+copy (VG ⓘ, Live Feed tagline + footnote, Volume ⓘ + window note, How we tell, "How sure are we?", DAO Buys ⓘ, calculators'
+disclaimers); buys / sells flipped where the token is the pair's QUOTE (`pairIsBase` — fetchDex totals for the TXNS tile, LpRowV2,
+LPRow); costs include the buy fee (`pfBuyCost` / `PF_BUY_FEE` in PfLeagues.jsx; Top 100 `t1Gross`); Portfolio "paid" / "received"
+by type (`pftUsd`, PfTx.jsx); New Capital shows the two-fee figure. Waiting for his pick (mock-ups on the page): v1 (A = value boxes
+removed + a note, recommended / B = kept, marked est.), v7 (transactions instead of swap legs — in both), v2 (A keep the name / B
+"SWAPS 24H"; the arrow line becomes "117 people · +$18.5K"). NOT done from v6: DAO / Add LP still shown in PLS (wait for v37).
+**GOTCHA: do not re-run `tools/top100.py`** — its `edit()` steps re-insert the preview-era scaffolding (LS.T100_PREVIEW, a second
+showTop100 state, T1Dot) because League History's mounts now sit between its anchors; splice t1.jsx by hand or fix the script.
+
 ## START HERE (2026-10-24 final wrap) — everything PUSHED (`036ffc3b`), working tree clean
 
 **PLAN FOR THE NEXT SESSION (Shaka, 2026-10-24 night): "any last little bit of polishing tomorrow, and look to make it live
