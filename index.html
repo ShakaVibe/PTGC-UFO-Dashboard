@@ -472,6 +472,8 @@
     .vs-td:first-child{text-align:left}
     .vs-mini{display:inline-flex;height:6px;width:72px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.08);vertical-align:middle;margin-left:8px}
     .vs-mini i{display:block;height:100%}
+    .vs-rest{margin-top:10px;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(0,0,0,.3);font-size:13px;line-height:1.45;color:rgba(255,255,255,.72)}   /* Audit V v21 */
+    .vs-rest b{color:#fff}
     .vs-conf{margin:14px 4px 2px;font-size:12.5px;line-height:1.55;color:rgba(255,255,255,.42);text-align:center}
     .vs-conf::before{content:"";display:block;width:120px;height:1px;margin:0 auto 12px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent)}
     .vs-note{font-size:14px;color:rgba(255,255,255,.6);line-height:1.5}
@@ -632,10 +634,10 @@
     .hvs-side .pct b{color:var(--s);font-size:48px;font-weight:700;margin-left:2px}
     .hvs.both .hvs-side.hu .pct b{background:linear-gradient(180deg,#F6D56A,#B9F24A);-webkit-background-clip:text;background-clip:text;color:transparent}
     .hvs-side .rule{height:1px;margin-top:12px;background:linear-gradient(90deg,rgba(var(--srgb),.7),rgba(var(--srgb),.15))}
-    .hvs-side .cols{display:grid;grid-template-columns:1fr 1fr 1.3fr;margin-top:10px}
+    .hvs-side .cols{display:grid;grid-template-columns:1.3fr 1.05fr 1.05fr;margin-top:10px}   /* Audit V: volume gets the room ("$3,403,544" ran into the next column on 90D BOTH); "Transactions" fits at .14em */
     .hvs-side .cols>div{padding:0 14px;border-left:1px solid rgba(255,255,255,.14);min-width:0}
     .hvs-side .cols>div:first-child{padding-left:0;border-left:0}
-    .hvs-side .k{font-family:'Orbitron',monospace;font-weight:500;font-size:11px;letter-spacing:.22em;color:rgba(255,255,255,.65);text-transform:uppercase;white-space:nowrap}
+    .hvs-side .k{font-family:'Orbitron',monospace;font-weight:500;font-size:11px;letter-spacing:.14em;color:rgba(255,255,255,.65);text-transform:uppercase;white-space:nowrap}
     .hvs-side .v{font-size:34px;font-weight:700;line-height:1.05;white-space:nowrap;margin-top:4px;font-variant-numeric:tabular-nums}
     .hvs-side .v.gen{color:var(--s)}
     .hvs-side .note{margin-top:8px;text-align:center;font-family:'Orbitron',monospace;font-weight:500;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.6);white-space:nowrap}
@@ -11234,6 +11236,18 @@
       }
       v.total={n:v.human.n+v.bot.n,usd:v.human.usd+v.bot.usd};
       v.botShare=v.total.usd>0?v.bot.usd/v.total.usd:null;
+      /* Audit V v21 / v22 (2026-10-25): the builder's `measured` block — each transaction counted ONCE (a bot loop is a buy in one pool +
+         a sell in another but one transaction and one fee), UFO's own swapback apart, and the fees actually paid, read from the fee
+         legs on chain. null when the file predates it → the window falls back to the swap-leg figures. BOTH: the bot / router counts
+         are the larger token's ("≥"), since one bot often works both tokens. */
+      const ms=toks.map(tk=>{const q=file.tokens[tk]&&file.tokens[tk].periods&&file.tokens[tk].periods[P.p];return q&&q.measured;});
+      if(ms.every(Boolean)){
+        const sum=(f)=>ms.reduce((a,m)=>a+(f(m)||0),0),fz=k=>({usd:sum(m=>m.fees[k]&&m.fees[k].usd),txs:sum(m=>m.fees[k]&&m.fees[k].txs)});
+        v.m={human:{usd:sum(m=>m.human.usd),txs:sum(m=>m.human.txs)},bot:{usd:sum(m=>m.bot.usd),txs:sum(m=>m.bot.txs)},protocol:{usd:sum(m=>m.protocol.usd),txs:sum(m=>m.protocol.txs)},
+          fees:{human:fz('human'),bot:fz('bot'),transfer:fz('transfer'),protocol:fz('protocol'),ok:ms.every(m=>m.fees&&m.fees.complete),since:ms.map(m=>m.fees&&m.fees.since).filter(Boolean).sort().pop()||null},
+          botContracts:Math.max(...ms.map(m=>m.botContracts||0)),botWallets:Math.max(...ms.map(m=>m.botWallets||0)),routers:Math.max(...ms.map(m=>m.routers||0)),atLeast:toks.length>1};
+        v.m.fees.total=v.m.fees.human.usd+v.m.fees.bot.usd+v.m.fees.transfer.usd+v.m.fees.protocol.usd;
+      }else v.m=null;
       v.pools=Object.values(v.pools).map(o=>({...o,total:o.human.usd+o.bot.usd})).sort((a,b)=>b.total-a.total);
       v.bots=Object.values(v.senders).filter(s=>s.kind==='bot').sort((a,b)=>b.usd-a.usd||b.n-a.n).slice(0,8);
       v.humans=Object.values(v.senders).filter(s=>s.kind==='human').sort((a,b)=>b.usd-a.usd);
@@ -11241,11 +11255,22 @@
       const now=Date.now(),since=now-P.h*3600000,binMs=P.h<=24?3600000:P.h<=168?6*3600000:86400000,bins=Math.ceil(P.h*3600000/binMs);
       const start=Math.floor(since/binMs)*binMs;
       v.series=Array.from({length:bins},(_,i)=>({t:start+i*binMs,h:0,b:0}));
-      for(const tk of toks)for(const r of(file.tokens[tk]&&file.tokens[tk].hours)||[]){if(r[0]<start)continue;const i=Math.min(bins-1,Math.floor((r[0]-start)/binMs));v.series[i].h+=r[2];v.series[i].b+=r[4];}
+      const useM=v.m&&toks.every(tk=>file.tokens[tk]&&Array.isArray(file.tokens[tk].measuredHours));   // Audit V v22: each tx once
+      for(const tk of toks)for(const r of(useM?file.tokens[tk].measuredHours:(file.tokens[tk]&&file.tokens[tk].hours))||[]){if(r[0]<start)continue;const i=Math.min(bins-1,Math.floor((r[0]-start)/binMs));v.series[i].h+=useM?r[1]:r[2];v.series[i].b+=useM?r[2]:r[4];}
       v.binMs=binMs;
       return v;
     };
     const vsPct=x=>x==null?'—':(x*100).toFixed(x*100>=10?0:1)+'%';
+    /* Audit V: what the window and the share card print. Measured (each tx once, fees from the chain) when the file has it; the old
+       swap-leg figures (and volume × fee) otherwise. */
+    const vsShow=(view,vg)=>{
+      if(view.m){const m=view.m,f=m.fees;return{measured:true,hUsd:m.human.usd,bUsd:m.bot.usd,hN:m.human.txs,bN:m.bot.txs,unit:'transaction',
+        feeH:f.ok?f.human.usd:null,feeB:f.ok?f.bot.usd:null,feeT:f.ok?f.transfer.usd:null,feeTot:f.ok?f.total:null,feesOk:f.ok,feeSince:f.since,
+        protoUsd:m.protocol.usd,botContracts:m.botContracts,botWallets:m.botWallets,routers:m.routers,atLeast:m.atLeast};}
+      return{measured:false,hUsd:view.human.usd,bUsd:view.bot.usd,hN:view.human.n,bN:view.bot.n,unit:'trade',   // the file predates `measured`
+        feeH:vg?vg.h:null,feeB:vg?vg.b:null,feeT:null,feeTot:vg?vg.h+vg.b:null,feesOk:!!vg,feeSince:null,
+        protoUsd:0,botContracts:Object.values(view.senders).filter(x=>x.kind==='bot').length,botWallets:0,routers:view.humans.length,atLeast:false};
+    };
     /* The OTHER token of a pool (Shaka: "the logos to all the pools — just the other token, not the ptgc or ufo"): its address from
        the file's pools map (token0 / token1), its logo = DexScreener's token image, or our own file for the Grays' pair. */
     const VS_SYMBOL_ADDR={WPLS:ADDR.WPLS,PLSX:ADDR.PLSX,INC:ADDR.INC,HEX:ADDR.HEX,EHEX:ADDR.EHEX,PRVX:ADDR.PRVX,WETH:ADDR.WETH,WBTC:ADDR.WBTC,USDC:ADDR.USDC,DAI:ADDR.DAI};   // last resort: the pool's name
@@ -11306,7 +11331,7 @@
       return{h,b};
     };
     /* Audit IV e38: at module scope (it was declared inside HvbShareCard's render — gotcha 14) */
-    const HvbSide=({cls,tag,pct,vol,n,gen,note,art})=>(
+    const HvbSide=({cls,tag,pct,vol,n,gen,note,art,nLabel='Trades',gLabel='Value generated'})=>(
       <div className={`hvs-side ${cls}`}>
         <img className="art" src={art} alt="" aria-hidden="true"/>
         <div className="tag">{tag}</div>
@@ -11314,8 +11339,8 @@
         <div className="rule" aria-hidden="true"></div>
         <div className="cols">
           <div><div className="k">Volume</div><div className="v">{fmtUSD(vol)}</div></div>
-          <div><div className="k">Trades</div><div className="v">{fmt(n)}</div></div>
-          <div><div className="k">Value generated</div><div className="v gen">{fmtUSD(gen)}</div></div>
+          <div><div className="k">{nLabel}</div><div className="v">{fmt(n)}</div></div>
+          <div><div className="k">{gLabel}</div><div className="v gen">{gen!=null?fmtUSD(gen):'\u2014'}</div></div>
         </div>
         <div className="note">{note}</div>
       </div>);
@@ -11323,10 +11348,10 @@
       const both=mode==='BOTH',ufo=mode==='UFO';
       const view=React.useMemo(()=>file?vsView(file,mode,P,{}):null,[file,mode,P]);
       if(!view)return <div className={`hvs${ufo?' ufo':both?' both':''}`}><div className="hvs-sky" aria-hidden="true"></div><div className="hvs-veil" aria-hidden="true"></div></div>;
-      const vg=hvsVg(file,mode,P,feeRates);
-      const tot=view.human.usd+view.bot.usd;
-      const pH=tot>0?Math.round(view.human.usd/tot*100):0,pB=tot>0?100-pH:0;
-      const routers=view.humans.length,botN=Object.values(view.senders).filter(x=>x.kind==='bot').length;
+      const D=vsShow(view,hvsVg(file,mode,P,feeRates));   // Audit V: measured when the file has it (each tx once, fees from the chain)
+      const tot=D.hUsd+D.bUsd;
+      const pH=tot>0?Math.round(D.hUsd/tot*100):0,pB=tot>0?100-pH:0;
+      const routers=D.routers,botN=D.botContracts,nL=D.measured?'Transactions':'Trades',gL=D.measured?'Fees paid':'Value generated';
       return(
         <div className={`hvs${ufo?' ufo':both?' both':''}`}>
           <div className="hvs-sky" aria-hidden="true"></div>
@@ -11338,16 +11363,16 @@
             <div className="hvs-title"><span className="h">HUMANS</span><span className="v">vs</span><span className="b">BOTS</span></div>
             <span className="hvs-period">{both?'PTGC + UFO':mode} VOLUME {'\u00b7'} {P.label.toUpperCase()}</span>
             <div className="hvs-split">
-              <HvbSide cls="hu" tag="HUMANS" pct={pH} vol={view.human.usd} n={view.human.n} gen={vg.h} art="logos/hvb/human.webp"
+              <HvbSide cls="hu" tag="HUMANS" pct={pH} vol={D.hUsd} n={D.hN} gen={D.feeH} nLabel={nL} gLabel={gL} art="logos/hvb/human.webp"
                 note={<><b>{pH}%</b> of total volume {'\u00b7'} via <b>{fmt(routers)}</b> router{routers===1?'':'s'}</>}/>
-              <HvbSide cls="bo" tag="ARB BOTS" pct={pB} vol={view.bot.usd} n={view.bot.n} gen={vg.b} art="logos/hvb/bot.webp"
-                note={<><b>{pB}%</b> of total volume {'\u00b7'} from <b>{fmt(botN)}</b> bot contract{botN===1?'':'s'}</>}/>
+              <HvbSide cls="bo" tag="ARB BOTS" pct={pB} vol={D.bUsd} n={D.bN} gen={D.feeB} nLabel={nL} gLabel={gL} art="logos/hvb/bot.webp"
+                note={<><b>{pB}%</b> of total volume {'\u00b7'} from <b>{D.atLeast?'\u2265':''}{fmt(botN)}</b> bot contract{botN===1?'':'s'}</>}/>
             </div>
             <div className="hvs-bar" aria-hidden="true"><i className="h" style={{width:`${pH}%`}}></i><i className="b"></i></div>
             <div className="hvs-strip">
               <div className="it"><div className="k">Total volume</div><b>{fmtUSD(tot)}</b></div>
-              <div className="it"><div className="k">Trades</div><b>{fmt(view.human.n+view.bot.n)}</b></div>
-              <div className="it"><div className="k">Value generated</div><b>{fmtUSD(vg.h+vg.b)}</b></div>
+              <div className="it"><div className="k">{nL}</div><b>{fmt(D.hN+D.bN)}</b></div>
+              <div className="it"><div className="k">{gL}</div><b>{D.feeTot!=null?fmtUSD(D.feeTot):'\u2014'}</b></div>
               <span className="site">ptgc-ufo.com</span>
             </div>
           </div>
@@ -11627,6 +11652,10 @@
       const feeLabel=both?`${pct(feeRates&&feeRates.PTGC)} PTGC · ${pct(feeRates&&feeRates.UFO)} UFO fee`:`at the ${pct(fee)} fee`;
       const share=(a,b)=>a+b>0?a/(a+b):null;
       const botN=view?Object.values(view.senders).filter(s=>s.kind==='bot').length:0;
+      const D=view?vsShow(view,vg):null;   // Audit V v21 / v22: measured when the file has it
+      const nUnit=(n,u)=>`${fmt(n)} ${u}${n===1?'':'s'}`;
+      const botWho=D?(D.measured?<>{D.atLeast?'\u2265':''}{fmt(D.botContracts)} bot contract{D.botContracts===1?'':'s'}{D.botWallets>0?<> and {D.atLeast?'\u2265':''}{fmt(D.botWallets)} bot wallet{D.botWallets===1?'':'s'}</>:null}</>:<>{fmt(botN)} bot contract{botN===1?'':'s'}</>):null;
+      const feeSub=(x)=>D.measured?(D.feesOk?<>{vsPct(D.feeTot>0?x/D.feeTot:null)} of all fees {'·'} read from the chain</>:<>fee history still filling in{D.feeSince?<> {'·'} from {new Date(D.feeSince).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</>:null}</>):<>{vsPct(share(x,(x===vg.h?vg.b:vg.h)))} of it {'·'} {feeLabel}</>;
       const logo=both?null:TOKENS[token].logo;
       return(
         <Modal onClose={onClose} label={`${token} humans vs bots`} className="z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay bg-black/85">
@@ -11681,9 +11710,9 @@
                 <>
                   {/* the whole — one strip */}
                   <div className="vs-strip">
-                    <span><span className="k">Total volume</span><span className="v tabular-nums">{fmtUSD(view.total.usd)}</span></span>
-                    <span><span className="k">Trades</span><span className="v tabular-nums">{fmt(view.total.n)}</span></span>
-                    {vg&&<span><span className="k">Value generated</span><span className="v tabular-nums">{fmtUSD(vg.h+vg.b)}</span></span>}
+                    <span><span className="k">Total volume</span><span className="v tabular-nums">{fmtUSD(D.hUsd+D.bUsd)}</span></span>
+                    <span><span className="k">{D.measured?'Transactions':'Trades'}</span><span className="v tabular-nums">{fmt(D.hN+D.bN)}</span></span>
+                    {(D.measured||vg)&&<span><span className="k">{D.measured?'Fees paid':'Value generated'}</span><span className="v tabular-nums">{D.feeTot!=null?fmtUSD(D.feeTot):'\u2014'}</span></span>}
                     <span className="ml-auto text-[13px] text-white/45 font-medium">{P.label.toLowerCase()} {'·'} {both?'PTGC + UFO':token}</span>
                   </div>
                   {/* the two sides — volume, then the value it generated (round 4: "tied to the volume boxes… this much human volume generated this much value") */}
@@ -11691,30 +11720,32 @@
                     <div className={`vs-card hu${token==='UFO'?' ufo':both?' both':''}`} style={{'--acc':rgb}}>
                       <div className="bg" aria-hidden="true"></div>{both&&<div className="bg2" aria-hidden="true"></div>}
                       <img className="fig" src="logos/hvb/human.webp" alt="" aria-hidden="true"/>
-                      <div className="hd"><span className={`n${gg}`}>Humans</span><span className={`pct tabular-nums${gg}`}>{vsPct(share(view.human.usd,view.bot.usd))}</span></div>
+                      <div className="hd"><span className={`n${gg}`}>Humans</span><span className={`pct tabular-nums${gg}`}>{vsPct(share(D.hUsd,D.bUsd))}</span></div>
                       <div className="k">Volume</div>
-                      <div className="v tabular-nums">{fmtUSD(view.human.usd)}</div>
-                      <div className="s">{fmt(view.human.n)} trades{view.wallets.humanTxs>0?(view.wallets.human>0?<> by <b className="text-white">{view.wallets.humanTxsKnown<view.wallets.humanTxs||both?'\u2265':''}{fmt(view.wallets.human)}</b> wallet{view.wallets.human===1?'':'s'}</>:<span className="text-white/40"> {'\u00b7'} wallets being counted</span>):null} through {view.humans.length} router{view.humans.length===1?'':'s'}</div>
-                      {vg&&<div className="vg"><span><span className="k">Value generated</span><div className="v tabular-nums">{fmtUSD(vg.h)}</div></span><span className="s">{vsPct(share(vg.h,vg.b))} of it {'·'} {feeLabel}</span></div>}
+                      <div className="v tabular-nums">{fmtUSD(D.hUsd)}</div>
+                      <div className="s">{D.measured?<b className="text-white">{fmt(D.hN)}</b>:fmt(D.hN)} {D.unit}{D.hN===1?'':'s'}{view.wallets.humanTxs>0?(view.wallets.human>0?<> by <b className="text-white">{view.wallets.humanTxsKnown<view.wallets.humanTxs||both?'\u2265':''}{fmt(view.wallets.human)}</b> wallet{view.wallets.human===1?'':'s'}</>:<span className="text-white/40"> {'\u00b7'} wallets being counted</span>):null} through {fmt(D.routers)} router{D.routers===1?'':'s'}</div>
+                      {(D.measured||vg)&&<div className="vg"><span><span className="k">{D.measured?'Fees paid':'Value generated'}</span><div className="v tabular-nums">{D.feeH!=null?fmtUSD(D.feeH):'\u2014'}</div></span><span className="s">{D.feeH!=null||D.measured?feeSub(D.feeH):null}</span></div>}
                     </div>
                     <div className="vs-card bo" style={{'--acc':VS_BOT}}>
                       <div className="bg" aria-hidden="true"></div>
                       <img className="fig" src="logos/hvb/bot.webp" alt="" aria-hidden="true"/>
-                      <div className="hd"><span className="n">Arb bots</span><span className="pct tabular-nums">{vsPct(share(view.bot.usd,view.human.usd))}</span></div>
+                      <div className="hd"><span className="n">Arb bots</span><span className="pct tabular-nums">{vsPct(share(D.bUsd,D.hUsd))}</span></div>
                       <div className="k">Volume</div>
-                      <div className="v tabular-nums">{fmtUSD(view.bot.usd)}</div>
-                      <div className="s">{fmt(view.bot.n)} trades from {fmt(botN)} bot contract{botN===1?'':'s'}</div>
-                      {vg&&<div className="vg"><span><span className="k">Value generated</span><div className="v tabular-nums">{fmtUSD(vg.b)}</div></span><span className="s">{vsPct(share(vg.b,vg.h))} of it {'·'} {feeLabel}</span></div>}
+                      <div className="v tabular-nums">{fmtUSD(D.bUsd)}</div>
+                      <div className="s">{D.measured?<b className="text-white">{fmt(D.bN)}</b>:fmt(D.bN)} {D.unit}{D.bN===1?'':'s'} from {botWho}</div>
+                      {(D.measured||vg)&&<div className="vg"><span><span className="k">{D.measured?'Fees paid':'Value generated'}</span><div className="v tabular-nums">{D.feeB!=null?fmtUSD(D.feeB):'\u2014'}</div></span><span className="s">{D.feeB!=null||D.measured?feeSub(D.feeB):null}</span></div>}
                     </div>
                   </div>
+                  {/* Audit V v21: the fees nobody traded for (sends between wallets, staking moves), and UFO's own swapback kept out of both sides */}
+                  {D.measured&&(D.feeT>0||D.protoUsd>0)&&<div className="vs-rest">{D.feeT>0&&<>+ <b>{fmtUSD(D.feeT)}</b> in fees from sends between wallets and staking moves ({vsPct(D.feeTot>0?D.feeT/D.feeTot:null)})</>}{D.feeT>0&&D.protoUsd>0&&<> {'\u00b7'} </>}{D.protoUsd>0&&<>UFO{'\u2019'}s own buy-and-burn swaps ({fmtUSD(D.protoUsd)}) are not counted as anyone{'\u2019'}s</>}</div>}
                   {/* the split over time */}
                   <div className="vs-chartcard mt-3 rounded-2xl border border-white/10 p-3 sm:p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="vs-key"><i style={{background:both?'linear-gradient(90deg,#E8C044,#7CFC00)':`rgb(${rgb})`}}></i>Humans {vsPct(share(view.human.usd,view.bot.usd))}</span>
-                      <span className="vs-key"><i style={{background:`rgb(${VS_BOT})`}}></i>Arb bots {vsPct(share(view.bot.usd,view.human.usd))}</span>
+                      <span className="vs-key"><i style={{background:both?'linear-gradient(90deg,#E8C044,#7CFC00)':`rgb(${rgb})`}}></i>Humans {vsPct(share(D.hUsd,D.bUsd))}</span>
+                      <span className="vs-key"><i style={{background:`rgb(${VS_BOT})`}}></i>Arb bots {vsPct(share(D.bUsd,D.hUsd))}</span>
                     </div>
-                    <div className="vs-bar mt-2" role="img" aria-label={`Humans ${vsPct(share(view.human.usd,view.bot.usd))}, bots ${vsPct(share(view.bot.usd,view.human.usd))}`}>
-                      <i className={`h${gg}`} style={{width:`${view.total.usd>0?view.human.usd/view.total.usd*100:0}%`}}></i><i className="b" style={{width:`${view.total.usd>0?view.bot.usd/view.total.usd*100:0}%`}}></i>
+                    <div className="vs-bar mt-2" role="img" aria-label={`Humans ${vsPct(share(D.hUsd,D.bUsd))}, bots ${vsPct(share(D.bUsd,D.hUsd))}`}>
+                      <i className={`h${gg}`} style={{width:`${D.hUsd+D.bUsd>0?D.hUsd/(D.hUsd+D.bUsd)*100:0}%`}}></i><i className="b" style={{width:`${D.hUsd+D.bUsd>0?D.bUsd/(D.hUsd+D.bUsd)*100:0}%`}}></i>
                     </div>
                     <div className="mt-3"><VsChart series={view.series} binMs={view.binMs} rgb={rgb} gg={both}/></div>
                   </div>
@@ -11734,11 +11765,11 @@
                       </table>
                     </div>
                   </VsFold>
-                  <VsFold open={showBots} onToggle={()=>setShowBots(s=>!s)} title="Top bot contracts" count={`${fmt(botN)} contract${botN===1?'':'s'}`} color={`rgb(${VS_BOT})`}>
+                  <VsFold open={showBots} onToggle={()=>setShowBots(s=>!s)} title="Top bot contracts" count={D.measured?`${D.atLeast?'\u2265':''}${fmt(D.botContracts)} contract${D.botContracts===1?'':'s'}`:`${fmt(botN)} contract${botN===1?'':'s'}`} color={`rgb(${VS_BOT})`}>
                     {view.bots.length===0?<div className="mt-2 rounded-2xl border border-white/10 bg-black/40 p-5 text-center text-white/55 text-sm">No bot trades in the {P.label.toLowerCase()}.</div>:(
                       <div className="mt-2 rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
                         <table className="w-full">
-                          <thead><tr><th className="vs-th">Contract</th><th className="vs-th">Trades</th><th className="vs-th">Volume</th>{!phone&&<th className="vs-th">Of bot volume</th>}</tr></thead>
+                          <thead><tr><th className="vs-th">Contract</th><th className="vs-th">Swaps</th><th className="vs-th">Volume</th>{!phone&&<th className="vs-th">Of bot volume</th>}</tr></thead>
                           <tbody>{view.bots.map(b=>(
                             <tr key={b.addr} className="border-t border-white/[0.06]">
                               <td className="vs-td">{/^0x[0-9a-fA-F]{40}$/.test(b.addr)?<a href={`https://scan.pulsechain.com/address/${b.addr}`} target="_blank" rel="noopener noreferrer" className="font-mono text-white/90 hover:text-white hover:underline" title={b.addr}>{vsShort(b.addr)}</a>:<span className="font-mono text-white/60">{vsShort(b.addr.replace(/:via$/,''))}</span>}{b.label&&<span className="text-white/40 text-[12px]"> {b.label}</span>}</td>
@@ -11750,10 +11781,10 @@
                       </div>)}
                   </VsFold>
                   <VsFold open={showHow} onToggle={()=>setShowHow(s=>!s)} title="How we tell" count="" color="rgba(255,255,255,.6)">
-                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days. One thing to know about the fee: it is charged per token transfer, not per swap. A bot's round trip moves the token pool-to-pool once, so it pays one fee while counting as a buy and a sell here, and a PulseX app buy split across pools can pay it twice.</div>
+                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days. The fee is charged per token transfer, not per swap: a bot's round trip is a buy in one pool and a sell in another but moves the token pool-to-pool once, so it pays one fee, while a PulseX app buy split across pools can pay it twice. So the volumes and counts here take each transaction ONCE (the larger of its buys and its sells), and the fees are read from the fee transfers on chain and given to whoever's transaction paid them; fees from transactions with no trade (sends between wallets, staking moves) are shown on their own. UFO's own buy-and-burn swaps are kept out of both sides. The By pool table and the contract list still show each pool's swaps.</div>
                   </VsFold>
                   {/* round 12 (Shaka): a confidence note — the split is vastly right, a few small trades at the edges may still be mislabelled */}
-                  <p className="vs-conf">How sure are we? Of who is who: very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land on the right side. The sums are another matter: a bot{'\u2019'}s loop is one transaction and one fee but two swaps, and the volumes and trade counts here still count every swap, so the bot side reads larger than it is. A fix that counts each loop once is on the way.</p>
+                  <p className="vs-conf">How sure are we? Of who is who: very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land on the right side. The sums count each transaction once and the fees are read from the chain, so a bot{'\u2019'}s loop (two swaps, one fee) is no longer counted twice. A handful of small trades at the edges can still be mislabelled, so read this as a very close picture rather than a to-the-cent ledger.</p>
                 </>
               )}
             </div>
