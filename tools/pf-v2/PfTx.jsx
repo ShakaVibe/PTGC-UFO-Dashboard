@@ -104,7 +104,7 @@
         .filter(x=>x.a&&x.a!==addr&&x.a!==tokAddr&&!PFT_FEE.has(x.a)).sort((x,y)=>y.v-x.v)[0];
       /* the hidden reflection slice of a send (see above) */
       if(net<0){if(tok==='PTGC'){const stLeg=legs.filter(l=>l.f===addr&&l.to===PFT_STAKING).reduce((a,l)=>a+l.v,0);net-=stLeg;}
-        else{const fee=legs.filter(l=>l.f===addr&&l.to===tokAddr).reduce((a,l)=>a+l.v,0);net-=fee/5;}}
+        else{const fee=legs.filter(l=>l.f===addr&&l.to===tokAddr).reduce((a,l)=>a+l.v,0);const sp=window.ufoSplitAt?window.ufoSplitAt(legs[0].t,true):[100,500];net-=fee*sp[0]/sp[1];}}   // Audit V v31: the split in force then (÷ 5 at the launch rates)
       let type;
       if(main&&own.has(main.a))type='Move';
       else if(/addliquidity/.test(m))type='Add LP';
@@ -192,6 +192,7 @@
           setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
           const got=[];let failed=0,done=0,q=0,q2=0;
           const px=await pfhPrices().catch(()=>null);
+          if(window.ufoRateTimeline)await window.ufoRateTimeline().catch(()=>null);   // Audit V v31
           let flows=[];   // round 20: every tx's net per wallet + token (moves on BOTH sides) — the Earned details' UFO maths
           const build=()=>{
             const rows=[];flows=[];

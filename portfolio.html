@@ -1526,6 +1526,36 @@
       }
       return out;
     };
+    /* Audit V v31 (2026-10-25): UFO's rates are owner-settable (FeesUpdated), so the hidden reflection slice of a send is the fee leg
+       × holders-bps ÷ contract-bps IN FORCE AT THAT BLOCK, not a fixed ÷ 5. The timeline is read once a page life (no event since
+       launch as of 2026-10-25 — the 1 : 5 split has held, so every figure is unchanged today). Before the first event: the launch
+       rates, 1 % each. A failed read → that launch split, as before. Layout: index.html's decodeFeesUpdated (6 words, or 7 with a
+       self-consistent total at either end). */
+    const UFO_FEES_UPDATED_TOPIC='0x020b4e17880b9764de4da2ebf8857a187cc492ae288e9f3ec0db3e2fdb37a2ec';
+    const UFO_LAUNCH_SPLIT=[100,500];   // [holders bps, the five contract buckets' bps]
+    let _ufoRateTL=null,_ufoRateP=null;
+    const ufoRateTimeline=()=>{
+      if(_ufoRateTL)return Promise.resolve(_ufoRateTL);if(_ufoRateP)return _ufoRateP;
+      _ufoRateP=(async()=>{
+        const head=await getHeadBlock();if(head==null)return null;
+        const logs=await getLogsChunked(UFO_TOKEN_ADDR,[UFO_FEES_UPDATED_TOPIC],UFO_LAUNCH_BLOCK,head,true);if(logs===null)return null;
+        const tl=[];
+        for(const l of logs){
+          const h=(l.data||'').replace(/^0x/,''),n=Math.floor(h.length/64),w=[];for(let i=0;i<n;i++)w.push(Number(BigInt('0x'+h.slice(i*64,(i+1)*64))));
+          const sum=a=>a.reduce((x,y)=>x+y,0);let r=null;
+          if(n===6)r=w;else if(n===7){if(w[6]===sum(w.slice(0,6)))r=w.slice(0,6);else if(w[0]===sum(w.slice(1)))r=w.slice(1);}
+          if(!r){console.warn('FeesUpdated layout not recognised — keeping the previous split');continue;}
+          const bn=parseInt(l.blockNumber,16);let ts=null;
+          try{const b=await rpcFetch({jsonrpc:'2.0',method:'eth_getBlockByNumber',params:['0x'+bn.toString(16),false],id:1});ts=b&&b.result?parseInt(b.result.timestamp,16)*1000:null;}catch(e){}
+          tl.push({block:bn,ts,r:r[0],c:sum(r.slice(1))});
+        }
+        _ufoRateTL=tl.sort((a,b)=>a.block-b.block);return _ufoRateTL;
+      })().catch(()=>null).finally(()=>{_ufoRateP=null;});
+      return _ufoRateP;
+    };
+    /* [holders bps, contract bps] in force at a block (or, with byTime, at a ms timestamp) */
+    const ufoSplitAt=(at,byTime=false)=>{let s=UFO_LAUNCH_SPLIT;for(const e of (_ufoRateTL||[])){const k=byTime?e.ts:e.block;if(k!=null&&k<=at&&e.c>0)s=[e.r,e.c];else if(k!=null&&k>at)break;}return s;};
+    window.ufoSplitAt=ufoSplitAt;window.ufoRateTimeline=ufoRateTimeline;   // PfTx (the Transactions list) grosses UFO sends up with the same split
     const getHeadBlock=async()=>{
       const r=await rpcFetch({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1});
       if(!r||!r.result)return null;
@@ -1558,7 +1588,8 @@
          throws the cache away and rescans from launch. A failed read never touches the cache. */
       const wtopic='0x'+padAddr(address);
       const ck='grays_ufo_refl_v1:'+address.toLowerCase();
-      let c=null;try{const s=localStorage.getItem(ck);if(s){const o=JSON.parse(s);if(o&&o.v===1&&Number.isInteger(o.to)&&o.to>=UFO_LAUNCH_BLOCK&&o.to<=head)c={to:o.to,inW:BigInt(o.inW),outW:BigInt(o.outW),feeW:BigInt(o.feeW)};}}catch(e){c=null;}
+      await ufoRateTimeline();   // Audit V v31: the split in force at each fee leg's block
+      let c=null;try{const s=localStorage.getItem(ck);if(s){const o=JSON.parse(s);if(o&&o.v===1&&Number.isInteger(o.to)&&o.to>=UFO_LAUNCH_BLOCK&&o.to<=head)c={to:o.to,inW:BigInt(o.inW),outW:BigInt(o.outW),feeW:BigInt(o.feeW),rfW:o.rfW!=null?BigInt(o.rfW):BigInt(o.feeW)/5n};}}catch(e){c=null;}
       const scan=async(fromBlock)=>{
         const [recv,sent]=await Promise.all([
           getLogsChunked(UFO_TOKEN_ADDR,[TRANSFER_TOPIC,null,wtopic],fromBlock,head,true),   // to = wallet   (exactTo: never 'latest')
@@ -1571,26 +1602,28 @@
           outW:sumWei(sent),                                                                        // = 99% of gross on fee-paying sends
           // The 5% contract-fee legs are the only sends addressed to the token itself. gross = fee/0.05,
           // so the unemitted 1% reflection slice = fee/5. Adding it back makes outflow exact.
-          feeW:sumWei(sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic))};
+          feeW:sumWei(sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic)),
+          // Audit V v31: …that slice is leg × holders ÷ contract bps of the block it was paid in (÷ 5 at the launch rates)
+          rfW:sent.filter(l=>(l.topics[2]||'').toLowerCase()===contractTopic).reduce((a,l)=>{const[r,cb]=ufoSplitAt(parseInt(l.blockNumber,16));return a+parseWord(l.data)*BigInt(r)/BigInt(cb);},0n)};
       };
-      const finish=(inWei,outEmitted,feeLegs,to)=>{
-        const outWei=outEmitted+feeLegs/5n;
+      const finish=(inWei,outEmitted,feeLegs,to,reflSlice)=>{
+        const outWei=outEmitted+(reflSlice!=null?reflSlice:feeLegs/5n);
         const reflWei=balanceWei-(inWei-outWei);
         if(reflWei<0n)return null;                                                                   // impossible — let the caller rescan
-        try{localStorage.setItem(ck,JSON.stringify({v:1,to,inW:inWei.toString(),outW:outEmitted.toString(),feeW:feeLegs.toString()}));}catch(e){}
+        try{localStorage.setItem(ck,JSON.stringify({v:1,to,inW:inWei.toString(),outW:outEmitted.toString(),feeW:feeLegs.toString(),rfW:(reflSlice!=null?reflSlice:feeLegs/5n).toString()}));}catch(e){}
         try{(window.pfUfoRecv=window.pfUfoRecv||{})[address.toLowerCase()]=toNum(inWei);}catch(e){}   // Portfolio v2 round 6: yield denominator
         return reflWei>0n?toNum(reflWei):0;
       };
       if(c){
         const d=c.to<head?await scan(c.to+1):{inW:0n,outW:0n,feeW:0n};
         if(d===null)return null;
-        const r=finish(c.inW+d.inW,c.outW+d.outW,c.feeW+d.feeW,head);
+        const r=finish(c.inW+d.inW,c.outW+d.outW,c.feeW+d.feeW,head,c.rfW+(d.rfW||0n));
         if(r!==null)return r;
         try{localStorage.removeItem(ck);}catch(e){}                                                  // fall through: full rescan
       }
       const d=await scan(UFO_LAUNCH_BLOCK);
       if(d===null)return null;
-      const r=finish(d.inW,d.outW,d.feeW,head);
+      const r=finish(d.inW,d.outW,d.feeW,head,d.rfW);
       return r===null?0:r;                                                                           // balance below net received even from launch: show 0, not a fake number
     };
 
@@ -2804,7 +2837,7 @@
         .filter(x=>x.a&&x.a!==addr&&x.a!==tokAddr&&!PFT_FEE.has(x.a)).sort((x,y)=>y.v-x.v)[0];
       /* the hidden reflection slice of a send (see above) */
       if(net<0){if(tok==='PTGC'){const stLeg=legs.filter(l=>l.f===addr&&l.to===PFT_STAKING).reduce((a,l)=>a+l.v,0);net-=stLeg;}
-        else{const fee=legs.filter(l=>l.f===addr&&l.to===tokAddr).reduce((a,l)=>a+l.v,0);net-=fee/5;}}
+        else{const fee=legs.filter(l=>l.f===addr&&l.to===tokAddr).reduce((a,l)=>a+l.v,0);const sp=window.ufoSplitAt?window.ufoSplitAt(legs[0].t,true):[100,500];net-=fee*sp[0]/sp[1];}}   // Audit V v31: the split in force then (÷ 5 at the launch rates)
       let type;
       if(main&&own.has(main.a))type='Move';
       else if(/addliquidity/.test(m))type='Add LP';
@@ -2892,6 +2925,7 @@
           setSt(s=>({...s,state:s.rows.length?'ok':'loading',done:0,total:jobs.length}));
           const got=[];let failed=0,done=0,q=0,q2=0;
           const px=await pfhPrices().catch(()=>null);
+          if(window.ufoRateTimeline)await window.ufoRateTimeline().catch(()=>null);   // Audit V v31
           let flows=[];   // round 20: every tx's net per wallet + token (moves on BOTH sides) — the Earned details' UFO maths
           const build=()=>{
             const rows=[];flows=[];
