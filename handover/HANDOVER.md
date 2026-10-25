@@ -4,7 +4,50 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## AUDIT V (2026-10-25) — the per-transfer fee model — `sessions/2026-10-25-audit5.md`, roadmap phase "AUDIT V" v1–v37
+## START HERE (2026-10-25 final wrap) — everything PUSHED (`47a6bdd`), live-checked, working tree clean
+
+**Audit V is finished and live.** All 37 items (v1–v37) are done or closed on Shaka's word; the roadmap artifact has every one
+ticked with a note. League History went LIVE the same day (the Token Allocation creature strip opens it; the dot is gone). The
+afternoon's polish batch (a44, a46, a47, a49, a56, a58, c38) is live too. Next session: nothing owed — ask Shaka what he wants.
+
+**What the site now shows (measured on chain, not estimated):**
+- **PTGC Value Generated** comes from the fee transfers themselves (`periods[p].measured.fees` in swap-volume.json, schema 2):
+  7D $6,707 est. → $8,537 measured; 90D $220,780 (live after the manual pipeline run). Panel, KPI card, share + Combined cards and
+  the Live Feed totals all read it. Each window is priced at its own fee-weighted average price (v27), not today's.
+- **Humans vs Bots** counts each transaction ONCE and reads the fees paid (people / bots / wallet sends); UFO's swapback is kept out
+  (v7, v21, v22). BOTH still sums PTGC + UFO on purpose (Shaka: "Both should get credit").
+- **TXNS 24H tile**: change % again (the people line was tried and removed on Shaka's call); buys / sells flipped on quote-side pools.
+- **LP Pairs** Value Gen per pool from that pool's measured fees (v24); Price 24h is the token's own on quote-side pools.
+- **Live Feed**: one row per transaction with its measured fee and an ARB side (v23); failed receipt reads retry up to 3× (a44).
+- **Volume 7D/30D/90D** from the hourly chain file (every pool), not CoinGecko's 20 pools (v18).
+- **Total Supply Burned**: burn totals by source are in the data (`burnSources`, v15/v16) but NOT displayed — Shaka removed the
+  bar and the hover. Tiles show "since launch" under the label when the token is younger than the window (a47).
+- **Holders** on the dashboard counts every address (contracts hold PTGC too); Top 100 and Leagues stay people-only; no ≈ on the
+  VG Holders box. The pipeline records the people count alongside (`people` in the holder snapshot).
+- **UFO fee rate** shown only once read from the contract ("rate unread" until then; v34); calculators read UFO's six live rates (v30).
+- **"How the fee works"** window (v33) from the Value Generated ⓘ and Humans vs Bots "How we tell".
+- **v37 result:** the PTGC contract's 2.5 % is 90 % sold for PLS + 10 % paired as LP (LP kept by the contract), leftover PLS to the
+  DAO contract → the site's 2 % : 0.5 % split is right. No site change.
+- **Calculators / Portfolio / Ledger:** Rewards presets from fee-paying volume (v29); Portfolio UFO reflections use the fee split
+  in force at each block (v31); Ledger counts the buy fee and the router double fee (v32); 10 Yr no longer counts burns / LP as buying.
+- **Polish:** 32 px tap areas on pills (a46); hover-only info made tappable (a47 — Affiliates "Threshold required" is an InfoTip, UFO
+  VG "⚠ not delivered" + an explainer line); 10 Yr number boxes can be cleared and clamp to their min, aria-labels (a56); description /
+  canonical / og / twitter tags on the four sibling pages, a tab title per dashboard route ("PTGC — The Grays Dashboard"), 404.html (c38).
+
+**Shaka's standing calls from this session (do not re-propose):** BOTH double count stays · Affiliates "5% fee Covered" chip stays ·
+no burn-source bar or hover · no people line on TXNS · no ≈ on Holders · Volume label (v25) not needed · phone LP row links not needed ·
+robots.txt does NOT block /data/ (Google renders the pages from those files).
+
+**Parked:** c10 — lock the switch.win trade iframe down with a `sandbox` attribute (Shaka: "lets mess with another time"; notes on
+the roadmap item). Audit V truth-table note: the audit's block windows were ~3.5 % long (10 s vs real ~10.35 s blocks) — the
+builder's ts windows are the right ones (see the session file §1 correction).
+
+**Gotchas learned today (also in Gotchas below):** `tools/league-history.py` anchors must stay contiguous — the v33 FeeHow insertion
+split them and the splice duplicated `showLeagueHist` (push bd34149, refused by deploy's compile check; fixed 66c389c; the script
+must report "0 edit(s)"). New Tailwind classes need `cd tools/harness && npm run css` + a `tw.css?v=` bump on all five pages
+(now v=9) or Site check goes red. Always `node tools/harness/compile.js` and diff before copying files to the Mac.
+
+## AUDIT V (2026-10-25) — history of the day (all of it LIVE now — see START HERE above) — the per-transfer fee model — `sessions/2026-10-25-audit5.md`, roadmap phase "AUDIT V" v1–v37
 
 PTGC (5 %) and UFO (~6 %) fees are charged per TRANSFER. Arb bots route pool → pool: one loop = 1 transfer = 1 fee but 2 swaps
 (a "buy" + a "sell"); a PulseX smart-router split buy pays the fee TWICE (pools → router → buyer). Measured on chain over 90 d
@@ -51,7 +94,7 @@ UFO 30d fee tokens 6.92 B = the site's own UFO realizedFees for the window. Bots
 Strip: "The Burn address" (desktop) and "Poseidon = the Burn address" (phone caption) REMOVED from CreatureStripV2 (Shaka: "we do not
 want the text THE BURN ADDRESS in this row of sea creatures") — the League History cards still say it (ask before touching them).
 
-## START HERE (2026-10-24 final wrap) — everything PUSHED (`036ffc3b`), working tree clean
+## Before that (2026-10-24 final wrap) — everything PUSHED (`036ffc3b`), working tree clean
 
 **PLAN FOR THE NEXT SESSION (Shaka, 2026-10-24 night): "any last little bit of polishing tomorrow, and look to make it live
 tomorrow."** So: (1) the owed checks below (the first daily league-history run after 00:15 UTC Oct 25 — Oct 24 as "latest",
@@ -2263,7 +2306,22 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
   a window that closes itself while it is the current entry calls `history.back()`. A new overlay that does not use `Modal` /
   `useDialog` / `PfModal` gets no Back behaviour — use them.
 
+- **Splice scripts and their anchors (2026-10-25).** `tools/league-history.py` splices lh.jsx / lh.css into index with `edit()`
+  steps keyed on neighbouring lines; anything inserted BETWEEN two anchors (v33's FeeHow state / render lines did) makes the next
+  run insert a second copy (bd34149: `showLeagueHist` declared twice → Babel error → deploy refused). Order now: state `showTop100`,
+  LH line, `showFeeHow` lines; render `FeeHowModal`, LH comment, `LeagueHistoryModal`, `LhDot`, `T1Dot`. A clean run says
+  "0 edit(s)". Still: never re-run `tools/top100.py`.
+- **tw.css is built, not live (2026-10-25).** A Tailwind class the build has not seen renders unstyled and Site check fails:
+  `cd tools/harness && npm run css`, then bump `tw.css?v=` on index / calculators / charts / portfolio / ledger together (v=9 now).
+- **Harness actions split on ';' (2026-10-25).** `run.js` actions are ';'-separated, so JS containing ';' must go in a probe file
+  (`evalfile=probes/x.js`). In the cloud, `ci-mount.js` needs `CHROME=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`.
+- **Measured fees are per transfer (2026-10-25, Audit V).** Volume × rate is only an estimate: a bot loop pays once while showing a
+  buy and a sell, a router-split buy pays twice, wallet sends pay too. Read fees from `periods[p].measured.fees` (pools / noPool) in
+  swap-volume.json; helpers `measuredPoolFees`, `ptgcMeasuredFees`, `chainVolWindows`, `vgWindowPrices`, `feeRateKnown`.
+
 ## Next up (in order)
+
+-59. **DONE — pushed `47a6bdd`, live-checked.** 2026-10-25: Audit V v1–v37 all done or closed, League History LIVE, polish a44 / a46 / a47 / a49 / a56 / a58 / c38. Parked: c10 (trade iframe sandbox). See START HERE.
 
 -58. **DONE — pushed `036ffc3b`** (small LEAGUES + SHARE pills) — the last change of 2026-10-24. Next: START HERE (polish → go live).
 -57. **DONE — pushed `919f9b7e`** (Leagues button).
@@ -2548,6 +2606,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    in dry-run would have shown up here too).
 
 ## Session log
+- `sessions/2026-10-25-audit5.md` — Audit V: the per-transfer fee model, v1–v37 findings + truth table, then the whole roadmap built and pushed the same day (measured fees in the pipeline, every surface switched, League History live, v37 traced, the afternoon polish batch). §6 = what shipped.
 - `sessions/2026-10-23.md` — Audit IV fixes: e1 + e2, batch P0b e7 / e8 / e3 / e4 / e19, the rank trio e9–e11 (all pushed, live-verified); batch 3 e17 / e24 / e25 / e12 / e18 / e20–e23 (built).
 - `sessions/2026-10-22-audit4.md` — Audit IV: the merged e1–e47 list (P0–P3, TOP 10, security / mobile / performance / data sections, quick wins, ideas, do-not-change) and the eight raw sweeps (S, N, M, D, R, P, U, V) with evidence. No code changed.
 - `sessions/2026-10-22.md` — TOP 100: mock-ups, the build (holders + stakers, the checker), four look rounds, the audit, go-live, the stakers columns, the Telegram post.
