@@ -4796,12 +4796,13 @@
         if(mf){const rate=(cfg.feeRate||0.05)*100,byKey={};
           (cfg.feeBreakdown||[]).forEach(b=>{byKey[b.key||b.name]=mf.usd*((b.pct||0)/rate);});
           byKey['Total H&S']=(byKey.Holders||0)+(byKey.Stakers||0);
-          return{basis:'measured',total:mf.usd,byKey,periodVol:none.periodVol,txs:mf.txs,pending:false};}
+          return{basis:'measured',total:mf.usd,byKey,periodVol:none.periodVol,txs:mf.txs,pending:false,px:vgWindowPrices(period,prices)};}   // px (Audit V v27): the prices that turn these USD back into tokens
       }
       if(token==='UFO'){
+        prices=vgWindowPrices(period,prices);   // Audit V v27: the window's own average prices
         const m=computeValueGenBuckets(period,delivered,realizedFees,prices||{});
         const live=(realizedFees&&realizedFees.ok&&realizedFees.byPeriod)?realizedFees.byPeriod[period]:null;
-        if(m)return{basis:'delivered',total:m.total,byKey:m.byKey,missing:m.missing,periodVol:none.periodVol,txs:live&&live.txCount!=null?live.txCount:null,pending:false};   // a21: total null + missing[] when a price is absent; Audit V v26/v28: txs = the fee-paying transfers counted
+        if(m)return{basis:'delivered',total:m.total,byKey:m.byKey,missing:m.missing,periodVol:none.periodVol,txs:live&&live.txCount!=null?live.txCount:null,pending:false,px:prices};   // a21: total null + missing[] when a price is absent; Audit V v26/v28: txs = the fee-paying transfers counted
         const ufoPx=(prices&&prices.UFO)||0;
         if(live&&ufoPx>0){
           const byKey={reflection:(live.tokens?.reflection||0)*ufoPx,ufoBurn:null,ptgcBurn:null,plsLP:null,plsxLP:null,wethLP:null};
@@ -8985,7 +8986,7 @@
       const total=vg?vg.total:null;
       const tokColor=token==='PTGC'?'#E8C044':'#9DFF3A';
       const tokTag=<span style={{color:tokColor}}>{token}</span>;
-      const tiles=items.map(it=>{const usd=valueGenBucketUsd(vg,it);return{it,usd,parts:usd==null?null:valueGenParts(token,it,usd,prices)};});
+      const tiles=items.map(it=>{const usd=valueGenBucketUsd(vg,it);return{it,usd,parts:usd==null?null:valueGenParts(token,it,usd,(vg&&vg.px)||prices)};});
       const barItems=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0);
       const barSum=barItems.reduce((s,t)=>s+t.usd,0);
       const basis=!vg?'—':vg.pending?'reading fees from the chain…':(vg.basis==='delivered'&&vg.txs==null)?'measured on chain':(vg.basis==='delivered'||vg.basis==='measured')?<>measured on chain {'\u00B7'} <b style={{color:'#fff'}}>{fmt(vg.txs)}</b> fee-paying transfers</>:vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>est. from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
@@ -10072,7 +10073,7 @@
     };
     const CvgPanel=({z,tkn,side,share,prices})=>{
       const cfg=TOKENS[tkn],gold=tkn==='PTGC',rgb=gold?'232,192,68':'124,252,0',col=gold?'#E8C044':'#9DFF3A';
-      const tiles=side.items.map(it=>{const usd=valueGenBucketUsd(side.vg,it);return{it,usd,parts:usd==null?null:valueGenParts(tkn,it,usd,prices)};});
+      const tiles=side.items.map(it=>{const usd=valueGenBucketUsd(side.vg,it);return{it,usd,parts:usd==null?null:valueGenParts(tkn,it,usd,(side.vg&&side.vg.px)||prices)};});
       const bar=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0),barSum=bar.reduce((s,t)=>s+t.usd,0);
       const total=side.vg?side.vg.total:null;
       return(
@@ -10103,10 +10104,10 @@
     };
     /* "Where it went": both tokens by destination. A group prints only when every bucket in it is known. */
     const cvgWhere=(ptgc,ufo,prices)=>{
-      const b=(side,tkn,k)=>{const it=side.items.find(i=>(i.key||i.name)===k);if(!it)return{usd:0,it:null,tkn};const usd=valueGenBucketUsd(side.vg,it);return{usd,it,tkn};};
+      const b=(side,tkn,k)=>{const it=side.items.find(i=>(i.key||i.name)===k);if(!it)return{usd:0,it:null,tkn};const usd=valueGenBucketUsd(side.vg,it);return{usd,it,tkn,px:side.vg&&side.vg.px};};
       const sum=parts=>parts.some(p=>p.usd==null)?null:parts.reduce((s,p)=>s+p.usd,0);
       const split=(p,u)=>{const a=sum(p),c=sum(u);return a==null||c==null?null:`PTGC ${fmtUSD(a)} · UFO ${fmtUSD(c)}`;};
-      const qty=(p,sym)=>{let t=0;for(const x of p){if(x.usd==null||!x.it)return null;const pr=valueGenParts(x.tkn,x.it,x.usd,prices);if(!pr)return null;pr.forEach(q=>{if(q.symbol===sym)t+=q.qty;});}return t;};
+      const qty=(p,sym)=>{let t=0;for(const x of p){if(x.usd==null||!x.it)return null;const pr=valueGenParts(x.tkn,x.it,x.usd,x.px||prices);if(!pr)return null;pr.forEach(q=>{if(q.symbol===sym)t+=q.qty;});}return t;};
       const dao=[b(ptgc,'PTGC','DAO')];
       const hsP=[b(ptgc,'PTGC','Holders'),b(ptgc,'PTGC','Stakers')],hsU=[b(ufo,'UFO','reflection')];
       const lpP=[b(ptgc,'PTGC','Add LP')],lpU=[b(ufo,'UFO','plsLP'),b(ufo,'UFO','plsxLP'),b(ufo,'UFO','wethLP')];
@@ -11285,6 +11286,19 @@
         const o=t.periods[p];if(!o||!o.human||!o.bot)continue;
         if(!(isFinite(since)&&since<=Date.now()-days*86400000+6*3600*1000))continue;
         const v=(o.human.usd||0)+(o.bot.usd||0);if(v>0)out[k]=v;
+      }
+      return out;
+    };
+    /* Audit V v27 (2026-10-25): a window's UFO / PTGC token amounts were priced at TODAY's price — UFO's 30D (6.9B UFO) moved with
+       one day's price. Each token's average price over the window, weighted by when its fees were paid, comes from the hourly file
+       (fees.total.usd ÷ fees.total.tokens; every fee is priced at its own hour). Used for UFO's delivered buckets and the PTGC its
+       swapback burns. PLS / PLSX / WETH (the LP quote sides) stay at today's price. No complete window → today's price, as before. */
+    const vgWindowPrices=(period,prices)=>{
+      const out={...(prices||{})};
+      for(const tk of ['UFO','PTGC']){
+        const f=_vsFile&&_vsFile.tokens&&_vsFile.tokens[tk]&&_vsFile.tokens[tk].periods&&_vsFile.tokens[tk].periods[period];
+        const m=f&&f.measured&&f.measured.fees;
+        if(m&&m.complete&&m.total&&m.total.tokens>0&&m.total.usd>0)out[tk]=m.total.usd/m.total.tokens;
       }
       return out;
     };
@@ -15341,14 +15355,14 @@
                     const totalGen=valueGenView.total!=null?valueGenView.total:0;
 
                     const orderedItems=buildValueGenItems(token,cfg);
-                    const vgPrices=vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);
+                    const vgPrices=token==='UFO'?vgWindowPrices(valueGenPeriod,vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice)):vgPriceMap(token,data,ptgcPrice,pls,plsxPrice,wethPrice);   // Audit V v27
 
                     /* MIGRATION: realized mode. Values come from summed on-chain fee transfers,
                        attributed with the fee rates actually in force at each block.
                        The chain read does NOT depend on the price feed: token amounts are
                        exact without it. Gating `live` on ufoPx>0 used to make a dropped
                        price feed look like "Data unavailable" when the fees were fine. */
-                    const ufoPx=data?.price||0;
+                    const ufoPx=(token==='UFO'&&vgPrices.UFO>0)?vgPrices.UFO:(data?.price||0);   // Audit V v27: the window's average UFO price
                     const livePeriod=(token==='UFO'&&realizedFees&&realizedFees.ok)?realizedFees.byPeriod[valueGenPeriod]:null;
                     const live=livePeriod||null;
                     const showLive=!!live;
@@ -15554,7 +15568,7 @@
                         {(showLive||((hasData||valueGenView.basis==='measured')&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 flex-1 mt-2">
                           {((showLive?liveItems:orderedItems)||[]).map((item,i)=>{
                             const dollarVal=showLive?item.usd:(valueGenBucketUsd(valueGenView,item)||0);   // u5: PTGC buckets from the shared model
-                            const parts=showLive?item.parts:valueGenParts(token,item,dollarVal,vgPrices);
+                            const parts=showLive?item.parts:valueGenParts(token,item,dollarVal,valueGenView.px||vgPrices);
                             const partsLabel=(parts&&parts.length)
                               ?parts.map(pt=>`${fmtTokenQty(pt.qty)} ${pt.symbol}`).join(' + ')
                               :null;
