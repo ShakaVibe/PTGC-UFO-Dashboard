@@ -4390,8 +4390,6 @@
         return null;
       }
     };
-    /* Audit V v17: an ADDRESS count (PulseScan, burn-summary) → people, by today's gap from holder-ranks.json (see applyHolderPeople) */
-    const holdersToPeople=(tk,n)=>{const pi=holderPeopleInfo(tk);return pi&&n>pi.gap?n-pi.gap:n;};
     const fetchHolders=async addr=>{
       const token=addr.toLowerCase()===TOKENS.PTGC.address.toLowerCase()?'PTGC':'UFO';
       
@@ -4409,7 +4407,7 @@
         if(lastSnap[token]>0&&age<HOLDER_SNAP_MAX_AGE_MS)return lastSnap[token];
       }
       if(useCache&&burnHistoryCache&&burnHistoryCache[token]?.holders>0&&(burnHistoryAgeMs()??Infinity)<HOLDER_SNAP_MAX_AGE_MS){
-        return holdersToPeople(token,burnHistoryCache[token].holders);
+        return burnHistoryCache[token].holders;
       }
       
       // No cache - must fetch from PulseScan (timeout + one retry for transient hiccups).
@@ -4421,7 +4419,7 @@
           clearTimeout(timeoutId);
           const data=await r.json();
           const count=parseInt(data.token_holders_count)||0;
-          if(count>0)return holdersToPeople(token,count);   // Audit V v17: PulseScan counts addresses
+          if(count>0)return count;
         }catch{}
         if(attempt===0)await new Promise(s=>setTimeout(s,600));
       }
@@ -4929,29 +4927,11 @@
       }
     };
 
-    /* Audit V v17 (2026-10-25): HOLDERS = PEOPLE. PulseScan's count (holder-history.json) is every address — pools, ~1,000
-       contracts, the burn address: PTGC 18,213 vs 17,129 people. holder-ranks.json (every 2 h) has the people count; each token's
-       snapshots become people: a snapshot's own `people` value where the pipeline recorded one (from 2026-10-25), otherwise the
-       address count less today's gap (addresses − people), so every change stays exactly what it was. holder-ranks missing or
-       older than 48 h → addresses, as before. `holderHistoryCacheNew.people[token]` = {people, addresses, gap} for the labels. */
-    const applyHolderPeople=(j,hr)=>{
-      if(!j||!Array.isArray(j.snapshots))return j;
-      j.people={};
-      for(const tk of ['PTGC','UFO']){
-        const e=hr&&hr.tokens&&hr.tokens[tk],at=e&&Date.parse(e.readAt);
-        if(!(e&&Number.isFinite(e.holders)&&e.holders>0&&Number.isFinite(e.listed)&&e.listed>=e.holders&&isFinite(at)&&Date.now()-at<48*3600*1000))continue;
-        const gap=e.listed-e.holders;j.people[tk]={people:e.holders,addresses:e.listed,gap};
-        for(const sn of j.snapshots){if(!(sn[tk]>0))continue;sn['addr'+tk]=sn[tk];const pp=sn.people&&sn.people[tk];sn[tk]=pp>0?pp:Math.max(1,sn[tk]-gap);}
-      }
-      return j;
-    };
-    const holderPeopleInfo=tk=>(holderHistoryCacheNew&&holderHistoryCacheNew.people&&holderHistoryCacheNew.people[tk])||null;
     const fetchHolderHistoryNew = async () => {
       if (holderHistoryCacheNew) return holderHistoryCacheNew;
       try {
-        const [r,hr] = await Promise.all([dataFetch(HOLDER_HISTORY_URL_NEW),
-          dataFetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/holder-ranks.json').then(x=>x.ok?x.json():null).catch(()=>null)]);
-        holderHistoryCacheNew = applyHolderPeople(await r.json(),hr);
+        const r = await dataFetch(HOLDER_HISTORY_URL_NEW);
+        holderHistoryCacheNew = await r.json();
         console.log('Holder history loaded:', holderHistoryCacheNew.snapshots?.length, 'snapshots');
         return holderHistoryCacheNew;
       } catch (e) {
@@ -7321,7 +7301,7 @@
             <p>Every {token} transfer pays a {rate?`${rate}% `:''}fee {'\u2014'} a buy, a sell, or a plain send between wallets. This panel shows what that fee produced in the selected window, split by where it went {'\u2014'} each tile is one destination.</p>
             {token==='UFO'
               ?<p>Figures are measured from the fee transfers on chain, not estimated from volume.</p>
-              :<p>PTGC{'\u2019'}s figures are measured on chain: every taxed transfer sends 0.5% to the burn address and 1% to the staking contract, so those two legs give the exact amount taxed, updated hourly. Burn and Stakers are read directly; DAO (2%) and Add LP (0.5%) reach the contract together as 2.5%; Holders (1%, marked ≈) is inferred, because reflections move no tokens. If the hourly file is unavailable the panel falls back to volume × the fee rate and says {'\u201C'}est.{'\u201D'}.</p>}
+              :<p>PTGC{'\u2019'}s figures are measured on chain: every taxed transfer sends 0.5% to the burn address and 1% to the staking contract, so those two legs give the exact amount taxed, updated hourly. Burn and Stakers are read directly; DAO (2%) and Add LP (0.5%) reach the contract together as 2.5%; Holders (1%) is worked out from the contract's fixed rate, because reflections move no tokens. If the hourly file is unavailable the panel falls back to volume × the fee rate and says {'\u201C'}est.{'\u201D'}.</p>}
           </>
         );
       },
@@ -9627,7 +9607,7 @@
       );
       const amount=(
         <>
-          <div style={{fontSize:z.lbl,letterSpacing:'0.22em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,textAlign:tall?'center':'left'}}>{tokTag} {'·'} {holderPeopleInfo(token)?'people holding':'addresses holding'}</div>
+          <div style={{fontSize:z.lbl,letterSpacing:'0.22em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,textAlign:tall?'center':'left'}}>{tokTag} {'·'} wallets holding</div>
           <div className={`tabular-nums ${T.cls}`} style={{fontSize:z.big,fontWeight:700,lineHeight:0.95,marginTop:6,textAlign:tall?'center':'left'}}>{fmt(cur)}</div>
           <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:14,marginTop:12}}>
             <HoldersTodayChip d={chg24h} z={z}/>
@@ -10757,7 +10737,6 @@
       const txc=txnChange24h!==null?txnChange24h:(burnHistoryCache?.[token]?.changes?.txns!==undefined?burnHistoryCache[token].changes.txns:null);
       const ppl=vsPeople24h(token);   // Audit V v2
       const holdersNow=holdersByPeriod?.current??holders;
-      const hpi=holderPeopleInfo(token),holdTip=hpi?`People holding ${token}. PulseScan lists ${hpi.addresses.toLocaleString('en-US')} addresses, which also counts ${hpi.gap.toLocaleString('en-US')} pools, contracts and the burn address. The change is since yesterday.`:undefined;   // Audit V v17
       const val=(node)=>loading?<span className="h2-sk" style={{left:'calc(24*var(--u))',top:'calc(66*var(--u))',width:'55%',height:'calc(46*var(--u))'}}></span>:node;
       const T=(key,label,node,chg,extra={})=>(
         <div className={`h2-tile h2-${key} ${extra.hot?'hot':''} ${extra.full?'h2-full':''}`} key={key}>
@@ -10776,7 +10755,7 @@
             {badge:<><button type="button" onClick={openVolume} aria-label="Volume by period" className="tap-h"><H2Info/></button>{openVolSplit&&<button type="button" onClick={openVolSplit} aria-label="Humans vs Bots — who moves the volume" title="Humans vs Bots" className="tap-h"><span className="h2-hd h2-bot" style={{"--ic":"url(logos/hvb/ic-bot.svg)"}} aria-hidden="true"></span></button>}</>})}{/* Humans vs Bots LIVE 2026-10-06: the Classic bot icon right of the ⓘ, like the Holders people icon */}
           {T('liq','LIQUIDITY',fmtUSD(data?.liq),(data&&data._fromChain&&data.liq!=null)?{cls:'na',node:'chain · core pools only'}:null,{badge:<button type="button" onClick={openRH} aria-label="Liquidity with RH Core coins" className="tap-h h2-rh">RH</button>})}
           {T('ratio','LIQ / MCAP',liqMcapRatio==='—'?'—':`${liqMcapRatio}%`,null)}
-          {T('hold','HOLDERS',fmt(holdersNow),holderChange!==null?(holderChange===0?{cls:'na',node:'— 0',tip:holdTip}:{cls:holderChange>=0?'':'dn',tip:holdTip,node:`${holderChange>=0?'↑':'↓'} ${holderChange>=0?'+':''}${fmt(holderChange)}`}):null,
+          {T('hold','HOLDERS',fmt(holdersNow),holderChange!==null?(holderChange===0?{cls:'na',node:'— 0'}:{cls:holderChange>=0?'':'dn',node:`${holderChange>=0?'↑':'↓'} ${holderChange>=0?'+':''}${fmt(holderChange)}`}):null,
             {badge:<><button type="button" onClick={openHolders} aria-label="Holders by period" className="tap-h"><H2Info/></button>{openNewHolders&&<button type="button" onClick={openNewHolders} aria-label="Holders details — who joined and who left" title="Holders Details" className="tap-h"><span className="h2-hd" style={{"--ic":`url(logos/holders/nh-ic-new.webp?v=${NH_ART_V})`}} aria-hidden="true"></span></button>}</>})}
           {T('lp',`${token} IN LP`,tokensInLPKnown?fmtAbbr(tokensInLP):'—',null,{badge:<span className="h2-pct">{tokensInLPKnown?tokensInLPPct+'%':'—'}</span>})}
           {T('tx','TXNS 24H',txnsKnown?<>{(data?.buys||0)+(data?.sells||0)}<small><span className="b"><BsN k="b" n={data?.buys||0}/></span><span className="sl"> / </span><span className="s"><BsN k="s" n={data?.sells||0}/></span></small></>:<span title="24h transaction counts unavailable — DexScreener did not answer."><DashWhy why="The 24h transaction counts are unavailable — DexScreener did not answer."/></span>,
@@ -14196,8 +14175,8 @@
             // In the normal case (files present) nothing below runs, so the modal is instant.
             if(ptgcHolders==null||ufoHolders==null){
               const[pc,uc]=await Promise.all([
-                ptgcHolders==null?fetchHoldersLive(TOKENS.PTGC.address).then(n=>n>0?holdersToPeople('PTGC',n):n):Promise.resolve(ptgcHolders),
-                ufoHolders==null?fetchHoldersLive(TOKENS.UFO.address).then(n=>n>0?holdersToPeople('UFO',n):n):Promise.resolve(ufoHolders)
+                ptgcHolders==null?fetchHoldersLive(TOKENS.PTGC.address):Promise.resolve(ptgcHolders),
+                ufoHolders==null?fetchHoldersLive(TOKENS.UFO.address):Promise.resolve(ufoHolders)
               ]);
               ptgcHolders=pc;ufoHolders=uc;
             }
@@ -15592,7 +15571,7 @@
                                        title={qTip}>{partsLabel}</div>
                                 ):(
                                   <div className={`text-lg sm:text-2xl font-semibold text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate ${hdrV2&&!stuck?'p2-gold':''}`}
-                                       title={!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'Inferred: reflections move no tokens, so this 1% is the measured total × 1/5 — every other tile is read from the fee transfers':qTip}>{hdrV2?<H2Val>{!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'\u2248 ':''}{fmtUSD(dollarVal)}</H2Val>:<>{!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'\u2248 ':''}{fmtUSD(dollarVal)}</>}</div>
+                                       title={!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'Worked out from the contract\'s fixed 1% rate (1/5 of the measured fees): reflections adjust balances without a transfer, so this is the one box not read from the chain directly':qTip}>{hdrV2?<H2Val>{fmtUSD(dollarVal)}</H2Val>:<>{fmtUSD(dollarVal)}</>}</div>
                                 )}
                               </div>
                             );
