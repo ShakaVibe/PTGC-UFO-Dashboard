@@ -99,7 +99,7 @@
     const KNOWN_ROUTERS = {
       '0x165c3410fc91ef562c50559f7d2289febed552d9': 'PulseX V1 Router',   // Audit IV e36: the real address (= ADDR.PULSEX_ROUTER)
       '0x98bf93ebf5c380c0e6ae8e192a7e2ae08edacc02': 'PulseX V2 Router',   // Audit IV e36: the real address
-      '0xda9aba4eacf54e0273f56dffee6b8f1e20b23bba': 'PulseX V3 Router',
+      '0xda9aba4eacf54e0273f56dffee6b8f1e20b23bba': 'PulseXSwapRouter',   // Audit V v32: its PulseScan name (the PulseX app's current router)
       '0x636f6407b90661b73b1c0f7e24f4c79f624d0738': '9inch Router',
     };
     
@@ -704,7 +704,10 @@
             type = 'burn';
             icon = '🔥';
             const dec = 18;
-            const amt = Number(ptgcBurn.value) / Math.pow(10, dec);
+            /* Audit V v32: a burn send pays PTGC's fee too, and its 0.5 % burn leg ALSO goes to 0x…369 — every leg to the burn
+               address is burned, so sum them (find() took whichever came first) */
+            const amt = tokensOut.filter(t => t.contractAddress.toLowerCase() === PTGC_ADDRESS && t.to.toLowerCase() === DEAD_ADDRESS)
+              .reduce((sum, t) => sum + Number(t.value) / Math.pow(10, dec), 0);
             amount = amt;
             amountSymbol = 'PTGC';
             description = `Burned ${fmtAbbr(amt)} PTGC`;
@@ -752,6 +755,13 @@
             const inAmt = ptgcReceivedTotal;
             amount = inAmt;
             amountSymbol = 'PTGC';
+            /* Audit V v32: PTGC charges 5 % on every TRANSFER. Straight from a pool the wallet receives 95 % of what left the pool;
+               through a router it is two transfers (pools → router → wallet), so 95 % of 95 %. Fee = what left the pools − what
+               arrived. Checked on chain: tx 0x5eea45a7… (router) and 0xbf64daf8… (pool → DAO). */
+            const viaRouter = ptgcInTransfers.some(t => KNOWN_ROUTERS[(t.from || '').toLowerCase()]);
+            const feeKeep = viaRouter ? 0.95 * 0.95 : 0.95;
+            const feePaid = inAmt / feeKeep - inAmt;
+            const feeLine = { label: 'Fee paid', value: `${fmtAbbr(feePaid)} PTGC (${viaRouter ? '5 % twice: pool → router → wallet' : '5 %'})` };
             if (tokensOut.length > 0) {
               const outToken = tokensOut[0];
               const outSymbol = KNOWN_TOKENS[outToken.contractAddress.toLowerCase()]?.symbol || outToken.tokenSymbol || 'Unknown';
@@ -760,13 +770,15 @@
               description = `Bought ${fmtAbbr(inAmt)} PTGC`;
               details = [
                 { label: 'Spent', value: `${fmtAbbr(outAmt)} ${outSymbol}` },
-                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` }
+                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` },
+                feeLine
               ];
             } else {
               description = `Bought ${fmtAbbr(inAmt)} PTGC`;
               details = [
                 { label: 'Spent', value: `${fmtAbbr(value)} PLS` },
-                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` }
+                { label: 'Received', value: `${fmtAbbr(inAmt)} PTGC` },
+                feeLine
               ];
             }
           } 
