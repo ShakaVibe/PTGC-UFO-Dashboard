@@ -1770,6 +1770,13 @@
     .p2-lphk{--c:245,197,66;width:222px;height:72px;border-radius:12px;padding:9px 12px;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:12px;row-gap:6px;align-items:center;flex:none;   /* one width for all three (round 21); label + figure flush LEFT at one x in every tile, icon / change at the right — the first column was `auto`, so the label's centre moved with the figure's width (Shaka, 2026-10-02: "need consistency") */
       background:linear-gradient(180deg,rgba(12,16,26,.78),rgba(4,6,12,.92));border:1px solid rgba(var(--c),.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 14px -4px rgba(var(--c),.45)}
     .p2-lphk.liq{--c:56,189,248}
+    /* a46 (2026-10-25): window controls under 32 px on a phone get an invisible 32 px hit box (the .hit idea — nothing moves):
+       the period / token pills (Humans vs Bots, Volume, Holders details, League History), League History's SHARE / LEAGUES buttons,
+       Humans vs Bots' share button; the Volume window's "show all" row gets 32 px of height. */
+    .nh-tg button,.lh-tg button{position:relative}
+    .nh-tg button::before,.lh-tg button::before,.lh-cam::before,.lh-lgb::before,button[aria-label="Share Humans vs Bots as an image"]::before{content:"";position:absolute;left:50%;top:50%;width:max(100%,32px);height:max(100%,32px);transform:translate(-50%,-50%)}
+    button[aria-label="Share Humans vs Bots as an image"]{position:relative}
+    .vw-more{min-height:32px}
     .p2-lphk.vg{--c:124,252,0}   /* Value Gen 24h = the pairs' volume × the fee (Shaka, 2026-10-01 evening: a third box between Volume and Liquidity, the Value Generated green) */
     .p2-lphk.vg .v{color:#9DFF3A;text-shadow:0 0 12px rgba(124,252,0,.3)}
     .p2-lphk .l{grid-column:1;grid-row:1;justify-self:start;text-align:left;font-family:'Orbitron',monospace;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;line-height:1;white-space:nowrap}
@@ -5860,7 +5867,7 @@
            The previous replay's timers lived on in replayTimersRef, so its rows kept landing on
            top of the fresh seed — duplicate row ids and pod totals counted twice. Cancel them. */
         replayTimersRef.current.forEach(clearTimeout);replayTimersRef.current=[];setReplayQueue(null);
-        const st=stateRef.current;st.seen=new Set();st.last=0;
+        const st=stateRef.current;st.seen=new Set();st.last=0;st.rcpRetry=[];
         if(poolLiveRef.current.token!==token){            // a token switch starts the ranking over; a refresh keeps it
           poolBaseRef.current=null;poolLiveRef.current={token,rows:[],ids:new Set(),failed:false};
         }
@@ -5919,7 +5926,8 @@
         };
         const resolveViaReceipt=async(x)=>{
           const rc=await rpcFetch({jsonrpc:'2.0',method:'eth_getTransactionReceipt',params:[x.tx],id:1});
-          const logs=(rc&&rc.result&&rc.result.logs)||[];
+          if(!rc||!rc.result)throw new Error('receipt unavailable');   // a44: a failed lookup is not "no swap in this tx"
+          const logs=rc.result.logs||[];
           const tok=logs.filter(l=>l.address&&l.address.toLowerCase()===mainAddr&&l.topics&&l.topics[0]===TRANSFER_TOPIC&&l.topics.length>=3)
             .map(l=>({from:('0x'+l.topics[1].slice(26)).toLowerCase(),to:('0x'+l.topics[2].slice(26)).toLowerCase(),amt:weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'))}));
           const pools=[...new Set(logs.filter(l=>l.topics&&l.topics[0]===PAIR_SWAP_TOPIC).map(l=>l.address.toLowerCase()))];
@@ -5977,7 +5985,7 @@
             getLogsRange(addrs,[PAIR_SWAP_TOPIC],from,to,0,head),
             getLogsRange(cfg.address,[TRANSFER_TOPIC,null,feeTopic],from,to,0,head)
           ]);
-          if(!sw)return null;
+          if(!sw||!fl)return null;   // a44: a failed fee-leg read drops this range's transfers and unknown-pool trades — retry the range, do not step past it
           const out=deckGroupTx(sw.map(decode).filter(Boolean),fl);   // Audit V v23: one row per transaction, its fee read from its fee legs
           const swapTx=new Set(sw.map(l=>l.transactionHash));
           const byTx={};
@@ -5991,14 +5999,20 @@
             byTx[k].feeTokens+=fee;byTx[k].legs.push({from,fee});
           });
           /* receipts: newest first, a few at a time, capped so a long backfill can't stall the deck */
-          const list=Object.values(byTx).sort((a,b)=>b.block-a.block);
+          /* a44: a receipt that could not be read is kept back (st.rcpRetry) and tried again on the next scans instead of being shown
+             as a "transferred" row; after three misses it is shown as the transfer its fee legs say it is (the old behaviour). */
+          const retry=(st.rcpRetry||[]).filter(x=>!byTx[x.tx]);st.rcpRetry=[];
+          const list=[...retry,...Object.values(byTx)].sort((a,b)=>b.block-a.block);
           const toResolve=list.slice(0,DECK_RECEIPT_CAP);
           for(let i=0;i<toResolve.length;i+=4){
             await Promise.all(toResolve.slice(i,i+4).map(async x=>{
-              try{const r=await resolveViaReceipt(x);x._trades=r.trades;x.feeTokens=r.restFee;}catch(e){}
+              try{const r=await resolveViaReceipt(x);x._trades=r.trades;x.feeTokens=r.restFee;x._held=false;}
+              catch(e){x._tries=(x._tries||0)+1;x._held=x._tries<3;if(x._held)st.rcpRetry.push(x);}
             }));
           }
+          if(st.rcpRetry.length>50)st.rcpRetry=st.rcpRetry.slice(0,50);
           list.forEach(x=>{
+            if(x._held)return;
             if(x._trades&&x._trades.length)out.push(...x._trades);
             if(!(x.feeTokens>0))return;
             const size=contractShare>0?x.feeTokens/contractShare:x.feeTokens;   // tokens the sender actually sent
@@ -13873,6 +13887,7 @@
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[showTop100,setShowTop100]=useState(false);
+      const[showLeagueHist,setShowLeagueHist]=useState(false);   // LEAGUE HISTORY window (2026-10-24) — the dot until LEAGUE_HISTORY_LIVE, then the creature strip
       const[showFeeHow,setShowFeeHow]=useState(null);   // Audit V v33: 'PTGC' | 'UFO' while the How the fee works window is open
       useEffect(()=>{const h=e=>setShowFeeHow((e&&e.detail)||token);window.addEventListener('grays:feehow',h);return()=>window.removeEventListener('grays:feehow',h);},[token]);
       const[showLeagueHist,setShowLeagueHist]=useState(false);   // LEAGUE HISTORY window (2026-10-24) — the dot until LEAGUE_HISTORY_LIVE, then the creature strip   // TOP 100 window (2026-10-22) — the button right of Leagues
@@ -16231,6 +16246,9 @@
           {showTop100&&<Top100Modal token={token} price={data&&data.price>0?data.price:0} onClose={()=>setShowTop100(false)}/>}
           {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
           {showFeeHow&&<FeeHowModal token={showFeeHow} onClose={()=>setShowFeeHow(null)}/>}
+          {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
+          {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
+          {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
           {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
           {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
           {!TOP100_LIVE&&activeTab==='dashboard'&&<T1Dot token={token} on={t100Preview} onToggle={()=>{const v=!t100Preview;setT100Preview(v);lsSet(LS.T100_PREVIEW,v?1:0);}}/>}
