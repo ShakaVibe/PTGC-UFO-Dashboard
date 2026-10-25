@@ -4831,6 +4831,7 @@
        panel uses (coingecko-data.json, hourly). For the KPI compare card, which has no
        volumeByPeriod for the "other" token. null when the file has nothing usable. */
     const vol7dFromCache=(tkn)=>{
+      const chv=chainVolWindows(tkn).vol7d;if(chv!=null)return chv;   // Audit V v18: every pool, from the chain
       const cg=(typeof coingeckoDataCache!=='undefined'&&coingeckoDataCache)||null;
       const v=cg&&cg[tkn]&&cg[tkn].volume?cg[tkn].volume.vol7d:null;
       return(v!=null&&isFinite(v)&&v>0)?v:null;
@@ -4882,8 +4883,8 @@
     const pairTokenChg = (p, addr, tokenChg) => { const v = pairIsBase(p, addr) ? p?.priceChange?.h24 : tokenChg; return v != null && isFinite(v) ? +v : null; };
     const cgVolWindows = (token, d) => {
       const none = { vol7d: null, vol30d: null, vol90d: null };
-      const cg = coingeckoDataCache;
-      if (!cg || !cg[token]) return none;
+      const cg = coingeckoDataCache || {};
+      if (!cg[token] && !_vsFile) return none;
       const fp = d?.pairs?.reduce((m,p)=>(p.pairCreatedAt&&p.pairCreatedAt<m)?p.pairCreatedAt:m, Infinity);
       const ageDays = (fp && isFinite(fp)) ? (Date.now()-fp)/86400000 : null;
       const cgAgeMs = cg.lastUpdated ? (Date.now()-Date.parse(cg.lastUpdated)) : Infinity;
@@ -4894,8 +4895,14 @@
         if (ageDays == null || ageDays < windowDays) return null;  // younger than the window
         return val;
       };
-      const cv = cg[token].volume || {};
-      let v7 = gate(7, cv.vol7d), v30 = gate(30, cv.vol30d), v90 = gate(90, cv.vol90d);
+      const cv = (cg[token] && cg[token].volume) || {};
+      /* Audit V v18 (2026-10-25): CoinGecko's windows cover only the 20 largest pools (PTGC: 20 of 93) and count today's partial
+         candle — 7D $133.7K vs $148.5K over every pool. The hourly swap-volume file has every pool's swaps, counted the way
+         DexScreener counts its 24h (every swap leg), so its window is used when the file is fresh and reaches that far back;
+         CoinGecko only fills a window the file cannot. */
+      const ch = chainVolWindows(token);
+      const pick = (days, chainV, cgV) => (chainV != null && ageDays != null && ageDays >= days) ? chainV : gate(days, cgV);
+      let v7 = pick(7, ch.vol7d, cv.vol7d), v30 = pick(30, ch.vol30d, cv.vol30d), v90 = pick(90, ch.vol90d, cv.vol90d);
       const mono = (v7==null||v30==null||v7<=v30*1.001) && (v30==null||v90==null||v30<=v90*1.001) && (v7==null||v90==null||v7<=v90*1.001);
       if (!mono) { console.warn(`${token}: cached volume windows are not monotonic (7d ${v7} / 30d ${v30} / 90d ${v90}); treating as unavailable`); return none; }
       return { vol7d: v7, vol30d: v30, vol90d: v90 };
@@ -11267,6 +11274,20 @@
       }).catch(()=>{_vsP=null;_vsAt=Date.now();_vsFile=null;return null;});
       return _vsP;
     };
+    /* Audit V v18: 7D / 30D / 90D volume over EVERY pool from the hourly swap-volume file (every swap leg, as DexScreener's 24h).
+       A window is null when the file is missing, older than 12 h, or does not reach that far back. */
+    const chainVolWindows=(token)=>{
+      const out={vol7d:null,vol30d:null,vol90d:null};
+      const f=_vsFile,t=f&&f.tokens&&f.tokens[token];if(!t||!t.periods)return out;
+      if(!(Date.now()-Date.parse(f.generatedAt)<12*3600*1000))return out;
+      const since=Date.parse(f.since);
+      for(const [k,p,days] of [['vol7d','7d',7],['vol30d','30d',30],['vol90d','90d',90]]){
+        const o=t.periods[p];if(!o||!o.human||!o.bot)continue;
+        if(!(isFinite(since)&&since<=Date.now()-days*86400000+6*3600*1000))continue;
+        const v=(o.human.usd||0)+(o.bot.usd||0);if(v>0)out[k]=v;
+      }
+      return out;
+    };
     /* Audit V v20: PTGC's measured fees for a Value Generated window, from the hourly swap-volume file (null = not available) */
     const ptgcMeasuredFees=(period)=>{
       const f=_vsFile&&_vsFile.tokens&&_vsFile.tokens.PTGC&&_vsFile.tokens.PTGC.periods&&_vsFile.tokens.PTGC.periods[period];
@@ -11686,7 +11707,7 @@
                   {pools.length>6&&<button type="button" className="vw-more" onClick={()=>setAllPools(a=>!a)} aria-expanded={allPools}>{allPools?<>show the top 6</>:<>and <b>{pools.length-6} more pool{pools.length-6===1?'':'s'}</b> {'—'} show all</>}</button>}
                 </div>
               )}
-              <div className="vw-conf">24H is DexScreener's, summed over every pair {'—'} the Volume tile's own number. 7D / 30D / 90D are CoinGecko's on-chain daily candles over the 20 largest pools (today counts as a partial day). The daily chart and the pool table are on-chain swap volume from the hourly file (the Humans vs Bots data). Three sources, so they will not match each other to the dollar. All of them count an arbitrage loop in two pools (a buy in one, a sell in the other), so they run above the outside money that traded.</div>
+              <div className="vw-conf">24H is DexScreener's, summed over every pair {'—'} the Volume tile's own number. 7D / 30D / 90D, the daily chart and the pool table are on-chain swap volume over every pool, from the hourly file (the Humans vs Bots data). Two sources, so 24H and the windows will not match each other to the dollar. All of them count an arbitrage loop in two pools (a buy in one, a sell in the other), so they run above the outside money that traded.</div>
             </div>
           </div>
         </Modal>
@@ -14534,6 +14555,7 @@
              Either guard failing means the cached series doesn't describe this token,
              so we return null and the panel shows "Data unavailable" instead of a number. */
           const v24 = (d?.vol!=null && isFinite(d.vol)) ? d.vol : null;   // a14/a19: unknown → null → "—"
+          await fetchSwapVolume().catch(()=>null);   // Audit V v18: the windows come from the hourly chain file first
           setVolumeByPeriod({ vol24h: v24, ...cgVolWindows(token, d) });   // 2026-10-20: the gate lives in cgVolWindows (quickRefresh uses it too)
           
           // Calculate holder history from snapshots
@@ -14659,7 +14681,7 @@
           if(d){const nv=(d.vol!=null&&isFinite(d.vol))?d.vol:null;setVolumeByPeriod(v=>(v&&v.vol24h===nv)?v:{...v,vol24h:nv});}
           /* 2026-10-20: the 7D / 30D / 90D windows too — they were set only in load(), so a tab that had blanked them (file copy
              past the 12 h gate) never got them back. fetchCoingeckoData re-reads after 15 min; the same gate as load(). */
-          if(d){await fetchCoingeckoData();if(tokenRef.current===t){const w=cgVolWindows(t,d);setVolumeByPeriod(v=>(v&&v.vol7d===w.vol7d&&v.vol30d===w.vol30d&&v.vol90d===w.vol90d)?v:{...v,...w});}}
+          if(d){await Promise.all([fetchCoingeckoData(),fetchSwapVolume().catch(()=>null)]);if(tokenRef.current===t){const w=cgVolWindows(t,d);setVolumeByPeriod(v=>(v&&v.vol7d===w.vol7d&&v.vol30d===w.vol30d&&v.vol90d===w.vol90d)?v:{...v,...w});}}
           // No-op guards: identical values return the previous reference → no re-render.
           if(h!=null)setHolders(prev=>h===prev?prev:h);
           // (was prev.burned — a field fetchBurn never returns, so the guard always short-circuited
