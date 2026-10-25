@@ -136,10 +136,11 @@ const dsPair=(base,quote,price,liq,vol0)=>({chainId:'pulsechain',dexId:'pulsex',
 const UFO_ADDR=/49eD499433Bee42DD34C169470feF2C8f9fAe6e6|E221e6fC30e5787F0d551f980B4da1055D832A03/i;   // TOKENS.UFO.address | TOKENS.UFO.mainPair
 /* DS_PAIRS=burn (2026-10-01): the PTGC /tokens/ answer is the REAL pair list captured in data/burn-summary.json
    (30 pairs, as DexScreener sent them) — the four synthetic pairs are too few to judge the LP Pairs table. */
-const burnPairs=()=>{try{const j=JSON.parse(fs.readFileSync(path.join(REPO,'data/burn-summary.json'),'utf8'));return j.PTGC&&j.PTGC.pairs&&j.PTGC.pairs.pairs||null;}catch(e){return null;}};
+const burnPairs=(tk='PTGC')=>{try{const j=JSON.parse(fs.readFileSync(path.join(REPO,'data/burn-summary.json'),'utf8'));return j[tk]&&j[tk].pairs&&j[tk].pairs.pairs||null;}catch(e){return null;}};
 const dsAnswer=(url)=>{
   if(process.env.DS_VOL_DRIFT&&/tokens\//.test(url))dsCalls++;
   if(process.env.DS_PAIRS==='burn'&&/tokens\/0x94534EeEe131840b1c0F61847c572228bdfDDE93/i.test(url)){const bp=burnPairs();if(bp)return {schemaVersion:'1.0.0',pairs:bp};}
+  if(process.env.DS_PAIRS==='burn'&&/tokens\//i.test(url)&&UFO_ADDR.test(url)){const bp=burnPairs('UFO');if(bp)return {schemaVersion:'1.0.0',pairs:bp};}   // Audit V v24: UFO's real pair list too
   const isUFO=UFO_ADDR.test(url);   // the UFO token or its main pair in the URL
   const P=isUFO&&process.env.DS_UFO_PRICE?+process.env.DS_UFO_PRICE:(+process.env.DS_PRICE||0.000142);   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48); DS_UFO_PRICE=n: a DIFFERENT price for UFO calls, so a token-switch race is visible (a7)
   const B=isUFO&&process.env.DS_UFO_PRICE?'UFO':'PTGC';

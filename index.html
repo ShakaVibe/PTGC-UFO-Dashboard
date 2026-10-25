@@ -4800,8 +4800,8 @@
       }
       if(token==='UFO'){
         const m=computeValueGenBuckets(period,delivered,realizedFees,prices||{});
-        if(m)return{basis:'delivered',total:m.total,byKey:m.byKey,missing:m.missing,periodVol:none.periodVol,pending:false};   // a21: total null + missing[] when a price is absent
         const live=(realizedFees&&realizedFees.ok&&realizedFees.byPeriod)?realizedFees.byPeriod[period]:null;
+        if(m)return{basis:'delivered',total:m.total,byKey:m.byKey,missing:m.missing,periodVol:none.periodVol,txs:live&&live.txCount!=null?live.txCount:null,pending:false};   // a21: total null + missing[] when a price is absent; Audit V v26/v28: txs = the fee-paying transfers counted
         const ufoPx=(prices&&prices.UFO)||0;
         if(live&&ufoPx>0){
           const byKey={reflection:(live.tokens?.reflection||0)*ufoPx,ufoBurn:null,ptgcBurn:null,plsLP:null,plsxLP:null,wethLP:null};
@@ -4877,6 +4877,9 @@
     /* Audit V v2/v8: is `addr` the pair's base token? (DexScreener reports txns / priceChange for the BASE token.) A pair with
        no base address is treated as base, as before. */
     const pairIsBase = (p, addr) => { const b = p?.baseToken?.address; return !b || !addr || b.toLowerCase() === String(addr).toLowerCase(); };
+    /* DexScreener's priceChange is the BASE token's. On a quote-side pool (TEDDY BEAR/pTGC) that is the other token's move, so the row
+       shows this token's own 24h change instead (one price across pools — arbitrage keeps them in line). null when unknown. */
+    const pairTokenChg = (p, addr, tokenChg) => { const v = pairIsBase(p, addr) ? p?.priceChange?.h24 : tokenChg; return v != null && isFinite(v) ? +v : null; };
     const cgVolWindows = (token, d) => {
       const none = { vol7d: null, vol30d: null, vol90d: null };
       const cg = coingeckoDataCache;
@@ -5606,11 +5609,11 @@
     const DeckRow=React.memo(({r,pods,token,ac,hi,reduced})=>(
       <div data-id={r.id} className={`deck-row${r.fresh?' deck-new':''}`}>
         <div className="deck-t text-white/70 text-[14px] font-medium tabular-nums">{deckTimeOf(r)}</div>
-        <div className="deck-side font-orbitron text-[10px] tracking-[0.1em] py-[4px] text-center rounded-[7px]" style={{color:r.side==='BUY'?'#86efac':r.side==='SELL'?'#fca5a5':'#F5DE8A',background:r.side==='BUY'?'rgba(22,101,52,0.5)':r.side==='SELL'?'rgba(127,29,29,0.5)':'rgba(120,53,15,0.45)',border:`1px solid ${r.side==='BUY'?'rgba(74,222,128,0.55)':r.side==='SELL'?'rgba(248,113,113,0.55)':'rgba(232,192,68,0.55)'}`}}>{r.side}</div>
+        <div className="deck-side font-orbitron text-[10px] tracking-[0.1em] py-[4px] text-center rounded-[7px]" style={{color:r.side==='BUY'?'#86efac':r.side==='SELL'?'#fca5a5':r.side==='ARB'?'#c4b5fd':'#F5DE8A',background:r.side==='BUY'?'rgba(22,101,52,0.5)':r.side==='SELL'?'rgba(127,29,29,0.5)':r.side==='ARB'?'rgba(76,29,149,0.45)':'rgba(120,53,15,0.45)',border:`1px solid ${r.side==='BUY'?'rgba(74,222,128,0.55)':r.side==='SELL'?'rgba(248,113,113,0.55)':r.side==='ARB'?'rgba(167,139,250,0.55)':'rgba(232,192,68,0.55)'}`}} title={r.side==='ARB'?'A bot\'s loop: bought in one pool and sold in another in one transaction — the token moved once, so one fee':undefined}>{r.side}</div>
         <div className="deck-contact min-w-0 flex items-center gap-3 text-white">
           <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
           <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
-            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
+            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':r.side==='ARB'?'looped by a bot':'transferred'}</span>
             <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/55 font-normal font-mono hover:text-white/80">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
           </div>
         </div>
@@ -5744,7 +5747,7 @@
       };
       const addLiveToPools=(list)=>{
         const live=poolLiveRef.current;let n=0;
-        list.forEach(r=>{
+        list.flatMap(r=>r.legs||[r]).forEach(r=>{   // Audit V v23: a grouped row ranks each pool by its own leg
           if(!r.pair||!(r.side==='BUY'||r.side==='SELL')||!(r.tokens>0)||live.ids.has(r.id))return;
           live.ids.add(r.id);live.rows.push({id:r.id,pair:r.pair,block:r.block,tokens:r.tokens,side:r.side,pool:r.pool,logo:r.logo,initial:r.initial});n++;
         });
@@ -5830,7 +5833,10 @@
         setTotals(t);
       };
       const totalsRef=useRef({});totalsRef.current=totals;
-      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);setContacts({base:(data?.buys||0)+(data?.sells||0),at:Date.now(),landed:0});},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.feeRate]);
+      useEffect(()=>{if(!open)return;seedTotals(stateRef.current.pending);const vm=_vsFile&&_vsFile.tokens&&_vsFile.tokens[token]&&_vsFile.tokens[token].periods&&_vsFile.tokens[token].periods['24h']&&_vsFile.tokens[token].periods['24h'].measured;
+        /* Audit V v23: Contacts 24h = transactions (each once: trades + wallet sends), from the hourly chain read; DexScreener's swap count (legs) without it */
+        const txs=vm?(vm.human.txs||0)+(vm.bot.txs||0)+((vm.protocol&&vm.protocol.txs)||0)+((vm.fees&&vm.fees.transfer&&vm.fees.transfer.txs)||0):null;
+        setContacts({base:txs!=null?txs:(data?.buys||0)+(data?.sells||0),at:Date.now(),landed:0});},[open,ready,win,windows,pods,data?.vol,data?.buys,data?.sells,cfg.feeRate]);
 
       /* ---------- chain feed ---------- */
       useEffect(()=>{
@@ -5921,13 +5927,43 @@
           const rest=x.legs.filter(l=>!consumed.has(l.from)).reduce((a,l)=>a+l.fee,0);
           return{trades,restFee:rest};
         };
+        /* Audit V v23 (2026-10-25): the fee is charged per TRANSFER, not per Swap event. A bot's loop (buy in one pool, sell in
+           another) moves the token pool → pool once and pays ONE fee, but showed as two rows lifting 5 % each; a router-split buy pays
+           TWICE (pools → router → buyer) but lifted once per pool leg. So the tape now shows one row per transaction — ARB for a loop,
+           one BUY / SELL for a split — and lifts the fee actually paid: the tx's legs into the token contract ÷ the contract's share
+           × the full rate (the same reading the TRANSFER rows already use). Fee legs unread for that tx → the old estimate, a loop once. */
+        const deckGroupTx=(rows,fl)=>{
+          const legs={};   // tx → token amount that reached the contract
+          (fl||[]).forEach(l=>{if(!l.topics||l.topics.length<3)return;const from=('0x'+l.topics[1].slice(26)).toLowerCase();if(from===mainAddr)return;
+            const a=weiToTokens(BigInt(l.data&&l.data!=='0x'?l.data:'0x0'));if(a>0)legs[l.transactionHash]=(legs[l.transactionHash]||0)+a;});
+          const byTx=new Map();rows.forEach(r=>{(byTx.get(r.tx)||byTx.set(r.tx,[]).get(r.tx)).push(r);});
+          const out=[];
+          byTx.forEach((g,tx)=>{
+            const feeTok=(fl&&contractShare>0&&legs[tx]>0)?legs[tx]/contractShare*st.fee:null;
+            const buys=g.filter(r=>r.side==='BUY'),sells=g.filter(r=>r.side==='SELL');
+            const sum=(a,k)=>a.reduce((x,r)=>x+r[k],0);
+            const loop=buys.length&&sells.length&&new Set(g.map(r=>r.pair)).size>=2;
+            if(g.length===1&&!loop){const r=g[0];out.push(feeTok!=null?{...r,gen:feeTok*st.price,measured:true}:r);return;}
+            const first=g[0];
+            if(loop){
+              const tokens=Math.max(sum(buys,'tokens'),sum(sells,'tokens')),usd=tokens*st.price;
+              out.push({...first,id:tx+':arb',side:'ARB',tokens,usd,gen:feeTok!=null?feeTok*st.price:usd*st.fee,measured:feeTok!=null,
+                pool:`${buys[0].pool} \u2192 ${sells[0].pool}`,legs:g});
+              return;
+            }
+            const tokens=sum(g,'tokens'),usd=tokens*st.price,pools=[...new Set(g.map(r=>r.pool))];
+            out.push({...first,id:tx+':tx',tokens,usd,gen:feeTok!=null?feeTok*st.price:usd*st.fee,measured:feeTok!=null,
+              pool:pools.length>1?`${pools[0]} +${pools.length-1}`:pools[0],legs:g});
+          });
+          return out;
+        };
         const fetchBoth=async(from,to,head)=>{
           const[sw,fl]=await Promise.all([
             getLogsRange(addrs,[PAIR_SWAP_TOPIC],from,to,0,head),
             getLogsRange(cfg.address,[TRANSFER_TOPIC,null,feeTopic],from,to,0,head)
           ]);
           if(!sw)return null;
-          const out=sw.map(decode).filter(Boolean);
+          const out=deckGroupTx(sw.map(decode).filter(Boolean),fl);   // Audit V v23: one row per transaction, its fee read from its fee legs
           const swapTx=new Set(sw.map(l=>l.transactionHash));
           const byTx={};
           (fl||[]).forEach(l=>{
@@ -6375,7 +6411,7 @@
               <div className="relative overflow-x-auto deck-tapewrap">
                 <div className="deck-tape" style={{minWidth:1040}}>
                   <div className="deck-head grid text-[12px] font-semibold tracking-[0.16em] uppercase text-white/75 px-[18px] pt-2.5 pb-2" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.35)}`}}>
-                    <span>Time <span style={{color:hi}}>{'↓'}</span></span><span>Type</span><span>Contact / TX</span><span className="text-right pr-1.5 whitespace-nowrap">Amount <span className="deck-head-lift normal-case tracking-normal text-white/45">lifted @ <b className="font-semibold" style={{color:hi}}>{(cfg.feeRate*100).toFixed(2)}%</b></span></span>
+                    <span>Time <span style={{color:hi}}>{'↓'}</span></span><span>Type</span><span>Contact / TX</span><span className="text-right pr-1.5 whitespace-nowrap">Amount <span className="deck-head-lift normal-case tracking-normal text-white/45">fee paid {'\u00B7'} <b className="font-semibold" style={{color:hi}}>{(cfg.feeRate*100).toFixed(2)}%</b> a transfer</span></span>
                     {pods.map(p=><span key={p.key} className="deck-head-pod text-center">{p.name}</span>)}
                   </div>
                   <DeckScanline contacts={contacts} lastScan={lastScan} status={status} statusText={statusText} hi={hi}/>
@@ -6414,14 +6450,14 @@
     // The ⓘ on the Holders box opens HoldersSingleModal (the 2026-09-26 card, with a 7D/30D/90D trend window)
     // directly. The old in-page modal (HolderAnalyticsModal + PctBadge, 2025) was deleted 2026-09-26 — the card
     // prints every number it did.
-    const LPRow=({pair,theme,mainAddr,v2=false})=>{
+    const LPRow=({pair,theme,mainAddr,v2=false,tokenChg})=>{
       const[logoErr,setLogoErr]=useState(false);
       const[det,setDet]=useState(false);
       const liq=pair.liq||0,vol=pair.vol||0;
       const ratio=liq>0?(vol/liq).toFixed(3):'0.000';
       const isBaseTx=pairIsBase(pair,mainAddr);   // Audit V v8: flip on a quote-side pool
       const buys=(isBaseTx?pair.txns?.h24?.buys:pair.txns?.h24?.sells)||0,sells=(isBaseTx?pair.txns?.h24?.sells:pair.txns?.h24?.buys)||0;
-      const chg=pair.priceChange?.h24||0,up=chg>=0;
+      const chg=pairTokenChg(pair,mainAddr,tokenChg)??0,up=chg>=0;   // quote-side pool: this token's own 24h change, not the other token's
       const isBase=pair.baseToken?.address?.toLowerCase()===mainAddr?.toLowerCase();
       const other=isBase?pair.quoteToken:pair.baseToken;
       const logo=getLogo(other?.address);
@@ -8945,7 +8981,7 @@
       const tiles=items.map(it=>{const usd=valueGenBucketUsd(vg,it);return{it,usd,parts:usd==null?null:valueGenParts(token,it,usd,prices)};});
       const barItems=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0);
       const barSum=barItems.reduce((s,t)=>s+t.usd,0);
-      const basis=!vg?'—':vg.pending?'reading fees from the chain…':vg.basis==='delivered'?'measured on chain, delivered to each bucket':vg.basis==='measured'?<>measured on chain {'\u00B7'} <b style={{color:'#fff'}}>{fmt(vg.txs)}</b> fee-paying transfers</>:vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>est. from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
+      const basis=!vg?'—':vg.pending?'reading fees from the chain…':(vg.basis==='delivered'&&vg.txs==null)?'measured on chain':(vg.basis==='delivered'||vg.basis==='measured')?<>measured on chain {'\u00B7'} <b style={{color:'#fff'}}>{fmt(vg.txs)}</b> fee-paying transfers</>:vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>est. from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
       const title=(
         <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
           <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F4B0}'}</span>
@@ -9988,8 +10024,8 @@
     const cvgBasis=(tkn,vg,vol)=>{
       if(!vg)return'—';
       if(vg.pending)return'reading fees from the chain…';
-      if(vg.basis==='delivered')return<>from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume {'·'} measured on chain</>;
-      if(vg.basis==='measured')return<>measured on chain {'·'} {fmt(vg.txs)} transfers</>;   // Audit V v20
+      /* Audit V v26 / v28: both halves are read from the chain now (UFO what its contract delivered, PTGC the fee transfers) — one line */
+      if(vg.basis==='delivered'||vg.basis==='measured')return vg.txs!=null?<>measured on chain {'·'} {fmt(vg.txs)} fee-paying transfers</>:'measured on chain';
       if(vg.basis==='accrued')return'accrued on chain — delivery still being read';
       if(vg.basis==='volume')return<>est. from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume × {(TOKENS[tkn]?.feeRate*100||0).toFixed(0)}%</>;   // Audit V v4: PTGC too
       return vg.error?'chain read failed':'—';
@@ -10977,7 +11013,7 @@
     };
     /* One table row (tablet up). Same fields and the same details drawer as LPRow, in the mock-up's layout; a
        missing read prints "—" (a14), the rank follows the current sort. */
-    const LpRowV2=({pair,rank,theme,mainAddr,pts,upColor,feeRate})=>{
+    const LpRowV2=({pair,rank,theme,mainAddr,pts,upColor,feeRate,pf,tokenChg,tokenSym})=>{
       const[logoErr,setLogoErr]=useState(false);
       const[det,setDet]=useState(false);
       /* c23 (Audit III): a chain-read pair (`_fromChain`, DexScreener missing it) carries fabricated 0s for volume and
@@ -10986,7 +11022,8 @@
       const ratio=liq>0&&vol!=null?(vol/liq).toFixed(3):'\u2014';
       const isBaseTx=pairIsBase(pair,mainAddr);   // Audit V v8: on a quote-side pool DexScreener's sells are this token's buys
       const buys=pair._fromChain?null:(isBaseTx?pair.txns?.h24?.buys:pair.txns?.h24?.sells),sells=pair._fromChain?null:(isBaseTx?pair.txns?.h24?.sells:pair.txns?.h24?.buys),txTotal=(buys!=null&&sells!=null)?buys+sells:null;
-      const chg=pair.priceChange?.h24,chgKnown=chg!=null&&isFinite(chg);
+      const chg=pairTokenChg(pair,mainAddr,tokenChg),chgKnown=chg!=null,chgOwn=!pairIsBase(pair,mainAddr);   // quote-side pool: this token's own change
+      const vgM=pf?pf.get(pair.pairAddress):undefined;   // Audit V v24: the fees this pool's trades paid, read from the chain
       /* volume vs the day before (Shaka's mock-up): today's DexScreener 24 h against the previous 24 h of the pool's curve (bins -8..-4, complete ones) — null when the curve is missing or that day was zero */
       const prior=(pts&&pts.length>=8)?pts.slice(-8,-4).reduce((s,p)=>s+(p.v>0?p.v:0),0):0;
       const volChg=(prior>0&&vol!=null&&isFinite(vol))?((vol-prior)/prior)*100:null;
@@ -11005,9 +11042,10 @@
             <div className="p2-lpnm"><div className={`p ${theme.text}`}>{name}</div><div className="d">{dex}</div></div>
             <div className="tabular-nums"><div className="p2-lpv">{fmtUSD(vol)}</div>{volChg!=null&&<div className={`p2-lpvc ${volChg>=0?'up':'dn'}`} title="24h volume vs the day before"><i aria-hidden="true">{volChg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(volChg).toFixed(0)}%</div>}</div>
             <div className="p2-lpsp c-sp"><LpSpark pts={pts} upColor={upColor} label={name} up={volChg!=null?volChg>=0:undefined}/></div>
-            <div className="p2-lpv m vg tabular-nums c-vg" title={feeRate>0?`${(feeRate*100).toFixed(0)}% of this pair's 24h volume`:undefined}>{(vol!=null&&isFinite(vol)&&feeRate>0)?fmtUSD(vol*feeRate):'\u2014'}</div>
+            {pf?<div className="p2-lpv m vg tabular-nums c-vg" title="Fees paid on this pool's trades in the last 24h, read from the chain">{vgM==null?'\u2014':fmtUSD(vgM)}</div>
+              :<div className="p2-lpv m vg tabular-nums c-vg" title={feeRate>0?`${(feeRate*100).toFixed(0)}% of this pair's 24h volume`:undefined}>{(vol!=null&&isFinite(vol)&&feeRate>0)?fmtUSD(vol*feeRate):'\u2014'}</div>}
             <div className="p2-lpv m tabular-nums">{fmtUSD(liq)}</div>
-            <div className="tabular-nums c-mid">{chgKnown?<span className={`p2-lpch ${chg>=0?'up':'dn'}`}><i aria-hidden="true">{chg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(chg).toFixed(1)}%</span>:<span className="p2-lpch na">{'\u2014'}</span>}</div>
+            <div className="tabular-nums c-mid" title={chgOwn&&chgKnown?`${tokenSym||'This token'}'s 24h price change (DexScreener's figure for this pool is ${pair.baseToken?.symbol||'the other token'}'s)`:undefined}>{chgKnown?<span className={`p2-lpch ${chg>=0?'up':'dn'}`}><i aria-hidden="true">{chg>=0?'\u25B2':'\u25BC'}</i>{Math.abs(chg).toFixed(1)}%</span>:<span className="p2-lpch na">{'\u2014'}</span>}</div>
             <div className="p2-lptx tabular-nums c-tx c-mid"><div className="t">{txTotal??'\u2014'}</div><div className="bs"><b><span className="sr-only">buys </span>{buys??'\u2014'}</b><s aria-hidden="true"></s><i><span className="sr-only">sells </span>{sells??'\u2014'}</i></div></div>
             <div className="p2-lpv m tabular-nums c-vl c-mid">{ratio}</div>
             <div className="p2-lpac">
@@ -11033,7 +11071,7 @@
        column flips the direction, another column starts descending — the old SORT toggle's rule */
     const LpTh=({k,name,sortBy,sortDir,onSort,className,children})=>{const on=sortBy===k;return(
       <div className={className}><button type="button" className={`p2-lpsb${on?' on':''}`} onClick={()=>onSort(k)} aria-label={`Sort by ${name}${on?(sortDir==='desc'?', descending':', ascending'):''}`}>{children}<i aria-hidden="true"><b className={on&&sortDir==='asc'?'on':''}>{'\u25B2'}</b><b className={on&&sortDir==='desc'?'on':''}>{'\u25BC'}</b></i></button></div>);};
-    const LpTableV2=({pairs,rankStart=1,theme,mainAddr,series,upColor,label,feeRate,sortBy,sortDir,onSort})=>{
+    const LpTableV2=({pairs,rankStart=1,theme,mainAddr,series,upColor,label,feeRate,pf,tokenChg,tokenSym,sortBy,sortDir,onSort})=>{
       const th={sortBy,sortDir,onSort};
       return(
       <div aria-label={label}>
@@ -11047,7 +11085,7 @@
           <LpTh k="ratio" name="volume to liquidity ratio" className="c-vl c-mid" {...th}>Vol/Liq</LpTh>
           <div>Actions</div>
         </div>
-        {pairs.map((p,i)=><LpRowV2 key={p.pairAddress||i} pair={p} rank={rankStart+i} theme={theme} mainAddr={mainAddr} pts={series[String(p.pairAddress||'').toLowerCase()]} upColor={upColor} feeRate={feeRate}/>)}
+        {pairs.map((p,i)=><LpRowV2 key={p.pairAddress||i} pair={p} rank={rankStart+i} theme={theme} mainAddr={mainAddr} pts={series[String(p.pairAddress||'').toLowerCase()]} upColor={upColor} feeRate={feeRate} pf={pf} tokenChg={tokenChg} tokenSym={tokenSym}/>)}
       </div>);};
     /* the frame: art (the burn / value-generated backdrops, faint) + the ground strip from the cosmic Home as the
        ember band along the bottom (gold side for PTGC, green side for UFO) + veil + top hairline + corner glow */
@@ -11084,7 +11122,7 @@
       return chg;
     };
     const LpChg=({v})=>v==null?null:<div className={`p2-lphc${v<0?' dn':''}`}><i aria-hidden="true">{v<0?'▼':'▲'}</i>{Math.abs(v).toFixed(1)}%</div>;
-    const LpHeaderV2=({token,cfg,theme,count,vol,vgen,liq,volChg,liqChg,showRHCores,setShowRHCores})=>(
+    const LpHeaderV2=({token,cfg,theme,count,vol,vgen,vgMeasured,liq,volChg,liqChg,showRHCores,setShowRHCores})=>(
       <div className="p2-lphb" data-c={token==='PTGC'?'gold':'green'}>
         <div className="b1" aria-hidden="true"></div><div className="b2" aria-hidden="true"></div><div className="b3" aria-hidden="true"></div>
         <div className="p2-lphbt">
@@ -11095,9 +11133,9 @@
           <div className="l">Volume 24h</div><div className={`v tabular-nums`}>{fmtUSD(vol)}</div>
           <img src="logos/panels/lp-bars-gold.webp" alt=""/><LpChg v={volChg}/>
         </div>
-        <div className="p2-lphk vg" title={cfg.feeRate>0?`${(cfg.feeRate*100).toFixed(0)}% of the pairs' 24h volume`:undefined}>
+        <div className="p2-lphk vg" title={vgMeasured?"Fees paid on these pools' trades in the last 24h, read from the chain":cfg.feeRate>0?`${(cfg.feeRate*100).toFixed(0)}% of the pairs' 24h volume`:undefined}>
           <div className="l">Value Gen 24h</div><div className={`v tabular-nums`}>{vgen!=null?fmtUSD(vgen):'\u2014'}</div>
-          <img src="logos/panels/lp-bars-green.webp" alt=""/><LpChg v={volChg}/>{/* the same % as Volume's — it is volume × a fixed fee */}
+          <img src="logos/panels/lp-bars-green.webp" alt=""/>{!vgMeasured&&<LpChg v={volChg}/>}{/* estimate: the same % as Volume's (volume × a fixed fee); measured (Audit V v24): no badge — it was never a fee change */}
         </div>
         <div className="p2-lphk liq">
           <div className="l">Liquidity</div><div className={`v tabular-nums`}>{fmtUSD(liq)}</div>
@@ -11232,6 +11270,15 @@
       const f=_vsFile&&_vsFile.tokens&&_vsFile.tokens.PTGC&&_vsFile.tokens.PTGC.periods&&_vsFile.tokens.PTGC.periods[period];
       const m=f&&f.measured&&f.measured.fees;if(!m||!m.complete||!m.total||!(m.total.usd>0))return null;
       return{usd:m.total.usd,tokens:m.total.tokens,txs:(m.human.txs||0)+(m.bot.txs||0)+(m.transfer.txs||0)+((m.protocol&&m.protocol.txs)||0)};
+    };
+    /* Audit V v24: the fees paid on each pool's trades, read from the chain (swap-volume measured.fees.pools; schema 2). get(addr) →
+       USD, 0 for a tracked pool with no fee-paying trade in the window, null for a pool the file does not track. null when the file
+       has no per-pool block or the window's fee history is not complete yet — the callers then keep their old figure. */
+    const measuredPoolFees=(token,period='24h')=>{
+      const f=_vsFile&&_vsFile.tokens&&_vsFile.tokens[token]&&_vsFile.tokens[token].periods&&_vsFile.tokens[token].periods[period];
+      const m=f&&f.measured&&f.measured.fees;if(!m||!m.complete||!m.pools)return null;
+      const known=_vsFile.pools||{};
+      return{get:a=>{const k=String(a||'').toLowerCase();if(!known[k])return null;return m.pools[k]?m.pools[k].usd:0;},noPool:m.noPool||null,total:m.total?m.total.usd:null};
     };
     const VsDot=({token,onOpen})=>(
       <button type="button" onClick={onOpen} aria-label="Volume split (preview)" title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
@@ -14643,7 +14690,9 @@
       },[token]);
       /* ===== END AUTO-REFRESH ===== */
       
-      const sorted=useMemo(()=>{if(!data?.pairs)return[];return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':case'valuegen':av=a.vol;bv=b.vol;break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=a.priceChange?.h24||0;bv=b.priceChange?.h24||0;break;case'txns':av=(a.txns?.h24?.buys||0)+(a.txns?.h24?.sells||0);bv=(b.txns?.h24?.buys||0)+(b.txns?.h24?.sells||0);break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir]);
+      const lpPf=measuredPoolFees(token,'24h');   // Audit V v24: per-pool fees read from the chain (null → the old volume × fee)
+      const lpTokChg=data?.change??null;          // this token's own 24h change, for quote-side pools
+      const sorted=useMemo(()=>{if(!data?.pairs)return[];const pfv=p=>{const v=lpPf?lpPf.get(p.pairAddress):null;return v==null?-1:v;};const ch=p=>pairTokenChg(p,cfg.address,lpTokChg)??0;return[...data.pairs].sort((a,b)=>{let av,bv;switch(sortBy){case'ratio':av=a.liq>0?a.vol/a.liq:0;bv=b.liq>0?b.vol/b.liq:0;break;case'volume':av=a.vol;bv=b.vol;break;case'valuegen':if(lpPf){av=pfv(a);bv=pfv(b);}else{av=a.vol;bv=b.vol;}break;case'liquidity':av=a.liq;bv=b.liq;break;case'change':av=ch(a);bv=ch(b);break;case'txns':av=(a.txns?.h24?.buys||0)+(a.txns?.h24?.sells||0);bv=(b.txns?.h24?.buys||0)+(b.txns?.h24?.sells||0);break;default:av=a.vol;bv=b.vol}return sortDir==='desc'?bv-av:av-bv})},[data?.pairs,sortBy,sortDir,lpPf,lpTokChg,cfg.address]);
       
       // Filter for RH Cores if enabled
       const filteredSorted=useMemo(()=>{
@@ -14674,6 +14723,7 @@
       // Calculate totals based on filter — c23 (Audit III): null when the tile's own figure is null (a DexScreener outage, a14),
       // so the band prints "—" like the tile instead of summing the chain pairs' fabricated 0s into "$0"
       const filteredVol=data?.vol==null?null:filteredSorted.reduce((s,p)=>s+(p._fromChain?0:(p.vol||0)),0);
+      const lpVgen=lpPf?filteredSorted.reduce((s,p)=>s+(lpPf.get(p.pairAddress)||0),0):((filteredVol!=null&&cfg.feeRate>0)?filteredVol*cfg.feeRate:null);   // Audit V v24
       const filteredLiq=data?.liq==null?null:filteredSorted.reduce((s,p)=>s+(p.liq||0),0);
       
       // RH Cores pairs (always computed for modal)
@@ -15385,7 +15435,7 @@
                               ):(
                                 <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text} ${hdrV2?'p2-hl sm':''}`}>{fmtUSD(liveTotalUsd)}</span>
                               )}
-                              {hdrV2&&<span className="p2-vgfrom">from <b>{periodVol>0?fmtUSD(periodVol):'\u2014'}</b> of volume</span>}
+                              {hdrV2&&<span className="p2-vgfrom">on chain {'\u00B7'} <b>{fmt(live.txCount)}</b> transfers</span>}{/* Audit V v28: the same line as PTGC's (was "from $X of volume") */}
                               {!(hdrV2&&haveDelivered&&!priceless)&&<span className={`text-white/45 text-sm sm:text-base${hdrV2?' p2-vgnote':''}`}>
                                 {haveDelivered&&!priceless?'delivered':`from ${live.txCount.toLocaleString()} fee-paying transfer${live.txCount===1?'':'s'}`}
                               </span>}
@@ -15805,7 +15855,7 @@
           {/* LP Pairs section */}
           <div className={`max-w-7xl mx-auto px-3 sm:px-6 py-4 ${hdrV2?'p2-lp':''}`} style={hdrV2?{'--lpc':isGold?'212,175,55':'124,252,0'}:undefined} data-c={hdrV2?(isGold?'gold':'green'):undefined}>
             {hdrV2?(
-              <div className="hidden sm:block mb-4"><LpHeaderV2 token={token} cfg={cfg} theme={theme} count={high.length} vol={filteredVol} vgen={(filteredVol!=null&&cfg.feeRate>0)?filteredVol*cfg.feeRate:null} liq={filteredLiq} volChg={lpVolChg} liqChg={lpLiqChg} showRHCores={showRHCores} setShowRHCores={setShowRHCores}/></div>
+              <div className="hidden sm:block mb-4"><LpHeaderV2 token={token} cfg={cfg} theme={theme} count={high.length} vol={filteredVol} vgen={lpVgen} vgMeasured={!!lpPf} liq={filteredLiq} volChg={lpVolChg} liqChg={lpLiqChg} showRHCores={showRHCores} setShowRHCores={setShowRHCores}/></div>
             ):(   /* classic desktop header — untouched since the v2 fork above (2026-10-01 afternoon); the v2 hook classes it carried are gone */
             <div className="hidden sm:flex items-center justify-between gap-4 mb-4 px-1">
               <div className="flex items-center gap-3">
@@ -15854,7 +15904,7 @@
               </div>
               {hdrV2&&<div className="p2-lphm tabular-nums" aria-label="Totals">{/* phones (2026-10-02): the band's three figures as one quiet line — the desktop band is LpHeaderV2 */}
                 <span><i>Vol 24h</i><b>{fmtUSD(filteredVol)}</b></span>
-                <span><i>Value Gen</i><b className="g">{(filteredVol!=null&&cfg.feeRate>0)?fmtUSD(filteredVol*cfg.feeRate):'\u2014'}</b></span>
+                <span><i>Value Gen</i><b className="g">{lpVgen!=null?fmtUSD(lpVgen):'\u2014'}</b></span>
                 <span><i>Liquidity</i><b>{fmtUSD(filteredLiq)}</b></span>
               </div>}
               <div className="flex gap-2 items-center flex-wrap">{/* Audit IV e37: wraps on 320-px phones (the sort group ran to x=336 — the whole page scrolled sideways) */}
@@ -15878,20 +15928,20 @@
               {/* LP Pairs v2: the table in its frame from 640px up; phones keep the stacked cards (LPRow, v2 skin) */}
               <div className="hidden sm:block">
                 <LpPanelV2 green={!isGold}>
-                  <LpTableV2 pairs={high} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} liquidity pairs`} feeRate={cfg.feeRate} sortBy={sortBy} sortDir={sortDir} onSort={lpSort}/>
+                  <LpTableV2 pairs={high} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} liquidity pairs`} feeRate={cfg.feeRate} pf={lpPf} tokenChg={lpTokChg} tokenSym={token} sortBy={sortBy} sortDir={sortDir} onSort={lpSort}/>
                   {low.length>0&&<>
                     <button onClick={()=>setShowLow(!showLow)} aria-expanded={showLow} className="p2-lpmore"><span>{showLow?'Hide':'Show'} <b className="text-white">{low.length}</b> pairs &lt; $1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>
-                    {showLow&&<div className="mt-2"><LpTableV2 pairs={low} rankStart={high.length+1} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} pairs under $1K liquidity`} feeRate={cfg.feeRate} sortBy={sortBy} sortDir={sortDir} onSort={lpSort}/></div>}
+                    {showLow&&<div className="mt-2"><LpTableV2 pairs={low} rankStart={high.length+1} theme={theme} mainAddr={cfg.address} series={lpSeries} upColor={isGold?'#F3C64C':'#7CFC00'} label={`${token} pairs under $1K liquidity`} feeRate={cfg.feeRate} pf={lpPf} tokenChg={lpTokChg} tokenSym={token} sortBy={sortBy} sortDir={sortDir} onSort={lpSort}/></div>}
                   </>}
                 </LpPanelV2>
               </div>
               <div className="sm:hidden">
-                <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} v2/>)}</div>
-                {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} aria-expanded={showLow} className="p2-lpmore p2-ph"><span>{showLow?'Hide':'Show'} <b className="text-white">{low.length}</b> pairs &lt; $1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} v2/>)}</div>}</div>}
+                <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} tokenChg={lpTokChg} v2/>)}</div>
+                {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} aria-expanded={showLow} className="p2-lpmore p2-ph"><span>{showLow?'Hide':'Show'} <b className="text-white">{low.length}</b> pairs &lt; $1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} tokenChg={lpTokChg} v2/>)}</div>}</div>}
               </div>
             </>):(<>
-            <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} v2={hdrV2}/>)}</div>
-            {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} className={`w-full bg-white/[0.04] border border-white/[0.07] rounded-lg p-2.5 flex justify-between items-center text-sm hover:bg-white/[0.06] transition-colors`}><span className="text-white/45 text-xs uppercase tracking-wider">{showLow?'Hide':'Show'} {low.length} pairs &lt;$1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address}/>)}</div>}</div>}
+            <div className="space-y-2">{high.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} tokenChg={lpTokChg} v2={hdrV2}/>)}</div>
+            {low.length>0&&<div className="mt-3"><button onClick={()=>setShowLow(!showLow)} className={`w-full bg-white/[0.04] border border-white/[0.07] rounded-lg p-2.5 flex justify-between items-center text-sm hover:bg-white/[0.06] transition-colors`}><span className="text-white/45 text-xs uppercase tracking-wider">{showLow?'Hide':'Show'} {low.length} pairs &lt;$1K</span><span className={theme.text}>{showLow?'\u25B2':'\u25BC'}</span></button>{showLow&&<div className="mt-2 space-y-2">{low.map((p,i)=><LPRow key={p.pairAddress||i} pair={p} theme={theme} mainAddr={cfg.address} tokenChg={lpTokChg}/>)}</div>}</div>}
             </>)}
           </div>
           </>)}

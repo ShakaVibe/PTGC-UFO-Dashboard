@@ -423,7 +423,12 @@ async function main() {
     const txList = [...txAgg.values()].map(t => ({ ts: t.ts, side: t.side, usd: Math.max(t.buy, t.sell) }));
     // the fee legs of this token, priced at the hour, classed by their tx
     const ti = tk === 'PTGC' ? 0 : 1;
-    const feeList = (cache.fees || []).filter(r => r[3] === ti).map(r => { const p = prices[tk](r[0]); return { ts: r[0], side: txClass.get(r[2] + '|' + r[1]) || 'transfer', tok: r[4] * FEE_TOTAL[tk], usd: p > 0 ? r[4] * FEE_TOTAL[tk] * p : null, k: r[2] + '|' + r[1] }; });
+    /* Audit V v24: each fee credited to the pool(s) its transaction traded in, split by the token amount each pool moved (a bot loop
+       = half to each pool, a router split = by leg size); a fee with no swap of this token in its tx is a wallet send (`noPool`). */
+    const amtSlot = ti === 0 ? 6 : 8;
+    const poolsOfTx = k => { const g = (byTx.get(k) || []).filter(r => r[amtSlot] > 0); const tot = g.reduce((a, r) => a + r[amtSlot], 0); if (!(tot > 0)) return null;
+      const m = new Map(); for (const r of g) { const pa = idx.pools[r[3]]; m.set(pa, (m.get(pa) || 0) + r[amtSlot] / tot); } return [...m]; };
+    const feeList = (cache.fees || []).filter(r => r[3] === ti).map(r => { const p = prices[tk](r[0]); return { ts: r[0], side: txClass.get(r[2] + '|' + r[1]) || 'transfer', tok: r[4] * FEE_TOTAL[tk], usd: p > 0 ? r[4] * FEE_TOTAL[tk] * p : null, k: r[2] + '|' + r[1], pools: poolsOfTx(r[2] + '|' + r[1]) }; });
     const feeSince = feeList.reduce((m, f) => f.ts < m ? f.ts : m, Infinity), feeSinceOk = isFinite(feeSince);
     const mHours = new Map();   // [hourTs, humanUsd, botUsd, humanFeeUsd, botFeeUsd, transferFeeUsd]
     for (const t of txList) { if (t.side === 'protocol') continue; const h = Math.floor(t.ts / HOUR) * HOUR, row = mHours.get(h) || [h, 0, 0, 0, 0, 0]; row[t.side === 'human' ? 1 : 2] += t.usd; mHours.set(h, row); }
@@ -460,7 +465,12 @@ async function main() {
         for (const t of txList) { if (t.ts < since) continue; m[t.side].usd += t.usd; m[t.side].txs++; }
         const fees = { human: { tokens: 0, usd: 0, txs: 0 }, bot: { tokens: 0, usd: 0, txs: 0 }, transfer: { tokens: 0, usd: 0, txs: 0 }, protocol: { tokens: 0, usd: 0, txs: 0 }, unpriced: 0 };
         const feeTx = { human: new Set(), bot: new Set(), transfer: new Set(), protocol: new Set() };
-        for (const f of feeList) { if (f.ts < since) continue; const b = fees[f.side]; b.tokens += f.tok; if (f.usd == null) fees.unpriced++; else b.usd += f.usd; feeTx[f.side].add(f.k); }
+        const poolFees = {}, noPool = { tokens: 0, usd: 0, txs: 0 };
+        for (const f of feeList) { if (f.ts < since) continue; const b = fees[f.side]; b.tokens += f.tok; if (f.usd == null) fees.unpriced++; else b.usd += f.usd; feeTx[f.side].add(f.k);
+          if (!f.pools) { noPool.tokens += f.tok; noPool.usd += f.usd || 0; noPool.txs++; continue; }
+          for (const [pa, w] of f.pools) { const q = poolFees[pa] || (poolFees[pa] = { tokens: 0, usd: 0, txs: 0 }); q.tokens += f.tok * w; q.usd += (f.usd || 0) * w; q.txs++; } }
+        for (const q of Object.values(poolFees)) { q.tokens = r6(q.tokens); q.usd = r6(q.usd); }
+        fees.pools = poolFees; fees.noPool = { tokens: r6(noPool.tokens), usd: r6(noPool.usd), txs: noPool.txs };   // Audit V v24
         for (const k of ['human', 'bot', 'transfer', 'protocol']) { fees[k] = { tokens: r6(fees[k].tokens), usd: r6(fees[k].usd), txs: feeTx[k].size }; }
         fees.total = { tokens: r6(fees.human.tokens + fees.bot.tokens + fees.transfer.tokens + fees.protocol.tokens), usd: r6(fees.human.usd + fees.bot.usd + fees.transfer.usd + fees.protocol.usd) };
         fees.since = feeSinceOk ? new Date(feeSince).toISOString() : null; fees.complete = !!(feeSinceOk && feeSince <= since + 6 * HOUR); fees.rate = FEE_TOTAL[tk];
@@ -482,7 +492,7 @@ async function main() {
     routers: { ...ROUTERS, ...Object.fromEntries(Object.entries(cache.senders).filter(([, v]) => v.kind === 'human' && v.label).map(([a, v]) => [a, v.label])) },
     pools: Object.fromEntries(Object.entries(pools).map(([a, r]) => [a, { name: r.name, tokens: r.tokens, token0: r.token0, token1: r.token1 }])),   // token0/1: the window draws the other token's logo
     tokens: tokensOut,
-    measuredSchema: 1,   // Audit V: periods[p].measured + measuredHours (v12–v14)
+    measuredSchema: 2,   // Audit V: periods[p].measured + measuredHours (v12–v14); 2 = measured.fees.pools / noPool (v24)
     stats: { feeLegs: (cache.fees || []).length, feeSince: cache.fees && cache.fees.length ? new Date(cache.fees[0][0]).toISOString() : null, swaps: all.length, walletsPending: (cache.fromPending || []).length, newThisRun: fresh.length, unpricedThisRun: unpriced, pools: addrs.length, ms: now - t0 },
   };
   fs.mkdirSync('data', { recursive: true });
