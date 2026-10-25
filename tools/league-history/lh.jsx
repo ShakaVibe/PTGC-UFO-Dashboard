@@ -215,7 +215,7 @@
                     <div className="vr"><div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div></div>
                     {held&&(()=>{const sh=shareOf(held[last][i],last);return<div className="hd2"><span className="g"><b>{fmtAbbr(held[last][i])}</b> <span className="w">{tok} held</span></span>{sh!=null&&<> <span className="w d">{'\u00B7'}</span> <span className="g"><b className="sp">{sh}%</b> <span className="w">supply</span></span></>}</div>;})()}
                     {(()=>{const nm=n.toLowerCase(),v=tierUsd(th||LH_TIERS[i-1][2]);return<div className="av">{v==null?<span className="w">{pq===null?'price unavailable':'reading the price…'}</span>
-                      :th?<><b>{lhUsd(v)}</b> <span className="w">to be a {nm}</span></>:<><span className="w">a {nm} holds under</span> <b>{lhUsd(v)}</b></>}</div>;})()}
+                      :th?<><b>{lhUsd(v)}</b> <span className="w">per {nm} position</span></>:<><span className="w">under</span> <b>{lhUsd(v)}</b> <span className="w">per {nm} position</span></>}</div>;})()}
                     <div className="jl">{fl?(()=>{const jn=fl[0][i],lf=fl[1][i],nt=jn-lf,sg=v=>v>0?'lh-up':v<0?'lh-dn':'z';return<><span className="g"><b className={jn>0?'lh-up':'z'}>+{lhFmt(jn)}</b> <span className="w">joined</span></span> <span className="w d">{'\u00B7'}</span> <span className="g"><b className={lf>0?'lh-dn':'z'}>{'\u2212'}{lhFmt(lf)}</b> <span className="w">left</span></span> <span className="w bar">|</span> <span className="g nt"><b className={sg(nt)}>{nt>0?'+':nt<0?'\u2212':''}{lhFmt(Math.abs(nt))}</b> <span className="w nl">NET</span></span></>;})():' '}</div>
                     <LhSpark vals={rows.slice(i0).map(r=>r[i])} col={LH_BEAM_C[i][1]}/>   {/* the league's colour (the beam's) */}
                   </button>);})}</div>
@@ -225,7 +225,7 @@
                     <div className="lh-bh"><div className="l"><img src={lhSea(img)} alt=""/><div><h3>{n.toUpperCase()}S {tm?'\u2014 TOKENS HELD':bm?'\u2014 WALLETS + TOKENS HELD':'OVER TIME'}</h3>
                       {tm?<div className="s"><b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>
                         :<div className="s"><b>{lhFmt(a)}</b> {'→'} <b>{lhFmt(b)}</b> <LhChange a={a} b={b}/> <span style={{color:'rgba(255,255,255,.45)'}}>{'·'} {span}</span></div>}
-                      {(tm||bm)&&<div className="s s3"><b>{lhFmt(total)}</b> holder wallets {'\u00B7'} people only</div>}
+                      {(tm||bm)&&<div className="s s3"><b>{lhFmt(total)}</b> holder wallets</div>}
                       {bm&&<div className="s s2">hold <b>{fmtAbbr(held[i0][sel])}</b> {'→'} <b>{fmtAbbr(held[last][sel])}</b> <LhChange a={held[i0][sel]} b={held[last][sel]} f={fmtAbbr}/></div>}</div></div>
                       <div className="r"><div className="lh-pill"><div className="k">JOINED</div><div className="n lh-up">{fl?'+'+lhFmt(fl[0][sel]):'—'}</div></div>
                         <div className="lh-pill"><div className="k">LEFT</div><div className="n lh-dn">{fl?'−'+lhFmt(fl[1][sel]):'—'}</div></div>
