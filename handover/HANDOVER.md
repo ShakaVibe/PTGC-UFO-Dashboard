@@ -35,6 +35,22 @@ removed + a note, recommended / B = kept, marked est.), v7 (transactions instead
 **GOTCHA: do not re-run `tools/top100.py`** — its `edit()` steps re-insert the preview-era scaffolding (LS.T100_PREVIEW, a second
 showTop100 state, T1Dot) because League History's mounts now sit between its anchors; splice t1.jsx by hand or fix the script.
 
+**2026-10-25 late afternoon — Audit V v12 / v13 / v14 in the PIPELINE (approved by Shaka, "lets make it live") + the strip label.**
+`scripts/build-swap-volume.mjs` now also writes `periods[p].measured` = {human, bot: {usd = each tx counted ONCE per token (max of its
+buy legs / sell legs), txs}, protocol (UFO's swapback swaps — PulseX v2 router legs to 0x…0369 / the UFO contract / itself, in a tx
+that has one), botContracts, botWallets, routers (counted BEFORE the top-25 slice), fees: {human, bot, transfer, protocol, total:
+{tokens, usd, txs}, since, complete, rate}} and `measuredHours` [hourTs, humanUsd, botUsd, humanFeeUsd, botFeeUsd, transferFeeUsd].
+The OLD fields are unchanged, so the page shows exactly what it showed until a surface is switched (v20–v22, mock-up first).
+Fee legs: PTGC burn leg (0.5 %) matched to a staking leg of exactly 2× from the same sender in the same tx → gross = burn ÷ 0.005;
+UFO = the 5 % leg into the contract (not from it) → gross ÷ 0.05; fee = gross × FEE_TOTAL (PTGC .05, UFO .06). Cached per (block,
+tx, token) in `cache.fees` [ts, block, tx10, tok, gross]; FEE_BACKFILL_DAYS (30) a run backwards until 90 d are covered (`fees.since`
+/ `complete` say how far). Cache 8 → 12 MB, swap-volume.json 245 → 440 KB. Checked against tools/audit5-measure-fees.py: same legs;
+the audit's block-window maths assumed 10 s blocks (real ≈ 10.35 s, so its "7 d" was 7.2 d) — the builder's ts windows are right:
+PTGC 7d real fees $8,652 (people $7,450 · bots $833 · wallet sends $363) vs the Humans vs Bots "value generated" $7,519 (bots $1,691);
+UFO 30d fee tokens 6.92 B = the site's own UFO realizedFees for the window. Bots' fees are about HALF of what the site shows; people's higher.
+Strip: "The Burn address" (desktop) and "Poseidon = the Burn address" (phone caption) REMOVED from CreatureStripV2 (Shaka: "we do not
+want the text THE BURN ADDRESS in this row of sea creatures") — the League History cards still say it (ask before touching them).
+
 ## START HERE (2026-10-24 final wrap) — everything PUSHED (`036ffc3b`), working tree clean
 
 **PLAN FOR THE NEXT SESSION (Shaka, 2026-10-24 night): "any last little bit of polishing tomorrow, and look to make it live

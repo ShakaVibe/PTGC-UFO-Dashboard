@@ -52,7 +52,32 @@ const ARB_BOT_SHARE = 0.5, ARB_AGG_MAX = 0.2;   // a sender ≥ 50 % round trips
 const ARB_MIN_BALANCE = 0.5;                    // 2026-10-06 audit: a router-sent round trip counts only if the buy and sell legs are within 2× of each other (arbitrage is balanced; a split sell with a small buy leg is a person)
 const WALLET_BOT_PER_DAY = 50;                   // a wallet trading through a router ≥ 50 times in one UTC day is a bot on the router (round 9 self-check: one did 144 in a day)   // eth_getTransactionByHash lookups per run (the human trades' wallets; the backlog drains over a few runs)
 
-const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';   // Swap(address,uint,uint,uint,uint,address)
+const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
+/* Audit V v12 / v13 / v14 (2026-10-25) — the per-transfer fee model. PTGC (5 %) and UFO (~6 %) charge their fee on every TRANSFER;
+   an arb bot's loop moves the token pool → pool once (1 transfer, 1 fee) but shows as 2 Swap events, and a router-split buy pays the
+   fee twice (pools → router → buyer). So this builder now ALSO writes, per period, a `measured` block next to the old figures
+   (which stay exactly as they were until the page is switched over):
+     measured.human / .bot   — volume with each transaction counted ONCE per token (max of its buy legs and its sell legs), and
+                               the number of transactions (not swap legs)
+     measured.protocol       — UFO's own swapback swaps (the contract selling its fee UFO, buying + burning UFO and PTGC through
+                               the PulseX v2 router); counted inside `human` in the old figures
+     measured.fees           — the fee actually paid, read from the fee legs on chain, split by who paid it:
+                               PTGC: each taxed transfer sends 0.5 % to 0x…0369 AND 1 % to the staking contract, from the same sender
+                               in the same tx (exactly 2×) → taxed gross = burn leg ÷ 0.005; UFO: the 5 % leg into the UFO contract →
+                               gross = leg ÷ 0.05. Fee = gross × FEE_TOTAL. Class: a tx with a bot swap → bot; else with a person's
+                               swap → human; else with only the contract's swapback → protocol; no tracked swap → transfer (sends
+                               between wallets, staking moves, untracked pools).
+   Fee legs are cached (cache.fees) and backfilled FEE_BACKFILL_DAYS a run, newest first, until the 90 days are covered; until then
+   `measured.fees.since` says how far back they reach. Reference + truth table: tools/audit5-measure-fees.py,
+   handover/sessions/2026-10-25-audit5.md. */
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const BURN_ADDR = '0x0000000000000000000000000000000000000369';
+const PTGC_STAKING = '0xc71f597a2ac39e47f07102e849d18489c96f39ef';
+const PULSEX_V2_ROUTER = '0x165c3410fc91ef562c50559f7d2289febed552d9';   // UFO's swapback swaps through it
+const FEE_TOTAL = { PTGC: 0.05, UFO: 0.06 };   // PTGC renounced; UFO = its 5 % contract leg + ~1 % reflections at today's rates (the owner can change them)
+const FEE_LEG_SHARE = { PTGC: 0.005, UFO: 0.05 };   // the leg we read, as a share of the taxed gross
+const FEE_BACKFILL_DAYS = Number(process.env.FEE_BACKFILL_DAYS || 30);
+const topicAddr = a => '0x' + '0'.repeat(24) + a.slice(2).toLowerCase();   // Swap(address,uint,uint,uint,uint,address)
 const TOKENS = {   // same as index.html TOKENS / ADDR (gotcha 00)
   PTGC: { address: '0x94534eeee131840b1c0f61847c572228bdfdde93', decimals: 18 },
   UFO:  { address: '0x49ed499433bee42dd34c169470fef2c8f9fae6e6', decimals: 18 },
@@ -203,10 +228,43 @@ async function main() {
   };
   const parts = await pmap(ranges, fetchRange, 4);
   const logs = parts.flat();
+
+  // Audit V v12: the fee legs. Forward from the fee cursor, and backward FEE_BACKFILL_DAYS a run until the 90 days are covered.
+  cache.fees = cache.fees || [];   // [ts, block, tx10, tok (0 PTGC · 1 UFO), taxed gross tokens summed over the tx's fee legs]
+  const feeFrom = cache.feeCursor ? cache.feeCursor.block + 1 : Math.max(target, head - FEE_BACKFILL_DAYS * BLOCKS_PER_DAY);
+  const feeOldest = cache.feeFromBlock || feeFrom;
+  const feeBack = feeOldest > target + 1 ? [Math.max(target, feeOldest - FEE_BACKFILL_DAYS * BLOCKS_PER_DAY), feeOldest - 1] : null;
+  const feeRanges = []; for (let a = feeFrom; a <= head; a += LOG_CHUNK) feeRanges.push([a, Math.min(a + LOG_CHUNK - 1, head)]);
+  const feeBackUsed = !!(cache.feeCursor && feeBack);
+  if (feeBackUsed) for (let a = feeBack[0]; a <= feeBack[1]; a += LOG_CHUNK) feeRanges.push([a, Math.min(a + LOG_CHUNK - 1, feeBack[1])]);
+  const feeFetch = (address, to) => async ([a, b]) => {
+    try { return await rpc('eth_getLogs', [{ address, topics: [TRANSFER_TOPIC, null, topicAddr(to)], fromBlock: hex(a), toBlock: hex(b) }], 3); }
+    catch (e) { if (b - a < 100) throw e; const m = Math.floor((a + b) / 2); return [...await feeFetch(address, to)([a, m]), ...await feeFetch(address, to)([m + 1, b])]; }
+  };
+  const [burnLegs, stakeLegs, ufoLegs] = await Promise.all([
+    pmap(feeRanges, feeFetch(TOKENS.PTGC.address, BURN_ADDR), 3).then(x => x.flat()),
+    pmap(feeRanges, feeFetch(TOKENS.PTGC.address, PTGC_STAKING), 3).then(x => x.flat()),
+    pmap(feeRanges, feeFetch(TOKENS.UFO.address, TOKENS.UFO.address), 3).then(x => x.flat()),
+  ]);
+  const legAmt = l => Number(BigInt(l.data)) / 1e18;
+  const stakeBy = new Map();
+  for (const l of stakeLegs) { const k = l.transactionHash + '|' + l.topics[1]; (stakeBy.get(k) || stakeBy.set(k, []).get(k)).push(legAmt(l)); }
+  const feeAgg = new Map();   // one row per (block, tx, token): the taxed gross of all its fee legs (a router split has several)
+  const addFee = (l, tok, gross) => { const k = parseInt(l.blockNumber, 16) + '|' + l.transactionHash.slice(0, 10) + '|' + tok; feeAgg.set(k, (feeAgg.get(k) || 0) + gross); };
+  for (const l of burnLegs) {   // a fee leg: the same sender sent exactly 2× the burn leg to the staking contract in the same tx
+    const a = legAmt(l), st = stakeBy.get(l.transactionHash + '|' + l.topics[1]) || [];
+    if (a > 0 && st.some(x => Math.abs(x - 2 * a) <= Math.max(1e-6, 2 * a * 1e-6))) addFee(l, 0, a / FEE_LEG_SHARE.PTGC);
+  }
+  for (const l of ufoLegs) {   // UFO: the 5 % leg into the UFO contract (not the contract's own moves)
+    if ('0x' + l.topics[1].slice(26) === TOKENS.UFO.address) continue;
+    const a = legAmt(l); if (a > 0) addFee(l, 1, a / FEE_LEG_SHARE.UFO);
+  }
+  const freshFees = [...feeAgg].map(([k, g]) => { const [b, tx, tok] = k.split('|'); return [+b, tx, +tok, Number(g.toPrecision(7))]; });
+  console.log(`fee legs: ${freshFees.length} tx rows new (${feeRanges.length} chunk(s); PTGC burn legs ${burnLegs.length}, UFO contract legs ${ufoLegs.length})`);
   console.log(`${logs.length} swaps in ${ranges.length} chunk(s)`);
 
   // block → time: the chunk ends, interpolated between (PulseChain ~10 s blocks)
-  const marks = [...new Set(ranges.flat())].sort((a, b) => a - b);
+  const marks = [...new Set([...ranges.flat(), ...feeRanges.flat()])].sort((a, b) => a - b);
   const markTs = new Map(await pmap(marks, async b => [b, await blockTs(b)], 6).then(r => r));
   const tsOf = b => { let lo = marks[0], hi = marks[marks.length - 1]; for (const m of marks) { if (m <= b) lo = m; if (m >= b) { hi = m; break; } } if (hi === lo) return markTs.get(lo); return Math.round(markTs.get(lo) + (markTs.get(hi) - markTs.get(lo)) * (b - lo) / (hi - lo)); };
 
@@ -323,11 +381,28 @@ async function main() {
   for (const r of rows) { if (r[5] === 1 && botWallets.has(walletOf(r))) { r[5] = 0; viaRouter++; } }
   if (botWallets.size) console.log(`  ${botWallets.size} wallet(s) trade ≥ ${WALLET_BOT_PER_DAY}× a day through a router → bots (${viaRouter} trades)`);
   const arbRowSet = new Set([...arbRows].map(r => r[2] + '|' + r[1] + '|' + r[3]));
+  { const seenF = new Set(); const fr = [...cache.fees, ...freshFees.map(r => [tsOf(r[0]), ...r])]   // [ts, block, tx10, tok, gross]; the scanned ranges never overlap the cached ones — the key only guards a re-scan
+      .filter(r => { if (r[0] < keepFrom) return false; const k = r[1] + '|' + r[2] + '|' + r[3]; if (seenF.has(k)) return false; seenF.add(k); return true; }).sort((x, y) => x[0] - y[0]);
+    cache.fees = fr; cache.feeCursor = { block: head }; cache.feeFromBlock = Math.min(cache.feeFromBlock || Infinity, feeFrom, feeBackUsed ? feeBack[0] : Infinity); }
   cache.swaps = rows; cache.cursor = { block: head, ts: Date.now() }; cache.schema = SCHEMA; cache.fromBlock = Math.min(cache.fromBlock || Infinity, from, back ? back[0] : Infinity);
   // the view the aggregation below reads
   // a bot trade that came through a router is attributed to the wallet behind it, labelled "via <router>" — the router stays a human path
   const senderOf = r => { const sd = idx.senders[r[4]]; if (r[5] === 0 && classOf(sd).kind === 'human') { const w = walletOf(r); return w ? { addr: w, label: `bot wallet via ${classOf(sd).label || 'router'}` } : { addr: sd + ':via', label: `unknown wallets via ${classOf(sd).label || 'router'}` }; } return { addr: sd, label: classOf(sd).label }; };   // ':via' = not an address — the window shows no link
-  const all = rows.map(r => ({ ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: senderOf(r).addr, senderLabel: senderOf(r).label, kind: r[5] ? 'human' : 'bot', arb: arbRowSet.has(r[2] + '|' + r[1] + '|' + r[3]), wallet: r[5] ? walletOf(r) : null, amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
+  /* Audit V v14: UFO's own swapback — in a tx where the PulseX v2 router swaps to 0x…0369 or the UFO contract, that router's legs
+     to 0x…0369 / the UFO contract / itself are the contract's (fee-exempt) selling, buying-and-burning; the trader's own legs in the
+     same tx (to a wallet) stay theirs. Kept inside the old human figures; split out in `measured`. */
+  const protoRows = new Set();
+  { const ufoA = TOKENS.UFO.address, toOf = r => r[13] >= 0 ? idx.wallets[r[13]] : null, sdOf = r => idx.senders[r[4]];
+    const groups = new Map(); for (const r of rows) { const k = r[2] + '|' + r[1]; (groups.get(k) || groups.set(k, []).get(k)).push(r); }
+    for (const g of groups.values()) {
+      if (!g.some(r => sdOf(r) === PULSEX_V2_ROUTER && (toOf(r) === BURN_ADDR || toOf(r) === ufoA))) continue;
+      for (const r of g) if (sdOf(r) === PULSEX_V2_ROUTER && [BURN_ADDR, ufoA, PULSEX_V2_ROUTER].includes(toOf(r))) protoRows.add(r);
+    } }
+  // per-tx class for the fee legs: any bot swap → bot; else a person's swap → human; else only swapback legs → protocol
+  const txClass = new Map();
+  for (const r of rows) { const k = r[2] + '|' + r[1], c = protoRows.has(r) ? 'protocol' : r[5] ? 'human' : 'bot', was = txClass.get(k);
+    if (!was || c === 'bot' || (c === 'human' && was === 'protocol')) txClass.set(k, c); }
+  const all = rows.map(r => ({ proto: protoRows.has(r), block: r[1], ts: r[0], tx: r[2], pool: idx.pools[r[3]], sender: senderOf(r).addr, senderLabel: senderOf(r).label, kind: r[5] ? 'human' : 'bot', arb: arbRowSet.has(r[2] + '|' + r[1] + '|' + r[3]), wallet: r[5] ? walletOf(r) : null, amounts: { ...(r[6] != null ? { PTGC: [r[6], r[7], r[10]] } : {}), ...(r[8] != null ? { UFO: [r[8], r[9], r[11]] } : {}) } }));
 
   // ---- the public file
   const now = Date.now();
@@ -340,6 +415,19 @@ async function main() {
     // hourly series, 30 d: [hourTs, humanN, humanUsd, botN, botUsd]
     const hours = new Map();
     for (const s of mine) { const h = Math.floor(s.ts / HOUR) * HOUR; const row = hours.get(h) || [h, 0, 0, 0, 0]; const usd = s.amounts[tk][1] || 0; if (s.kind === 'human') { row[1]++; row[2] += usd; } else { row[3]++; row[4] += usd; } hours.set(h, row); }
+    /* Audit V v13: each transaction counted ONCE per token — per (tx, side) the larger of its buy legs and its sell legs (a bot loop =
+       a buy in one pool + a sell in another; a router split = several legs of one trade). Protocol legs apart (v14). */
+    const txAgg = new Map();   // tx|block → {ts, side, buy, sell}
+    for (const s of mine) { const side = s.proto ? 'protocol' : s.kind, k = s.tx + '|' + s.block + '|' + side, [, usd, dir] = s.amounts[tk];
+      const t = txAgg.get(k) || txAgg.set(k, { ts: s.ts, side, buy: 0, sell: 0 }).get(k); if (dir < 0) t.sell += usd || 0; else t.buy += usd || 0; }
+    const txList = [...txAgg.values()].map(t => ({ ts: t.ts, side: t.side, usd: Math.max(t.buy, t.sell) }));
+    // the fee legs of this token, priced at the hour, classed by their tx
+    const ti = tk === 'PTGC' ? 0 : 1;
+    const feeList = (cache.fees || []).filter(r => r[3] === ti).map(r => { const p = prices[tk](r[0]); return { ts: r[0], side: txClass.get(r[2] + '|' + r[1]) || 'transfer', tok: r[4] * FEE_TOTAL[tk], usd: p > 0 ? r[4] * FEE_TOTAL[tk] * p : null, k: r[2] + '|' + r[1] }; });
+    const feeSince = feeList.reduce((m, f) => f.ts < m ? f.ts : m, Infinity), feeSinceOk = isFinite(feeSince);
+    const mHours = new Map();   // [hourTs, humanUsd, botUsd, humanFeeUsd, botFeeUsd, transferFeeUsd]
+    for (const t of txList) { if (t.side === 'protocol') continue; const h = Math.floor(t.ts / HOUR) * HOUR, row = mHours.get(h) || [h, 0, 0, 0, 0, 0]; row[t.side === 'human' ? 1 : 2] += t.usd; mHours.set(h, row); }
+    for (const f of feeList) { if (f.usd == null || f.side === 'protocol') continue; const h = Math.floor(f.ts / HOUR) * HOUR, row = mHours.get(h) || [h, 0, 0, 0, 0, 0]; row[f.side === 'human' ? 3 : f.side === 'bot' ? 4 : 5] += f.usd; mHours.set(h, row); }
     const per = {};
     for (const [p, days] of Object.entries(periods)) {
       const since = now - days * 86400000;
@@ -368,10 +456,24 @@ async function main() {
       o.wallets = { human: hw.size, humanTxs: htx.size, humanTxsKnown: htxKnown.size };
       o.arb = { n: o.arb.n, usd: round(o.arb.usd), txs: arbTx.size };
       for (const pl of Object.values(o.pools)) { pl.human.usd = round(pl.human.usd); pl.bot.usd = round(pl.bot.usd); }
+      { const r6 = x => Number((x || 0).toPrecision(6)), m = { human: { usd: 0, txs: 0 }, bot: { usd: 0, txs: 0 }, protocol: { usd: 0, txs: 0 } };
+        for (const t of txList) { if (t.ts < since) continue; m[t.side].usd += t.usd; m[t.side].txs++; }
+        const fees = { human: { tokens: 0, usd: 0, txs: 0 }, bot: { tokens: 0, usd: 0, txs: 0 }, transfer: { tokens: 0, usd: 0, txs: 0 }, protocol: { tokens: 0, usd: 0, txs: 0 }, unpriced: 0 };
+        const feeTx = { human: new Set(), bot: new Set(), transfer: new Set(), protocol: new Set() };
+        for (const f of feeList) { if (f.ts < since) continue; const b = fees[f.side]; b.tokens += f.tok; if (f.usd == null) fees.unpriced++; else b.usd += f.usd; feeTx[f.side].add(f.k); }
+        for (const k of ['human', 'bot', 'transfer', 'protocol']) { fees[k] = { tokens: r6(fees[k].tokens), usd: r6(fees[k].usd), txs: feeTx[k].size }; }
+        fees.total = { tokens: r6(fees.human.tokens + fees.bot.tokens + fees.transfer.tokens + fees.protocol.tokens), usd: r6(fees.human.usd + fees.bot.usd + fees.transfer.usd + fees.protocol.usd) };
+        fees.since = feeSinceOk ? new Date(feeSince).toISOString() : null; fees.complete = !!(feeSinceOk && feeSince <= since + 6 * HOUR); fees.rate = FEE_TOTAL[tk];
+        const allSenders = Object.values(o.senders);
+        o.measured = { human: { usd: r6(m.human.usd), txs: m.human.txs }, bot: { usd: r6(m.bot.usd), txs: m.bot.txs }, protocol: { usd: r6(m.protocol.usd), txs: m.protocol.txs },
+          botContracts: allSenders.filter(v => v.kind === 'bot' && !String(v.label || '').startsWith('bot wallet')).length, botWallets: allSenders.filter(v => v.kind === 'bot' && String(v.label || '').startsWith('bot wallet')).length, routers: allSenders.filter(v => v.kind === 'human').length,
+          fees }; }
       o.senders = Object.entries(o.senders).map(([addr, v]) => ({ addr, ...v, usd: round(v.usd), arbShare: v.n ? Number((v.arb / v.n).toFixed(3)) : 0 })).sort((a, b) => b.usd - a.usd || b.n - a.n).slice(0, 25);
       per[p] = o;
     }
-    tokensOut[tk] = { hours: [...hours.values()].sort((a, b) => a[0] - b[0]).map(r => [r[0], r[1], Number(r[2].toPrecision(6)), r[3], Number(r[4].toPrecision(6))]), periods: per };
+    tokensOut[tk] = { hours: [...hours.values()].sort((a, b) => a[0] - b[0]).map(r => [r[0], r[1], Number(r[2].toPrecision(6)), r[3], Number(r[4].toPrecision(6))]),
+      measuredHours: [...mHours.values()].sort((a, b) => a[0] - b[0]).map(r => [r[0], ...r.slice(1).map(x => Number(x.toPrecision(6)))]),   // Audit V: [hourTs, humanUsd, botUsd (each tx once), humanFeeUsd, botFeeUsd, transferFeeUsd]
+      periods: per };
   }
   const out = {
     schema: SCHEMA, generatedAt: new Date(now).toISOString(),
@@ -380,7 +482,8 @@ async function main() {
     routers: { ...ROUTERS, ...Object.fromEntries(Object.entries(cache.senders).filter(([, v]) => v.kind === 'human' && v.label).map(([a, v]) => [a, v.label])) },
     pools: Object.fromEntries(Object.entries(pools).map(([a, r]) => [a, { name: r.name, tokens: r.tokens, token0: r.token0, token1: r.token1 }])),   // token0/1: the window draws the other token's logo
     tokens: tokensOut,
-    stats: { swaps: all.length, walletsPending: (cache.fromPending || []).length, newThisRun: fresh.length, unpricedThisRun: unpriced, pools: addrs.length, ms: now - t0 },
+    measuredSchema: 1,   // Audit V: periods[p].measured + measuredHours (v12–v14)
+    stats: { feeLegs: (cache.fees || []).length, feeSince: cache.fees && cache.fees.length ? new Date(cache.fees[0][0]).toISOString() : null, swaps: all.length, walletsPending: (cache.fromPending || []).length, newThisRun: fresh.length, unpricedThisRun: unpriced, pools: addrs.length, ms: now - t0 },
   };
   fs.mkdirSync('data', { recursive: true });
   fs.writeFileSync(CACHE_PATH, JSON.stringify(cache));
