@@ -4786,6 +4786,18 @@
        UFO is NEVER volume × fee: that estimate is what used to balloon to ~$2M on a young token. */
     const computeValueGen=({token,cfg,period,periodVol,delivered,realizedFees,prices,estimate=false})=>{
       const none={basis:null,total:null,byKey:null,periodVol:periodVol==null?null:periodVol,pending:false};
+      /* Audit V v20 (2026-10-25): PTGC is MEASURED now — the fees actually paid, read from the fee legs on chain by the hourly
+         swap-volume builder (periods[p].measured.fees). Buckets are the contract's fixed split of that total: Burn 0.5 % and Stakers
+         1 % are read directly, DAO 2 % + Add LP 0.5 % arrive at the contract together, Holders 1 % is inferred (reflections leave no
+         event). Falls back to volume × fee while the file is missing / stale / older than the measured block, or that window's fee
+         history is still filling in. */
+      if(token==='PTGC'){
+        const mf=ptgcMeasuredFees(period);
+        if(mf){const rate=(cfg.feeRate||0.05)*100,byKey={};
+          (cfg.feeBreakdown||[]).forEach(b=>{byKey[b.key||b.name]=mf.usd*((b.pct||0)/rate);});
+          byKey['Total H&S']=(byKey.Holders||0)+(byKey.Stakers||0);
+          return{basis:'measured',total:mf.usd,byKey,periodVol:none.periodVol,txs:mf.txs,pending:false};}
+      }
       if(token==='UFO'){
         const m=computeValueGenBuckets(period,delivered,realizedFees,prices||{});
         if(m)return{basis:'delivered',total:m.total,byKey:m.byKey,missing:m.missing,periodVol:none.periodVol,pending:false};   // a21: total null + missing[] when a price is absent
@@ -4810,6 +4822,7 @@
     const valueGenBucketUsd=(vg,item)=>{
       if(!vg||vg.pending)return null;
       if(vg.basis==='volume')return vg.total==null?null:(vg.periodVol||0)*((item.pct||0)/100);   // includes PTGC's synthetic "Total H&S"
+      if(vg.basis==='measured'){const v=vg.byKey&&vg.byKey[item.key||item.name];return v==null?null:v;}   // Audit V v20
       const k=item.key||item.name;
       const v=vg.byKey?vg.byKey[k]:undefined;
       return v==null?null:v;   // delivered: a21 — a bucket with no price is null → "—"; accrued: only reflection is known
@@ -7252,7 +7265,7 @@
             <p>Every {token} transfer pays a {rate?`${rate}% `:''}fee {'\u2014'} a buy, a sell, or a plain send between wallets. This panel shows what that fee produced in the selected window, split by where it went {'\u2014'} each tile is one destination.</p>
             {token==='UFO'
               ?<p>Figures are measured from the fee transfers on chain, not estimated from volume.</p>
-              :<p>PTGC{'\u2019'}s figures are estimated as trading volume × the fee rate. That is rough: an arbitrage bot{'\u2019'}s loop counts twice in volume but pays the fee once, a buy a router splits across pools pays it twice, and sends between wallets pay it with no volume at all. A measured figure is on the way.</p>}
+              :<p>PTGC{'\u2019'}s figures are measured on chain: every taxed transfer sends 0.5% to the burn address and 1% to the staking contract, so those two legs give the exact amount taxed, updated hourly. Burn and Stakers are read directly; DAO (2%) and Add LP (0.5%) reach the contract together as 2.5%; Holders (1%, marked ≈) is inferred, because reflections move no tokens. If the hourly file is unavailable the panel falls back to volume × the fee rate and says {'\u201C'}est.{'\u201D'}.</p>}
           </>
         );
       },
@@ -8932,7 +8945,7 @@
       const tiles=items.map(it=>{const usd=valueGenBucketUsd(vg,it);return{it,usd,parts:usd==null?null:valueGenParts(token,it,usd,prices)};});
       const barItems=tiles.filter(t=>!t.it.isTotal&&t.usd!=null&&t.usd>0);
       const barSum=barItems.reduce((s,t)=>s+t.usd,0);
-      const basis=!vg?'—':vg.pending?'reading fees from the chain…':vg.basis==='delivered'?'measured on chain, delivered to each bucket':vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>est. from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
+      const basis=!vg?'—':vg.pending?'reading fees from the chain…':vg.basis==='delivered'?'measured on chain, delivered to each bucket':vg.basis==='measured'?<>measured on chain {'\u00B7'} <b style={{color:'#fff'}}>{fmt(vg.txs)}</b> fee-paying transfers</>:vg.basis==='accrued'?'accrued on chain — delivery still being read':vg.basis==='volume'?(<>est. from <b style={{color:'#fff'}}>{vg.periodVol!=null?fmtUSD(vg.periodVol):'—'}</b> volume at a <b style={{color:'#fff'}}>{(cfg.feeRate*100).toFixed(0)}%</b> fee</>):(vg.error?'chain read failed':'no volume data for this window');
       const title=(
         <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
           <span style={{fontSize:'0.9em',letterSpacing:0}}>{'\u{1F4B0}'}</span>
@@ -9976,6 +9989,7 @@
       if(!vg)return'—';
       if(vg.pending)return'reading fees from the chain…';
       if(vg.basis==='delivered')return<>from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume {'·'} measured on chain</>;
+      if(vg.basis==='measured')return<>measured on chain {'·'} {fmt(vg.txs)} transfers</>;   // Audit V v20
       if(vg.basis==='accrued')return'accrued on chain — delivery still being read';
       if(vg.basis==='volume')return<>est. from <b style={{color:'#fff'}}>{vol>0?fmtUSD(vol):'—'}</b> volume × {(TOKENS[tkn]?.feeRate*100||0).toFixed(0)}%</>;   // Audit V v4: PTGC too
       return vg.error?'chain read failed':'—';
@@ -11212,6 +11226,12 @@
         return _vsFile;
       }).catch(()=>{_vsP=null;_vsAt=Date.now();_vsFile=null;return null;});
       return _vsP;
+    };
+    /* Audit V v20: PTGC's measured fees for a Value Generated window, from the hourly swap-volume file (null = not available) */
+    const ptgcMeasuredFees=(period)=>{
+      const f=_vsFile&&_vsFile.tokens&&_vsFile.tokens.PTGC&&_vsFile.tokens.PTGC.periods&&_vsFile.tokens.PTGC.periods[period];
+      const m=f&&f.measured&&f.measured.fees;if(!m||!m.complete||!m.total||!(m.total.usd>0))return null;
+      return{usd:m.total.usd,tokens:m.total.tokens,txs:(m.human.txs||0)+(m.bot.txs||0)+(m.transfer.txs||0)+((m.protocol&&m.protocol.txs)||0)};
     };
     const VsDot=({token,onOpen})=>(
       <button type="button" onClick={onOpen} aria-label="Volume split (preview)" title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
@@ -13759,6 +13779,8 @@
             if(vg.basis==='accrued'&&vg.total>0){out[w]={label:w,total:vg.total,byKey:null,missing:[]};return;}
             return;
           }
+          const mv=computeValueGen({token,cfg,period:w,periodVol:null,prices});   // Audit V v20: PTGC measured on chain when the file has it
+          if(mv.basis==='measured'){out[w]={label:w,total:mv.total,byKey:null,missing:[]};return;}
           const v=volumeByPeriod&&volumeByPeriod['vol'+w];
           if(v>0)out[w]={label:w,total:v*cfg.feeRate,byKey:null,missing:[]};
         });
@@ -13943,6 +13965,8 @@
       const[showVolumeModal,setShowVolumeModal]=useState(false);
       const[showHoldersSingleModal,setShowHoldersSingleModal]=useState(false);   // the ⓘ on the Holders box → HoldersSingleModal (2026-09-26)
       const[showNewHolders,setShowNewHolders]=useState(false);   // Holders Details (2026-10-02): the faint dot while hidden, the button beside the ⓘ once NEW_HOLDERS_LIVE
+      const[,setVsTick]=useState(0);   // Audit V v20: re-render when the hourly swap-volume file (PTGC's measured fees) arrives / refreshes
+      useEffect(()=>{let live=true;const go=()=>fetchSwapVolume().then(()=>{if(live)setVsTick(t=>t+1);});go();const id=setInterval(go,5*60*1000);return()=>{live=false;clearInterval(id);};},[]);
       const[showVolSplit,setShowVolSplit]=useState(false);       // Volume Split (2026-10-06): human vs arb-bot volume — the faint dot while hidden (VOL_SPLIT_LIVE)
       const nhFile=useNewHoldersFile(NEW_HOLDERS_LIVE);          // data/new-holders.json, read only once the window is live — the Holders tile's change line comes from it then
       /* c5 (Audit III): ONE 24 h holders number for every surface — the file's net once Holders Details is live (gotcha 40: the tile
@@ -15376,11 +15400,14 @@
                             </>
                           ):realizedLoading&&token==='UFO'?(
                             <span className="text-base text-white/40">Reading fees from chain…</span>
-                          ):(hasData&&token!=='UFO')?(
+                          ):((hasData||valueGenView.basis==='measured')&&token!=='UFO')?(
                             <>
                               <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.text} ${hdrV2?'p2-hl sm':''}`}>{fmtUSD(totalGen)}</span>
-                              {hdrV2?<span className="p2-vgfrom">est. from <b>{fmtUSD(periodVol)}</b> vol</span>
-                                    :<span className="text-white/45 text-sm sm:text-base">est. from {fmtUSD(periodVol)} vol {'\u00D7'} {(cfg.feeRate*100).toFixed(0)}%</span>}{/* Audit V v4 */}
+                              {valueGenView.basis==='measured'
+                                ?(hdrV2?<span className="p2-vgfrom">on chain {'\u00B7'} <b>{fmt(valueGenView.txs)}</b> transfers</span>
+                                       :<span className="text-white/45 text-sm sm:text-base">on chain {'\u00B7'} {fmt(valueGenView.txs)} transfers</span>)
+                                :(hdrV2?<span className="p2-vgfrom">est. from <b>{fmtUSD(periodVol)}</b> vol</span>
+                                       :<span className="text-white/45 text-sm sm:text-base">est. from {fmtUSD(periodVol)} vol {'\u00D7'} {(cfg.feeRate*100).toFixed(0)}%</span>)}{/* Audit V v4 / v20 */}
                             </>
                           ):(token==='UFO'&&realizedFees&&!realizedFees.ok)?(
                             <div className="flex flex-col gap-1">
@@ -15439,7 +15466,7 @@
                         {/* No spacer. The grid absorbs the panel's height and each tile
                             stretches to fill it, so the six numbers are the panel rather
                             than a footnote pinned to the bottom of it. */}
-                        {(showLive||(hasData&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 flex-1 mt-2">
+                        {(showLive||((hasData||valueGenView.basis==='measured')&&token!=='UFO'))&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 flex-1 mt-2">
                           {((showLive?liveItems:orderedItems)||[]).map((item,i)=>{
                             const dollarVal=showLive?item.usd:(valueGenBucketUsd(valueGenView,item)||0);   // u5: PTGC buckets from the shared model
                             const parts=showLive?item.parts:valueGenParts(token,item,dollarVal,vgPrices);
@@ -15481,7 +15508,7 @@
                                        title={qTip}>{partsLabel}</div>
                                 ):(
                                   <div className={`text-lg sm:text-2xl font-semibold text-right tabular-nums leading-none ${stuck?'text-red-300/70':theme.text} truncate ${hdrV2&&!stuck?'p2-gold':''}`}
-                                       title={qTip}>{hdrV2?<H2Val>{fmtUSD(dollarVal)}</H2Val>:fmtUSD(dollarVal)}</div>
+                                       title={!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'Inferred: reflections move no tokens, so this 1% is the measured total × 1/5 — every other tile is read from the fee transfers':qTip}>{hdrV2?<H2Val>{!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'\u2248 ':''}{fmtUSD(dollarVal)}</H2Val>:<>{!showLive&&valueGenView.basis==='measured'&&item.name==='Holders'?'\u2248 ':''}{fmtUSD(dollarVal)}</>}</div>
                                 )}
                               </div>
                             );
