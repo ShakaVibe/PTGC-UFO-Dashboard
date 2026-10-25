@@ -7,7 +7,7 @@
        Hidden until LEAGUE_HISTORY_LIVE: the faint bottom-right dot of the dashboard opens it (LhDot). Going live = flip the flag:
        the dot goes, the creature strip in the Token Allocation panel becomes the button (with a small HISTORY tag).
        Honest states (gotcha 20): loading = skeleton cards; a failed read = "couldn't load" + Retry; a file older than 2 days says so. */
-    const LEAGUE_HISTORY_LIVE=false;
+    const LEAGUE_HISTORY_LIVE=true;   // LIVE 2026-10-25 (Shaka: "make the league history live.. remove the dot and make the bar in token allocation clickable")
     const LH_URL='https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/league-history.json';
     const LH_TIERS=[['Poseidon','trident','10%'],['Whale','whale','1%'],['Shark','shark','0.1%'],['Dolphin','dolphin','0.01%'],['Squid','squid','0.001%'],['Turtle','turtle','0.0001%'],['Shrimp','shrimp','0.00001%'],['Shell','shell',null]];
     const LH_PERS=[['7D',7,'7 days'],['30D',30,'30 days'],['90D',90,'90 days'],['6M',182,'6 months'],['1Y',365,'1 year'],['ALL',null,'all time']];
