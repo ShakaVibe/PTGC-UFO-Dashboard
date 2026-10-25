@@ -2322,6 +2322,12 @@
     const encodeAddress=a=>a.slice(2).toLowerCase().padStart(64,'0');
     const isZeroAddress=a=>!a||/^0x0{40}$/i.test(a);
 
+    /* Audit V v34 (2026-10-25): UFO's fee is read from the contract; until a read succeeds the config's 6 % is only a fallback, so a
+       label never prints it as fact. feeRateTxt(cfg) → "6%" once read (PTGC: always — its rate is fixed in the contract), else null;
+       feeUnreadTip says why. */
+    const feeRateKnown=cfg=>!!cfg&&(cfg.name!=='UFO'||!!cfg.feesAt);
+    const feeRateTxt=(cfg,dp=2)=>feeRateKnown(cfg)&&cfg.feeRate>=0?`${+(cfg.feeRate*100).toFixed(dp)}%`:null;
+    const FEE_UNREAD_TIP="UFO's fee rate could not be read from the contract yet (it is set by the token's owner); it refreshes every few minutes";
     // Returns {breakdown,totalBps,feeRate} or null on any failure (caller falls back to config).
     const fetchUfoFees=async(tokenAddress)=>{
       try{
@@ -6420,7 +6426,7 @@
               <div className="relative overflow-x-auto deck-tapewrap">
                 <div className="deck-tape" style={{minWidth:1040}}>
                   <div className="deck-head grid text-[12px] font-semibold tracking-[0.16em] uppercase text-white/75 px-[18px] pt-2.5 pb-2" style={{gridTemplateColumns:cols,gap:'0 10px',borderTop:`1px solid ${deckHexA(ac,0.35)}`}}>
-                    <span>Time <span style={{color:hi}}>{'↓'}</span></span><span>Type</span><span>Contact / TX</span><span className="text-right pr-1.5 whitespace-nowrap">Amount <span className="deck-head-lift normal-case tracking-normal text-white/45">fee paid {'\u00B7'} <b className="font-semibold" style={{color:hi}}>{(cfg.feeRate*100).toFixed(2)}%</b> a transfer</span></span>
+                    <span>Time <span style={{color:hi}}>{'↓'}</span></span><span>Type</span><span>Contact / TX</span><span className="text-right pr-1.5 whitespace-nowrap">Amount <span className="deck-head-lift normal-case tracking-normal text-white/45">fee paid {'\u00B7'} {feeRateTxt(cfg)?<><b className="font-semibold" style={{color:hi}}>{feeRateTxt(cfg)}</b> a transfer</>:<span title={FEE_UNREAD_TIP}>rate unread</span>}</span></span>
                     {pods.map(p=><span key={p.key} className="deck-head-pod text-center">{p.name}</span>)}
                   </div>
                   <DeckScanline contacts={contacts} lastScan={lastScan} status={status} statusText={statusText} hi={hi}/>
@@ -7304,7 +7310,7 @@
         </>
       ),
       valueGenerated:(token,cfg)=>{
-        const rate=cfg&&cfg.feeRate>0?(cfg.feeRate*100).toFixed(cfg.feeRate*100%1?1:0):null;
+        const rate=feeRateKnown(cfg)&&cfg.feeRate>0?(cfg.feeRate*100).toFixed(cfg.feeRate*100%1?1:0):null;   // Audit V v34: no rate printed until UFO's is read
         return(
           <>
             <p>Every {token} transfer pays a {rate?`${rate}% `:''}fee {'\u2014'} a buy, a sell, or a plain send between wallets. This panel shows what that fee produced in the selected window, split by where it went {'\u2014'} each tile is one destination.</p>
@@ -10086,7 +10092,7 @@
             </div>
             <div style={{minWidth:0,flex:1}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
-                <span style={{fontSize:z.feeL,letterSpacing:'0.24em',fontWeight:700,color:col,whiteSpace:'nowrap'}}>{tkn} {'·'} {+(cfg.feeRate*100).toFixed(2)}% FEE</span>
+                <span style={{fontSize:z.feeL,letterSpacing:'0.24em',fontWeight:700,color:col,whiteSpace:'nowrap'}}>{tkn} {'·'} {feeRateTxt(cfg)?`${feeRateTxt(cfg)} FEE`:'FEE RATE UNREAD'}</span>
                 {share!=null&&<span className="tabular-nums" style={{fontSize:z.feeL,fontWeight:700,color:col,whiteSpace:'nowrap'}}>{share.toFixed(0)}% of total</span>}
               </div>
               <div className={`${gold?'metallic-gold':'metallic-green'} tabular-nums`} style={{fontSize:z.tot,fontWeight:700,lineHeight:1}}>{total==null?'—':fmtUSD(total)}</div>
@@ -13635,44 +13641,7 @@
         </div>
       );
     };
-    const FeeBlock=({tokenCfg,vol,accent,rgb,vg})=>{
-      /* u5/u6: renders the shared Value Generated model for one token. null → "—" (never $0). */
-      const totalGen=vg?vg.total:null;
-      const note=!vg?null:vg.basis==='delivered'?'measured on chain':vg.basis==='accrued'?'accrued \u2014 delivery still being read':vg.pending?'reading fees from chain\u2026':vg.basis==='volume'&&tokenCfg.name==='UFO'?'est. from volume':null;
-      const items=tokenCfg.name==='PTGC'?tokenCfg.feeBreakdown:tokenCfg.feeBreakdown.filter(b=>(b.pct||0)>0);
-      return(
-        <div style={{borderRadius:'12px',padding:'12px 16px',background:`rgba(${rgb},0.07)`,border:`1.5px solid rgba(${rgb},0.3)`}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'14px',marginBottom:'10px'}}>
-            {/* Left: logo + hero amount */}
-            <div style={{display:'flex',alignItems:'center',gap:'14px'}}>
-              <img src={tokenCfg.logo} alt={tokenCfg.name} style={{width:'64px',height:'64px',borderRadius:'50%',flexShrink:0,boxShadow:`0 0 20px rgba(${rgb},0.4)`}}/>
-              <div style={{display:'flex',alignItems:'baseline',gap:'8px',flexWrap:'wrap'}}>
-                <span style={{fontFamily:RJ,fontWeight:700,fontSize:'38px',color:totalGen==null?'rgba(255,255,255,0.35)':'#4ade80',lineHeight:1}}>{totalGen==null?'\u2014':fmtUSD(totalGen)}</span>
-                <span style={{fontFamily:OB,fontSize:'10px',color:'rgba(255,255,255,0.4)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Value Generated{note?<span style={{fontFamily:RJ,fontSize:'11px',letterSpacing:0,textTransform:'none',color:'rgba(255,255,255,0.35)',marginLeft:'6px'}}>{note}</span>:null}</span>
-              </div>
-            </div>
-            {/* Right: token name + vol, right-justified */}
-            <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontFamily:OB,fontSize:'13px',fontWeight:700,color:accent,letterSpacing:'0.5px'}}>{tokenCfg.name}</div>
-              <div style={{fontFamily:RJ,fontSize:'15px',color:'rgba(255,255,255,0.55)',fontWeight:600,marginTop:'4px'}}>Vol: {vol>0?fmtUSD(vol):'\u2014'}</div>
-            </div>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:`repeat(${items.length},1fr)`,gap:'6px'}}>
-            {items.map((item,i)=>{
-              const dollarVal=valueGenBucketUsd(vg,item);   // null → "—"
-              return(
-                <div key={i} style={{background:'rgba(0,0,0,0.3)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'8px',padding:'7px 6px',textAlign:'center'}}>
-                  <div style={{fontSize:'17px',marginBottom:'3px'}}>{item.emoji}</div>
-                  <div style={{fontFamily:OB,fontSize:'9px',color:`rgba(${rgb},0.65)`,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:'3px',lineHeight:1.2}}>{item.name}</div>
-                  <div style={{fontFamily:RJ,fontWeight:700,fontSize:'19px',color:dollarVal==null?'rgba(255,255,255,0.35)':'#4ade80'}}>{dollarVal==null?'\u2014':fmtUSD(dollarVal)}</div>
-                  <div style={{fontFamily:RJ,fontSize:'14px',color:`rgba(${rgb},0.55)`,fontWeight:500,marginTop:'1px'}}>{item.pct}%</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    };
+    /* (Audit V v36, 2026-10-25: the unused FeeBlock — it still embedded the old volume × fee model — was deleted) */
 
     const Dashboard=({token,onBack,onSwitch,onAffiliates,routeTab='dashboard',onTabRoute,headerDesign='classic'})=>{
       const hdrV2=headerDesign==='v2';   // DashHeaderV2 + KpiTilesV2 instead of the classic header and KPI strip (2026-09-30)
