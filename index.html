@@ -68,7 +68,7 @@
        version here and you MUST regenerate its hash (openssl dgst -sha384 -binary f | openssl base64 -A).
        Tailwind's play CDN generates its script and does not allow cross-origin reads, so it
        cannot carry a hash; it is scheduled to be replaced by a build step. -->
-  <link rel="stylesheet" href="tw.css?v=7">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
+  <link rel="stylesheet" href="tw.css?v=8">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
   <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
@@ -13890,7 +13890,6 @@
       const[showLeagueHist,setShowLeagueHist]=useState(false);   // LEAGUE HISTORY window (2026-10-24) — the dot until LEAGUE_HISTORY_LIVE, then the creature strip
       const[showFeeHow,setShowFeeHow]=useState(null);   // Audit V v33: 'PTGC' | 'UFO' while the How the fee works window is open
       useEffect(()=>{const h=e=>setShowFeeHow((e&&e.detail)||token);window.addEventListener('grays:feehow',h);return()=>window.removeEventListener('grays:feehow',h);},[token]);
-      const[showLeagueHist,setShowLeagueHist]=useState(false);   // LEAGUE HISTORY window (2026-10-24) — the dot until LEAGUE_HISTORY_LIVE, then the creature strip   // TOP 100 window (2026-10-22) — the button right of Leagues
       const[t100Preview,setT100Preview]=useState(()=>lsGet(LS.T100_PREVIEW)===1);   // the faint dot's device flag while !TOP100_LIVE
       const[showBeam,setShowBeam]=useState(false); // LIVE FEED: the Abduction Deck overlay, opened from the nav; survives the deck's own token toggle because this instance is not remounted (a22 removed the sessionStorage flag)
       useEffect(()=>{try{sessionStorage.removeItem('grays_deck_reopen');}catch(e){}},[]);   // a22: sweep the retired flag from tabs that still carry it
@@ -16244,10 +16243,7 @@
           {!VOL_SPLIT_LIVE&&activeTab==='dashboard'&&<VsDot token={token} onOpen={()=>setShowVolSplit(true)}/>}
           {/* TOP 100 (2026-10-22): the Token Allocation panel's window. The button is hidden until TOP100_LIVE; the faint dot shows / hides it on this device. */}
           {showTop100&&<Top100Modal token={token} price={data&&data.price>0?data.price:0} onClose={()=>setShowTop100(false)}/>}
-          {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
           {showFeeHow&&<FeeHowModal token={showFeeHow} onClose={()=>setShowFeeHow(null)}/>}
-          {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
-          {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
           {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
           {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
           {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
