@@ -276,6 +276,21 @@
         return j;                       // may legitimately carry {error:{...}}
       }finally{clearTimeout(timeoutId);}
     };
+    /* Audit V v30 (2026-10-25): UFO's fee is owner-settable — read the six live rates from the contract (index.html's fetchUfoFees,
+       the same selectors) and write them over the config's 6 × 1 % before the page computes anything. A failed / implausible read
+       keeps the config. */
+    const UFO_FEE_SELS=[['Holders','0x83ad7994'],['Burn UFO','0xea9f27e5'],['Burn PTGC','0xc045df51'],['LP PLS','0x1bbe947c'],['LP PLSX','0x7ddabe9d'],['LP WETH','0xd5d58ce7']];
+    let ufoFeesAt=0;
+    const refreshUfoFees=async()=>{
+      if(Date.now()-ufoFeesAt<5*60e3)return;
+      try{
+        const raw=await Promise.all(UFO_FEE_SELS.map(([,sel])=>rpcFetch({jsonrpc:'2.0',method:'eth_call',params:[{to:TOKENS.UFO.address,data:sel},'latest'],id:1}).then(r=>r&&r.result&&r.result!=='0x'?Number(BigInt(r.result)):null)));
+        if(raw.some(v=>v==null||!isFinite(v)||v<0))return;
+        const tot=raw.reduce((a,b)=>a+b,0);if(!(tot>=0&&tot<=600))return;   // the contract caps the total at 6 % (the dashboard's rule)
+        UFO_FEE_SELS.forEach(([n],i)=>{const b=TOKENS.UFO.feeBreakdown.find(x=>x.name===n);if(b)b.pct=raw[i]/100;});
+        TOKENS.UFO.feeRate=tot/10000;ufoFeesAt=Date.now();
+      }catch(e){console.warn('UFO fee read failed — config rates kept',e);}
+    };
     const rpcFetch=async(body,timeout=8000)=>{
       // Drift back to the primary once the sticky window on a fallback has expired.
       if(_rpcIdx!==0&&Date.now()-_rpcSince>RPC_STICKY_MS){_rpcIdx=0;}
@@ -4104,7 +4119,7 @@ if(p>0)setRwdPtgcPrice(p);
             const stakerPct=isPTGC?(cfg.feeBreakdown.find(t=>t.name==='Stakers')?.pct||0)/100:0;
             /* MIGRATION: new UFO ecosystem buckets — read from cfg so the calculator can
                never drift from the published fee model. Burn buckets buy & burn; the LP
-               buckets are AUTO-LIQUIDITY: half of each bucket buys UFO, half is the paired
+               buckets are AUTO-LIQUIDITY: half of each bucket is fee UFO, half is the paired
                asset, and the FULL bucket lands in the pool as permanent depth. */
             const burnUfoPct=!isPTGC?(cfg.feeBreakdown.find(t=>t.name==='Burn UFO')?.pct||0)/100:0;
             const burnPtgcPct=!isPTGC?(cfg.feeBreakdown.find(t=>t.name==='Burn PTGC')?.pct||0)/100:0;
@@ -4150,8 +4165,8 @@ if(p>0)setRwdPtgcPrice(p);
             const ecoUfoBurnTokens=price>0?ecoUfoBurnUSD/price:0;
             const ecoPtgcBurnUSD=periodVolUSD*burnPtgcPct;
             const ecoLpTotalUSD=periodVolUSD*autoLpPct;       // full amount lands as LP depth
-            const ecoLpUfoSideUSD=ecoLpTotalUSD/2;            // half buys UFO...
-            const ecoLpPairedSideUSD=ecoLpTotalUSD/2;         // ...half is the paired asset
+            const ecoLpUfoSideUSD=ecoLpTotalUSD/2;            // half is fee UFO...
+            const ecoLpPairedSideUSD=ecoLpTotalUSD/2;         // ...half is the paired asset, bought by selling fee UFO
             const ecoLpUfoTokens=price>0?ecoLpUfoSideUSD/price:0;
             
             // APY: yearly total reward USD / total position value
@@ -4411,22 +4426,22 @@ if(p>0)setRwdPtgcPrice(p);
                     
                     {/* Ecosystem Impact — what this volume does for every holder, not a payout */}
                     <div className="border-t border-white/[0.08] pt-4">
-                      <div className="text-white/40 text-sm uppercase tracking-widest font-bold mb-3 text-center">{spanLabel} Ecosystem Impact {'\u00B7'} {fmtUSD(periodVolUSD)} Volume</div>
+                      <div className="text-white/40 text-sm uppercase tracking-widest font-bold mb-3 text-center">{spanLabel} Ecosystem Impact {'\u00B7'} {fmtUSD(periodVolUSD)} Fee-Paying Volume</div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,140,0,0.25)'}}>
-                          <div className="flex items-center justify-center gap-2 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.UFO.logo} alt="UFO" className="w-8 h-8" style={{filter:'drop-shadow(0 0 5px rgba(124,252,0,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">UFO Bought & Burned</span></div>
+                          <div className="flex items-center justify-center gap-2 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.UFO.logo} alt="UFO" className="w-8 h-8" style={{filter:'drop-shadow(0 0 5px rgba(124,252,0,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">UFO Burned</span></div>
                           <div className="text-orange-400 text-3xl font-bold">{fmtDollar(ecoUfoBurnUSD)}</div>
-                          <div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoUfoBurnTokens),0)} UFO</div>
+                          <div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoUfoBurnTokens),0)} UFO from the fee, burned</div>
                         </div>
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(212,175,55,0.25)'}}>
                           <div className="flex items-center justify-center gap-2 mb-2"><span className="text-xl">{'\uD83D\uDD25'}</span><img src={TOKENS.PTGC.logo} alt="PTGC" className="w-8 h-8" style={{filter:'drop-shadow(0 0 5px rgba(212,175,55,0.5))'}}/><span className="text-white/50 text-base uppercase tracking-wide font-bold">PTGC Bought & Burned</span></div>
                           <div className="text-[#D4AF37] text-3xl font-bold">{fmtDollar(ecoPtgcBurnUSD)}</div>
-                          {rwdPtgcPrice>0&&<div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoPtgcBurnUSD/rwdPtgcPrice),0)} PTGC</div>}
+                          {rwdPtgcPrice>0&&<div className="text-white/40 text-base font-semibold mt-1">{'\u2248'} {fmtComma(Math.round(ecoPtgcBurnUSD/rwdPtgcPrice),0)} PTGC, bought by selling fee UFO</div>}
                         </div>
                         <div className="text-center rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${glowColor}0.3)`}}>
                           <div className="flex items-center justify-center gap-1.5 mb-2"><span className="text-xl">{'\uD83D\uDCA7'}</span><span className="text-white/50 text-base uppercase tracking-wide font-bold">Total LP Added</span></div>
                           <div className={`text-3xl font-bold ${theme.text}`}>{fmtDollar(ecoLpTotalUSD)}</div>
-                          <div className="text-white/40 text-base font-semibold mt-1">{fmtDollar(ecoLpUfoSideUSD)} buys UFO ({'\u2248'} {fmtComma(Math.round(ecoLpUfoTokens),0)}) + {fmtDollar(ecoLpPairedSideUSD)} paired</div>
+                          <div className="text-white/40 text-base font-semibold mt-1">{fmtDollar(ecoLpUfoSideUSD)} of fee UFO ({'\u2248'} {fmtComma(Math.round(ecoLpUfoTokens),0)}) + {fmtDollar(ecoLpPairedSideUSD)} of PLS / PLSX / WETH bought by selling fee UFO</div>
                         </div>
                       </div>
                     </div>
@@ -4455,7 +4470,7 @@ if(p>0)setRwdPtgcPrice(p);
                         payout of 3% settled in PLS against a share rate tracked by the staking
                         contract. None of that exists on the new contract: the fee is 6% split
                         1% six ways, and the three LP buckets are auto-liquidity, not a payout. */}
-                    <p className="mt-1.5">Holder reflections (1% fee) are distributed in UFO proportionally based on your share of the eligible circulating supply {'\u2014'} UFO held inside LP pools does not earn reflections and is excluded from that calculation. The remaining 5% of the fee does not pay out to wallets: 1% buys and burns UFO, 1% buys and burns PTGC, and 3% is auto-liquidity split evenly across the PLS, PLSX and WETH pools, where it becomes permanent depth rather than a claimable reward. Volume assumptions used here may not reflect actual future trading activity. <strong className="text-white/50">Always DYOR</strong> and never invest more than you can afford to lose.</p>
+                    <p className="mt-1.5">{(()=>{const u=TOKENS.UFO,pc=n=>+((u.feeBreakdown.find(t=>t.name===n)?.pct)||0).toFixed(2),lp=+(pc('LP PLS')+pc('LP PLSX')+pc('LP WETH')).toFixed(2),rest=+((u.feeRate*100)-pc('Holders')).toFixed(2);return<>Holder reflections ({pc('Holders')}% fee) are distributed in UFO proportionally based on your share of the eligible circulating supply {'\u2014'} UFO held inside LP pools does not earn reflections and is excluded from that calculation. The remaining {rest}% of the fee does not pay out to wallets: {pc('Burn UFO')}% is burned as UFO, {pc('Burn PTGC')}% is sold for PTGC that is burned, and {lp}% is auto-liquidity across the PLS, PLSX and WETH pools (half fee UFO, half the paired coin bought by selling fee UFO), where it becomes permanent depth rather than a claimable reward. Rates are read live from the UFO contract.</>;})()} Volume assumptions used here may not reflect actual future trading activity. <strong className="text-white/50">Always DYOR</strong> and never invest more than you can afford to lose.</p>
                     </>
                     )}
                   </div>
@@ -5101,7 +5116,8 @@ if(p>0)setRwdPtgcPrice(p);
           const[d,b,p]=await Promise.all([
             fetchDex(cfg.address,cfg.mainPair),
             fetchBurn(cfg.address,cfg.decimals),
-            fetchPLS()
+            fetchPLS(),
+            refreshUfoFees()   // Audit V v30: UFO's live rates, before anything renders with them
           ]);
           if(cancelled)return;
           setData(d);setBurn(b);if(p!=null)setPls(p);setLoading(false);setLoadedOnce(true);   // a5: a failed PLS read keeps the last good value (or stays null); never a placeholder
