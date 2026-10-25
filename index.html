@@ -1293,6 +1293,7 @@
     @media(max-width:700px){.lh-cam,.lh-lgb{width:30px;height:30px;padding:0;justify-content:center;border-radius:50%}
       .lh-cam span,.lh-lgb span{display:none}.lh-cam{right:56px;top:16px;font-size:13px}.lh-lgb{right:56px;top:52px}.lh-lgb img{width:19px;height:19px}
       .lh-x{top:14px;right:14px;width:34px;height:34px;line-height:32px}}
+    .lh-pxat{margin:10px 2px 0;font-size:14px;color:rgba(255,255,255,.55);text-align:center}.lh-pxat b{color:rgba(255,255,255,.88);font-weight:700}   /* 2026-10-25: the time of the price the cards use */
     /* LH:CSS:END */
     /* T100:CSS:BEGIN */
     /* TOP 100 (2026-10-22) — the Token Allocation panel's "Top 100" window (Top100Modal), Shaka's picks from
@@ -13205,6 +13206,16 @@
       const shareOf=(v,k)=>{const sp=supAt(k);if(!(sp>0)||v==null)return null;if(v===0)return'0';const p=v/sp*100;return p>=10?p.toFixed(1):p>=0.1?p.toFixed(2):p>=0.001?p.toFixed(3):'<0.001';};
       const tm=mode==='t'&&!!held,bm=mode==='b'&&!!held;
       const per1=(v,c)=>c>0&&v>0?fmtAbbr(v/c):null;   // tokens per wallet, for the hover
+      /* 2026-10-25 (Shaka): each card says what it costs to BE that creature — the league's threshold (its % of the basis supply,
+         today) × the token's price now (DexScreener main pair, read when the window opens / the token switches), with the time of
+         that price under the cards. Replaces the "~X avg per shark" line. */
+      const[px,setPx]=useState({});   // tok → {price, at} | null (failed); missing = reading
+      useEffect(()=>{if(px[tok]!==undefined)return;let dead=false;(async()=>{let q=null;
+        try{const p=dsOnePair(await dsGet('https://api.dexscreener.com/latest/dex/pairs/pulsechain/'+TOKENS[tok].mainPair,6000));const price=parseFloat(p?.priceUsd)||0;if(price>0)q={price,at:Date.now()};}catch(e){}
+        if(!dead)setPx(o=>({...o,[tok]:q}));})();return()=>{dead=true;};},[tok]);
+      const pq=px[tok];
+      const lhUsd=v=>v>=10?fmtUSD(v):v>=0.01?'$'+v.toFixed(2):'<$0.01';
+      const tierUsd=(th)=>{const sp=supAt(last),pc=parseFloat(th);return(pq&&sp>0&&pc>0)?sp*pc/100*pq.price:null;};
       return(
         <Modal onClose={onClose} label={`${tok} league history`} className="z-50 overflow-y-auto overscroll-contain bg-black/85 sm:p-4">
           <div className={`lh-win${isU?' u':''}`} onClick={e=>e.stopPropagation()}>
@@ -13231,10 +13242,12 @@
                     <div className="top"><span className="ic"><img src={lhSea(img)} alt=""/></span><div><div className="nm">{n}</div><div className="th">{th?`≥ ${th} of supply`:'below Shrimp'}</div>{t.burnIn&&t.burnIn[basis]===i&&<div className="bwl">{b===1?'The Burn address':'incl. the Burn address'}</div>}</div></div>
                     <div className="vr"><div className="v">{lhFmt(b)}</div><div className="ch"><LhChange a={a} b={b}/></div></div>
                     {held&&(()=>{const sh=shareOf(held[last][i],last);return<div className="hd2"><span className="g"><b>{fmtAbbr(held[last][i])}</b> <span className="w">{tok} held</span></span>{sh!=null&&<> <span className="w d">{'\u00B7'}</span> <span className="g"><b className="sp">{sh}%</b> <span className="w">supply</span></span></>}</div>;})()}
-                    {held&&<div className="av">{b>1?<><b>~{per1(held[last][i],b)}</b> <span className="w">avg per {n.toLowerCase()}</span></>:b===1?'one wallet':'no wallets'}</div>}
+                    {(()=>{const nm=n.toLowerCase(),v=tierUsd(th||LH_TIERS[i-1][2]);return<div className="av">{v==null?<span className="w">{pq===null?'price unavailable':'reading the price…'}</span>
+                      :th?<><b>{lhUsd(v)}</b> <span className="w">to be a {nm}</span></>:<><span className="w">a {nm} holds under</span> <b>{lhUsd(v)}</b></>}</div>;})()}
                     <div className="jl">{fl?(()=>{const jn=fl[0][i],lf=fl[1][i],nt=jn-lf,sg=v=>v>0?'lh-up':v<0?'lh-dn':'z';return<><span className="g"><b className={jn>0?'lh-up':'z'}>+{lhFmt(jn)}</b> <span className="w">joined</span></span> <span className="w d">{'\u00B7'}</span> <span className="g"><b className={lf>0?'lh-dn':'z'}>{'\u2212'}{lhFmt(lf)}</b> <span className="w">left</span></span> <span className="w bar">|</span> <span className="g nt"><b className={sg(nt)}>{nt>0?'+':nt<0?'\u2212':''}{lhFmt(Math.abs(nt))}</b> <span className="w nl">NET</span></span></>;})():' '}</div>
                     <LhSpark vals={rows.slice(i0).map(r=>r[i])} col={LH_BEAM_C[i][1]}/>   {/* the league's colour (the beam's) */}
                   </button>);})}</div>
+                {pq&&<div className="lh-pxat">{tok} price <b>{(()=>{const v=pq.price;return v>=0.01?'$'+v.toFixed(4):'$'+v.toPrecision(3);})()}</b> {'\u00B7'} {new Date(pq.at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})} {'\u00B7'} the $ on each card is that league{'\u2019'}s minimum, {basis==='circ'?'circulating':'starting'} supply</div>}
                 {(()=>{const[n,img]=LH_TIERS[sel],a=rows[i0][sel],b=rows[last][sel];return(
                   <div className="lh-big">
                     <div className="lh-bh"><div className="l"><img src={lhSea(img)} alt=""/><div><h3>{n.toUpperCase()}S {tm?'\u2014 TOKENS HELD':bm?'\u2014 WALLETS + TOKENS HELD':'OVER TIME'}</h3>
