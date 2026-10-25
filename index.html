@@ -6229,10 +6229,15 @@
         entries.sort((a,b)=>b.tokens-a.tokens);
         const price=data?.price||0,feeRate=cfg.feeRate||0;
         const base=(ready&&!missingSet.size&&wg&&wg.total>0)?wg.total:(token==='UFO'?0:(totTok*price*feeRate));   // a23: UFO pools never quote the volume × fee estimate — "…" until the measured figure is in
-        const top=entries.slice(0,3).map(e=>({...e,share:totTok>0?e.tokens/totTok:0,usd:totTok>0?base*e.tokens/totTok:0}));
+        /* Audit V re-check (2026-10-25): a pool's lift is the fee its OWN trades paid when the hourly file has it for this window
+           (measured.fees.pools — a bot loop half to each pool, a router buy's second fee to the pools it bought from); a pool the
+           file does not cover keeps its volume share. "+n others" is whatever is left of the HUD's figure, so the four still add up. */
+        const pf=measuredPoolFees(token,win);
+        const top=entries.slice(0,3).map(e=>{const m=pf?pf.get(e.pa):null;return{...e,share:totTok>0?e.tokens/totTok:0,usd:m!=null?m:(totTok>0?base*e.tokens/totTok:0)};});
         const rest=entries.slice(3);
         const restShare=totTok>0?rest.reduce((s,e)=>s+e.tokens,0)/totTok:0;
-        return{top,restN:rest.length,restUsd:base*restShare,restShare,totTok,usdOk:base>0};
+        const restUsd=pf?Math.max(0,base-top.reduce((s,e)=>s+e.usd,0)):base*restShare;
+        return{top,restN:rest.length,restUsd,restShare,totTok,usdOk:base>0};
       },[poolVol,win,windows,ready,missingSet,data?.price,cfg.feeRate]);
 
       if(!open)return null;
@@ -7314,9 +7319,10 @@
         return(
           <>
             <p>Every {token} transfer pays a {rate?`${rate}% `:''}fee {'\u2014'} a buy, a sell, or a plain send between wallets. This panel shows what that fee produced in the selected window, split by where it went {'\u2014'} each tile is one destination.</p>
+            <FeeHowLink token={token}/>
             {token==='UFO'
               ?<p>Figures are measured from the fee transfers on chain, not estimated from volume.</p>
-              :<p>PTGC{'\u2019'}s figures are measured on chain: every taxed transfer sends 0.5% to the burn address and 1% to the staking contract, so those two legs give the exact amount taxed, updated hourly. Burn and Stakers are read directly; DAO (2%) and Add LP (0.5%) reach the contract together as 2.5%; Holders (1%) is worked out from the contract's fixed rate, because reflections move no tokens. If the hourly file is unavailable the panel falls back to volume × the fee rate and says {'\u201C'}est.{'\u201D'}.</p>}
+              :<p>PTGC{'\u2019'}s figures are measured on chain: every fee-paying transfer sends 0.5% to the burn address and 1% to the staking contract, so those two legs give the exact amount that paid the fee, updated hourly. Burn and Stakers are read directly; DAO (2%) and Add LP (0.5%) reach the contract together as 2.5%; Holders (1%) is worked out from the contract's fixed rate, because reflections move no tokens. If the hourly file is unavailable the panel falls back to volume × the fee rate and says {'\u201C'}est.{'\u201D'}.</p>}
           </>
         );
       },
@@ -11911,7 +11917,7 @@
                       </div>)}
                   </VsFold>
                   <VsFold open={showHow} onToggle={()=>setShowHow(s=>!s)} title="How we tell" count="" color="rgba(255,255,255,.6)">
-                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days. The fee is charged per token transfer, not per swap: a bot's round trip is a buy in one pool and a sell in another but moves the token pool-to-pool once, so it pays one fee, while a PulseX app buy split across pools can pay it twice. So the volumes and counts here take each transaction ONCE (the larger of its buys and its sells), and the fees are read from the fee transfers on chain and given to whoever's transaction paid them; fees from transactions with no trade (sends between wallets, staking moves) are shown on their own. UFO's own buy-and-burn swaps are kept out of both sides. The By pool table and the contract list still show each pool's swaps.</div>
+                    <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days. The fee is charged per token transfer, not per swap: a bot's round trip is a buy in one pool and a sell in another but moves the token pool-to-pool once, so it pays one fee, while a PulseX app buy split across pools can pay it twice. So the volumes and counts here take each transaction ONCE (the larger of its buys and its sells), and the fees are read from the fee transfers on chain and given to whoever's transaction paid them; fees from transactions with no trade (sends between wallets, staking moves) are shown on their own. UFO's own buy-and-burn swaps are kept out of both sides. The By pool table and the contract list still show each pool's swaps.<span className="block mt-2"><button type="button" onClick={()=>openFeeHow(token)} className="underline underline-offset-2 font-semibold text-white/85">How the fee works {'\u203A'}</button></span></div>
                   </VsFold>
                   {/* round 12 (Shaka): a confidence note — the split is vastly right, a few small trades at the edges may still be mislabelled */}
                   <p className="vs-conf">How sure are we? Of who is who: very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land on the right side. The sums count each transaction once and the fees are read from the chain, so a bot{'\u2019'}s loop (two swaps, one fee) is no longer counted twice. A handful of small trades at the edges can still be mislabelled, so read this as a very close picture rather than a to-the-cent ledger.</p>
@@ -11920,6 +11926,63 @@
             </div>
           </div>
           {shareCard&&file&&<HvbShareModal token={token} file={file} win={win} setWin={setWin} feeRates={feeRates} onClose={()=>setShareCard(false)}/>}
+        </Modal>
+      );
+    };
+    /* ===================== HOW THE FEE WORKS (Audit V v33, 2026-10-25, Shaka: "ok") =====================
+       One window, opened from the Value Generated ⓘ and Humans vs Bots' "How we tell" (a window event, so any ⓘ can open it
+       without a prop chain). Everything in it is what the chain showed on 2026-10-25: the fee is charged per TRANSFER; where each
+       share goes and which ones the site reads directly; a bot loop pays once, a router-split buy twice; PTGC's 2.5 % is sold 90 %
+       for PLS (the DAO's) and 10 % paired as LP (v37 trace); UFO's rates are its owner's and read live. */
+    const openFeeHow=tok=>{try{window.dispatchEvent(new CustomEvent('grays:feehow',{detail:tok}));}catch(e){}};
+    const FeeHowLink=({token})=><p><button type="button" onClick={()=>openFeeHow(token)} className="underline underline-offset-2 font-semibold" style={{color:'inherit'}}>How the fee works {'\u203A'}</button></p>;
+    const FeeHowModal=({token,onClose})=>{
+      const[tok,setTok]=useState(token==='UFO'?'UFO':'PTGC');
+      const cfg=TOKENS[tok],isU=tok==='UFO',col=isU?'#8DFF3A':'#E8C044',rgb=isU?'141,255,58':'232,192,68';
+      const rate=feeRateTxt(cfg,2);
+      const pc=n=>{const b=(cfg.feeBreakdown||[]).find(t=>(t.name===n||t.key===n));return b?+(+b.pct).toFixed(2):null;};
+      const rows=isU?[
+        ['\u{1F48E}','Holders',pc('Holders')??pc('reflection'),'Reflections: every holder\'s balance grows a little, with no transfer to read.','worked out'],
+        ['\u{1F525}','Burn UFO',pc('Burn UFO')??pc('ufoBurn'),'UFO from the fee is sent to the burn address.','read'],
+        ['\u{1F525}','Burn PTGC',pc('Burn PTGC')??pc('ptgcBurn'),'UFO from the fee is sold for PTGC, and that PTGC is burned.','read'],
+        ['\u{1F4A7}','LP PLS · PLSX · WETH',(['LP PLS','LP PLSX','LP WETH'].map(n=>pc(n)).reduce((a,b)=>a+(b||0),0))||null,'Added to UFO\'s three pools as permanent liquidity: half is UFO from the fee, half is the paired coin, bought by selling fee UFO.','read'],
+      ]:[
+        ['\u{1F3DB}\u{FE0F}','DAO',2,'Collected by the PTGC contract with Add LP. It sells 90% of that PTGC for PLS, and the PLS goes to the DAO contract.','read'],
+        ['\u{1F4A7}','Add LP',0.5,'The other 10% is paired with some of that PLS and added to the pTGC/WPLS pool. The contract keeps the LP tokens.','read'],
+        ['\u{1F525}','Burn',0.5,'Sent straight to the burn address on every transfer.','read'],
+        ['\u{1F4B0}','Stakers',1,'Sent straight to the staking contract on every transfer.','read'],
+        ['\u{1F48E}','Holders',1,'Reflections: every holder\'s balance grows a little, with no transfer to read.','worked out'],
+      ];
+      const C=({e,t,children})=><div className="rounded-2xl p-3 sm:p-4" style={{background:'rgba(255,255,255,.035)',border:'1px solid rgba(255,255,255,.1)'}}><div className="flex items-center gap-2 font-semibold text-white text-[15px] sm:text-base"><span aria-hidden="true">{e}</span>{t}</div><div className="mt-1 text-white/70 leading-relaxed" style={{fontSize:13.5}}>{children}</div></div>;
+      return(
+        <Modal onClose={onClose} label="How the fee works" className="overflow-y-auto overscroll-contain bg-black/85 sm:p-4" style={{zIndex:80}}>{/* above an open ⓘ card (z 70) it may be opened from */}
+          <div onClick={e=>e.stopPropagation()} className="relative w-full border p-4 sm:p-6" style={{maxWidth:680,margin:'0 auto',borderRadius:22,background:'#070707',borderColor:`rgba(${rgb},.45)`,boxShadow:`0 0 60px -20px rgba(${rgb},.6)`}}>
+            <button type="button" onClick={onClose} aria-label="Close" className="tap-h absolute right-3 top-3" style={{width:36,height:36,borderRadius:999,border:'1px solid rgba(255,255,255,.25)',background:'rgba(0,0,0,.5)',color:'rgba(255,255,255,.85)',fontSize:22,lineHeight:'32px'}}>{'\u00D7'}</button>
+            <div className="flex items-center gap-3 pr-10"><img src={cfg.logo} alt="" className="w-10 h-10 rounded-full"/><div><div className="font-orbitron uppercase tracking-[0.16em] text-white text-base sm:text-lg">How the fee works</div><div className="text-white/55 text-[13px]">read from the chain {'\u00B7'} what this site measures</div></div></div>
+            <div className="mt-3 flex gap-2" role="group" aria-label="Token">{['PTGC','UFO'].map(k=><button type="button" key={k} aria-pressed={tok===k} onClick={()=>setTok(k)} className="tap-h px-3 rounded-lg text-sm font-bold" style={tok===k?{background:k==='UFO'?'#8DFF3A':'#E8C044',color:'#111'}:{background:'rgba(255,255,255,.06)',color:'rgba(255,255,255,.6)'}}>{k}</button>)}</div>
+            <div className="mt-4 rounded-2xl p-4" style={{background:`rgba(${rgb},.08)`,border:`1px solid rgba(${rgb},.35)`}}>
+              <div className="text-white text-lg sm:text-xl font-semibold"><span style={{color:col}}>{rate||'A'}</span> fee on every transfer</div>
+              <div className="mt-1 text-white/75 text-sm leading-relaxed">A buy, a sell, or a plain send between wallets: every time {tok} moves, {rate||'the fee'} of it is taken. It is charged per <b className="text-white">transfer</b>, not per trade.{isU?<> UFO{'\u2019'}s rates are set by its owner and read live from the contract{rate?'':' (not read yet)'}.</>:<> PTGC{'\u2019'}s rates are fixed in the contract.</>}</div>
+            </div>
+            <div className="mt-4 text-white/45 text-[12px] uppercase tracking-[0.16em] font-semibold">Where it goes</div>
+            <div className="mt-2 flex flex-col gap-2">{rows.map(([e,n,p,why,how])=>(
+              <div key={n} className="flex items-start gap-3 rounded-xl px-3 py-2.5" style={{background:'rgba(255,255,255,.03)',border:'1px solid rgba(255,255,255,.08)'}}>
+                <span className="text-xl leading-none mt-0.5" aria-hidden="true">{e}</span>
+                <div className="min-w-0 flex-1"><div className="flex items-baseline justify-between gap-2"><span className="text-white font-semibold">{n}</span><span className="tabular-nums font-bold" style={{color:col}}>{p!=null?`${p}%`:'\u2014'}</span></div>
+                  <div className="text-white/65 text-[13px] leading-snug">{why} <span className={how==='read'?'text-emerald-300/80':'text-white/45'}>{how==='read'?'Read from the chain.':'Worked out from the rate.'}</span></div></div>
+              </div>))}</div>
+            <div className="mt-5 text-white/45 text-[12px] uppercase tracking-[0.16em] font-semibold">How many fees a trade pays</div>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <C e={'\u{1F464}'} t="Straight from a pool: one fee">The pool sends {tok} to your wallet in one transfer.</C>
+              <C e={'\u{1F500}'} t="Through a router: usually two">When the app splits a buy across pools, the pools pay the router and the router pays you: two transfers, two fees.</C>
+              <C e={'\u{1F916}'} t={"A bot\u2019s loop: one fee"}>An arbitrage bot buys in one pool and sells in another in one go. The token moves pool to pool once, so it pays once, even though it shows as a buy and a sell.</C>
+              <C e={'\u{1F4E8}'} t="A send between wallets: one fee">Moving {tok} to another wallet pays the fee too.</C>
+            </div>
+            <div className="mt-4 rounded-2xl p-3 text-white/70 text-[13.5px] leading-relaxed" style={{background:'rgba(255,255,255,.03)',border:'1px solid rgba(255,255,255,.08)'}}>
+              <b className="text-white">Many small sells after a big buy?</b> Usually arbitrage bots bringing the other pools back in line with the price, not people dumping. The Humans vs Bots window shows who is who.
+            </div>
+            <div className="mt-4 text-white/45 text-[12.5px] leading-relaxed">Value Generated, Humans vs Bots, LP Pairs and the Live Feed all use these fee transfers, read from the chain every hour. Checked on chain October 2026.</div>
+          </div>
         </Modal>
       );
     };
@@ -13831,6 +13894,8 @@
       const[showRHCores,setShowRHCores]=useState(false);
       const[showTierInfo,setShowTierInfo]=useState(false);
       const[showTop100,setShowTop100]=useState(false);
+      const[showFeeHow,setShowFeeHow]=useState(null);   // Audit V v33: 'PTGC' | 'UFO' while the How the fee works window is open
+      useEffect(()=>{const h=e=>setShowFeeHow((e&&e.detail)||token);window.addEventListener('grays:feehow',h);return()=>window.removeEventListener('grays:feehow',h);},[token]);
       const[showLeagueHist,setShowLeagueHist]=useState(false);   // LEAGUE HISTORY window (2026-10-24) — the dot until LEAGUE_HISTORY_LIVE, then the creature strip   // TOP 100 window (2026-10-22) — the button right of Leagues
       const[t100Preview,setT100Preview]=useState(()=>lsGet(LS.T100_PREVIEW)===1);   // the faint dot's device flag while !TOP100_LIVE
       const[showBeam,setShowBeam]=useState(false); // LIVE FEED: the Abduction Deck overlay, opened from the nav; survives the deck's own token toggle because this instance is not remounted (a22 removed the sessionStorage flag)
@@ -16186,6 +16251,7 @@
           {/* TOP 100 (2026-10-22): the Token Allocation panel's window. The button is hidden until TOP100_LIVE; the faint dot shows / hides it on this device. */}
           {showTop100&&<Top100Modal token={token} price={data&&data.price>0?data.price:0} onClose={()=>setShowTop100(false)}/>}
           {/* LEAGUE HISTORY (2026-10-24): hidden behind the faint bottom-right dot until LEAGUE_HISTORY_LIVE; then the creature strip opens it */}
+          {showFeeHow&&<FeeHowModal token={showFeeHow} onClose={()=>setShowFeeHow(null)}/>}
           {showLeagueHist&&<LeagueHistoryModal token={token} onClose={()=>setShowLeagueHist(false)} onLeagues={()=>setShowTierInfo(true)}/>}
           {!LEAGUE_HISTORY_LIVE&&activeTab==='dashboard'&&<LhDot token={token} onOpen={()=>setShowLeagueHist(true)}/>}
           {!TOP100_LIVE&&activeTab==='dashboard'&&<T1Dot token={token} on={t100Preview} onToggle={()=>{const v=!t100Preview;setT100Preview(v);lsSet(LS.T100_PREVIEW,v?1:0);}}/>}
