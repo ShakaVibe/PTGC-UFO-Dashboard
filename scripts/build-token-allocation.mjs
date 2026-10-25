@@ -139,6 +139,11 @@ async function buildToken(sym, cfg) {
   const others = [...CORES, sym === 'PTGC' ? TOKENS.UFO.address : TOKENS.PTGC.address];
   const pools = new Set();
   for (const o of others) { const p = await getPair(cfg.address, o); if (p) pools.add(p); }
+  /* Audit V v19 (2026-10-25): the V2 factory's token/core pairs are a small part of the token's liquidity — the v1 pTGC/WPLS pool
+     alone held 4.93 B PTGC (6.46 B counted vs ~19 B across the 93 PTGC pools). Add every pool the hourly swap-volume builder tracks
+     for this token (DexScreener's pairs + the pinned ones, v1 and v2). Missing file → the factory pairs only, as before. */
+  const vsPools = (() => { try { return Object.entries(JSON.parse(fs.readFileSync('data/swap-volume.json', 'utf8')).pools || {}); } catch { return []; } })();
+  for (const [a, pl] of vsPools) if ((pl.tokens || []).includes(sym)) pools.add(a.toLowerCase());
 
   // Allocation (all on-chain). staked = UFO actually held by the staking contract (0 if none).
   const burned = await balanceOf(cfg.address, BURN);
