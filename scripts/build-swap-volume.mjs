@@ -485,8 +485,41 @@ async function main() {
       measuredHours: [...mHours.values()].sort((a, b) => a[0] - b[0]).map(r => [r[0], ...r.slice(1).map(x => Number(x.toPrecision(6)))]),   // Audit V: [hourTs, humanUsd, botUsd (each tx once), humanFeeUsd, botFeeUsd, transferFeeUsd]
       periods: per };
   }
+  /* Audit V v15 / v16 (2026-10-25): where PTGC's burns come from. Every Transfer → 0x…0369 is in data/ptgc-burns-<year>-h<n>.json
+     (block, time, from, amount — no tx hash). Per block, the non-staking burn rows are split, in this order:
+       fee        — the 0.5 % burn legs of fee-paying transfers: this builder's fee legs (gross × 0.005, by block)
+       ufoBuyback — the PTGC UFO's swapback buys and burns: the principal of each tx in data/ufo-ptgc-burns-cache.json (its largest row;
+                    the smaller rows are that tx's own fee legs, already under `fee` — v16: counted once)
+       other      — what is left: wallets / the DAO sending PTGC to the burn address themselves
+     and stakeClaim = rows FROM the staking contract (its claim / unstake burns). Stakers' 1 % fee never burns, so these never overlap
+     the Stakers bucket. Windows: 24h / 7d / 30d / 90d from now; a window is `complete` only when the fee legs reach back that far. */
+  const burnSources = (() => {
+    try {
+      const files = fs.readdirSync('data').filter(f => /^ptgc-burns-\d{4}-h[12]\.json$/.test(f)).sort().slice(-2);
+      const rows = files.flatMap(f => (readJson('data/' + f, {}).burns || [])).filter(r => r && r.t >= now - 90 * 86400000 && Number.isFinite(r.b));
+      if (!rows.length) return null;
+      const feeByBlock = new Map(); for (const r of (cache.fees || [])) if (r[3] === 0) feeByBlock.set(r[1], (feeByBlock.get(r[1]) || 0) + r[4] * 0.005);
+      // every PTGC burn inside a UFO swapback tx, both contracts (block + tx): data/ufo-ptgc-burns-cache.json, written earlier in this lane
+      const ubRows = (readJson('data/ufo-ptgc-burns-cache.json', {})._ptgcByUFOCache || []).filter(r => r && r.t >= now - 90 * 86400000 && Number.isFinite(r.b));
+      const byTx = new Map(); for (const r of ubRows) { const g = byTx.get(r.tx) || byTx.set(r.tx, { b: r.b, a: 0 }).get(r.tx); g.a = Math.max(g.a, r.a || 0); }
+      const ufoByBlock = new Map(); for (const g of byTx.values()) ufoByBlock.set(g.b, (ufoByBlock.get(g.b) || 0) + g.a);
+      const byBlock = new Map(); for (const r of rows) { const g = byBlock.get(r.b) || byBlock.set(r.b, { t: r.t, stake: 0, rest: 0 }).get(r.b); if (lc(r.f) === PTGC_STAKING) g.stake += r.a; else g.rest += r.a; }
+      const tagged = [];
+      for (const [b, g] of byBlock) { let left = g.rest; const fee = Math.min(left, feeByBlock.get(b) || 0); left -= fee; const ufo = Math.min(left, ufoByBlock.get(b) || 0); left -= ufo;
+        tagged.push({ t: g.t, fee, ufo, other: left, stake: g.stake }); }
+      const feeSince = (cache.fees || []).reduce((m, r) => r[3] === 0 && r[0] < m ? r[0] : m, Infinity);
+      const o = {};
+      for (const [p, days] of Object.entries(periods)) { const since = now - days * 86400000, w = { fee: 0, stakeClaim: 0, ufoBuyback: 0, other: 0 };
+        for (const x of tagged) if (x.t >= since) { w.fee += x.fee; w.stakeClaim += x.stake; w.ufoBuyback += x.ufo; w.other += x.other; }
+        for (const k of Object.keys(w)) w[k] = Number(w[k].toPrecision(7));
+        o[p] = { ...w, total: Number((w.fee + w.stakeClaim + w.ufoBuyback + w.other).toPrecision(7)), complete: isFinite(feeSince) && feeSince <= since + 6 * HOUR }; }
+      return { PTGC: o, unit: 'tokens', note: 'Audit V v15: PTGC burns by source (fee legs / staking-contract claims / UFO swapback buybacks / other)' };
+    } catch (e) { console.warn('burn sources skipped:', e.message); return null; }
+  })();
+  if (burnSources) for (const p of Object.keys(periods)) { const x = burnSources.PTGC[p]; console.log(`  PTGC burns ${p}: fee ${Math.round(x.fee).toLocaleString()} · stake ${Math.round(x.stakeClaim).toLocaleString()} · UFO ${Math.round(x.ufoBuyback).toLocaleString()} · other ${Math.round(x.other).toLocaleString()}${x.complete ? '' : ' (fee history still filling in)'}`); }
   const out = {
     schema: SCHEMA, generatedAt: new Date(now).toISOString(),
+    burnSources,   // Audit V v15 / v16
     method: 'Swap events of every PTGC / UFO pool. Bot: a round trip (buys the token in one pool and sells it in another inside one transaction), or a sender that is not a known router / aggregator (named on PulseScan, or delivering to many different wallets). USD = token-side amount × hourly close (charts-intraday.json); direction = the token leaving the pool is a buy; wallets = tx.from / the buy recipient of the human trades',
     cursor: cache.cursor, since: new Date(Math.max(keepFrom, all.length ? all[0].ts : keepFrom)).toISOString(),
     routers: { ...ROUTERS, ...Object.fromEntries(Object.entries(cache.senders).filter(([, v]) => v.kind === 'human' && v.label).map(([a, v]) => [a, v.label])) },
