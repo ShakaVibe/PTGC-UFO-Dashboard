@@ -4,6 +4,19 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## AUDIT V (2026-10-25) — the per-transfer fee model — `sessions/2026-10-25-audit5.md`, roadmap phase "AUDIT V" v1–v37
+
+PTGC (5 %) and UFO (~6 %) fees are charged per TRANSFER. Arb bots route pool → pool: one loop = 1 transfer = 1 fee but 2 swaps
+(a "buy" + a "sell"); a PulseX smart-router split buy pays the fee TWICE (pools → router → buyer). Measured on chain over 90 d
+(`tools/audit5-measure-fees.py`): the PTGC Value Generated headline is NOT overstated — it is 17–33 % LOW on 7D/30D/90D (24H right
+by luck); the Humans vs Bots split IS overstated for bots ~2× (PTGC bots' share of fees real 10–14 % vs 22–30 % shown; UFO 30d
+volume share 60 % shown vs 44 % counted once — people are the majority); the TXNS tile reads as selling while people net bought
+(no quote-side flip, loops counted in two pools); the 10 Yr calculator counts burns / LP as buying. `0xc71f…` = the staking
+contract (it also burns part of claims); `0xda9aba4e…` = PulseXSwapRouter (human). Order: Phase A page-only fixes (v1–v11,
+mock-ups for v1 / v2 / v7) → Phase B one builder change in build-swap-volume (v12 fee stream + v13 loop-once / tx counts + v14
+UFO swapbacks as protocol) + burn sources (v15–v16) → Phase C switch the surfaces (v20–v28) → D calculators / portfolio → E
+explainer (v33, mock-up first). League History go-live does not depend on any of it.
+
 ## START HERE (2026-10-24 final wrap) — everything PUSHED (`036ffc3b`), working tree clean
 
 **PLAN FOR THE NEXT SESSION (Shaka, 2026-10-24 night): "any last little bit of polishing tomorrow, and look to make it live
