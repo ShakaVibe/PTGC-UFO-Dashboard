@@ -10735,6 +10735,7 @@
       const vol24h=data?.vol||0,vol7d=volumeByPeriod.vol7d||0;
       const volChg=(vol24h>0&&vol7d>0)?((vol24h-vol7d/7)/(vol7d/7))*100:null;
       const txc=txnChange24h!==null?txnChange24h:(burnHistoryCache?.[token]?.changes?.txns!==undefined?burnHistoryCache[token].changes.txns:null);
+      const ppl=vsPeople24h(token);   // Audit V v2
       const holdersNow=holdersByPeriod?.current??holders;
       const val=(node)=>loading?<span className="h2-sk" style={{left:'calc(24*var(--u))',top:'calc(66*var(--u))',width:'55%',height:'calc(46*var(--u))'}}></span>:node;
       const T=(key,label,node,chg,extra={})=>(
@@ -10758,7 +10759,8 @@
             {badge:<><button type="button" onClick={openHolders} aria-label="Holders by period" className="tap-h"><H2Info/></button>{openNewHolders&&<button type="button" onClick={openNewHolders} aria-label="Holders details — who joined and who left" title="Holders Details" className="tap-h"><span className="h2-hd" style={{"--ic":`url(logos/holders/nh-ic-new.webp?v=${NH_ART_V})`}} aria-hidden="true"></span></button>}</>})}
           {T('lp',`${token} IN LP`,tokensInLPKnown?fmtAbbr(tokensInLP):'—',null,{badge:<span className="h2-pct">{tokensInLPKnown?tokensInLPPct+'%':'—'}</span>})}
           {T('tx','TXNS 24H',txnsKnown?<>{(data?.buys||0)+(data?.sells||0)}<small><span className="b"><BsN k="b" n={data?.buys||0}/></span><span className="sl"> / </span><span className="s"><BsN k="s" n={data?.sells||0}/></span></small></>:<span title="24h transaction counts unavailable — DexScreener did not answer."><DashWhy why="The 24h transaction counts are unavailable — DexScreener did not answer."/></span>,
-            txc!==null?{cls:txc>=0?'':'dn',node:`${txc>=0?'↑':'↓'} ${Math.abs(txc).toFixed(1)}%`}:null,{full:true})}
+            ppl?{cls:'na',tip:ppl.tip,node:<span style={{color:'rgba(255,255,255,.75)'}}><b style={{color:'#fff'}}>{fmt(ppl.txs)}</b> people {'\u00B7'} <b style={{color:ppl.net>=0?'#39E15A':'#FF5A5A'}}>{ppl.netTxt}</b></span>}
+              :txc!==null?{cls:txc>=0?'':'dn',node:`${txc>=0?'↑':'↓'} ${Math.abs(txc).toFixed(1)}%`}:null,{full:true})}{/* Audit V v2 */}
         </div>);
     };
 
@@ -11279,6 +11281,17 @@
       const m=f&&f.measured&&f.measured.fees;if(!m||!m.complete||!m.pools)return null;
       const known=_vsFile.pools||{};
       return{get:a=>{const k=String(a||'').toLowerCase();if(!known[k])return null;return m.pools[k]?m.pools[k].usd:0;},noPool:m.noPool||null,total:m.total?m.total.usd:null};
+    };
+    /* Audit V v2: the TXNS tile's second line — people's transactions in the last 24h and what they put in net (people's buys − sells,
+       USD), from the hourly chain read. The swap count above it is mostly bots (a loop = a buy + a sell), so the old ↑/↓ % line was
+       bot-driven and the buys/sells split read as heavy selling while people were net buying. null → the tile keeps its old line. */
+    const vsPeople24h=(token)=>{
+      const f=_vsFile&&_vsFile.tokens&&_vsFile.tokens[token]&&_vsFile.tokens[token].periods&&_vsFile.tokens[token].periods['24h'];
+      if(!f||!f.measured||!f.buys||!f.sells)return null;
+      const net=(f.buys.human.usd||0)-(f.sells.human.usd||0),a=Math.abs(net);
+      const tx=(f.measured.human.txs||0).toLocaleString('en-US'),amt='$'+Math.round(a).toLocaleString('en-US');
+      const tip=`${tx} of these transactions were people's; the rest are mostly bots looping between pools. In the last 24 hours people ${net>=0?'bought':'sold'} ${amt} more than they ${net>=0?'sold':'bought'} (read from the chain, hourly).`;
+      return{tip,txs:f.measured.human.txs||0,wallets:f.wallets&&f.wallets.human,net,netTxt:(net>=0?'+':'\u2212')+'$'+(a>=999.5?(a/1000).toFixed(1)+'K':Math.round(a).toLocaleString('en-US'))};
     };
     const VsDot=({token,onOpen})=>(
       <button type="button" onClick={onOpen} aria-label="Volume split (preview)" title="" className="fixed bottom-1 right-1 z-30 w-7 h-7 flex items-center justify-center bg-transparent border-0 p-0">
@@ -15152,7 +15165,7 @@
                     <span className={`text-xl sm:text-2xl lg:text-xl xl:text-[26px] font-medium ${theme.text} tabular-nums`} title={txnsKnown?undefined:'24h transaction counts unavailable — DexScreener did not answer.'}>{txnsKnown?(data?.buys||0)+(data?.sells||0):<DashWhy why="The 24h transaction counts are unavailable — DexScreener did not answer."/>}</span>
                     {txnsKnown&&<span className="text-xs sm:text-sm tabular-nums"><span className="text-emerald-400"><BsN k="b" n={data?.buys||0}/></span><span className="text-white/30 mx-0.5">/</span><span className="text-rose-400"><BsN k="s" n={data?.sells||0}/></span></span>}
                   </div>
-                  {txnChange24h!==null?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${txnChange24h>=0?'text-emerald-400':'text-rose-400'} truncate`}>{txnChange24h>=0?'\u2191':'\u2193'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${tc>=0?'text-emerald-400':'text-rose-400'} truncate`}>{tc>=0?'\u2191':'\u2193'} {Math.abs(tc).toFixed(1)}%</div>:<div className="hidden lg:block h-4 mt-2"></div>})()}
+                  {(()=>{const ppl=vsPeople24h(token);return ppl?<div className="text-xs sm:text-sm font-medium lg:mt-2 text-white/75 truncate" title={ppl.tip}><b className="text-white">{fmt(ppl.txs)}</b> people {'\u00B7'} <b className={ppl.net>=0?'text-emerald-400':'text-rose-400'}>{ppl.netTxt}</b></div>:null;})()||(txnChange24h!==null?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${txnChange24h>=0?'text-emerald-400':'text-rose-400'} truncate`}>{txnChange24h>=0?'\u2191':'\u2193'} {Math.abs(txnChange24h).toFixed(1)}%</div>:(()=>{const tc=burnHistoryCache?.[token]?.changes?.txns;return tc!==undefined?<div className={`text-xs sm:text-sm font-medium lg:mt-2 ${tc>=0?'text-emerald-400':'text-rose-400'} truncate`}>{tc>=0?'\u2191':'\u2193'} {Math.abs(tc).toFixed(1)}%</div>:<div className="hidden lg:block h-4 mt-2"></div>})())}
                 </div>
 
               </div>
