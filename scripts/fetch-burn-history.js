@@ -1140,10 +1140,21 @@ async function main() {
     const newHolderSnapshot = { timestamp: now.toISOString() };
     if (ptgcCount != null) newHolderSnapshot.PTGC = ptgcCount;
     if (ufoCount  != null) newHolderSnapshot.UFO  = ufoCount;
+    /* Audit V v17 (2026-10-25): PulseScan's holder count is every ADDRESS (pools, ~1,000 contracts, the burn address). The people
+       count — data/holder-ranks.json, its own lane, every 2 h — rides along when it is fresh (≤ 3 h), so the history grows a people
+       series from today: { …, people: { PTGC, UFO } }. The site shows people and estimates earlier days from the address count. */
+    try {
+      const hr = JSON.parse(fs.readFileSync(path.join(dataDir, 'holder-ranks.json'), 'utf8'));
+      const people = {};
+      for (const tk of ['PTGC', 'UFO']) { const e = hr && hr.tokens && hr.tokens[tk]; const at = e && Date.parse(e.readAt);
+        if (e && Number.isFinite(e.holders) && e.holders > 0 && isFinite(at) && now.getTime() - at < 3 * 3600 * 1000) people[tk] = e.holders; }
+      if (Object.keys(people).length) newHolderSnapshot.people = people;
+    } catch (e) { /* no people count this run — the address counts still go in */ }
 
     if (existingTodayIndex >= 0) {
       // Merge, so a carried-forward value never clobbers a good one already recorded today.
-      holderHistory.snapshots[existingTodayIndex] = { ...holderHistory.snapshots[existingTodayIndex], ...newHolderSnapshot };
+      const prevSnap = holderHistory.snapshots[existingTodayIndex];
+      holderHistory.snapshots[existingTodayIndex] = { ...prevSnap, ...newHolderSnapshot, ...((prevSnap.people || newHolderSnapshot.people) ? { people: { ...(prevSnap.people || {}), ...(newHolderSnapshot.people || {}) } } : {}) };
       console.log(`  Updated existing snapshot for ${todayDate}`);
     } else {
       holderHistory.snapshots.push(newHolderSnapshot);
