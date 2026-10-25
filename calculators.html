@@ -5,6 +5,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The Grays Dashboard — Calculators</title>
+  <meta name="description" content="Price, growth, rewards and new-capital calculators for PTGC &amp; UFO on PulseChain — what-if scenarios built on live on-chain data.">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://ptgc-ufo.com/calculators.html">
+  <meta property="og:title" content="The Grays Dashboard — Calculators">
+  <meta property="og:description" content="Price, growth, rewards and new-capital calculators for PTGC &amp; UFO on PulseChain — what-if scenarios built on live on-chain data.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="The Grays Dashboard">
+  <meta property="og:url" content="https://ptgc-ufo.com/calculators.html">
+  <meta property="og:image" content="https://ptgc-ufo.com/share-preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="The Grays Dashboard — Calculators">
+  <meta name="twitter:description" content="Price, growth, rewards and new-capital calculators for PTGC &amp; UFO on PulseChain — what-if scenarios built on live on-chain data.">
+  <meta name="twitter:image" content="https://ptgc-ufo.com/share-preview.png">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">   <!-- Audit IV e38: real files (iOS ignores a data: URI) -->
   <!-- CDN scripts pinned to exact versions with SRI hashes, same as index.html (roadmap a13, 2026-09-16).
@@ -13,7 +28,7 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="tw.css?v=8">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
+  <link rel="stylesheet" href="tw.css?v=9">   <!-- c13 (Audit III, 2026-10-07): the built Tailwind CSS (tools/harness: npm run css) in place of the play CDN -->
   <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
   <script defer src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js" integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj" crossorigin="anonymous"></script>
@@ -1565,20 +1580,27 @@
       }}>{children}</button>
     );
 
-    const GP_NumInput = ({ glowColor, value, onChange, suffix, prefix, step, min }) => (
+    const GP_NumInput = ({ glowColor, value, onChange, suffix, prefix, step, min, label }) => {
+      // a56: keep a text draft so the box can be cleared while typing; clamp to min (no negatives) and restore on blur
+      const [draft, setDraft] = React.useState(String(value));
+      React.useEffect(() => { if (parseFloat(draft) !== value) setDraft(String(value)); }, [value]);
+      const lo = min != null ? parseFloat(min) : -Infinity;
+      return (
       <div className="relative">
         {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{prefix}</span>}
-        <input type="number" value={value} step={step} min={min}
-          onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
+        <input type="number" inputMode="decimal" aria-label={label} value={draft} step={step} min={min}
+          onChange={e => { const t = e.target.value; setDraft(t); const v = parseFloat(t); if (!isNaN(v) && v >= lo) onChange(v); }}
+          onBlur={() => { const v = parseFloat(draft); const ok = isNaN(v) ? value : Math.max(lo, v); setDraft(String(ok)); if (ok !== value) onChange(ok); }}
           className={`w-full ${prefix ? 'pl-7' : 'pl-3'} ${suffix ? 'pr-8' : 'pr-3'} py-2.5 rounded-lg bg-black/50 text-white text-base font-bold font-mono focus:outline-none focus-visible:outline-white/60 transition`}
           style={{ border: `1px solid ${glowColor}0.25)` }} />
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">{suffix}</span>}
       </div>
-    );
+      );
+    };
 
-    const GP_Slider = ({ glowColor, isGold, value, onChange, min, max, step, suffix }) => (
+    const GP_Slider = ({ glowColor, isGold, value, onChange, min, max, step, suffix, label }) => (
       <div className="flex items-center gap-3">
-        <input type="range" min={min} max={max} step={step} value={value}
+        <input type="range" aria-label={label} min={min} max={max} step={step} value={value}
           onChange={e => onChange(parseFloat(e.target.value))}
           className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
           style={{ background: `linear-gradient(to right, ${glowColor}0.6) 0%, ${glowColor}0.6) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) ${((value-min)/(max-min))*100}%, rgba(255,255,255,0.08) 100%)`, accentColor: isGold ? '#D4AF37' : '#7CFC00' }} />
@@ -2053,8 +2075,8 @@
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Year 0 LP Multiplier</label>
-                  <div className="mb-2"><GP_NumInput glowColor={glowColor} value={lpYear0} onChange={setLpYear0} suffix="x" step="0.5" min="0.1" /></div>
-                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={lpYear0} onChange={setLpYear0} min={0} max={100} step={1} suffix="x" /></div>
+                  <div className="mb-2"><GP_NumInput glowColor={glowColor} value={lpYear0} label="LP multiple, year 0" onChange={setLpYear0} suffix="x" step="0.5" min="0.1" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={lpYear0} label="LP multiple, year 0 slider" onChange={setLpYear0} min={0} max={100} step={1} suffix="x" /></div>
                   <div className="flex flex-wrap gap-1.5">
                     {[2,5,10,25,50,100].map(v => <GP_Pill glowColor={glowColor} key={v} active={lpYear0===v} onClick={()=>setLpYear0(v)}>{v}x</GP_Pill>)}
                   </div>
@@ -2062,8 +2084,8 @@
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Ongoing Annual LP Growth (after Y0)</label>
-                  <div className="mb-2"><GP_NumInput glowColor={glowColor} value={lpAnnual} onChange={setLpAnnual} suffix="%" step="5" min="0" /></div>
-                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={lpAnnual} onChange={setLpAnnual} min={0} max={300} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_NumInput glowColor={glowColor} value={lpAnnual} label="LP growth per year" onChange={setLpAnnual} suffix="%" step="5" min="0" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={lpAnnual} label="LP growth per year slider" onChange={setLpAnnual} min={0} max={300} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
                     {[0,25,50,100,200,300].map(v => <GP_Pill glowColor={glowColor} key={v} active={lpAnnual===v} onClick={()=>setLpAnnual(v)}>{v}%</GP_Pill>)}
                   </div>
@@ -2082,17 +2104,17 @@
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">New Users in Year 0</label>
-                  <GP_NumInput glowColor={glowColor} value={usersYear0} onChange={setUsersYear0} step="100" min="0" />
+                  <GP_NumInput glowColor={glowColor} value={usersYear0} label="Users, year 0" onChange={setUsersYear0} step="100" min="0" />
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Avg Price Injection per User</label>
-                  <GP_NumInput glowColor={glowColor} value={injection} onChange={setInjection} prefix="$" step="500" min="0" />
+                  <GP_NumInput glowColor={glowColor} value={injection} label="Capital injection" onChange={setInjection} prefix="$" step="500" min="0" />
                 </div>
 
                 <div className="mb-5">
                   <label className="text-white/70 text-sm uppercase tracking-wide font-bold block mb-2">Annual User Growth %</label>
-                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={userGrowth} onChange={setUserGrowth} min={0} max={400} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={userGrowth} label="User growth per year" onChange={setUserGrowth} min={0} max={400} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
                     {[{v:0,l:'0% Flat'},{v:25,l:'25%'},{v:50,l:'50%'},{v:100,l:'100%'},{v:200,l:'200%'},{v:300,l:'300%'},{v:400,l:'400%'}].map(o => <GP_Pill glowColor={glowColor} key={o.v} active={userGrowth===o.v} onClick={()=>setUserGrowth(o.v)}>{o.l}</GP_Pill>)}
                   </div>
@@ -2132,7 +2154,7 @@
                       </div>
                     )}
                   </div>
-                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={sellPct} onChange={setSellPct} min={0} max={150} step={1} suffix="%" /></div>
+                  <div className="mb-2"><GP_Slider glowColor={glowColor} isGold={isGold} value={sellPct} label="Sell percent" onChange={setSellPct} min={0} max={150} step={1} suffix="%" /></div>
                   <div className="flex flex-wrap gap-1.5">
                     {[25,50,75,95,125,150].map(v => <GP_Pill glowColor={glowColor} key={v} active={sellPct===v} onClick={()=>setSellPct(v)}>{v}%</GP_Pill>)}
                   </div>
@@ -2157,7 +2179,7 @@
                             <span className="text-white/55 text-sm text-right" style={{width:'70px'}}>{v}%</span>
                           ) : (
                             <div className="relative" style={{width:'70px'}}>
-                              <input
+                              <input aria-label={`${row.label} %`}
                                 type="number" min="0" max="100" step="1"
                                 value={v}
                                 onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) updateAllocation(row.id, n); }}
@@ -3306,7 +3328,8 @@ if(p>0)setRwdPtgcPrice(p);
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                       <div className="rounded-xl p-4" style={{background:'transparent',border:`1px solid ${glowColor}0.4)`}}>
                         <div className={`text-base uppercase tracking-wide mb-0.5 font-bold ${theme.text}`}>{cfg.name} at {selectedPairSymbol} Target</div>
-                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and <span title={`${cfg.name} doesn't automatically follow ${selectedPairSymbol} — this assumes ${cfg.name}'s own buyers keep the ${cfg.name}/${selectedPairSymbol} ratio steady across all its pools.`}>ratio holds</span></div>
+                        <div className="text-white/40 text-sm mb-2">If {selectedPairSymbol} reaches <span className="text-white/60 font-semibold">${targetPaired}</span> and ratio holds</div>
+                        <div className="text-white/30 text-xs mb-2">{cfg.name} doesn{'\u2019'}t automatically follow {selectedPairSymbol}: this assumes {cfg.name}{'\u2019'}s own buyers keep the {cfg.name}/{selectedPairSymbol} ratio steady across all its pools.</div>{/* a47: was hover-only */}
                         <div className={`text-4xl font-bold ${theme.text} mb-2`}><Price p={basePrice} c={theme.text}/></div>
                         <div className="flex items-center gap-3 text-base">
                           <span className="text-green-400 font-bold">{fmtX(basePotential.toFixed(1))} Potential</span>
@@ -4724,7 +4747,7 @@ if(p>0)setRwdPtgcPrice(p);
                           <div className="relative h-2.5 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.1)'}}>
                             <div className="absolute right-0 top-0 h-full rounded-full" style={{width:`${splitPct}%`,background:tSolid,opacity:0.6}}></div>
                           </div>
-                          <input type="range" min="0" max="100" step="10" value={splitPct} onChange={e=>setSplitPct(parseInt(e.target.value))} className="w-full cursor-pointer" style={{accentColor:tSolid,opacity:0.5,height:'14px',marginTop:'-2px'}}/>
+                          <input type="range" aria-label="Split" min="0" max="100" step="10" value={splitPct} onChange={e=>setSplitPct(parseInt(e.target.value))} className="w-full cursor-pointer" style={{accentColor:tSolid,opacity:0.5,height:'14px',marginTop:'-2px'}}/>
                         </div>
                         ):(<div className="h-[60px]"></div>)}
                       </div>
@@ -4841,7 +4864,7 @@ if(p>0)setRwdPtgcPrice(p);
                       <div className="absolute left-0 top-0 h-full" style={{width:`${freshSplitPct}%`,background:'linear-gradient(90deg,#D4AF37,#b8a83d)'}}></div>
                       <div className="absolute right-0 top-0 h-full" style={{width:`${100-freshSplitPct}%`,background:'linear-gradient(90deg,#5cbf00,#7CFC00)'}}></div>
                     </div>
-                    <input type="range" min="0" max="100" step="5" value={freshSplitPct} onChange={e=>setFreshSplitPct(parseInt(e.target.value))} className="w-full mt-0.5 cursor-pointer" style={{accentColor:'white',opacity:0.4,height:'14px'}}/>
+                    <input type="range" aria-label="PTGC / UFO split" min="0" max="100" step="5" value={freshSplitPct} onChange={e=>setFreshSplitPct(parseInt(e.target.value))} className="w-full mt-0.5 cursor-pointer" style={{accentColor:'white',opacity:0.4,height:'14px'}}/>
                     <div className="flex justify-center gap-2">
                       {[{l:'25/75',v:25},{l:'50/50',v:50},{l:'75/25',v:75}].map(p=>(
                         <button key={p.v} onClick={()=>setFreshSplitPct(p.v)} className={`px-3 py-1 rounded text-xs font-bold transition ${freshSplitPct===p.v?'bg-white/15 text-white':'bg-white/5 text-white/30 hover:text-white/50'}`}>{p.l}</button>
