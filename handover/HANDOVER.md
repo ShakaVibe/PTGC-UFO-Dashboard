@@ -4,7 +4,11 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-25 final wrap) — everything PUSHED (`47a6bdd`), live-checked, working tree clean
+## START HERE (2026-10-25 final wrap) — everything PUSHED (last code change `d6f7783`), live-checked, working tree clean
+
+**Last fix of the day (`d6f7783`):** the HISTORY tag on the Token Allocation creature strip is clickable — it had
+`pointer-events:none` and sits 12 px above the button's box, so taps fell through (Shaka: "it looks like a button, so needs to act
+like it"). Fixed in index.html and tools/league-history/lh.css together (splice still reports 0 edits); probes lh-go-hit.js / lh-open.js.
 
 **Audit V is finished and live.** All 37 items (v1–v37) are done or closed on Shaka's word; the roadmap artifact has every one
 ticked with a note. League History went LIVE the same day (the Token Allocation creature strip opens it; the dot is gone). The
@@ -2321,6 +2325,7 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
 
 ## Next up (in order)
 
+-60. **DONE — pushed `d6f7783`.** HISTORY tag on the creature strip clickable.
 -59. **DONE — pushed `47a6bdd`, live-checked.** 2026-10-25: Audit V v1–v37 all done or closed, League History LIVE, polish a44 / a46 / a47 / a49 / a56 / a58 / c38. Parked: c10 (trade iframe sandbox). See START HERE.
 
 -58. **DONE — pushed `036ffc3b`** (small LEAGUES + SHARE pills) — the last change of 2026-10-24. Next: START HERE (polish → go live).
