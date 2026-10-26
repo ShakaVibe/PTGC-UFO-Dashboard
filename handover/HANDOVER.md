@@ -4,6 +4,19 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## 2026-10-26 (evening) — Affiliates: podium $ bigger (LIVE `66e91d603`) + the Leaderboard window v2 (BUILT, `tools/af-leaderboard-v2.py`)
+
+- Podium cards: the USD figure 13 → 19 px desktop, 11 → 14 px phone (under the PTGC amount 24 / 16) — Shaka: "much bigger … not as
+  big as the ptgc qty". Live-checked.
+- **Leaderboard window v2** (Shaka: "more in line with all the cosmetic changes … make it exciting" → `design/affiliates-leaderboard/
+  mock-v1.html` → "do it"): `AfLeaderboard` (module scope, replaces `medal` + `LeaderboardCard`), CSS `.alb-*` after the podium rules.
+  ONE board at a time — period switch ALL-TIME (gold) / `<Month 'YY ▾>` (green; a transparent native select over the pill, so
+  clicking it both picks the month and switches to it; `leaderboardMonth` state kept) × MOST PTGC BOUGHT / MOST REFERRALS. Header =
+  the hero's sky (`rk-plate-nf.webp`, hue-rotated green for a month) + the corona coin + the period's totals (all-time = the page's
+  `stats`, same as the ALL-TIME band; a month = its entries). Top 3 on the medals (`t1-*.webp`) with CHAMPION tag, ranks 4–10 "the
+  chase" with a bar against #4 and the creature art × count (`getCreatureForPtgc` → `SeaIcon`). **Top 10 now (was four top-5
+  boards).** A name opens the referrer, as before. Harness: `AFFIL_DATA=real` + `probes/alb-state.js`; 1280 + 390, no overflow.
+
 ## START HERE (2026-10-26 final wrap) — everything PUSHED (last code change `6fd143f34`), live-checked, working tree clean
 
 **Today, all LIVE (checked in the browser pane on Shaka's Mac):**
