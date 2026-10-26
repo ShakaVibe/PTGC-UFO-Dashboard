@@ -17,7 +17,7 @@ Update it at the end of every session.
   chase" with a bar against #4 and the creature art × count (`getCreatureForPtgc` → `SeaIcon`). **Top 10 now (was four top-5
   boards).** A name opens the referrer, as before. Harness: `AFFIL_DATA=real` + `probes/alb-state.js`; 1280 + 390, no overflow.
 
-## START HERE (2026-10-26 final wrap) — everything PUSHED (last code change `6fd143f34`), live-checked, working tree clean
+## START HERE (2026-10-26 evening wrap) — everything PUSHED (last code change `f78da449d`), live-checked, working tree clean
 
 **Today, all LIVE (checked in the browser pane on Shaka's Mac):**
 1. **Value Generated opens on 30D** on both dashboards (`335bba9c5`).
@@ -26,10 +26,13 @@ Update it at the end of every session.
    (`6fd143f34`, `tools/holders-single-v2.py`, run in that order): Atlantis art, lit coins, all eight leagues with his sea art,
    one league helper (`hc2RanksFile` + `hc2Leagues`). Mock-ups `design/holders-card/`. Details in the three entries below and
    `sessions/2026-10-26.md`.
+4. **Affiliates podium: bigger $ figure** (`66e91d603`).
+5. **Affiliates Leaderboard window v2** (`f78da449d`, `tools/af-leaderboard-v2.py`, mock-up `design/affiliates-leaderboard/`): one
+   board at a time (All-time / month × PTGC bought / referrals), medal podium + ranks 4–10, top 10. Entry above.
 
 **Shaka's standing calls from today (do not re-propose):** no 🔥 / "burn wallet" marker on the Holders cards (the wallet is still
 counted in its league, like the dashboard strip) · Holders card = mock A (combined: 4 × 2 grid Wide, one row Tall; single: one row
-Wide, 4 × 2 Tall).
+Wide, 4 × 2 Tall). · Leaderboard = one board at a time with switches, top 10 (approved mock-up).
 
 **Next session: nothing owed** — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
 other Socials cards still on the 2026-09 nebula look (Burn, DAO Treasury, DAO Buys, Value Generated, Token Allocation …) could get
