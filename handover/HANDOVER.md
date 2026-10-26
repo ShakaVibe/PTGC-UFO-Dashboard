@@ -4,6 +4,14 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## 2026-10-26 — two small fixes, BUILT (index.html only; compile ok, harness checked PTGC + UFO)
+
+- **Value Generated opens on 30D** on both dashboards (Shaka). `valueGenPeriod` starts at '30d' and the token-switch reset sets
+  '30d' too. The share card follows (it reads the same state). The "new token → longest window with data" fallback is unchanged.
+- **Socials → Combined → Holders crashed** ("today24 is not defined", ErrorBoundary). `HoldersSocialModal` took `today24` (c5) but
+  `HoldersSocialCard` never declared or received it. Now the card takes it as a prop and the modal passes it. Reproduced on HEAD in
+  the harness, gone after the fix.
+
 ## START HERE (2026-10-25 final wrap) — everything PUSHED (last code change `d6f7783`), live-checked, working tree clean
 
 **Last fix of the day (`d6f7783`):** the HISTORY tag on the Token Allocation creature strip is clickable — it had

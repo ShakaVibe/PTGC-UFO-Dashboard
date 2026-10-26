@@ -9563,7 +9563,7 @@
         </div>
       );
     };
-    const HoldersSocialCard=({data,shape='wide'})=>{
+    const HoldersSocialCard=({data,shape='wide',today24})=>{   // c5 prop (missing → ReferenceError, fixed 2026-10-26)
       const z=HOLD_SHAPES[shape]||HOLD_SHAPES.wide,tall=shape==='tall';
       const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
       const P=data?data.PTGC:null,U=data?data.UFO:null;
@@ -9613,7 +9613,7 @@
       return(
         <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label="PTGC + UFO holders share card" filename={`ptgc-ufo-holders-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
           <div style={{position:'relative',width:z.W,height:z.H}}>
-            <HoldersSocialCard data={data} shape={shape}/>
+            <HoldersSocialCard data={data} shape={shape} today24={today24}/>
             <CardLoadState loading={loading} error={error&&!data} what="holder data" onRetry={onRetry} radius="0" font="'Rajdhani',sans-serif"/>
           </div>
         </ShareCardModal>
@@ -13737,7 +13737,7 @@
          dashboard re-renders on every 5-minute refresh, so the label follows the clock. */
       const[burnPeriodsSource,setBurnPeriodsSource]=useState(null); // {at} = when UFO's snapshot windows were generated
       const[live24hBurn,setLive24hBurn]=useState(null); // Live blockchain 24H burn
-      const[valueGenPeriod,setValueGenPeriod]=useState('7d');
+      const[valueGenPeriod,setValueGenPeriod]=useState('30d');   // Shaka 2026-10-26: opens on 30D
       // MIGRATION: UFO's Value Generated is always measured on-chain (see fetchRealizedFees).
       // There is no estimate mode for UFO — an estimate is what produced the bad numbers.
       const[realizedFees,setRealizedFees]=useState(null);
@@ -14345,7 +14345,7 @@
         setBurnPeriods(undefined);
         setBurnPeriodsSource(null);
         setLive24hBurn(null);
-        setValueGenPeriod('7d');
+        setValueGenPeriod('30d');
         setValueGenShowTokens(false);
         setBurnShowTokens(false);
         setShowRHCores(false);
