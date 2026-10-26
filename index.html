@@ -9401,14 +9401,13 @@
      * today-vs-average % (holdersRate = the modal's calcRatePct) — plus the tier counts. Every missing read is
      * "—" / "Gathering…" (gotcha 20); the seeded {0,0,0,0,0} tier object reads as "not loaded", never five zeros. */
     const HOLD_ALIENS='logos/combined/14_Two_Color__Alien_2_head.png';   // the two-colour alien cropped to the head (the 2000² original is ¾ margin)
-    const HOLD_TIERS=[['Poseidon','\u{1F531}'],['Whale','\u{1F40B}'],['Shark','\u{1F988}'],['Dolphin','\u{1F42C}'],['SquidAndBelow','\u{1F991}']];
     const HOLD_SHAPES={   // hc2:1 — Holders card v2 (2026-10-26, mock A)
       wide:{W:1200,H:675,pad:44,top:34,bottom:30,cu:.4,nm:32,big:58,lb:12,chip:15,idg:16,pad2:20,g:10,sh:64,sf:10,pp:7,pk:11,pv:22,pa:12,lh:12,gg:7,gi:8,gpad:'5px 8px',ia:38,gc:21,gt:10.5,title:56,kick:15},
       tall:{W:1080,H:1350,pad:56,top:42,bottom:42,cu:.44,nm:42,big:70,lb:15,chip:19,idg:22,pad2:22,g:10,sh:50,sf:12,pp:8,pk:13,pv:24,pa:13,lh:15,gg:10,r8p:'10px 6px 8px',r8i:60,r8c:25,gt:13,title:66,kick:15}
     };
-    const HOLD1_SHAPES={
-      wide:{W:1200,H:675,pad:48,top:38,bottom:34,title:40,logo:180,big:100,lbl:17,chip:18,chartH:132,gap:12,tp:'12px 14px 12px 18px',tl:14,tv:32,tq:14,em:30,cnt:24,tpad:6,cw:1104},
-      tall:{W:1080,H:1350,pad:56,top:54,bottom:44,title:52,logo:220,big:132,lbl:24,chip:26,chartH:140,gap:16,tp:'18px 22px 18px 26px',tl:20,tv:50,tq:20,em:40,cnt:32,tpad:9,cw:968}
+    const HOLD1_SHAPES={   // hc2s:1 — single Holders card v2 (2026-10-26, design/holders-card/mock-single-v1.html)
+      wide:{W:1200,H:675,pad:44,top:34,bottom:30,kick:14,title:46,cu:.62,big:84,lb:13,chip:16,sh:150,sf:10,pp:8,pk:11,pv:22,pa:12,lh:12,gg:7,r8p:'10px 6px 8px',r8i:50,r8c:21,gt:10.5,g:12,cw:600},
+      tall:{W:1080,H:1350,pad:56,top:46,bottom:42,kick:15,title:60,cu:.82,big:104,lb:16,chip:20,sh:166,sf:13,pp:12,pk:14,pv:30,pa:15,lh:15,gg:12,gi:14,gpad:'12px 14px',ia:64,gc:32,gt:13,g:16}
     };
     const HOLD_THEME={
       PTGC:{cls:'metallic-gold',pill:'linear-gradient(180deg,#FFF8DC,#E8C044 55%,#A67C1E)',pillText:'#2a1d05',glow:'rgba(232,192,68,0.55)',rgb:'232,192,68',hex:'#E8C044',edge:['#FFF8DC','#E8C044','#6B4E0E'],
@@ -9420,19 +9419,6 @@
     const holdSgn=n=>n==null?'—':(n>0?'+':n<0?'':'±')+fmt(n);
     const holdCol=n=>n==null?'rgba(255,255,255,0.45)':n>0?'#4ade80':n<0?'#f87171':'rgba(255,255,255,0.55)';
     const holdArrow=n=>n==null?'':n>0?'▲':n<0?'▼':'•';
-    /* Same maths as HolderAnalyticsModal's calcRatePct: today's change against the period's average gain per day. */
-    const holdersRate=(chg24h,net,days)=>{
-      if(net==null)return{avg:null,pct:null};
-      const avg=net/days;
-      const pct=chg24h==null?null:avg===0?(chg24h>0?100:chg24h<0?-100:0):((chg24h-avg)/Math.abs(avg))*100;
-      return{avg,pct};
-    };
-    /* The seeded / failed tier object is all-zero; a token with holders always has someone in some tier, so that is "unknown". */
-    const holdersTierCounts=tiers=>{
-      if(!tiers)return null;
-      const vals=HOLD_TIERS.map(([k])=>(Number.isFinite(tiers[k])?tiers[k]:null));
-      return vals.every(v=>!v)?null:vals;
-    };
     /* Trend series from the holder-history file (epoch-filtered, gotcha: MIGRATION) over the last `days` days
        + today's count on the end. `from` says how far back the series really reaches (a young token's 90D is shorter). */
     const holdersSeries=(tkn,current,days=30)=>{
@@ -9443,96 +9429,34 @@
       const span=rows.length?Math.round((now-new Date(rows[0].timestamp).getTime())/864e5):0;
       return{pts,from:span>=days-1?`${days} DAYS AGO`:span>=1?`${span}D AGO`:'START'};
     };
-    const HoldersSpark=({pts,from,w,h,rgb,hex,fs})=>{
-      const uid=React.useId().replace(/[^a-zA-Z0-9]/g,'');
-      if(!pts||pts.length<2)return<div style={{width:w,height:h,display:'flex',alignItems:'center',justifyContent:'center',fontSize:fs+3,fontStyle:'italic',color:'rgba(255,255,255,0.4)'}}>{pts&&pts.length===1?'Trend appears as days accumulate':'History unavailable'}</div>;
-      const n=pts.length,min=Math.min(...pts),max=Math.max(...pts),range=(max-min)||1;
-      const padT=14,padB=22,padR=22;
-      const X=i=>i*(w-padR)/(n-1),Y=v=>padT+(1-(v-min)/range)*(h-padT-padB);
-      const P=pts.map((v,i)=>[X(i),Y(v)]);
-      const line=P.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-      const area=`${line} L${P[n-1][0].toFixed(1)} ${(h-padB).toFixed(1)} L${P[0][0].toFixed(1)} ${(h-padB).toFixed(1)} Z`;
-      const last=P[n-1];
-      return(
-        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{display:'block',overflow:'visible'}} aria-hidden="true">
-          <defs>
-            <linearGradient id={`hg${uid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={`rgba(${rgb},0.45)`}/><stop offset="1" stopColor={`rgba(${rgb},0)`}/></linearGradient>
-            <filter id={`hf${uid}`} x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
-          </defs>
-          {[0.25,0.5,0.75].map(f=>{const y=padT+f*(h-padT-padB);return<line key={f} x1="0" x2={w-padR} y1={y} y2={y} stroke="rgba(255,255,255,0.07)" strokeDasharray="3 6"/>;})}
-          <path d={area} fill={`url(#hg${uid})`}/>
-          <path d={line} fill="none" stroke={hex} strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" opacity="0.45" filter={`url(#hf${uid})`}/>
-          <path d={line} fill="none" stroke={hex} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-          <circle cx={last[0]} cy={last[1]} r="9" fill={`rgba(${rgb},0.25)`}/>
-          <circle cx={last[0]} cy={last[1]} r="4.5" fill={hex} stroke="#0b0f12" strokeWidth="2"/>
-          <text x="0" y={h-4} fontFamily="Rajdhani" fontWeight="600" fontSize={fs} fill="rgba(255,255,255,0.45)" letterSpacing="1">{from}</text>
-          <text x={w-padR} y={h-4} textAnchor="end" fontFamily="Rajdhani" fontWeight="600" fontSize={fs} fill="rgba(255,255,255,0.45)" letterSpacing="1">TODAY</text>
-          <text x={w-padR} y={padT-3} textAnchor="end" fontFamily="Rajdhani" fontWeight="700" fontSize={fs} fill="rgba(255,255,255,0.6)">{fmt(max)}</text>
-          <text x={w-padR} y={h-padB-3} textAnchor="end" fontFamily="Rajdhani" fontWeight="700" fontSize={fs} fill="rgba(255,255,255,0.35)">{fmt(min)}</text>
-        </svg>
-      );
-    };
-    const HoldersAliens=({h,glow})=>{
-      const w=Math.round(h*0.87),W=Math.round(h*1.32);
-      return(
-        <div aria-hidden="true" style={{position:'relative',width:W,height:h,flexShrink:0,filter:`drop-shadow(0 0 10px ${glow})`}}>
-          <img src={HOLD_ALIENS} alt="" style={{position:'absolute',left:0,top:0,width:Math.round(w*0.86),height:Math.round(h*0.86),opacity:0.9}}/>
-          <img src={HOLD_ALIENS} alt="" style={{position:'absolute',right:0,bottom:0,width:w,height:h,filter:'drop-shadow(-3px 0 0 #06111a) drop-shadow(-2px -2px 0 #06111a)'}}/>
-        </div>
-      );
-    };
-    const HoldersLogo=({src,size,rgb})=>(
-      <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
-        <div aria-hidden="true" style={{position:'absolute',inset:-Math.round(size*0.2),borderRadius:'50%',background:`radial-gradient(circle, rgba(${rgb},0.42) 0%, rgba(0,0,0,0) 68%)`}}></div>
-        <img src={src} alt="" style={{position:'relative',width:size,height:size,borderRadius:'50%',boxShadow:`0 0 0 3px rgba(${rgb},0.9), 0 0 0 6px rgba(${rgb},0.3), 0 0 46px rgba(${rgb},0.7)`}}/>
-      </div>
-    );
     const HoldersTodayChip=({d,z})=>{
       const c=d==null?'rgba(255,255,255,0.2)':d>0?'rgba(74,222,128,0.45)':d<0?'rgba(248,113,113,0.45)':'rgba(255,255,255,0.2)';
       return<span className="tabular-nums" style={{display:'inline-flex',alignItems:'center',gap:'0.35em',borderRadius:999,fontWeight:700,letterSpacing:'0.04em',whiteSpace:'nowrap',fontSize:z.chip,padding:'0.2em 0.7em 0.15em',background:'rgba(0,0,0,0.55)',border:`1px solid ${c}`,boxShadow:`0 0 16px -4px ${c}`,color:holdCol(d)}}>{d==null?'— today':`${holdArrow(d)} ${holdSgn(d)} today`}</span>;
     };
-    /* The three period tiles + the "today vs daily growth rate" caption. p = {current,d1Ago,d7Ago,d30Ago,d90Ago}. */
-    const HoldersPeriodTiles=({p,z,rgb})=>{
-      const cur=p&&p.current!=null?p.current:null;
-      const chg24h=p&&p.today!==undefined?p.today:(cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null);   // c5: the dashboard's one number when given
-      const rows=[['7D',p?p.d7Ago:null,7],['30D',p?p.d30Ago:null,30],['90D',p?p.d90Ago:null,90]];
-      const tileSt={borderRadius:16,position:'relative',overflow:'hidden',padding:z.tp,background:`linear-gradient(180deg,rgba(${rgb},0.10),rgba(4,7,10,0.92))`,border:`1px solid rgba(${rgb},0.35)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${rgb},0.5)`};
-      return(
-        <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6,padding:'0 2px'}}>
-            <span style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,255,255,0.5)'}}>Today vs daily growth rate</span>
-            <span className="tabular-nums" style={{fontSize:z.tq,color:'rgba(255,255,255,0.45)',fontWeight:600}}>today <b style={{color:holdCol(chg24h)}}>{holdSgn(chg24h)}</b> {'·'} vs avg gained per day</span>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:z.gap}}>
-            {rows.map(([l,then,days])=>{
-              const net=cur!=null&&then!=null?cur-then:null;
-              const r=holdersRate(chg24h,net,days);
-              return(
-                <div key={l} style={tileSt}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
-                    <span style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,255,255,0.6)',lineHeight:1}}>{l}</span>
-                    {net!=null&&<span className="tabular-nums" style={{fontSize:z.tq,color:'rgba(255,255,255,0.5)',fontWeight:600,whiteSpace:'nowrap'}}>{fmt(then)} then</span>}
-                  </div>
-                  {net==null
-                    ?<div style={{fontSize:Math.round(z.tv*0.5),fontWeight:600,color:'rgba(255,255,255,0.4)',fontStyle:'italic',marginTop:Math.round(z.tv*0.28),lineHeight:1.1}}>{cur!=null?'Gathering…':'—'}<br/><span style={{fontSize:z.tq,fontStyle:'normal',color:'rgba(255,255,255,0.3)'}}>{cur!=null?'not enough history yet':'not available'}</span></div>
-                    :<>
-                      <div className="tabular-nums" style={{fontSize:z.tv,fontWeight:700,lineHeight:1.05,marginTop:6,color:holdCol(net),textShadow:'0 2px 10px rgba(0,0,0,0.8)'}}>{holdArrow(net)} {holdSgn(net)}</div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,paddingTop:6,borderTop:'1px solid rgba(255,255,255,0.08)'}}>
-                        <span className="tabular-nums" style={{fontSize:z.tq,fontWeight:600,color:'rgba(255,255,255,0.6)',whiteSpace:'nowrap'}}>{r.avg>=0?'+':''}{r.avg.toFixed(1)}/day avg</span>
-                        <span className="tabular-nums" style={{fontSize:z.tq+2,fontWeight:700,whiteSpace:'nowrap',color:chg24h===0?'rgba(255,255,255,0.45)':holdCol(r.pct)}}>{r.pct==null?'—':chg24h===0?'— quiet today':`${holdArrow(r.pct)} ${Math.abs(r.pct).toFixed(1)}%`}</span>
-                      </div>
-                    </>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    };
     /* ===== Holders card v2 (hc2, 2026-10-26 — Shaka picked mock A, design/holders-card/mock-v1.html) =====
        Combined card only (HoldersSingleCard keeps its own look). Leagues = people from holder-ranks.json + the burn wallet
        (holdersLeagues in the loader); null = unknown → "—". Screenshot-only card: masks / background-clip are fine. */
-    const HC2_FS='hc2-fs';
+    /* The eight league counts for the Holders cards: PEOPLE from data/holder-ranks.json (`b` = every person's balance in whole
+       tokens, <= 48 h old) placed by holdingTier (% of the STARTING supply — the dashboard strip's basis), + 1 for the burn wallet
+       in the league token-allocation.json names (`burnIn`), unmarked (Shaka: no 🔥). Unknown → null → "—". */
+    let _hc2Ranks=null;
+    const hc2RanksFile=()=>{
+      const now=Date.now();
+      if(_hc2Ranks&&now-_hc2Ranks.at<30*60*1000)return _hc2Ranks.p;
+      const p=fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/holder-ranks.json?t='+Math.floor(now/3600000)).then(r=>r.ok?r.json():null).catch(()=>null);
+      _hc2Ranks={at:now,p};p.then(j=>{if(!j)_hc2Ranks=null;});
+      return p;
+    };
+    const hc2Leagues=(ranksFile,tkn,burnInName)=>{
+      const e=ranksFile&&ranksFile.tokens&&ranksFile.tokens[tkn];
+      const at=e&&Date.parse(e.readAt);
+      if(!e||!Array.isArray(e.b)||!e.b.length||!isFinite(at)||Date.now()-at>=48*3600*1000)return null;
+      const counts=BURN_C.map(()=>0);
+      for(const v of e.b){const c=holdingTier(Number(v),tkn);if(c)counts[BURN_C.indexOf(c)]++;}
+      const bi=burnInName?BURN_C.findIndex(c=>c.n===burnInName):-1;
+      if(bi>=0)counts[bi]++;
+      return{counts,people:Number.isFinite(e.holders)?e.holders:e.b.length,burnIn:bi>=0?bi:null};
+    };
     const Hc2Spark=({pts,from,w,h,rgb,hex,fs})=>{
       const uid=React.useId().replace(/[^a-zA-Z0-9]/g,'');
       if(!pts||pts.length<2)return<div style={{width:w,height:h,display:'flex',alignItems:'center',justifyContent:'center',fontSize:fs+5,fontStyle:'italic',color:'rgba(255,255,255,0.4)'}}>{pts&&pts.length===1?'Trend appears as days accumulate':'History unavailable'}</div>;
@@ -9551,7 +9475,7 @@
           <text x={w-p} y={h-2} textAnchor="end" fontFamily="Orbitron" fontWeight="700" fontSize={fs} letterSpacing="2" fill="rgba(255,255,255,0.45)">TODAY {'·'} {fmt(pts[pts.length-1])}</text>
         </svg>);
     };
-    const Hc2Periods=({p,z})=>{
+    const Hc2Periods=({p,z,showThen})=>{
       const cur=p&&p.current!=null?p.current:null;
       return(
         <div className="hc2-per" style={{padding:`${z.pp}px 0`}}>
@@ -9561,19 +9485,19 @@
               <div key={k}>
                 <div className="k" style={{fontSize:z.pk}}>{k}</div>
                 <div className="v tabular-nums" style={{fontSize:z.pv,marginTop:5,color:holdCol(net)}}>{net==null?'—':`${holdArrow(net)} ${holdSgn(net)}`}</div>
-                <div className="a tabular-nums" style={{fontSize:z.pa,marginTop:4}}>{net==null?(cur!=null?'gathering…':'not available'):`${net>=0?'+':''}${(net/days).toFixed(1)}/day`}</div>
+                <div className="a tabular-nums" style={{fontSize:z.pa,marginTop:4}}>{net==null?(cur!=null?'gathering…':'not available'):`${showThen?`${fmt(then)} then · `:''}${net>=0?'+':''}${(net/days).toFixed(1)}/day`}</div>
               </div>);})}
         </div>);
     };
-    /* lg = {counts:[8], people, burnIn:index|null} or null. Wide = 4 x 2 tiles, tall = one row of 8. */
-    const Hc2Leagues=({lg,rgb,z,tall})=>{
+    /* lg = {counts:[8], people, burnIn:index|null} or null. row = one row of 8 (combined Tall, single Wide), else 4 x 2 tiles. */
+    const Hc2Leagues=({lg,rgb,z,row})=>{
       const head=(
         <div className="hc2-lgh" style={{fontSize:z.lh}}>
           <span style={{color:`rgba(${rgb},0.95)`}}>The Leagues</span>
           <span className="tabular-nums" style={{color:'rgba(255,255,255,0.5)'}}>{lg?`${fmt(lg.people)} people`:'people only'}</span>
         </div>);
       const cell=i=>{const c=lg?lg.counts[i]:null;return{c,dim:!c};};
-      if(tall)return(
+      if(row)return(
         <div>{head}
           <div className="hc2-row8" style={{marginTop:z.gg+2,padding:z.r8p}}>
             {LH_TIERS.map(([n,k],i)=>{const{c,dim}=cell(i);return(
@@ -9620,7 +9544,7 @@
           </div>
           <div style={{marginTop:z.g}}><Hc2Spark pts={series.pts} from={series.from} w={inner} h={z.sh} rgb={T.rgb} hex={T.hex} fs={z.sf}/></div>
           <div style={{marginTop:z.g}}><Hc2Periods p={p} z={z}/></div>
-          <div style={{marginTop:z.g+2}}><Hc2Leagues lg={d?d.leagues:null} rgb={T.rgb} z={z} tall={tall}/></div>
+          <div style={{marginTop:z.g+2}}><Hc2Leagues lg={d?d.leagues:null} rgb={T.rgb} z={z} row={tall}/></div>
         </div>);
     };
     const HoldersSocialCard=({data,shape='wide',today24})=>{   // c5 prop (missing → ReferenceError, fixed 2026-10-26)
@@ -9679,83 +9603,69 @@
         </ShareCardModal>
       );
     };
-    /* ⓘ Holder Analytics → 📷: one token, in its colour. Reads the same state the modal prints (holdersByPeriod,
-       holders, holderTiers) — nothing is fetched for it. */
-    const HoldersSingleCard=({token,holders,holdersByPeriod,tiers,shape='wide',days=30,today24})=>{
+    /* ⓘ Holder Analytics → 📷: one token, in its colour (v2 2026-10-26, design/holders-card/mock-single-v1.html). Reads the same
+       state the modal prints (holdersByPeriod, holders, holderTiers.burnIn); `leagues` comes from HoldersSingleModal (hc2Leagues). */
+    const HoldersSingleCard=({token,holders,holdersByPeriod,leagues,shape='wide',days=30,today24})=>{
       const z=HOLD1_SHAPES[shape]||HOLD1_SHAPES.wide,tall=shape==='tall';
-      const T=HOLD_THEME[token]||HOLD_THEME.PTGC,cfg=TOKENS[token];
+      const T=HOLD_THEME[token]||HOLD_THEME.PTGC;
       const today=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
       const hp=holdersByPeriod||{};
       const cur=hp.current!=null?hp.current:(holders!=null?holders:null);
       const p={current:cur,d1Ago:hp.d1Ago!=null?hp.d1Ago:null,d7Ago:hp.d7Ago!=null?hp.d7Ago:null,d30Ago:hp.d30Ago!=null?hp.d30Ago:null,d90Ago:hp.d90Ago!=null?hp.d90Ago:null};
-      if(today24!==undefined)p.today=today24;   // c5: the dashboard's one 24 h number
-      const chg24h=today24!==undefined?today24:(cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null);
+      const chg24h=today24!==undefined?today24:(cur!=null&&p.d1Ago!=null?cur-p.d1Ago:null);   // c5: the dashboard's one 24 h number
       const thenWin=days===7?p.d7Ago:days===90?p.d90Ago:p.d30Ago;   // the window's own "then" for the headline line
-      const n30=cur!=null&&thenWin!=null?cur-thenWin:null;
-      const pct30=n30!=null&&thenWin>0?n30/thenWin*100:null;
+      const nW=cur!=null&&thenWin!=null?cur-thenWin:null;
+      const pctW=nW!=null&&thenWin>0?nW/thenWin*100:null;
       const series=holdersSeries(token,cur,days);
-      const counts=holdersTierCounts(tiers);
-      const tokTag=<span style={{color:T.hex}}>{token}</span>;
-      const title=(
-        <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:16,fontSize:z.title,fontWeight:700,letterSpacing:'0.18em',textTransform:'uppercase',lineHeight:1}}>
-          <HoldersAliens h={Math.round(z.title*1.15)} glow={T.glow}/>
-          <span className={T.cls} style={{filter:`drop-shadow(0 0 14px ${T.glow})`}}>Holders</span>
-          <span style={{fontSize:'0.62em',fontWeight:700,letterSpacing:'0.14em',color:T.pillText,background:T.pill,padding:'0.28em 0.7em 0.22em',borderRadius:999,boxShadow:`0 0 18px ${T.glow}`}}>{days}D</span>
-        </div>
-      );
+      const kick=<div className="hc2-kick" style={{fontSize:z.kick}}>The Grays {'·'} Holder Analytics</div>;
+      const ttl=<div className="hc2-ttl" style={{fontSize:z.title,marginTop:tall?12:8}}><span className={T.cls}>{token}</span> <span style={{color:'#fff'}}>Holders</span></div>;
+      const pill=<span className="hc2-pill" style={tall?{fontSize:16,padding:'10px 22px'}:{fontSize:12,padding:'8px 16px'}}><span style={{color:T.hex}}>Past {days} days</span></span>;
       const amount=(
-        <>
-          <div style={{fontSize:z.lbl,letterSpacing:'0.22em',textTransform:'uppercase',color:'rgba(255,255,255,0.55)',fontWeight:600,textAlign:tall?'center':'left'}}>{tokTag} {'·'} wallets holding</div>
-          <div className={`tabular-nums ${T.cls}`} style={{fontSize:z.big,fontWeight:700,lineHeight:0.95,marginTop:6,textAlign:tall?'center':'left'}}>{fmt(cur)}</div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:tall?'center':'flex-start',gap:14,marginTop:12}}>
+        <div style={{textAlign:tall?'center':'left'}}>
+          <div className="hc2-lbl" style={{fontSize:z.lb}}>Wallets holding</div>
+          <div className="hc2-big tabular-nums" style={{fontSize:z.big,marginTop:6,textAlign:tall?'center':'left'}}>{fmt(cur)}</div>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginTop:10,justifyContent:tall?'center':'flex-start'}}>
             <HoldersTodayChip d={chg24h} z={z}/>
-            <span className="tabular-nums" style={{fontSize:z.lbl,color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap'}}>{n30==null?`— in ${days} days`:<>{holdSgn(n30)} in {days} days {'·'} <span style={{color:holdCol(n30)}}>{pct30!=null?pct30.toFixed(2)+'%':'—'}</span></>}</span>
+            <span className="tabular-nums" style={{fontSize:z.chip,fontWeight:600,color:'rgba(255,255,255,0.7)',whiteSpace:'nowrap'}}>{nW==null?`— in ${days} days`:<>{holdSgn(nW)} in {days} days {'·'} <span style={{color:holdCol(nW)}}>{pctW!=null?pctW.toFixed(2)+'%':'—'}</span></>}</span>
           </div>
-        </>
-      );
-      const chart=(
-        <div style={{position:'relative',borderRadius:22,padding:`${Math.round(z.gap*1.2)}px ${Math.round(z.gap*1.4)}px ${Math.round(z.gap*0.8)}px`,background:'linear-gradient(180deg,rgba(10,14,18,0.82),rgba(4,7,10,0.9))',border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:'inset 0 1px 0 rgba(255,255,255,0.10)'}}>
-          <div style={{fontSize:z.tl,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:T.hex,marginBottom:6}}>{days}-day holder trend</div>
-          <HoldersSpark pts={series.pts} from={series.from} w={z.cw-Math.round(z.gap*2.8)-2} h={z.chartH} rgb={T.rgb} hex={T.hex} fs={z.tq}/>
-        </div>
-      );
-      const tierTiles=(
-        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:z.gap}}>
-          {HOLD_TIERS.map(([k,e],i)=>{const c=counts?counts[i]:null;return(
-            <div key={k} style={{borderRadius:16,padding:`${z.tpad}px 8px`,textAlign:'center',background:`linear-gradient(180deg,rgba(${T.rgb},0.08),rgba(4,7,10,0.92))`,border:`1px solid rgba(${T.rgb},0.3)`,boxShadow:`inset 0 1px 0 rgba(255,255,255,0.1), 0 0 24px -8px rgba(${T.rgb},0.45)`}}>
-              <div style={{fontSize:z.em,lineHeight:1,height:z.em,overflow:'visible',filter:'drop-shadow(0 2px 6px rgba(0,0,0,0.8))'}}>{e}</div>
-              <div className="tabular-nums" style={{fontSize:z.cnt,lineHeight:1.1,fontWeight:700,marginTop:6,color:c?'#fff':'rgba(255,255,255,0.35)'}}>{c==null?'—':fmt(c)}</div>
-            </div>);})}
-        </div>
-      );
-      const brandWide=<div style={{textAlign:'right',flexShrink:0}}><div className={`font-orbitron ${T.cls}`} style={{fontSize:24,fontWeight:700,lineHeight:1}}>ptgc-ufo.com</div><div style={{marginTop:10,fontSize:14,letterSpacing:'0.26em',textTransform:'uppercase',color:'rgba(255,255,255,0.4)'}}>{tokTag} {'·'} holder analytics</div><div className="tabular-nums" style={{marginTop:6,fontSize:13,letterSpacing:'0.08em',color:'rgba(255,255,255,0.3)'}}>{today}</div></div>;
-      const brandTall=<div style={{marginTop:16,display:'flex',justifyContent:'center',alignItems:'center',gap:18,fontSize:18,letterSpacing:'0.2em',textTransform:'uppercase'}}><span className={`font-orbitron ${T.cls}`} style={{fontSize:28,fontWeight:700,letterSpacing:0,textTransform:'none',filter:'drop-shadow(0 2px 10px rgba(0,0,0,0.9))'}}>ptgc-ufo.com</span><span style={{color:'rgba(235,240,245,0.75)'}}>{'·'} {tokTag} {'·'} {today}</span></div>;
+        </div>);
+      const coin=<div className={`hc2-coin${token==='UFO'?' g':''}`} style={{'--u':`${z.cu}px`}}><LgCoin token={token}/></div>;
+      const chartBox=w=>(
+        <div className="hc2-tp" style={{'--c':T.rgb,padding:tall?'16px 18px 12px':'12px 14px 10px'}}>
+          <div className="hc2-lgh" style={{fontSize:z.lh,marginBottom:8}}><span style={{color:`rgba(${T.rgb},0.95)`}}>{days}-day holder trend</span></div>
+          <Hc2Spark pts={series.pts} from={series.from} w={w} h={z.sh} rgb={T.rgb} hex={T.hex} fs={z.sf}/>
+        </div>);
+      const foot=<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:tall?16:12}}><span className={`font-orbitron ${T.cls}`} style={{fontSize:tall?30:24,fontWeight:700}}>ptgc-ufo.com</span><span className="hc2-meta" style={{fontSize:tall?12:10.5}}>{today} {'·'} Holders = every address {'·'} Leagues = people</span></div>;
+      const iw=z.W-2*z.pad;
       return(
-        <div className="relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#040705',fontFamily:"'Rajdhani',sans-serif"}}>
-          <SocialNebulaBackdrop W={z.W} H={z.H} tall={tall} logo={cfg.logo} rgb={T.rgb} edge={T.edge} seed={token==='PTGC'?5:9}/>
+        <div className="hc2 relative overflow-hidden text-white" style={{width:z.W,height:z.H,background:'#04070a',fontFamily:"'Rajdhani',sans-serif"}}>
+          <div aria-hidden="true" className="hc2-sky" style={{backgroundImage:`url(logos/leagues/lg-atl-${token==='UFO'?'ufo':'ptgc'}.webp?v=${LG_ART_V})`,backgroundPosition:'50% 35%'}}></div>
+          <div aria-hidden="true" className="hc2-shade"></div>
+          <div aria-hidden="true" className="hc2-glow" style={{boxShadow:`0 0 70px -10px rgba(${T.rgb},0.55)`}}></div>
+          <div aria-hidden="true" className="hc2-edge" style={{background:`linear-gradient(#0000,#0000) padding-box,linear-gradient(135deg,${T.edge[0]} 0%,${T.edge[1]} 50%,${T.edge[2]} 100%) border-box`}}></div>
           <div style={{position:'absolute',left:z.pad,right:z.pad,top:z.top,bottom:z.bottom,display:'flex',flexDirection:'column'}}>
             {tall?(
               <>
-                {title}
-                <div style={{display:'flex',justifyContent:'center',marginTop:18}}><HoldersLogo src={cfg.logo} size={z.logo} rgb={T.rgb}/></div>
-                <div style={{marginTop:14}}>{amount}</div>
+                <div style={{textAlign:'center'}}>{kick}{ttl}<div style={{marginTop:14}}>{pill}</div></div>
+                <div style={{display:'flex',justifyContent:'center',marginTop:38}}>{coin}</div>
+                <div style={{marginTop:28}}>{amount}</div>
                 <div style={{flex:1,minHeight:0}}></div>
-                {chart}
-                <div style={{marginTop:z.gap+4}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
-                <div style={{marginTop:z.gap+4}}>{tierTiles}</div>
-                {brandTall}
+                {chartBox(iw-36)}
+                <div style={{marginTop:z.g}}><Hc2Periods p={p} z={z} showThen/></div>
+                <div style={{marginTop:z.g+4}}><Hc2Leagues lg={leagues} rgb={T.rgb} z={z} row={false}/></div>
+                {foot}
               </>
             ):(
               <>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:24}}>{title}{brandWide}</div>
-                <div style={{display:'flex',alignItems:'center',gap:24,marginTop:14}}>
-                  <HoldersLogo src={cfg.logo} size={z.logo} rgb={T.rgb}/>
-                  <div style={{flex:1,minWidth:0}}>{amount}</div>
-                  <div style={{width:Math.round(z.cw*0.5),flexShrink:0}}><HoldersPeriodTiles p={p} z={z} rgb={T.rgb}/></div>
-                </div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}><div>{kick}{ttl}</div><div style={{paddingTop:4}}>{pill}</div></div>
                 <div style={{flex:1,minHeight:0}}></div>
-                {chart}
-                <div style={{marginTop:z.gap}}>{tierTiles}</div>
+                <div style={{display:'flex',gap:22,alignItems:'center'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:26,flex:1,minWidth:0,paddingLeft:18}}>{coin}{amount}</div>
+                  <div style={{width:z.cw,flexShrink:0}}>{chartBox(z.cw-28)}</div>
+                </div>
+                <div style={{marginTop:z.g}}><Hc2Periods p={p} z={z} showThen/></div>
+                <div style={{marginTop:z.g+2}}><Hc2Leagues lg={leagues} rgb={T.rgb} z={z} row/></div>
+                {foot}
               </>
             )}
           </div>
@@ -9766,6 +9676,9 @@
     const HoldersSingleModal=({token,holders,holdersByPeriod,tiers,onClose,today24})=>{
       const[shape,setShape]=useState('wide');
       const[days,setDays]=useState(30);
+      const[ranks,setRanks]=useState(undefined);   // hc2s: holder-ranks.json for the eight leagues (undefined = loading → "—")
+      useEffect(()=>{let on=true;hc2RanksFile().then(j=>{if(on)setRanks(j||null);});return()=>{on=false;};},[]);
+      const leagues=ranks?hc2Leagues(ranks,token,tiers&&tiers.burnIn):null;
       const z=HOLD1_SHAPES[shape];
       const T=HOLD_THEME[token]||HOLD_THEME.PTGC;
       const controls=(
@@ -9781,7 +9694,7 @@
       );
       return(
         <ShareCardModal onClose={onClose} width={z.W} height={z.H} screenshot controls={controls} toolbarClass="mb-6" label={`${token} holder analytics`} filename={`${token.toLowerCase()}-holders-${days}d-${shape}-${new Date().toISOString().slice(0,10)}.png`}>
-          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} tiers={tiers} today24={today24} shape={shape} days={days}/>
+          <HoldersSingleCard token={token} holders={holders} holdersByPeriod={holdersByPeriod} leagues={leagues} today24={today24} shape={shape} days={days}/>
         </ShareCardModal>
       );
     };
@@ -14377,24 +14290,10 @@
               return{current:currentCount,d1Ago:findClosest(1),d7Ago:findClosest(7),d30Ago:findClosest(30),d90Ago:findClosest(90),avg7d:calcAvg(7),avg30d:calcAvg(30),avg90d:calcAvg(90)};
             };
             
-            /* hc2 (2026-10-26): all eight leagues for the card — PEOPLE from data/holder-ranks.json (`b` = every person's balance in
-               whole tokens, <= 48 h old), each placed by % of the STARTING supply (holdingTier's rule, the dashboard strip's basis),
-               plus the burn wallet in the league token-allocation.json names (its `burnIn`) — counted like the dashboard strip, NOT marked (Shaka: no 🔥). No file → null → "—". */
-            let ranksFile=null;
-            try{const r=await fetch('https://raw.githubusercontent.com/shakavibe/PTGC-UFO-Dashboard/main/data/holder-ranks.json?t='+Math.floor(Date.now()/3600000));if(r.ok)ranksFile=await r.json();}catch(e){}
-            const holdersLeagues=(tkn,tierObj)=>{
-              const e=ranksFile&&ranksFile.tokens&&ranksFile.tokens[tkn];
-              const at=e&&Date.parse(e.readAt);
-              if(!e||!Array.isArray(e.b)||!e.b.length||!isFinite(at)||Date.now()-at>=48*3600*1000)return null;
-              const counts=BURN_C.map(()=>0);
-              for(const v of e.b){const c=holdingTier(Number(v),tkn);if(c)counts[BURN_C.indexOf(c)]++;}
-              const bi=tierObj&&tierObj.burnIn?BURN_C.findIndex(c=>c.n===tierObj.burnIn):-1;
-              if(bi>=0)counts[bi]++;
-              return{counts,people:Number.isFinite(e.holders)?e.holders:e.b.length,burnIn:bi>=0?bi:null};
-            };
+            const ranksFile=await hc2RanksFile();   // hc2: the eight leagues (hc2Leagues)
             setHoldersShareData({
-              PTGC:{holders:ptgcHolders,tiers:ptgcTierObj,periods:calcPeriods('PTGC',ptgcHolders),leagues:holdersLeagues('PTGC',ptgcTierObj)},
-              UFO:{holders:ufoHolders,tiers:ufoTierObj,periods:calcPeriods('UFO',ufoHolders),leagues:holdersLeagues('UFO',ufoTierObj)}
+              PTGC:{holders:ptgcHolders,tiers:ptgcTierObj,periods:calcPeriods('PTGC',ptgcHolders),leagues:hc2Leagues(ranksFile,'PTGC',ptgcTierObj&&ptgcTierObj.burnIn)},
+              UFO:{holders:ufoHolders,tiers:ufoTierObj,periods:calcPeriods('UFO',ufoHolders),leagues:hc2Leagues(ranksFile,'UFO',ufoTierObj&&ufoTierObj.burnIn)}
             });
           }catch(e){
             console.error('Error loading holders share data:',e);

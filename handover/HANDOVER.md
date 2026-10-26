@@ -12,6 +12,17 @@ Update it at the end of every session.
   `HoldersSocialCard` never declared or received it. Now the card takes it as a prop and the modal passes it. Reproduced on HEAD in
   the harness, gone after the fix.
 
+## 2026-10-26 (later still) — the two SINGLE Holders cards v2, BUILT by `tools/holders-single-v2.py` (run after holders-card-v2.py)
+
+Socials → PTGC / UFO → Holders and the Holders box's ⓘ (both open `HoldersSingleModal`). Shaka: "yes" to
+`design/holders-card/mock-single-v1.html` (single-*.png). The token's half of his Atlantis art (`lg-atl-ptgc|ufo.webp`), border in
+the token colour, "PTGC HOLDERS", "Past N days" pill, lit coin + wallets holding + today chip + "+N in N days · %", N-day trend panel
+(`Hc2Spark`), 7D/30D/90D with "then" + per day (`Hc2Periods showThen`), eight leagues (Wide one row, Tall 4 × 2 — `Hc2Leagues row`).
+The 7D/30D/90D switch stays. **One league helper for both cards now:** `hc2RanksFile()` (holder-ranks.json, cached 30 min) +
+`hc2Leagues(ranks, token, burnInName)`; the combined loader calls them too; the single modal reads `holderTiers.burnIn` (no 🔥).
+Removed as unused: HoldersSpark, HoldersPeriodTiles, HoldersAliens, HoldersLogo, holdersRate, holdersTierCounts, HOLD_TIERS
+(HOLD_ALIENS kept — still used elsewhere). Room (`probes/hc2-spacer.js`): single Wide 43 px, Tall 49 px.
+
 ## 2026-10-26 (later) — Holders share card v2 (Socials → Combined → Holders), BUILT by `tools/holders-card-v2.py`
 
 Shaka: "the holders card needs to be updated like we have done with many others. correct sea creatures and better look" →
