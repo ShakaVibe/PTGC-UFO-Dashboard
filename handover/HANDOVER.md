@@ -12,6 +12,20 @@ Update it at the end of every session.
   `HoldersSocialCard` never declared or received it. Now the card takes it as a prop and the modal passes it. Reproduced on HEAD in
   the harness, gone after the fix.
 
+## 2026-10-26 (later) — Holders share card v2 (Socials → Combined → Holders), BUILT by `tools/holders-card-v2.py`
+
+Shaka: "the holders card needs to be updated like we have done with many others. correct sea creatures and better look" →
+mock-ups `design/holders-card/mock-v1.html` (+ PNGs, A / B) → **"a"**, then **"dont put the fire emoji for the burn address"**
+(the mock's 🔥 marker + footnote are NOT built). The build: his Atlantis split art (`lg-atl-split.webp`), gold → green edge,
+Orbitron "HOLDERS", the lit coin (`LgCoin` in `.hc2-coin`), `Hc2Spark` 30 D trend, `Hc2Periods` 7D/30D/90D + per day, and
+`Hc2Leagues` = ALL EIGHT leagues with his sea art (`LH_TIERS` / `lhSea`; Wide 4 × 2, Tall one row of 8). League counts = PEOPLE
+from `holder-ranks.json` (`b`, ≤ 48 h, `holdingTier` on the starting supply = the strip's rule) + 1 for the burn wallet in the
+`token-allocation.json` `tiers.burnIn` league, unmarked (PTGC Poseidon 1 / UFO Whale 17 — same as the dashboard strip). No ranks
+file → every league "—". Header "N people" over each league grid; footer "Holders = every address · Leagues = people".
+`HoldersSingleCard` (one token) is untouched — still the old emoji row. CSS `.hc2-*` after `.lg-hd .lg-coin`. Room check:
+`probes/hc2-spacer.js` (the flex spacer; Wide 33 px, Tall 47 px — keep ≥ 25, a Mac renders ~10 px taller). Script idempotent
+("0 edit(s)" on a second run).
+
 ## START HERE (2026-10-25 final wrap) — everything PUSHED (last code change `d6f7783`), live-checked, working tree clean
 
 **Last fix of the day (`d6f7783`):** the HISTORY tag on the Token Allocation creature strip is clickable — it had

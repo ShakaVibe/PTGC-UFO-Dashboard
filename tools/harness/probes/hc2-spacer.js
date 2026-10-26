@@ -1,0 +1,2 @@
+// Holders card v2 (hc2): the free room in each card = the flex spacer between the header and the panels (Mac renders ~10 px taller; want >= 25).
+(()=>[...document.querySelectorAll('.hc2')].map(c=>{const col=c.lastElementChild;const sp=[...col.children].find(e=>e.style.flex&&e.style.flex.startsWith('1'));return{card:c.offsetWidth+'x'+c.offsetHeight,spacerPx:sp?Math.round(sp.getBoundingClientRect().height/(c.getBoundingClientRect().width/c.offsetWidth)):null};}))()
