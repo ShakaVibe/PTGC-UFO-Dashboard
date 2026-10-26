@@ -4,6 +4,24 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## START HERE (2026-10-26 final wrap) — everything PUSHED (last code change `6fd143f34`), live-checked, working tree clean
+
+**Today, all LIVE (checked in the browser pane on Shaka's Mac):**
+1. **Value Generated opens on 30D** on both dashboards (`335bba9c5`).
+2. **Combined Holders card crash fixed** ("today24 is not defined") (`335bba9c5`).
+3. **Holders share cards v2** — the combined card (`b3c5b9199`, `tools/holders-card-v2.py`) and the two single cards
+   (`6fd143f34`, `tools/holders-single-v2.py`, run in that order): Atlantis art, lit coins, all eight leagues with his sea art,
+   one league helper (`hc2RanksFile` + `hc2Leagues`). Mock-ups `design/holders-card/`. Details in the three entries below and
+   `sessions/2026-10-26.md`.
+
+**Shaka's standing calls from today (do not re-propose):** no 🔥 / "burn wallet" marker on the Holders cards (the wallet is still
+counted in its league, like the dashboard strip) · Holders card = mock A (combined: 4 × 2 grid Wide, one row Tall; single: one row
+Wide, 4 × 2 Tall).
+
+**Next session: nothing owed** — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
+other Socials cards still on the 2026-09 nebula look (Burn, DAO Treasury, DAO Buys, Value Generated, Token Allocation …) could get
+the same Atlantis / lit-coin treatment, mock-up first; Audit IV e1–e47 still not on the roadmap artifact.
+
 ## 2026-10-26 — two small fixes, BUILT (index.html only; compile ok, harness checked PTGC + UFO)
 
 - **Value Generated opens on 30D** on both dashboards (Shaka). `valueGenPeriod` starts at '30d' and the token-switch reset sets
@@ -37,7 +55,7 @@ file → every league "—". Header "N people" over each league grid; footer "Ho
 `probes/hc2-spacer.js` (the flex spacer; Wide 33 px, Tall 47 px — keep ≥ 25, a Mac renders ~10 px taller). Script idempotent
 ("0 edit(s)" on a second run).
 
-## START HERE (2026-10-25 final wrap) — everything PUSHED (last code change `d6f7783`), live-checked, working tree clean
+## Before that (2026-10-25 final wrap) — everything PUSHED (last code change `d6f7783`), live-checked, working tree clean
 
 **Last fix of the day (`d6f7783`):** the HISTORY tag on the Token Allocation creature strip is clickable — it had
 `pointer-events:none` and sits 12 px above the button's box, so taps fell through (Shaka: "it looks like a button, so needs to act
