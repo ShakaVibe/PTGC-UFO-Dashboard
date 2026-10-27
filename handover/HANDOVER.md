@@ -4,6 +4,28 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## 2026-10-27 — Humans vs Bots: a COUNT switch, ALL SWAPS / EACH TX (BUILT by `tools/hvb-count-switch.py`, NOT pushed)
+
+Shaka: "the 30 day in the Volume window does not match the 30 day for the arb bots one … we need the volume to be accurate" →
+(explained: the Volume window / DexScreener count EVERY SWAP, so a bot loop — buy in one pool + sell in another, ONE tx — is two;
+HvB counted each tx once since Audit V v22; people's volume is the same either way, the gap is all bot loops: PTGC 30D $1,493,239
+vs $1,276,663, UFO $427,572 vs $288,130) → "we probably need to match dexscreener" → **"we probably need a selector switch"**.
+- HvB window: new pill group **ALL SWAPS (default) / EACH TX** after the period pills (only when the file has `measured`).
+  ALL SWAPS = `periods[p].human/bot` (every swap leg, every pool) = the Volume window's 7D / 30D / 90D TO THE DOLLAR (checked live:
+  30D $1,493,239 both); EACH TX = the Audit V v22 view (`measured`, UFO swapback apart). Drives the strip ("Swaps" / "Transactions"),
+  both boxes (volume, %, count), the bar, the chart (`hours` vs `measuredHours`). **Fees paid = the chain's in both modes.**
+- The note box under the boxes always shows the OTHER count ("Each transaction once: $1,276,663, bots 19%" / "Counting every swap
+  like DexScreener: $1,493,239, bots 30%"); the "UFO's own buy-and-burn swaps not counted" line only in EACH TX (in ALL SWAPS they are
+  counted, as DexScreener does). The "How sure are we?" sentence follows the mode.
+- Share card (📷 + Socials): same switch in its toolbar; EACH TX adds "· EACH TX ONCE" to the period pill. By pool / Top bots unchanged
+  (per pool = per swap in both modes).
+- Still different by design: the 24H TILE is DexScreener's live number from its 30 listed pools; HvB 24H is the hourly chain file over
+  every pool (e.g. $16.4K vs $17.3K) — close, never to the dollar.
+- Harness: PTGC 30D ALL SWAPS 70 % / 30 %, EACH TX 81 / 19; UFO 39 / 61; BOTH 63 / 37 → EACH TX 76 / 24; 390 px no overflow.
+- Gotcha: `npm run css` in a CLOUD clone drops ~5 rules the Mac build keeps (bg-gradient-to-l, h-32 …) — never copy a cloud-built
+  tw.css to the Mac. This change adds no new classes (tw.css untouched). A `git fetch` from the bridge left `.git/objects/maintenance.lock`;
+  it was renamed to `.git/stale-maintenance-lock` (safe to delete).
+
 ## 2026-10-26 (evening) — Affiliates: podium $ bigger (LIVE `66e91d603`) + the Leaderboard window v2 (BUILT, `tools/af-leaderboard-v2.py`)
 
 - Podium cards: the USD figure 13 → 19 px desktop, 11 → 14 px phone (under the PTGC amount 24 / 16) — Shaka: "much bigger … not as
@@ -34,7 +56,7 @@ Update it at the end of every session.
 counted in its league, like the dashboard strip) · Holders card = mock A (combined: 4 × 2 grid Wide, one row Tall; single: one row
 Wide, 4 × 2 Tall). · Leaderboard = one board at a time with switches, top 10 (approved mock-up).
 
-**Next session: nothing owed** — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
+**Next session (2026-10-27 update): the HvB COUNT switch is built — see the 2026-10-27 entry at the top; push + live check if not done.** Otherwise nothing owed — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
 other Socials cards still on the 2026-09 nebula look (Burn, DAO Treasury, DAO Buys, Value Generated, Token Allocation …) could get
 the same Atlantis / lit-coin treatment, mock-up first; Audit IV e1–e47 still not on the roadmap artifact.
 
