@@ -4,6 +4,29 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
+## START HERE (2026-10-27 wrap) — everything PUSHED (last code change `137806437`), live-checked, working tree clean
+
+**Today (Shaka: "the Volume window's 30 day does not match the arb bots one … we need the volume to be accurate"):**
+1. **Humans vs Bots now counts EVERY SWAP, like DexScreener** — totals, boxes, %, bar, chart, share card. = the Volume window's
+   7D / 30D / 90D to the dollar (live check: PTGC 30D $1,493,239 in both, 70 % / 30 %). Fees paid stay the chain's.
+2. A selector ALL SWAPS / EACH TX was built (`be9fdbc37`, `tools/hvb-count-switch.py`) and removed the same hour on his word
+   (`137806437`, `tools/hvb-count-off.py`). The note box under the boxes still shows the each-tx-once figure (PTGC 30D $1,276,663,
+   bots 19 %) — he saw it and kept it.
+3. The why (for anyone asking): `sessions/2026-10-27.md` — a real bot loop from Oct 22 counted $1,443 by DexScreener, ~$740 once.
+
+**Shaka's standing calls from today (do not re-propose):** volume matches DexScreener (every swap) everywhere · NO count selector on
+Humans vs Bots. Known and accepted: the 24H tile (DexScreener live, its 30 listed pools) vs HvB 24H (hourly chain file, every pool)
+are close, never to the dollar.
+
+**Session notes for Claude:** Shaka now commits + pushes himself after Claude commits on the Mac (Claude has no GitHub login; Terminal
+is click-only for computer use). Committing from the bridge works once delete permission is granted for the folder — run git with
+`-c gc.auto=0 -c maintenance.auto=false` (a background auto-gc left `.git/gc.log.lock`) and the ShakaVibe identity via `-c user.*`.
+A cloud clone's `npm run css` drops ~5 rules the Mac build keeps — never copy a cloud-built tw.css to the Mac.
+
+**Next session: nothing owed** — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the other
+Socials cards on the 2026-09 nebula look could get the Atlantis / lit-coin treatment (mock-up first); Audit IV e1–e47 not on the roadmap
+artifact.
+
 ## 2026-10-27 — Humans vs Bots counts EVERY SWAP, like DexScreener (`tools/hvb-count-switch.py` LIVE `be9fdbc37`, then `tools/hvb-count-off.py`)
 
 **Later the same day Shaka: "actually take the selector off... just make it match dex screener"** → `tools/hvb-count-off.py` (run after
@@ -45,7 +68,7 @@ vs $1,276,663, UFO $427,572 vs $288,130) → "we probably need to match dexscree
   chase" with a bar against #4 and the creature art × count (`getCreatureForPtgc` → `SeaIcon`). **Top 10 now (was four top-5
   boards).** A name opens the referrer, as before. Harness: `AFFIL_DATA=real` + `probes/alb-state.js`; 1280 + 390, no overflow.
 
-## START HERE (2026-10-26 evening wrap) — everything PUSHED (last code change `f78da449d`), live-checked, working tree clean
+## Before that (2026-10-26 evening wrap) — everything PUSHED (last code change `f78da449d`), live-checked, working tree clean
 
 **Today, all LIVE (checked in the browser pane on Shaka's Mac):**
 1. **Value Generated opens on 30D** on both dashboards (`335bba9c5`).
@@ -62,7 +85,7 @@ vs $1,276,663, UFO $427,572 vs $288,130) → "we probably need to match dexscree
 counted in its league, like the dashboard strip) · Holders card = mock A (combined: 4 × 2 grid Wide, one row Tall; single: one row
 Wide, 4 × 2 Tall). · Leaderboard = one board at a time with switches, top 10 (approved mock-up).
 
-**Next session (2026-10-27 update): HvB now counts every swap like DexScreener (switch built, then removed) — see the 2026-10-27 entry at the top; push + live check if not done.** Otherwise nothing owed — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
+(superseded by the 2026-10-27 wrap above) Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
 other Socials cards still on the 2026-09 nebula look (Burn, DAO Treasury, DAO Buys, Value Generated, Token Allocation …) could get
 the same Atlantis / lit-coin treatment, mock-up first; Audit IV e1–e47 still not on the roadmap artifact.
 
