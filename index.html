@@ -11580,14 +11580,14 @@
           </div>
         </div>);
     };
-    const HvbShareModal=({token:initial,file,win,setWin,count='swaps',setCount,feeRates,loading=false,error=false,onRetry,onClose})=>{
+    const HvbShareModal=({token:initial,file,win,setWin,count='swaps',setCount,   // COUNT switch removed 2026-10-27 (share card): count stays 'swaps'
+      feeRates,loading=false,error=false,onRetry,onClose})=>{
       const[mode,setMode]=useState(initial==='BOTH'?'BOTH':initial==='UFO'?'UFO':'PTGC');
       const P=VS_PERIODS.find(w=>w.k===win)||VS_PERIODS[2];
       const T=NH_THEME[mode==='UFO'?'UFO':'PTGC'];
       const controls=(<>
         <NhPills items={[{k:'PTGC',label:'PTGC card'},{k:'UFO',label:'UFO card'},{k:'BOTH',label:'Both tokens on one card'}]} value={mode} onChange={setMode} label="Card" rgb={T.rgb}/>
         {setWin&&<NhPills items={VS_PERIODS} value={win} onChange={setWin} label="Period" rgb={T.rgb}/>}
-        {setCount&&<NhPills items={VS_COUNT} value={vsCountK(count)} onChange={k=>setCount(vsCountOf(k))} label="Count" rgb={T.rgb}/>}
       </>);
       const stamp=new Date().toISOString().slice(0,10);
       return(
@@ -11890,8 +11890,7 @@
               </div>
               <div className="relative mt-5 sm:mt-7 flex flex-wrap items-center gap-2 sm:gap-3">
                 <NhPills items={[{k:'PTGC'},{k:'UFO'},{k:'BOTH'}]} value={token} onChange={setToken} label="Token" rgb={rgb}/>
-                <NhPills items={VS_PERIODS} value={win} onChange={setWin} label="Period" rgb={rgb}/>
-                {view&&view.m&&<NhPills items={VS_COUNT} value={vsCountK(count)} onChange={k=>setCount(vsCountOf(k))} label="Count" rgb={rgb}/>}
+                <NhPills items={VS_PERIODS} value={win} onChange={setWin} label="Period" rgb={rgb}/>{/* COUNT switch removed 2026-10-27 (Shaka: "just make it match dex screener") — always every swap */}
                 <button type="button" onClick={()=>setShareCard(true)} disabled={!view} aria-label="Share Humans vs Bots as an image" title="Share card" className="tap h-[30px] w-[34px] rounded-[10px] border border-white/15 bg-black/55 text-white/70 hover:text-white hover:border-white/40 flex items-center justify-center text-[15px] leading-none disabled:opacity-30 transition-colors" style={{minHeight:0,backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)'}}>{'\u{1F4F7}'}</button>
                 <div className="ml-auto text-[11px] text-white/60 tabular-nums" style={{textShadow:'0 1px 6px rgba(0,0,0,.9)'}}>
                   {file===undefined?'Loading…':file?<span className={amber?'text-amber-300/90':''}>as of {fmtSnapshotAge(ageMs)}{amber?' — the hourly update is late':''}</span>:null}
@@ -11995,7 +11994,7 @@
                     <div className="mt-2 rounded-2xl border border-white/10 bg-black/30 p-3 vs-note">Every trade on a PulseX pool is a Swap event that names the contract which called the pool. A person's wallet can only reach a pool through a router or aggregator (PulseX, Piteas, …), so trades sent by those are counted as human — a multi-hop swap included. A transaction that buys the token in one pool and sells it in another — a round trip — is the arbitrage itself and counts as a bot whoever sent it (unless it came through a router as one person's swap: a sale split across pools, or a UFO ↔ PLS swap routed through PTGC, is not a round trip). Beyond that, arbitrage bots call the pools from their own contracts, so every other sender is counted as a bot, with two ways back to the human side: a sender PulseScan names as a verified router or aggregator, or one that delivers its output to many different wallets (what a router does; a bot sends the output to itself) with few round trips — that is how an unnamed aggregator such as switch.win is recognised. One more catch: a wallet that trades through a router 50 or more times a day is a bot driving a router, so its trades count as bots too (listed as "bot wallet via …"). Each trade is valued at the token's price for that hour, on the pools this dashboard tracks — so the totals will not match DexScreener's to the dollar. Updated hourly; the list covers 90 days. The fee is charged per token transfer, not per swap: a bot's round trip is a buy in one pool and a sell in another but moves the token pool-to-pool once, so it pays one fee, while a PulseX app buy split across pools can pay it twice. So the volumes and counts here take each transaction ONCE (the larger of its buys and its sells), and the fees are read from the fee transfers on chain and given to whoever's transaction paid them; fees from transactions with no trade (sends between wallets, staking moves) are shown on their own. UFO's own buy-and-burn swaps are kept out of both sides. The By pool table and the contract list still show each pool's swaps.<span className="block mt-2"><button type="button" onClick={()=>openFeeHow(token)} className="underline underline-offset-2 font-semibold text-white/85">How the fee works {'\u203A'}</button></span></div>
                   </VsFold>
                   {/* round 12 (Shaka): a confidence note — the split is vastly right, a few small trades at the edges may still be mislabelled */}
-                  <p className="vs-conf">How sure are we? Of who is who: very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land on the right side. {D.count==='swaps'?<>The volume counts every swap, the way DexScreener does (EACH TX counts a bot{'\u2019'}s loop {'\u2014'} two swaps, one fee {'\u2014'} once), and the fees are read from the chain.</>:<>The sums count each transaction once and the fees are read from the chain, so a bot{'\u2019'}s loop (two swaps, one fee) is not counted twice.</>} A handful of small trades at the edges can still be mislabelled, so read this as a very close picture rather than a to-the-cent ledger.</p>
+                  <p className="vs-conf">How sure are we? Of who is who: very. Every trade is classified from the chain itself {'—'} who called the pool, where the tokens went, and whether the same transaction bought in one pool and sold in another {'—'} so the overwhelming majority land on the right side. {D.count==='swaps'?<>The volume counts every swap, the way DexScreener does (a bot{'\u2019'}s loop is two swaps but one transaction and one fee), and the fees are read from the chain.</>:<>The sums count each transaction once and the fees are read from the chain, so a bot{'\u2019'}s loop (two swaps, one fee) is not counted twice.</>} A handful of small trades at the edges can still be mislabelled, so read this as a very close picture rather than a to-the-cent ledger.</p>
                 </>
               )}
             </div>

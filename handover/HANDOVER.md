@@ -4,7 +4,13 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## 2026-10-27 — Humans vs Bots: a COUNT switch, ALL SWAPS / EACH TX (BUILT by `tools/hvb-count-switch.py`, NOT pushed)
+## 2026-10-27 — Humans vs Bots counts EVERY SWAP, like DexScreener (`tools/hvb-count-switch.py` LIVE `be9fdbc37`, then `tools/hvb-count-off.py`)
+
+**Later the same day Shaka: "actually take the selector off... just make it match dex screener"** → `tools/hvb-count-off.py` (run after
+hvb-count-switch.py; idempotent, 4 edits): the two COUNT pill groups (window + share card) are gone; the window and share card always
+count every swap (= the Volume window 7D / 30D / 90D). The `count` plumbing stays (default 'swaps'), so EACH TX could return with one
+line. The note box still prints the each-transaction-once figure + bot share; "How sure are we?" reworded. Do not re-propose the switch.
+The entry below describes the switch as first built:
 
 Shaka: "the 30 day in the Volume window does not match the 30 day for the arb bots one … we need the volume to be accurate" →
 (explained: the Volume window / DexScreener count EVERY SWAP, so a bot loop — buy in one pool + sell in another, ONE tx — is two;
@@ -56,7 +62,7 @@ vs $1,276,663, UFO $427,572 vs $288,130) → "we probably need to match dexscree
 counted in its league, like the dashboard strip) · Holders card = mock A (combined: 4 × 2 grid Wide, one row Tall; single: one row
 Wide, 4 × 2 Tall). · Leaderboard = one board at a time with switches, top 10 (approved mock-up).
 
-**Next session (2026-10-27 update): the HvB COUNT switch is built — see the 2026-10-27 entry at the top; push + live check if not done.** Otherwise nothing owed — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
+**Next session (2026-10-27 update): HvB now counts every swap like DexScreener (switch built, then removed) — see the 2026-10-27 entry at the top; push + live check if not done.** Otherwise nothing owed — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the
 other Socials cards still on the 2026-09 nebula look (Burn, DAO Treasury, DAO Buys, Value Generated, Token Allocation …) could get
 the same Atlantis / lit-coin treatment, mock-up first; Audit IV e1–e47 still not on the roadmap artifact.
 
