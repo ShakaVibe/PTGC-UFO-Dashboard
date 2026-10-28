@@ -7163,7 +7163,14 @@
        one (a window closed BY a navigation leaves it, and Back then just steps over it). The entries share the URL, so the hash
        router sees no hashchange. */
     const MODAL_HIST=[];let _histSkip=0;
-    if(typeof window!=='undefined')window.addEventListener('popstate',()=>{if(_histSkip>0){_histSkip--;return;}const h=MODAL_HIST[MODAL_HIST.length-1];if(h){h.fromBack=true;h.close();}});
+    /* Audit VI item 2 (2026-10-28): a hash navigation (`navigate()` setting location.hash) fires popstate BEFORE hashchange, and
+       the listener below read it as Back and closed the top window — the Live Feed's own PTGC/UFO toggle closed the Live Feed
+       (confirmed live). navigate() now announces the hash it is about to set while a window is open; the popstate that lands on
+       exactly that hash is ignored once. The window's own history entry stays underneath the new hash entry (the e44 comment's
+       "closed BY a navigation" case): Back from there closes the window AND returns to the previous token, as before. */
+    let _navSkipHash=null;
+    const skipPopFor=h=>{_navSkipHash=MODAL_HIST.length>0?h:null;};
+    if(typeof window!=='undefined')window.addEventListener('popstate',()=>{if(_navSkipHash!==null&&location.hash===_navSkipHash){_navSkipHash=null;return;}if(_histSkip>0){_histSkip--;return;}const h=MODAL_HIST[MODAL_HIST.length-1];if(h){h.fromBack=true;h.close();}});
     const useBackCloses=(closeRef)=>{useEffect(()=>{if(!closeRef.current)return;const h={id:'gm'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),fromBack:false,close:()=>{if(closeRef.current)closeRef.current();}};
       try{history.pushState(Object.assign({},history.state||{},{grayModal:h.id}),'');}catch(e){return;}
       MODAL_HIST.push(h);
@@ -18681,7 +18688,9 @@
       const navigate=(view,token,tab)=>{
         const h=hashForRoute(view,token,tab);
         if(window.location.hash===h){setRoute(routeFromHash());return;}
-        window.location.hash=h;   // fires hashchange → setRoute
+        skipPopFor(h);                // Audit VI item 2: the popstate this fires must not close an open window
+        window.location.hash=h;   // fires hashchange → setRoute (and popstate first, synchronously)
+        skipPopFor(null);             // consumed by the popstate above; cleared here so a browser that fires none can never swallow a real Back
       };
       const[disclaimerAccepted,setDisclaimerAccepted]=useState(()=>{
         try{return localStorage.getItem(LS.DISCLAIMER)===DISCLAIMER_VERSION;}catch(e){return false;}
