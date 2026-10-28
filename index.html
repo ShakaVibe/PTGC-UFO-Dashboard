@@ -6597,7 +6597,11 @@
         ?<img src={src} alt="" onError={()=>setErr(true)} className="w-4 h-4 rounded-full bg-black/50 shrink-0"/>
         :<span className="w-4 h-4 rounded-full bg-gray-700 text-[8px] font-bold flex items-center justify-center shrink-0 text-white/85">{initial||'?'}</span>;
     };
-    const fmtUSD2=n=>{if(n==null||isNaN(n))return'—';if(n>0&&n<0.01)return'$'+n.toFixed(3);const d=Math.floor(n),c=Math.round((n-d)*100);return'$'+d.toLocaleString('en-US')+(d<1000&&c?'.'+String(c).padStart(2,'0'):'');};
+    /* Audit VI item 3 (2026-10-28): round to cents FIRST. The old split (floor, then round the remainder) printed $0.100 for 0.999,
+       $5.100 for 5.995, $19.100 for 19.999 — the dollars never carried when the cents rounded to 100. Negative amounts keep their
+       sign in front (never occur on the tape today; floor() used to give "$-2.50" for -1.5). Style unchanged otherwise: whole
+       dollars print bare ("$12"), cents only under $1,000, sub-cent amounts with three decimals. */
+    const fmtUSD2=n=>{if(n==null||isNaN(n))return'—';const sgn=n<0?'-':'';n=Math.abs(n);if(n>0&&n<0.01)return sgn+'$'+n.toFixed(3);const r=Math.round(n*100)/100,d=Math.floor(r),c=Math.round((r-d)*100);return sgn+'$'+d.toLocaleString('en-US')+(d<1000&&c?'.'+String(c).padStart(2,'0'):'');};
 
     // ===== HOLDER ANALYTICS =====
     // The ⓘ on the Holders box opens HoldersSingleModal (the 2026-09-26 card, with a 7D/30D/90D trend window)
@@ -7658,7 +7662,7 @@
               {!ready&&(
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6" aria-live="polite">
                   <div className="w-10 h-10 rounded-full border-2 border-white/10 animate-spin" style={{borderTopColor:hex}}></div>
-                  <div className="text-white/50 text-xs uppercase tracking-[0.2em]">Loading Switch\u2026</div>
+                  <div className="text-white/50 text-xs uppercase tracking-[0.2em]">{'Loading Switch\u2026'}</div>{/* Audit VI item 3: JSX text does not process \u escapes — this printed LOADING SWITCH\U2026 */}
                 </div>
               )}
               <iframe key={url} src={url} title={`Switch widget \u2014 ${tok}`} allow="clipboard-write" referrerPolicy="strict-origin" onLoad={()=>setReady(true)} className="w-full h-full" style={{border:0,opacity:ready?1:0,transition:'opacity .35s ease'}}></iframe>
