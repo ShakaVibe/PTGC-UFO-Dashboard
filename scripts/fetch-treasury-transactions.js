@@ -23,6 +23,7 @@
  */
 
 const fs = require('fs');
+const { writeAtomic } = require('./fs-atomic.js');   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
 const path = require('path');
 
 // No API key required — PulseScan is the public PulseChain block explorer.
@@ -509,7 +510,7 @@ function buildRecent({ wallet1Txns, wallet2Txns, wallet1Tokens, wallet2Tokens, n
 function writeRecent(dataDir, parts) {
   const recent = buildRecent(parts);
   const recentPath = path.join(dataDir, 'treasury-recent.json');
-  fs.writeFileSync(recentPath, JSON.stringify(recent));
+  writeAtomic(recentPath, JSON.stringify(recent));
   console.log(`  Written: ${recentPath} (${(fs.statSync(recentPath).size / 1024).toFixed(0)} KB — ${recent.counts.transactions} txns + ${recent.counts.transfers} transfers since ${recent.sinceIso.slice(0, 10)})`);
   return recent;
 }
@@ -597,7 +598,7 @@ async function main() {
   
   // Wallet 1 transactions
   const w1TxnPath = path.join(dataDir, 'treasury-wallet1-txns.json');
-  fs.writeFileSync(w1TxnPath, JSON.stringify({
+  writeAtomic(w1TxnPath, JSON.stringify({
     wallet: WALLET1,
     lastUpdated: new Date().toISOString(),
     count: wallet1Txns.length,
@@ -607,7 +608,7 @@ async function main() {
   
   // Wallet 2 transactions
   const w2TxnPath = path.join(dataDir, 'treasury-wallet2-txns.json');
-  fs.writeFileSync(w2TxnPath, JSON.stringify({
+  writeAtomic(w2TxnPath, JSON.stringify({
     wallet: WALLET2,
     lastUpdated: new Date().toISOString(),
     count: wallet2Txns.length,
@@ -617,7 +618,7 @@ async function main() {
   
   // Wallet 1 token transfers
   const w1TokenPath = path.join(dataDir, 'treasury-wallet1-tokens.json');
-  fs.writeFileSync(w1TokenPath, JSON.stringify({
+  writeAtomic(w1TokenPath, JSON.stringify({
     wallet: WALLET1,
     lastUpdated: new Date().toISOString(),
     count: wallet1Tokens.length,
@@ -627,7 +628,7 @@ async function main() {
   
   // Wallet 2 token transfers
   const w2TokenPath = path.join(dataDir, 'treasury-wallet2-tokens.json');
-  fs.writeFileSync(w2TokenPath, JSON.stringify({
+  writeAtomic(w2TokenPath, JSON.stringify({
     wallet: WALLET2,
     lastUpdated: new Date().toISOString(),
     count: wallet2Tokens.length,
@@ -685,7 +686,7 @@ async function main() {
   };
   
   const summaryPath = path.join(dataDir, 'treasury-summary.json');
-  fs.writeFileSync(summaryPath, JSON.stringify(summaryData, null, 2));
+  writeAtomic(summaryPath, JSON.stringify(summaryData, null, 2));
   console.log(`  Written: ${summaryPath}`);
   
   // ============================================

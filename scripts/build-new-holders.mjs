@@ -32,6 +32,8 @@
 //
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/new-holders.json';
@@ -259,7 +261,7 @@ const main = async () => {
   fs.mkdirSync(OUT_PATH.replace(/\/[^/]+$/, ''), { recursive: true });
   // One event per line: the hourly data commit's diff then shows exactly who arrived or left.
   const body = JSON.stringify(out).replace(/\{"a":"0x/g, '\n{"a":"0x');
-  fs.writeFileSync(OUT_PATH, body);
+  writeAtomic(OUT_PATH, body);
   const size = fs.statSync(OUT_PATH).size;
   console.log(`\nwrote ${OUT_PATH} (${(size / 1024).toFixed(1)} KB) in ${((Date.now() - t0) / 1000).toFixed(0)} s — cursor ${head}`);
 };

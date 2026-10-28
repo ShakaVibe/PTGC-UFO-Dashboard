@@ -21,6 +21,8 @@
 //
 // Local run (Node 22): NODE_USE_ENV_PROXY=1 node scripts/build-pair-volume.mjs   (OUT_PATH= to write elsewhere)
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 
 const OUT = process.env.OUT_PATH || 'data/pair-volume-7d.json';
 const TOKENS = {
@@ -131,7 +133,7 @@ async function main() {
     meta: { pools: pools.length, ok, missing, refused, carried, ms: Date.now() - t0 },
   };
   fs.mkdirSync(OUT.replace(/\/[^/]*$/, ''), { recursive: true });
-  fs.writeFileSync(OUT, JSON.stringify(file));
+  writeAtomic(OUT, JSON.stringify(file));
   console.log(`wrote ${OUT}: ${ok} read, ${missing} not listed, ${refused} refused (${carried} carried), ${Math.round((Date.now() - t0) / 1000)} s, ${fs.statSync(OUT).size} bytes`);
 }
 

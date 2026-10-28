@@ -34,6 +34,8 @@
 //
 // Node 20+ (global fetch; locally: NODE_USE_ENV_PROXY=1 node scripts/build-swap-volume.mjs). ESM.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/swap-volume.json';
@@ -206,6 +208,13 @@ async function classifySenders(cache, addrs) {
 // ---------------------------------------------------------------- main
 async function main() {
   const t0 = Date.now();
+  // Audit VI item 6 (2026-10-28): a cache that EXISTS but does not parse is a cut write, not a first run. readJson's fallback used
+  // to rebuild 90 days from an empty cache without a word (the 16,494 wallet attributions take ~11 runs to come back). Stop instead:
+  // the step fails, the previous swap-volume.json stays published, the run goes red with this line. Same rule as lv-snapshot.js.
+  if (fs.existsSync(CACHE_PATH)) {
+    try { JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8')); }
+    catch (e) { console.error(`::error::${CACHE_PATH} exists but cannot be read (${e.message}) — refusing to rebuild 90 days from an empty cache. Restore it from git (git checkout HEAD~1 -- ${CACHE_PATH}) or delete it to rebuild on purpose.`); process.exit(1); }
+  }
   let cache = readJson(CACHE_PATH, { schema: SCHEMA, cursor: null, pools: {}, senders: {}, swaps: [] });
   if ((cache.schema || 1) < SCHEMA) { console.log(`cache is schema ${cache.schema || 1} — rebuilding the ${BACKFILL_DAYS}-day history with directions and wallets`); cache = { schema: SCHEMA, cursor: null, pools: cache.pools || {}, senders: cache.senders || {}, swaps: [], from: {} }; }
   cache.from = cache.from || {};
@@ -529,8 +538,8 @@ async function main() {
     stats: { feeLegs: (cache.fees || []).length, feeSince: cache.fees && cache.fees.length ? new Date(cache.fees[0][0]).toISOString() : null, swaps: all.length, walletsPending: (cache.fromPending || []).length, newThisRun: fresh.length, unpricedThisRun: unpriced, pools: addrs.length, ms: now - t0 },
   };
   fs.mkdirSync('data', { recursive: true });
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(cache));
-  fs.writeFileSync(OUT_PATH, JSON.stringify(out));
+  writeAtomic(CACHE_PATH, JSON.stringify(cache));
+  writeAtomic(OUT_PATH, JSON.stringify(out));
   const s = out.tokens;
   console.log(`wrote ${OUT_PATH} (${(fs.statSync(OUT_PATH).size / 1024).toFixed(1)} KB) + cache (${(fs.statSync(CACHE_PATH).size / 1024).toFixed(1)} KB) in ${Math.round((now - t0) / 1000)} s — cursor ${head}, ${all.length} swaps kept, ${unpriced} unpriced this run`);
   for (const tk of Object.keys(TOKENS)) for (const p of Object.keys(periods)) { const o = s[tk].periods[p]; console.log(`  ${tk} ${p}: human ${o.human.n} trades $${Math.round(o.human.usd).toLocaleString()} · bot ${o.bot.n} trades $${Math.round(o.bot.usd).toLocaleString()}`); }

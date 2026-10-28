@@ -30,6 +30,8 @@
 // live scan flaky; don't reintroduce it.
 
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const RPC  = 'https://rpc.pulsechain.com';
@@ -212,7 +214,7 @@ async function main() {
     process.exit(1);
   }
   fs.mkdirSync('data', { recursive: true });
-  fs.writeFileSync(OUT, JSON.stringify(out, null, 2));
+  writeAtomic(OUT, JSON.stringify(out, null, 2));
   console.log('wrote', OUT, failed ? `(${failed} token kept from the previous run)` : '');
   if (failed) process.exit(1);   // the pipeline's report step goes red; the good token still landed
 }

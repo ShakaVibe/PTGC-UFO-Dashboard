@@ -19,6 +19,8 @@
 // wrong rank forever. The index is rebuilt from the archive every run (deterministic), so it can never disagree with it.
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 import path from 'node:path';
 
@@ -142,8 +144,8 @@ function index(sym, st) {
     const sk = a.slice(2, 2 + SHARD_HEX); (shards[sk] = shards[sk] || {})[a] = [ks[0], ds];
   }
   const dir = path.join(IDX_DIR, sym); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
-  for (const [xxx, obj] of Object.entries(shards)) fs.writeFileSync(path.join(dir, xxx + '.json'), JSON.stringify(obj));
-  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ schema: 2, shard: SHARD_HEX, token: sym, day0: days[0], days: days.length, holders: counts, generatedAt: st.generatedAt || new Date().toISOString() }));
+  for (const [xxx, obj] of Object.entries(shards)) writeAtomic(path.join(dir, xxx + '.json'), JSON.stringify(obj));
+  writeAtomic(path.join(dir, 'meta.json'), JSON.stringify({ schema: 2, shard: SHARD_HEX, token: sym, day0: days[0], days: days.length, holders: counts, generatedAt: st.generatedAt || new Date().toISOString() }));
   console.log(`${sym}: index — ${tracks.size} wallets over ${days.length} days in ${Object.keys(shards).length} shards`);
 }
 

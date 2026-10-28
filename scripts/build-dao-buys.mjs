@@ -36,6 +36,8 @@
 //
 // Node 20+ (global fetch). ESM so it runs regardless of repo package.json.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/dao-buys.json';
@@ -281,7 +283,7 @@ async function main() {
     price
   };
   fs.mkdirSync(OUT_PATH.slice(0, OUT_PATH.lastIndexOf('/')) || '.', { recursive: true });
-  fs.writeFileSync(OUT_PATH, JSON.stringify(out));
+  writeAtomic(OUT_PATH, JSON.stringify(out));
   console.log(`wrote ${OUT_PATH}: ${out.buys.length} buys, ${totals.ptgc.toFixed(0)} PTGC for ${totals.pls.toFixed(0)} PLS ($${totals.usd.toFixed(0)}), ` +
     `avg $${totals.avgPrice.toFixed(8)}; line daily=${price.daily.length} hourly=${price.hourly.length}; ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 }

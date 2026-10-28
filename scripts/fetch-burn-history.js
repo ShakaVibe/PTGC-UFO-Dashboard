@@ -21,6 +21,7 @@
  */
 
 const fs = require('fs');
+const { writeAtomic } = require('./fs-atomic.js');   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
 const path = require('path');
 
 // No Moralis key needed — price/volume/liquidity now come from DexScreener (keyless).
@@ -1169,7 +1170,7 @@ async function main() {
     holderHistory.lastUpdated = now.toISOString();
     holderHistory.source = 'PulseScan';
 
-    fs.writeFileSync(holderHistoryPath, JSON.stringify(holderHistory, null, 2));
+    writeAtomic(holderHistoryPath, JSON.stringify(holderHistory, null, 2));
     console.log(`  Written: ${holderHistoryPath} (${holderHistory.snapshots.length} daily snapshots)`);
   }
   

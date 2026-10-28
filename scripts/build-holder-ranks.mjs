@@ -31,6 +31,8 @@
 //
 // Node 20+ (global fetch; run locally with NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 
 const OUT_PATH = process.env.OUT_PATH || 'data/holder-ranks.json';
 const API = process.env.PULSESCAN_API || 'https://api.scan.pulsechain.com/api/v2';
@@ -127,5 +129,5 @@ if (!ok) { console.error('holder-ranks: both tokens failed — previous file kep
 if (!out.tokens.PTGC || !out.tokens.UFO) { console.error('holder-ranks: a token is missing and there is no previous list to carry — previous file kept'); process.exit(1); }
 out.generatedAt = new Date().toISOString();
 const body = JSON.stringify(out);
-fs.writeFileSync(OUT_PATH, body);
+writeAtomic(OUT_PATH, body);
 console.log(`holder-ranks: wrote ${OUT_PATH} (${(body.length / 1024).toFixed(0)} KB)`);

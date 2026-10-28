@@ -3,6 +3,7 @@
 // .github/workflows/lv-snapshot.yml until 2026-09-17 (a29); moved here unchanged so it runs as a
 // step of the combined hourly pipeline (every 6 h by file age — see pipeline-gate.mjs).
 const fs = require('fs');
+const { writeAtomic } = require('./fs-atomic.js');   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
 const https = require('https');
 
 // Config
@@ -138,10 +139,10 @@ async function main() {
     catch (e) { console.error(`lv-snapshots.json exists but cannot be read (${e.message}) — refusing to replace the only copy with a one-row file`); process.exit(1); }   // Audit IV e23
   }
   snapshots.push(snapshot);
-  fs.writeFileSync(snapshotsPath, JSON.stringify(snapshots, null, 2));
+  writeAtomic(snapshotsPath, JSON.stringify(snapshots, null, 2));
 
   // Write latest snapshot
-  fs.writeFileSync('data/lv-latest.json', JSON.stringify(snapshot, null, 2));
+  writeAtomic('data/lv-latest.json', JSON.stringify(snapshot, null, 2));
 
   console.log('Snapshot captured:');
   console.log(`  PTGC - Core Liq: $${ptgc.coreLiquidity.toFixed(0)} | Core Vol: $${ptgc.coreVolume.toFixed(0)} | Pairs: ${ptgc.pairCount}`);

@@ -19,6 +19,8 @@
 //
 // Node 20+ (global fetch; locally NODE_USE_ENV_PROXY=1 behind a proxy). ESM.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 
 const OUT_PATH = process.env.OUT_PATH || 'data/top-stakers.json';
@@ -112,6 +114,6 @@ const out = {
   s: rows.map(r => key(r[1])),
 };
 const body = JSON.stringify(out);
-fs.writeFileSync(OUT_PATH, body);
-fs.writeFileSync(CACHE_PATH, JSON.stringify({ lastBlock: head, addrs }));
+writeAtomic(OUT_PATH, body);
+writeAtomic(CACHE_PATH, JSON.stringify({ lastBlock: head, addrs }));
 console.log(`top-stakers: ${rows.length} stakers, ${out.total.toLocaleString('en-US')} PTGC staked (${out.locked.toLocaleString('en-US')} locked), #100 = ${rows[99] ? key(rows[99][1]).toLocaleString('en-US') : '—'} — wrote ${OUT_PATH} (${(body.length / 1024).toFixed(0)} KB) in ${Math.round((Date.now() - t0) / 1000)} s`);

@@ -26,6 +26,7 @@
 'use strict';
 
 const fs = require('fs');
+const { writeAtomic } = require('./fs-atomic.js');   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
 const path = require('path');
 
 const API_KEY = process.env.COINGECKO_API_KEY;
@@ -175,6 +176,6 @@ const spanH = (s) => (s && s.length >= 2 ? ((s[s.length - 1][0] - s[0][0]) / 360
     tokens,
   };
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
-  fs.writeFileSync(OUT_PATH, JSON.stringify(payload));
+  writeAtomic(OUT_PATH, JSON.stringify(payload));
   console.log(`\nWrote ${OUT_PATH} — ${fresh} fresh series / ${Object.keys(tokens).length} tokens, ${(fs.statSync(OUT_PATH).size / 1024).toFixed(1)} KB`);
 })().catch((e) => { console.error('FATAL:', e); process.exit(1); });

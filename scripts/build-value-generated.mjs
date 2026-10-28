@@ -9,6 +9,8 @@
 //
 // Node 22+ (global fetch / AbortController). ESM so it runs regardless of repo package.json.
 import fs from 'node:fs';
+import fsAtomic from './fs-atomic.js';   // Audit VI item 6: tmp + rename, so a killed run never commits a half-written file
+const { writeAtomic } = fsAtomic;
 import rpcPool from './rpc-pool.js';   // Audit IV e33 / D-4: the shared RPC pool with a head check (scripts/rpc-pool.js)
 const OUT_PATH = process.env.OUT_PATH || 'data/value-generated.json';
 
@@ -879,7 +881,7 @@ async function main(){
     realizedFees,
     burnPeriods: burnPeriodsOut ? { UFO: burnPeriodsOut } : undefined
   };
-  fs.writeFileSync(OUT_PATH, JSON.stringify(out, null, 2));
+  writeAtomic(OUT_PATH, JSON.stringify(out, null, 2));
   const d24 = delivered.byPeriod && delivered.byPeriod['24h'];
   console.log(`wrote ${OUT_PATH} | headBlock ${out.meta.headBlock} | 24h: ${d24?Math.round(d24.ufoBurned):'?'} UFO burned, ${d24?Math.round(d24.ptgcBurned):'?'} PTGC burned | lifetime pTGC by UFO v2: ${Math.round(delivered.ptgcBurnedAll).toLocaleString()} (${delivered.ptgcBurnedAllOk?'exact':'90d only'}) | UFO burn periods: ${burnPeriodsOut?(burnPeriodsOut.carriedForward?'carried forward':'fresh'):'none'}`);
 }
