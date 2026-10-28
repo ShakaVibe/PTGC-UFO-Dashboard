@@ -3,6 +3,7 @@
     python3 tools/audit4-batch6.py        (twice: the second run must print "0 edit(s)")
 then `cd tools/harness && npm run css` if tw.css changed. See handover/HANDOVER.md "Current state" for what each part does.
 """
+import sys; sys.exit('audit4-batch6.py: applied 2026-10-23, then superseded by later edits. Re-running it would write a partial edit to tools/pf-v2/PortfolioV2.jsx and then fail. Kept for its history only (tools/README.md).')   # Audit VI item 5 (2026-10-28)
 import hashlib, re, subprocess, sys
 n = 0
 def edit(path, old, new, count=1):

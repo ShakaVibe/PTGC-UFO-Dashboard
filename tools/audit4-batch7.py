@@ -16,6 +16,7 @@ then  cd tools/harness && npm run css   (tw.css gains the max-h-[..dvh] utilitie
       disclaimer / Affiliates / Logos windows use dvh (+ a vh fallback); the "About the cost" ⓘ (Top 100, rank window)
       opens on a tap; the Volume tile's two badges stop touching "24H" at 1024–1199.
 """
+import sys; sys.exit('audit4-batch7.py: applied 2026-10-24, then superseded by later edits. Re-running it would write partial edits to index.html and portfolio.html and then fail, leaving a page that does not compile. Kept for its history only (tools/README.md).')   # Audit VI item 5 (2026-10-28)
 import hashlib, re, subprocess, sys
 n = 0
 def edit(path, old, new, count=1):

@@ -7,6 +7,7 @@ chosen period, like its sparkline); (4) the plot area behind the lines ~15 % dar
 (joined − left, coloured), JOINED / LEFT / SHARE kept.
 Idempotent, from the repo root:   python3 tools/lh-cards-live.py   (twice: "0 edit(s)"); it re-splices via tools/league-history.py.
 """
+import sys; sys.exit('lh-cards-live.py: applied 2026-10-25, then partly undone by tools/lh-no-hilo.py. Re-running it would put back the High/Low line and the IN THE CHART tag he asked to remove. Kept for its history only (tools/README.md).')   # Audit VI item 5 (2026-10-28)
 import hashlib, subprocess, sys
 n = 0
 def edit(path, old, new, count=1):

@@ -22,8 +22,11 @@ jsx = '\n\n'.join(open(os.path.join(HERE, n), encoding='utf-8').read().rstrip('\
 # round 2: the Leagues window's CSS, taken from index.html each run (one design for both pages)
 ix = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
 a = ix.index('    .lg-m{'); b = ix.index('    /* the combined card (Socials', a)
+# Audit VI item 5 (2026-10-28): the Holders share card's hc2-* rules (2026-10-26) were inserted INSIDE this range in index.html,
+# so a re-run pasted 25 lines of them into portfolio.html. Copy the Leagues rules only: drop the hc2 header and every .hc2- rule.
+lg = '\n'.join(l for l in ix[a:b].split('\n') if not (l.startswith('    .hc2-') or l.startswith('    /* hc2 ')))
 css += ('\n    /* ---- the Leagues window (lg-*), copied from index.html by tools/pf-v2.py — edit it THERE, then re-run ---- */\n'
-        + ix[a:b].rstrip('\n'))
+        + lg.rstrip('\n'))
 
 CSS_A, CSS_B = '    /* ===== Portfolio v2 (2026-10-13, design', '\n  </style>\n</head>'
 JSX_A, JSX_B = '    /* Portfolio v2, round 2 (2026-10-13): the Leagues window', '\n\n    const PortfolioPage=({onBack})=>{'

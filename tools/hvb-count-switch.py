@@ -19,6 +19,7 @@ volume is the same either way — the whole gap is bot loops (PTGC 30D $1.49M vs
 
 Idempotent (done-markers); a second run prints "0 edit(s)". Run from the repo root.
 """
+import sys; sys.exit("hvb-count-switch.py: applied 2026-10-27, then undone by tools/hvb-count-off.py on Shaka's call. Re-running it would put back the Humans vs Bots COUNT selector he asked to remove. Kept for its history only (tools/README.md).")   # Audit VI item 5 (2026-10-28)
 import sys, pathlib
 
 P = pathlib.Path('index.html')
