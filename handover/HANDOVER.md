@@ -4,7 +4,25 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-27 wrap) — everything PUSHED (last code change `137806437`), live-checked, working tree clean
+## START HERE (2026-10-28) — AUDIT VI delivered; roadmap item 1 (Worker v8) LIVE; working the roadmap in order
+
+**Audit VI** (Shaka: "complete review … prioritized roadmap … do not start changing things") = the Claude Doc "Grays Dashboard —
+Audit VI & Roadmap" (https://claude.ai/artifact/3GQUQyfumJYzvxv6SvLpvN): 45 scored items in execution order, FIX NOW 1–9 first.
+Details + method: `sessions/2026-10-28.md`. **His call: one item at a time, test, verify, next.**
+
+**Done — item 1, Worker v8** (`handover/ptgcapi-worker-v8.js`, commit `a7308b0ce`, deployed in Cloudflare by Shaka 2026-10-28):
+`/read` / `/write` path whitelist `data/<name>.json` (400 "bad path" + log line otherwise), constant-time secret compare, generic 500.
+No key change. Live-checked: `/public/commissions` 200, every authenticated route 401 without the secret. e5/e6's key re-scope stays parked.
+
+**Next session: item 2** — `navigate()` must bump `_histSkip` when a modal is open (popstate fires before hashchange, so e44's
+listener closes the Live Feed on its own PTGC/UFO toggle — confirmed live), + a harness probe. Then items 3–9 in order
+(`\u2026` literal + `fmtUSD2`, deploy gate = compile + mount, 4 ci-mount cases, neuter the one-shot splice scripts / `af.css`,
+atomic pipeline writes, DAO Buys `pricesAt(block-1)`).
+
+**Standing calls (unchanged):** volume matches DexScreener everywhere · NO count selector on HvB · BOTH double count · no burn-source
+bar · robots does NOT block /data/ · classic headers kept until he says.
+
+## Before that (2026-10-27 wrap) — everything PUSHED (last code change `137806437`), live-checked, working tree clean
 
 **Today (Shaka: "the Volume window's 30 day does not match the arb bots one … we need the volume to be accurate"):**
 1. **Humans vs Bots now counts EVERY SWAP, like DexScreener** — totals, boxes, %, bar, chart, share card. = the Volume window's
