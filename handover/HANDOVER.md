@@ -4,15 +4,19 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-29) — item 6 PASSED; Live Feed back to plain BUY / SELL (Shaka's ask) — committed, needs PUSH + live check
+## START HERE (2026-10-29 wrap) — item 6 PASSED; Live Feed back to plain BUY / SELL — PUSHED (`d95982c8e`), LIVE-CHECKED
 
 | What | State |
 | --- | --- |
 | Audit VI item 6 (atomic writes) — the owed look at the hourly runs | **PASSED**: 25 hourly runs after the push, every one `failed` 0, no `*.tmp` in the tree |
-| Live Feed: no ARB badge, no "looped by a bot" — a loop is a BUY row + a SELL row that SHARE its one fee (`tools/deck-buy-sell.py`, harness `DECK_LOOP=1` + `probes/deck-rows.js`) | BUILT, harness-checked, committed; **Shaka pushes → Claude checks it live** |
+| Live Feed: no ARB badge, no "looped by a bot" — a loop is a BUY row + a SELL row that SHARE its one fee (`tools/deck-buy-sell.py`, harness `DECK_LOOP=1` + `probes/deck-rows.js`) | **LIVE** `d95982c8e`, checked on ptgc-ufo.com (28 rows: 17 BUY / 11 SELL, no ARB / bot words; real loops = BUY + SELL pairs, same tx, equal halves) |
+| **Site check workflow RED since 2026-10-26** (`f78da449d`, Affiliates leaderboard v2): step "tw.css is current" fails, so "Mount every page" is skipped. Deploy is NOT affected (its own gate is green) | **Open — fix next session** |
 
-**First thing next session:** if the live check is not recorded here yet, open the Live Feed on ptgc-ufo.com: no ARB badge or bot
-wording anywhere, a loop transaction = two rows (BUY + SELL) with the same tx hash. **Then item 7** (DAO Buys, unchanged — below).
+**First thing next session:** make Site check green again — the committed `tw.css` no longer matches what the CI's Tailwind build
+makes (red on every push since `f78da449d`; 2026-10-25 gotcha "tw.css is built, not live"). Find the classes that differ (rebuild
+with `npm run css` ON THE MAC — never a cloud build, it drops ~5 rules — and diff), commit, bump `tw.css?v=` on all five pages if
+it changed. Then confirm the CI build and the Mac build agree; if they never can, make the check compare what matters. **Then item 7**
+(DAO Buys, unchanged — below). Optional: tick item 6 on the Audit VI doc.
 Details: `sessions/2026-10-29.md`.
 **Standing call (2026-10-29, do not re-propose):** Live Feed rows say BUY / SELL (and TRANSFER) only — no ARB badge, no bot wording.
 
