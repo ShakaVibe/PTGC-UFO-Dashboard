@@ -4,7 +4,19 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-28 wrap) — AUDIT VI roadmap items 1–6 DONE; item 6 needs ONE look at the next hourly run
+## START HERE (2026-10-29) — item 6 PASSED; Live Feed back to plain BUY / SELL (Shaka's ask) — committed, needs PUSH + live check
+
+| What | State |
+| --- | --- |
+| Audit VI item 6 (atomic writes) — the owed look at the hourly runs | **PASSED**: 25 hourly runs after the push, every one `failed` 0, no `*.tmp` in the tree |
+| Live Feed: no ARB badge, no "looped by a bot" — a loop is a BUY row + a SELL row that SHARE its one fee (`tools/deck-buy-sell.py`, harness `DECK_LOOP=1` + `probes/deck-rows.js`) | BUILT, harness-checked, committed; **Shaka pushes → Claude checks it live** |
+
+**First thing next session:** if the live check is not recorded here yet, open the Live Feed on ptgc-ufo.com: no ARB badge or bot
+wording anywhere, a loop transaction = two rows (BUY + SELL) with the same tx hash. **Then item 7** (DAO Buys, unchanged — below).
+Details: `sessions/2026-10-29.md`.
+**Standing call (2026-10-29, do not re-propose):** Live Feed rows say BUY / SELL (and TRANSFER) only — no ARB badge, no bot wording.
+
+## Before that (2026-10-28 wrap) — AUDIT VI roadmap items 1–6 DONE (item 6's hourly-run check passed 2026-10-29)
 
 **Audit VI** = the Claude Doc "Grays Dashboard — Audit VI & Roadmap" (https://claude.ai/artifact/3GQUQyfumJYzvxv6SvLpvN): 45 scored
 items in execution order. **Shaka's call: one item at a time, test, verify, next.** Details: `sessions/2026-10-28.md`.

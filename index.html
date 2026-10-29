@@ -5750,11 +5750,11 @@
     const DeckRow=React.memo(({r,pods,token,ac,hi,reduced})=>(
       <div data-id={r.id} className={`deck-row${r.fresh?' deck-new':''}`}>
         <div className="deck-t text-white/70 text-[14px] font-medium tabular-nums">{deckTimeOf(r)}</div>
-        <div className="deck-side font-orbitron text-[10px] tracking-[0.1em] py-[4px] text-center rounded-[7px]" style={{color:r.side==='BUY'?'#86efac':r.side==='SELL'?'#fca5a5':r.side==='ARB'?'#c4b5fd':'#F5DE8A',background:r.side==='BUY'?'rgba(22,101,52,0.5)':r.side==='SELL'?'rgba(127,29,29,0.5)':r.side==='ARB'?'rgba(76,29,149,0.45)':'rgba(120,53,15,0.45)',border:`1px solid ${r.side==='BUY'?'rgba(74,222,128,0.55)':r.side==='SELL'?'rgba(248,113,113,0.55)':r.side==='ARB'?'rgba(167,139,250,0.55)':'rgba(232,192,68,0.55)'}`}} title={r.side==='ARB'?'A bot\'s loop: bought in one pool and sold in another in one transaction — the token moved once, so one fee':undefined}>{r.side}</div>
+        <div className="deck-side font-orbitron text-[10px] tracking-[0.1em] py-[4px] text-center rounded-[7px]" style={{color:r.side==='BUY'?'#86efac':r.side==='SELL'?'#fca5a5':'#F5DE8A',background:r.side==='BUY'?'rgba(22,101,52,0.5)':r.side==='SELL'?'rgba(127,29,29,0.5)':'rgba(120,53,15,0.45)',border:`1px solid ${r.side==='BUY'?'rgba(74,222,128,0.55)':r.side==='SELL'?'rgba(248,113,113,0.55)':'rgba(232,192,68,0.55)'}`}}>{r.side}</div>
         <div className="deck-contact min-w-0 flex items-center gap-3 text-white">
           <DeckPairLogo src={r.logo} initial={r.initial} title={r.pool}/>
           <div className="min-w-0 font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
-            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':r.side==='ARB'?'looped by a bot':'transferred'}</span>
+            <span className="tabular-nums">{fmtUSD2(r.usd)} {r.side==='BUY'?'bought':r.side==='SELL'?'sold':'transferred'}</span>
             <a href={`https://scan.pulsechain.com/tx/${r.tx}`} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-white/55 font-normal font-mono hover:text-white/80">{r.pool} · {fmtAbbr(r.tokens)} {token} · {r.tx.slice(0,8)}…{r.tx.slice(-4)}</a>
           </div>
         </div>
@@ -6069,11 +6069,13 @@
           const rest=x.legs.filter(l=>!consumed.has(l.from)).reduce((a,l)=>a+l.fee,0);
           return{trades,restFee:rest};
         };
-        /* Audit V v23 (2026-10-25): the fee is charged per TRANSFER, not per Swap event. A bot's loop (buy in one pool, sell in
-           another) moves the token pool → pool once and pays ONE fee, but showed as two rows lifting 5 % each; a router-split buy pays
-           TWICE (pools → router → buyer) but lifted once per pool leg. So the tape now shows one row per transaction — ARB for a loop,
-           one BUY / SELL for a split — and lifts the fee actually paid: the tx's legs into the token contract ÷ the contract's share
-           × the full rate (the same reading the TRANSFER rows already use). Fee legs unread for that tx → the old estimate, a loop once. */
+        /* Audit V v23 (2026-10-25): the fee is charged per TRANSFER, not per Swap event. A loop (buy in one pool, sell in another,
+           one transaction) moves the token pool → pool once and pays ONE fee, but its two rows each lifted 5 %; a router-split buy
+           pays TWICE (pools → router → buyer) but lifted once per pool leg. So the tape lifts the fee actually paid: the tx's legs
+           into the token contract ÷ the contract's share × the full rate (the same reading the TRANSFER rows use); fee legs unread
+           for that tx → the old estimate, a loop once. A split is ONE BUY / SELL row. A loop was one purple ARB row (v23) until
+           2026-10-29 (Shaka: "I just want buy or sell"): it is its BUY row + its SELL row again, like DexScreener, and the two
+           SHARE the one fee by size (half each for a plain loop), so every total still counts it once. tools/deck-buy-sell.py */
         const deckGroupTx=(rows,fl)=>{
           const legs={};   // tx → token amount that reached the contract
           (fl||[]).forEach(l=>{if(!l.topics||l.topics.length<3)return;const from=('0x'+l.topics[1].slice(26)).toLowerCase();if(from===mainAddr)return;
@@ -6087,10 +6089,12 @@
             const loop=buys.length&&sells.length&&new Set(g.map(r=>r.pair)).size>=2;
             if(g.length===1&&!loop){const r=g[0];out.push(feeTok!=null?{...r,gen:feeTok*st.price,measured:true}:r);return;}
             const first=g[0];
-            if(loop){
-              const tokens=Math.max(sum(buys,'tokens'),sum(sells,'tokens')),usd=tokens*st.price;
-              out.push({...first,id:tx+':arb',side:'ARB',tokens,usd,gen:feeTok!=null?feeTok*st.price:usd*st.fee,measured:feeTok!=null,
-                pool:`${buys[0].pool} \u2192 ${sells[0].pool}`,legs:g});
+            if(loop){   // 2026-10-29: a BUY row + a SELL row, sharing the one fee by size — never an ARB row
+              const bt=sum(buys,'tokens'),stk=sum(sells,'tokens'),all=bt+stk;
+              const fee=feeTok!=null?feeTok*st.price:Math.max(bt,stk)*st.price*st.fee;   // the estimate counts a loop once, as before
+              [[buys,'BUY',bt],[sells,'SELL',stk]].forEach(([lg,side,tk])=>{const pools=[...new Set(lg.map(r=>r.pool))];
+                out.push({...lg[0],id:tx+':'+side.toLowerCase(),side,tokens:tk,usd:tk*st.price,gen:all>0?fee*tk/all:0,measured:feeTok!=null,
+                  pool:pools.length>1?`${pools[0]} +${pools.length-1}`:pools[0],legs:lg});});
               return;
             }
             const tokens=sum(g,'tokens'),usd=tokens*st.price,pools=[...new Set(g.map(r=>r.pool))];
@@ -6579,7 +6583,7 @@
               </div>
             </div>
             <div className="mt-3 text-[11px] text-white/30 leading-relaxed">
-              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus fee-paying wallet transfers, read live from the chain. Trade size = token-side amount × current price; lifted = trade size × the live fee rate (transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. A swap{'\u2019'}s “lifted” is an estimate: the fee is charged per token transfer, so an arbitrage loop that shows here as a buy and a sell paid one fee, and a buy a router splits across pools paid two. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
+              Contacts are PulseX swaps on this token's pools (including pools discovered from the trades themselves) plus fee-paying wallet transfers, read live from the chain. Trade size = token-side amount × current price. Lifted = the fee the transaction actually paid, read from its fee transfers on chain (trade size × the live fee rate when that read is missing; transfers are sized from the fee leg that reaches the contract), split by the live bucket weights. The fee is charged per token transfer, so a buy in one pool and a sell in another in the same transaction paid one fee — its two rows share it — and a buy a router splits across pools paid two. Pod totals start from the dashboard's figure for the selected window and grow as contacts land; the opening replay is already inside that figure. Times marked ~ are estimated from block height.
             </div>
           </div>
         </Modal>

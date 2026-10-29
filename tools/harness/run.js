@@ -3,7 +3,7 @@
    - swaps the CDN <script> tags for the pinned npm builds (SRI attrs stripped by rewriting the HTML)
    - replaces the Tailwind play CDN with a CLI-built stylesheet
    - stubs RPC (eth_*), DexScreener, PulseScan, GitHub raw, fonts
-   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, GT_SPARSE=1, PAIRVOL=1|old, CHROME=)
+   Usage: node run.js <route> <width> <height> <outPrefix> [actions]   (env: HTML=, RPC_DOWN=1, SLOW_RPC=ms, DS_DOWN=1, DS_VOL_DRIFT=1, SLOW=ms, SLOW_HISTORY=ms, SLOW_UFO=ms, HEAD_BLOCK=n, LOGS_DOWN=1, DECK_LOGS=n, DECK_LOOP=1, REDUCED=1, PS_DOWN=1, PS_COUNTERS_DOWN=1, GT_CANDLES=1|slow:<ms>|flaky, AFFIL_DATA=1, AFFIL_SYNC=iso, AFFIL_BAD=1|<body>, DS_PRICE=n, DS_UFO_PRICE=n, DS_PAIRS=burn, GT_POOLS=miss:<n>, GT_SPARSE=1, PAIRVOL=1|old, CHROME=)
 */
 const fs=require('fs'),path=require('path'),http=require('http');
 const {chromium}=require('playwright-core');
@@ -67,7 +67,9 @@ const rpcAnswer=(body)=>{
     else if(m==='eth_getLogs'&&process.env.LOGS_DOWN){return {jsonrpc:'2.0',id:q.id,error:{code:-32000,message:'query timeout exceeded'}};}   // LOGS_DOWN=1: every eth_getLogs is a JSON-RPC error (calls still work) — portfolio's reflections scan must end "unavailable", never 0 (a12)
     else if(m==='eth_getLogs'){
       /* DECK_LOGS=n: answer a Swap-topic query with n synthetic PulseX Swap events on the stub pair,
-         newest at the head block, so the Live Feed has rows to lift (u11). Everything else stays empty. */
+         newest at the head block, so the Live Feed has rows to lift (u11). Everything else stays empty.
+         DECK_LOOP=1 (2026-10-29): event #2 becomes a SELL of 950 on a SECOND pool (0xacac…, the PRVX pair) in event #1's
+         transaction and block — a loop: buy 1,000 in one pool, sell in another, one tx. */
       const f=q.params&&q.params[0]||{};const topics=f.topics||[];const n=+process.env.DECK_LOGS||0;
       const swapTopic='0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822';
       const asks=(Array.isArray(topics[0])?topics[0]:[topics[0]]).includes(swapTopic);
@@ -82,8 +84,8 @@ const rpcAnswer=(body)=>{
         if(toW&&!fromW){[L+1000,L+100500,27104950].forEach((b,i)=>{if(inRange(b))out.push(mk(b,pad(0x55),toW,1_000_000_000n*10n**18n,i));});}
         if(fromW&&!toW){[L+50000,27104900].forEach((b,i)=>{if(inRange(b)){out.push(mk(b,fromW,pad(0x66),94n*10n**8n*10n**18n/1n,i*2));out.push(mk(b,fromW,pad(BigInt(f.address)),5n*10n**8n*10n**18n,i*2+1));}});}
         result=out;}
-      if(n&&asks)for(let i=0;i<n;i++){const b=HEAD-i*3;if(b<from||b>to)continue;const buy=i%3!==2;const amt=pad((1000n+BigInt(i)*250n)*10n**18n).slice(2);const z=pad(0).slice(2);
-        result.push({address:'0x'+'ab'.repeat(20),topics:[swapTopic,pad(1),pad(2)],data:'0x'+(buy?z+z+z+amt:z+amt+z+z),blockNumber:hex(b),transactionHash:'0x'+(i+1).toString(16).padStart(64,'0'),logIndex:hex(i),removed:false});}
+      if(n&&asks)for(let i=0;i<n;i++){const lp=!!process.env.DECK_LOOP&&i===1;const b=lp?HEAD:HEAD-i*3;if(b<from||b>to)continue;const buy=!lp&&i%3!==2;const amt=pad(lp?950n*10n**18n:(1000n+BigInt(i)*250n)*10n**18n).slice(2);const z=pad(0).slice(2);
+        result.push({address:'0x'+(lp?'ac':'ab').repeat(20),topics:[swapTopic,pad(1),pad(2)],data:'0x'+(buy?z+z+z+amt:z+amt+z+z),blockNumber:hex(b),transactionHash:'0x'+(lp?1:i+1).toString(16).padStart(64,'0'),logIndex:hex(i),removed:false});}
     }
     else if(m==='eth_call'){
       const d=(q.params[0].data||'').slice(0,10);
@@ -145,6 +147,7 @@ const dsAnswer=(url)=>{
   const P=isUFO&&process.env.DS_UFO_PRICE?+process.env.DS_UFO_PRICE:(+process.env.DS_PRICE||0.000142);   // DS_PRICE=4.5e-5: a sub-micro price, to exercise the $0.0₄… notation (a48); DS_UFO_PRICE=n: a DIFFERENT price for UFO calls, so a token-switch race is visible (a7)
   const B=isUFO&&process.env.DS_UFO_PRICE?'UFO':'PTGC';
   const pairs=[dsPair(B,'WPLS',P,850000,42000),dsPair(B,'PRVX',P*0.993,120000,4000),dsPair(B,'PLSX',P*1.007,90000,2000),dsPair(B,'HEX',P,50000,1500)];
+  if(process.env.DECK_LOOP)pairs[1].pairAddress='0x'+'ac'.repeat(20);   // DECK_LOOP=1: a second pool address for the loop's SELL leg
   /* UFO's pairs are born at the migration (2026-09-26): index.html learns ufoLaunchMs from the youngest pairCreatedAt,
      and a 1062-day-old UFO pair let the OLD contract's holder-history rows into every UFO 90D figure in here (6,597 "then"). */
   if(isUFO)pairs.forEach(pr=>{pr.pairCreatedAt=Date.parse('2026-07-08T00:00:00Z');});
