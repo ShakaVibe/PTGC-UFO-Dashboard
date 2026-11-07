@@ -4,7 +4,25 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-10-29 wrap) — item 6 PASSED; Live Feed back to plain BUY / SELL — PUSHED (`d95982c8e`), LIVE-CHECKED
+## START HERE (2026-11-07 wrap) — Site check GREEN again: tw.css rebuilt (`10dddfdd5`) — PUSH STATE: see below
+
+| What | State |
+| --- | --- |
+| Site check workflow (red since `f78da449d`, 2026-10-26) — cause: the committed `tw.css` was last built Oct 25 and `f78da449d` removed the old Affiliates leaderboard's 16 gradient / shadow classes; the CI build was right, the file was stale | **FIXED** `10dddfdd5`: `npm run css` in the repo, `tw.css?v=10` on the five pages, compile ok. No class in use lost (every dropped rule grepped against the six scanned files) |
+| Audit VI item 6 (atomic writes) | PASSED 2026-10-29 (25 hourly runs, `failed` 0, no `*.tmp`) |
+| Live Feed plain BUY / SELL (`d95982c8e`) | LIVE, checked 2026-10-29 |
+
+**Gotcha corrected (replaces the 2026-10-27 "cloud build drops ~5 rules" notes below):** there is no Mac-vs-cloud Tailwind
+difference. The "dropped" rules were the dead leaderboard classes a fresh build rightly omits; the Oct-27 comparison was against
+the stale Oct-25 file. `npm run css` with the repo's pinned tailwindcss 3.4.16 is right anywhere. The rule: a page edit that adds or
+removes Tailwind classes → rebuild `tw.css` in the SAME commit and bump `tw.css?v=` on all five pages, or the Site check goes red.
+
+**Next:** Audit VI **item 7** — DAO Buys: `pricesAt(b.block-1)` for the pre-trade market price (84/324 buys print "paid < market"
+today), delete the dead refund loop (`internal_transactions` is always `[]`), `::warning::` + `price.carried` on the price-line carry.
+Then the HIGH group (10–19). One item at a time, test, verify, next. Standing calls unchanged (count selector, BOTH, burn-source bar,
+/data/ in robots, classic headers; Live Feed = BUY / SELL / TRANSFER only). Details: `sessions/2026-11-07.md`.
+
+## Before that (2026-10-29 wrap) — item 6 PASSED; Live Feed back to plain BUY / SELL — PUSHED (`d95982c8e`), LIVE-CHECKED
 
 | What | State |
 | --- | --- |
@@ -14,7 +32,7 @@ Update it at the end of every session.
 
 **First thing next session:** make Site check green again — the committed `tw.css` no longer matches what the CI's Tailwind build
 makes (red on every push since `f78da449d`; 2026-10-25 gotcha "tw.css is built, not live"). Find the classes that differ (rebuild
-with `npm run css` ON THE MAC — never a cloud build, it drops ~5 rules — and diff), commit, bump `tw.css?v=` on all five pages if
+with `npm run css` ON THE MAC — never a cloud build, it drops ~5 rules [WRONG, see 2026-11-07: the file was stale] — and diff), commit, bump `tw.css?v=` on all five pages if
 it changed. Then confirm the CI build and the Mac build agree; if they never can, make the check compare what matters. **Then item 7**
 (DAO Buys, unchanged — below). Optional: tick item 6 on the Audit VI doc.
 Details: `sessions/2026-10-29.md`.
@@ -68,7 +86,7 @@ are close, never to the dollar.
 **Session notes for Claude:** Shaka now commits + pushes himself after Claude commits on the Mac (Claude has no GitHub login; Terminal
 is click-only for computer use). Committing from the bridge works once delete permission is granted for the folder — run git with
 `-c gc.auto=0 -c maintenance.auto=false` (a background auto-gc left `.git/gc.log.lock`) and the ShakaVibe identity via `-c user.*`.
-A cloud clone's `npm run css` drops ~5 rules the Mac build keeps — never copy a cloud-built tw.css to the Mac.
+~~A cloud clone's `npm run css` drops ~5 rules the Mac build keeps — never copy a cloud-built tw.css to the Mac.~~ (Wrong — 2026-11-07: the committed file was stale; any build with the pinned Tailwind is right.)
 
 **Next session: nothing owed** — ask Shaka what he wants. Still parked: c10 (switch.win iframe `sandbox`). Ideas if he asks: the other
 Socials cards on the 2026-09 nebula look could get the Atlantis / lit-coin treatment (mock-up first); Audit IV e1–e47 not on the roadmap
@@ -98,7 +116,7 @@ vs $1,276,663, UFO $427,572 vs $288,130) → "we probably need to match dexscree
 - Still different by design: the 24H TILE is DexScreener's live number from its 30 listed pools; HvB 24H is the hourly chain file over
   every pool (e.g. $16.4K vs $17.3K) — close, never to the dollar.
 - Harness: PTGC 30D ALL SWAPS 70 % / 30 %, EACH TX 81 / 19; UFO 39 / 61; BOTH 63 / 37 → EACH TX 76 / 24; 390 px no overflow.
-- Gotcha: `npm run css` in a CLOUD clone drops ~5 rules the Mac build keeps (bg-gradient-to-l, h-32 …) — never copy a cloud-built
+- Gotcha (RETRACTED 2026-11-07 — those rules were dead leaderboard classes, the committed file was stale): `npm run css` in a CLOUD clone drops ~5 rules the Mac build keeps (bg-gradient-to-l, h-32 …) — never copy a cloud-built
   tw.css to the Mac. This change adds no new classes (tw.css untouched). A `git fetch` from the bridge left `.git/objects/maintenance.lock`;
   it was renamed to `.git/stale-maintenance-lock` (safe to delete).
 
@@ -2776,6 +2794,11 @@ found DOWN and fixed — the `ptgcapi` worker, not this repo** (`sessions/2026-0
    in dry-run would have shown up here too).
 
 ## Session log
+- `sessions/2026-11-07.md` — Site check green again: the committed tw.css was stale since `f78da449d` (16 dead leaderboard classes), rebuilt, v=10; the "cloud build drops rules" gotcha retracted.
+- `sessions/2026-10-29.md` — Audit VI item 6 hourly-run check PASSED; Live Feed back to plain BUY / SELL (`d95982c8e`).
+- `sessions/2026-10-28.md` — Audit VI roadmap items 1–6 built (worker v8, deck toggle, Loading Switch, mount gate, splice scripts, atomic writes).
+- `sessions/2026-10-27.md` — Humans vs Bots counts every swap like DexScreener; the ALL SWAPS / EACH TX selector built and removed the same day.
+- `sessions/2026-10-26.md` — Holders share cards v2 (combined + single), Affiliates podium $ and Leaderboard window v2, two small fixes.
 - `sessions/2026-10-25-audit5.md` — Audit V: the per-transfer fee model, v1–v37 findings + truth table, then the whole roadmap built and pushed the same day (measured fees in the pipeline, every surface switched, League History live, v37 traced, the afternoon polish batch). §6 = what shipped.
 - `sessions/2026-10-23.md` — Audit IV fixes: e1 + e2, batch P0b e7 / e8 / e3 / e4 / e19, the rank trio e9–e11 (all pushed, live-verified); batch 3 e17 / e24 / e25 / e12 / e18 / e20–e23 (built).
 - `sessions/2026-10-22-audit4.md` — Audit IV: the merged e1–e47 list (P0–P3, TOP 10, security / mobile / performance / data sections, quick wins, ideas, do-not-change) and the eight raw sweeps (S, N, M, D, R, P, U, V) with evidence. No code changed.
