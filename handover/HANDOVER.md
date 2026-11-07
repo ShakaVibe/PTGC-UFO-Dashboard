@@ -12,6 +12,8 @@ Update it at the end of every session.
 | Audit VI item 6 (atomic writes) | PASSED 2026-10-29 (25 hourly runs, `failed` 0, no `*.tmp`) |
 | Live Feed plain BUY / SELL (`d95982c8e`) | LIVE, checked 2026-10-29 |
 
+**Standing call (2026-11-07, do not re-propose):** no "terminal" / data-only view of the dashboards — explored with two mock-ups and a flagged build the same day, then dropped on Shaka's word ("scratch all this"); nothing of it is in the repo. `sessions/2026-11-07.md` §2.
+
 **Gotcha corrected (replaces the 2026-10-27 "cloud build drops ~5 rules" notes below):** there is no Mac-vs-cloud Tailwind
 difference. The "dropped" rules were the dead leaderboard classes a fresh build rightly omits; the Oct-27 comparison was against
 the stale Oct-25 file. `npm run css` with the repo's pinned tailwindcss 3.4.16 is right anywhere. The rule: a page edit that adds or
