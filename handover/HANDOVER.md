@@ -4,11 +4,11 @@ Living status file for work on this repo. One entry per working session lives in
 `handover/sessions/`. This file is the summary: what's true now, what's done, what's next.
 Update it at the end of every session.
 
-## START HERE (2026-11-07 wrap) — Site check GREEN again: tw.css rebuilt (`10dddfdd5`) — PUSH STATE: see below
+## START HERE (2026-11-07 wrap) — Site check GREEN again: tw.css rebuilt — PUSHED (`12e9e4f25`), CHECK GREEN, LIVE-CHECKED
 
 | What | State |
 | --- | --- |
-| Site check workflow (red since `f78da449d`, 2026-10-26) — cause: the committed `tw.css` was last built Oct 25 and `f78da449d` removed the old Affiliates leaderboard's 16 gradient / shadow classes; the CI build was right, the file was stale | **FIXED** `10dddfdd5`: `npm run css` in the repo, `tw.css?v=10` on the five pages, compile ok. No class in use lost (every dropped rule grepped against the six scanned files) |
+| Site check workflow (red since `f78da449d`, 2026-10-26) — cause: the committed `tw.css` was last built Oct 25 and `f78da449d` removed the old Affiliates leaderboard's 16 gradient / shadow classes; the CI build was right, the file was stale | **FIXED + PUSHED** (`10dddfdd5`, rebased → `12e9e4f25`): `npm run css` in the repo, `tw.css?v=10` on the five pages. Site check run 42402043705 green — "tw.css is current" AND "Mount every page" (first mount run since Oct 26) passed; Deploy green; live: all five pages link `tw.css?v=10`, live tw.css = 78,259 bytes = the build, home renders, no console errors |
 | Audit VI item 6 (atomic writes) | PASSED 2026-10-29 (25 hourly runs, `failed` 0, no `*.tmp`) |
 | Live Feed plain BUY / SELL (`d95982c8e`) | LIVE, checked 2026-10-29 |
 
